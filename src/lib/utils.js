@@ -75,7 +75,7 @@ export function daysUntilExpiry(expiryDate) {
 
 export function formatDate(dateStr) {
   if (!dateStr) return '—'
-  try { return format(parseISO(dateStr), 'd MMM yyyy') } catch { return dateStr }
+  try { return format(parseISO(dateStr), 'd MMM yyyy') } catch (e) { return dateStr }
 }
 
 export function formatCurrency(val) {

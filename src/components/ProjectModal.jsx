@@ -57,16 +57,15 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       start_date: form.start_date || null,
       end_date: form.end_date || null,
     }
-
-    let error
+    let result
     if (editing) {
-      ;({ error } = await supabase.from('projects').update(payload).eq('id', project.id))
+      result = await supabase.from('projects').update(payload).eq('id', project.id)
     } else {
       payload.created_by = profile?.id
-      ;({ error } = await supabase.from('projects').insert(payload))
+      result = await supabase.from('projects').insert(payload)
     }
     setSaving(false)
-    if (error) { setErrors({ _global: error.message }); return }
+    if (result.error) { setErrors({ _global: result.error.message }); return }
     onSaved()
   }
 
@@ -90,69 +89,53 @@ export default function ProjectModal({ project, onClose, onSaved }) {
           {errors._global}
         </div>
       )}
-
       <div className="form-grid">
         <div className="form-section">Project Details</div>
-
         <div className="full">
           <Field label="Project Name *" error={errors.project_name}>
             <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments — Phase 2" autoFocus />
           </Field>
         </div>
-
         <Field label="Project Reference">
           <input value={form.project_ref} onChange={e => set('project_ref', e.target.value)} placeholder="e.g. PRJ-2025-042" />
         </Field>
-
         <Field label="Client Name">
           <input value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Client company or individual" />
         </Field>
-
         <Field label="Status">
           <select value={form.status} onChange={e => set('status', e.target.value)}>
             {Object.entries(PROJECT_STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </Field>
-
         <Field label="Project Manager">
           <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
             <option value="">— Unassigned —</option>
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select>
         </Field>
-
         <Field label="Contract Value (£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
-
         <div className="form-section">Dates</div>
-
         <Field label="Start Date">
           <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
         </Field>
-
         <Field label="End Date" error={errors.end_date}>
           <input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} />
         </Field>
-
         <div className="form-section">Site Address</div>
-
         <div className="full">
           <Field label="Site Address">
             <input value={form.site_address} onChange={e => set('site_address', e.target.value)} placeholder="Street address of the site" />
           </Field>
         </div>
-
         <Field label="City / Town">
           <input value={form.city} onChange={e => set('city', e.target.value)} placeholder="London" />
         </Field>
-
         <Field label="Postcode">
           <input value={form.postcode} onChange={e => set('postcode', e.target.value)} placeholder="SW1A 1AA" />
         </Field>
-
         <div className="form-section">Additional Info</div>
-
         <div className="full">
           <Field label="Description / Notes">
             <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional details…" />

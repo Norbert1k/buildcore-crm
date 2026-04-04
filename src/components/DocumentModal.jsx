@@ -15,6 +15,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
     issue_date: doc?.issue_date || '',
     expiry_date: doc?.expiry_date || '',
     notes: doc?.notes || '',
+    _nameManuallySet: false,
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -22,7 +23,6 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
   function set(k, v) {
     setForm(f => {
       const next = { ...f, [k]: v }
-      // Auto-fill document name from type if not manually set
       if (k === 'document_type' && !editing && !f._nameManuallySet) {
         next.document_name = DOCUMENT_TYPES[v] || ''
       }
@@ -45,24 +45,27 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
   async function save() {
     if (!validate()) return
     setSaving(true)
-    const { _nameManuallySet, ...payload } = form
-    payload.subcontractor_id = subcontractorId
-    payload.uploaded_by = profile?.id
-    if (!payload.issue_date) payload.issue_date = null
-    if (!payload.expiry_date) payload.expiry_date = null
-
-    let error
+    const payload = {
+      document_type: form.document_type,
+      document_name: form.document_name,
+      reference_number: form.reference_number || null,
+      issue_date: form.issue_date || null,
+      expiry_date: form.expiry_date || null,
+      notes: form.notes || null,
+      subcontractor_id: subcontractorId,
+      uploaded_by: profile?.id,
+    }
+    let result
     if (editing) {
-      ;({ error } = await supabase.from('documents').update(payload).eq('id', doc.id))
+      result = await supabase.from('documents').update(payload).eq('id', doc.id)
     } else {
-      ;({ error } = await supabase.from('documents').insert(payload))
+      result = await supabase.from('documents').insert(payload)
     }
     setSaving(false)
-    if (error) { setErrors({ _global: error.message }); return }
+    if (result.error) { setErrors({ _global: result.error.message }); return }
     onSaved()
   }
 
-  // Group document types for the select
   const docGroups = {
     'Insurance': ['public_liability', 'employers_liability', 'professional_indemnity'],
     'Health & Safety': ['rams', 'method_statement', 'risk_assessment', 'f10_notification'],
@@ -70,6 +73,10 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
     'Quality & Environment': ['iso_9001', 'iso_14001', 'iso_45001'],
     'Other': ['other'],
   }
+
+  const days = form.expiry_date
+    ? Math.round((new Date(form.expiry_date) - new Date()) / 86400000)
+    : null
 
   return (
     <Modal
@@ -91,7 +98,6 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
           {errors._global}
         </div>
       )}
-
       <div className="form-grid">
         <div className="full">
           <Field label="Document Type">
@@ -104,58 +110,34 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
             </select>
           </Field>
         </div>
-
         <div className="full">
           <Field label="Document Name *" error={errors.document_name}>
-            <input
-              value={form.document_name}
-              onChange={e => setName(e.target.value)}
-              placeholder="e.g. Employers Liability Certificate 2025"
-            />
+            <input value={form.document_name} onChange={e => setName(e.target.value)} placeholder="e.g. Employers Liability Certificate 2025" />
           </Field>
         </div>
-
         <Field label="Reference / Certificate Number">
-          <input
-            value={form.reference_number}
-            onChange={e => set('reference_number', e.target.value)}
-            placeholder="e.g. EL-2025-00123"
-          />
+          <input value={form.reference_number} onChange={e => set('reference_number', e.target.value)} placeholder="e.g. EL-2025-00123" />
         </Field>
-
         <div />
-
         <Field label="Issue Date">
           <input type="date" value={form.issue_date} onChange={e => set('issue_date', e.target.value)} />
         </Field>
-
         <Field label="Expiry Date">
           <input type="date" value={form.expiry_date} onChange={e => set('expiry_date', e.target.value)} />
         </Field>
-
-        {form.expiry_date && (() => {
-          const days = Math.round((new Date(form.expiry_date) - new Date()) / 86400000)
-          if (days < 0) return (
-            <div className="full" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--red)' }}>
-              ⚠ This date is in the past — document will be marked as expired.
-            </div>
-          )
-          if (days <= 30) return (
-            <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--amber)' }}>
-              ! This document expires in {days} day{days !== 1 ? 's' : ''} — it will trigger an alert.
-            </div>
-          )
-          return null
-        })()}
-
+        {days !== null && days < 0 && (
+          <div className="full" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--red)' }}>
+            This date is in the past — document will be marked as expired.
+          </div>
+        )}
+        {days !== null && days >= 0 && days <= 30 && (
+          <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--amber)' }}>
+            This document expires in {days} day{days !== 1 ? 's' : ''} — it will trigger an alert.
+          </div>
+        )}
         <div className="full">
           <Field label="Notes">
-            <textarea
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              placeholder="e.g. Covers up to £5m, renewed annually…"
-              style={{ minHeight: 72 }}
-            />
+            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="e.g. Covers up to £5m, renewed annually…" style={{ minHeight: 72 }} />
           </Field>
         </div>
       </div>
