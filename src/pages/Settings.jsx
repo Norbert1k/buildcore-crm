@@ -16,7 +16,7 @@ export default function Settings() {
   const [inviteError, setInviteError] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
 
-  useEffect(() => { if (can('manage_users')) loadUsers() else setLoading(false) }, [])
+  useEffect(() => { if (can('manage_users')) { loadUsers() } else { setLoading(false) } }, [])
 
   async function loadUsers() {
     setLoading(true)
