@@ -1,9 +1,15 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
 
-export default function Sidebar({ expCount }) {
+export default function Sidebar({ expCount, open, onClose }) {
   const { profile } = useAuth()
+  const location = useLocation()
+
+  // Close sidebar on nav on mobile
+  function handleNav() {
+    if (window.innerWidth < 768) onClose()
+  }
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <IconDashboard /> },
@@ -14,52 +20,54 @@ export default function Sidebar({ expCount }) {
   ]
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img
-            src="/logo.png"
-            alt="City Construction"
-            style={{ height: 36, width: 'auto', objectFit: 'contain' }}
-          />
-          <div>
-            <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
-            <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
+    <>
+      {/* Mobile overlay */}
+      <div className={`sidebar-overlay ${open ? 'open' : ''}`} onClick={onClose} />
+
+      <aside className={`sidebar ${open ? 'open' : ''}`}>
+        <div className="sidebar-logo">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src="/logo.png" alt="City Construction" style={{ height: 34, width: 'auto', objectFit: 'contain' }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <nav style={{ flex: 1, padding: '8px 0' }}>
-        <div className="nav-section">Navigation</div>
-        {navItems.map(item => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-          >
-            {item.icon}
-            {item.label}
-            {item.badge && <span className="nav-badge">{item.badge}</span>}
+        <nav style={{ flex: 1, padding: '8px 0' }}>
+          <div className="nav-section">Navigation</div>
+          {navItems.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              onClick={handleNav}
+            >
+              {item.icon}
+              {item.label}
+              {item.badge && <span className="nav-badge">{item.badge}</span>}
+            </NavLink>
+          ))}
+
+          <div className="nav-section" style={{ marginTop: 8 }}>Account</div>
+          <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={handleNav}>
+            <IconSettings />
+            Settings
           </NavLink>
-        ))}
+        </nav>
 
-        <div className="nav-section" style={{ marginTop: 8 }}>Account</div>
-        <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>
-          <IconSettings />
-          Settings
-        </NavLink>
-      </nav>
-
-      {profile && (
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Avatar name={profile.full_name} size="sm" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'capitalize' }}>{profile.role?.replace('_', ' ')}</div>
+        {profile && (
+          <div className="nav-user">
+            <Avatar name={profile.full_name} size="sm" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'capitalize' }}>{profile.role?.replace('_', ' ')}</div>
+            </div>
           </div>
-        </div>
-      )}
-    </aside>
+        )}
+      </aside>
+    </>
   )
 }
