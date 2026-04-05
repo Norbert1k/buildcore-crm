@@ -58,33 +58,33 @@ export default function SubcontractorDetail() {
 
       {/* Header card */}
       <div className="card card-pad" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 12 }}>
           <Avatar name={sub.company_name} size="lg" />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 600 }}>{sub.company_name}</h2>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 600 }}>{sub.company_name}</h2>
               <Pill cls={SUB_STATUSES[sub.status]?.cls || 'pill-gray'}>{SUB_STATUSES[sub.status]?.label || sub.status}</Pill>
               <Pill cls="pill-blue">{sub.trade}</Pill>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px' }}>
-              {[
-                ['Contact', sub.contact_name],
-                ['Email', sub.email],
-                ['Phone', sub.phone],
-                ['Location', [sub.city, sub.postcode].filter(Boolean).join(' ')],
-                ['Address', sub.address],
-                ['Website', sub.website],
-              ].filter(([, v]) => v).map(([k, v]) => (
-                <div key={k} style={{ fontSize: 13 }}>
-                  <span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span>
-                  <span style={{ color: k === 'Email' ? 'var(--blue)' : 'var(--text)' }}>{v}</span>
-                </div>
-              ))}
-            </div>
           </div>
           {can('manage_subcontractors') && (
-            <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
+            <button className="btn btn-sm" style={{ flexShrink: 0 }} onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
           )}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px 24px' }}>
+          {[
+            ['Contact', sub.contact_name],
+            ['Email', sub.email],
+            ['Phone', sub.phone],
+            ['Location', [sub.city, sub.postcode].filter(Boolean).join(' ')],
+            ['Address', sub.address],
+            ['Website', sub.website],
+          ].filter(([, v]) => v).map(([k, v]) => (
+            <div key={k} style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</span>
+              <span style={{ color: k === 'Email' || k === 'Website' ? 'var(--blue)' : 'var(--text)', wordBreak: 'break-all' }}>{v}</span>
+            </div>
+          ))}
         </div>
         {sub.notes && (
           <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)' }}>
