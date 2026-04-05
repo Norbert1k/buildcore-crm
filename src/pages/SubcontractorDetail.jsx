@@ -5,6 +5,7 @@ import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import SubcontractorModal from '../components/SubcontractorModal'
+import ContactsTab from '../components/ContactsTab'
 import DocumentModal from '../components/DocumentModal'
 
 export default function SubcontractorDetail() {
@@ -21,6 +22,7 @@ export default function SubcontractorDetail() {
   const [showDocModal, setShowDocModal] = useState(false)
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [contacts, setContacts] = useState([])
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteForm, setNoteForm] = useState({ note: '', note_type: 'note' })
   const [savingNote, setSavingNote] = useState(false)
@@ -29,16 +31,18 @@ export default function SubcontractorDetail() {
 
   async function load() {
     setLoading(true)
-    const [subRes, docsRes, projRes, notesRes] = await Promise.all([
+    const [subRes, docsRes, projRes, notesRes, contactsRes] = await Promise.all([
       supabase.from('subcontractors').select('*').eq('id', id).single(),
       supabase.from('documents_with_status').select('*').eq('subcontractor_id', id).order('document_type'),
       supabase.from('project_subcontractors').select('*, projects(id, project_name, project_ref, status, start_date, end_date)').eq('subcontractor_id', id),
       supabase.from('subcontractor_notes').select('*, profiles(full_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
+      supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
     ])
     setSub(subRes.data)
     setDocs(docsRes.data || [])
     setProjects(projRes.data || [])
     setNotes(notesRes.data || [])
+    setContacts(contactsRes.data || [])
     setLoading(false)
   }
 
@@ -114,7 +118,7 @@ export default function SubcontractorDetail() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px 24px' }}>
           {[
-            ['Contact', sub.contact_name],
+            ['Contact', sub.contact_name ? `${sub.contact_name}${sub.contact_role ? ` (${sub.contact_role})` : ''}` : null],
             ['Email', sub.email],
             ['Phone', sub.phone],
             ['Location', [sub.city, sub.postcode].filter(Boolean).join(' ')],
@@ -146,6 +150,7 @@ export default function SubcontractorDetail() {
       <div className="filter-tabs">
         <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Documents ({docs.length})</div>
         <div className={`filter-tab ${activeTab === 'activity' ? 'active' : ''}`} onClick={() => setActiveTab('activity')}>Activity ({notes.length})</div>
+        <div className={`filter-tab ${activeTab === 'contacts' ? 'active' : ''}`} onClick={() => setActiveTab('contacts')}>Contacts ({contacts.length})</div>
         <div className={`filter-tab ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>Projects ({projects.length})</div>
       </div>
 
@@ -244,6 +249,11 @@ export default function SubcontractorDetail() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Contacts tab */}
+      {activeTab === 'contacts' && (
+        <ContactsTab subcontractorId={id} contacts={contacts} onRefresh={load} />
       )}
 
       {/* Projects tab */}

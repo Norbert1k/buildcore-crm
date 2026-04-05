@@ -11,6 +11,7 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
   const [form, setForm] = useState({
     company_name: sub?.company_name || '',
     contact_name: sub?.contact_name || '',
+    contact_role: sub?.contact_role || '',
     trade: sub?.trade || TRADES[0],
     email: sub?.email || '',
     phone: sub?.phone || '',
@@ -81,6 +82,12 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
         </div>
         <Field label="Contact Name *" error={errors.contact_name}>
           <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} placeholder="Primary contact" />
+        </Field>
+        <Field label="Contact Role / Job Title">
+          <select value={form.contact_role} onChange={e => set('contact_role', e.target.value)}>
+            <option value="">— Select role —</option>
+            {['Director','Managing Director','Contracts Manager','Site Manager','Project Manager','Quantity Surveyor','Estimator','Foreman','H&S Manager','Office Manager','Accounts','Engineer','Supervisor','Other'].map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
         </Field>
         <Field label="Trade / Specialty *" error={errors.trade}>
           <select value={form.trade} onChange={e => set('trade', e.target.value)}>
