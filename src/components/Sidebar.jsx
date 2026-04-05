@@ -1,10 +1,9 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconAlert, IconSettings } from './ui'
+import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings } from './ui'
 
 export default function Sidebar({ expCount }) {
   const { profile } = useAuth()
-  const location = useLocation()
 
   const navItems = [
     { to: '/', label: 'Dashboard', icon: <IconDashboard /> },
@@ -17,16 +16,13 @@ export default function Sidebar({ expCount }) {
     <aside className="sidebar">
       <div className="sidebar-logo">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 32, height: 32, background: 'var(--accent)', borderRadius: 8,
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="#fff">
-              <path d="M2 14V6l6-4 6 4v8H2zm4-1h4V9H6v4z" />
-            </svg>
-          </div>
+          <img
+            src="/logo.png"
+            alt="City Construction"
+            style={{ height: 36, width: 'auto', objectFit: 'contain' }}
+          />
           <div>
-            <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>BuildCore</div>
+            <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
             <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
           </div>
         </div>

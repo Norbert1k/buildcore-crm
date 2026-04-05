@@ -165,7 +165,7 @@ export default function Settings() {
 
       {/* Edit user role modal */}
       <Modal open={!!showEditUser} onClose={() => setShowEditUser(null)}
-        title={`Edit — ${showEditUser?.full_name}`} size="sm"
+        title={`Edit: ${showEditUser?.full_name}`} size="sm"
         footer={
           <>
             <button className="btn" onClick={() => setShowEditUser(null)}>Cancel</button>

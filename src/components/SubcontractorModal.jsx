@@ -56,7 +56,7 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
     <Modal
       open
       onClose={onClose}
-      title={editing ? `Edit — ${sub.company_name}` : 'Add New Subcontractor'}
+      title={editing ? `Edit: ${sub.company_name}` : 'Add New Subcontractor'}
       size="lg"
       footer={
         <>

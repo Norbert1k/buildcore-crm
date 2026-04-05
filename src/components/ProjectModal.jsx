@@ -73,7 +73,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     <Modal
       open
       onClose={onClose}
-      title={editing ? `Edit — ${project.project_name}` : 'Create New Project'}
+      title={editing ? `Edit: ${project.project_name}` : 'Create New Project'}
       size="lg"
       footer={
         <>

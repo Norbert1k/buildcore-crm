@@ -27,15 +27,12 @@ export default function Login() {
     }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 48, height: 48, background: 'var(--accent)', borderRadius: 12,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px'
-          }}>
-            <svg width="26" height="26" viewBox="0 0 16 16" fill="#fff">
-              <path d="M2 14V6l6-4 6 4v8H2zm4-1h4V9H6v4z" />
-            </svg>
-          </div>
-          <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>BuildCore CRM</h1>
+          <img
+            src="/logo.png"
+            alt="City Construction"
+            style={{ height: 80, margin: '0 auto 16px', display: 'block', objectFit: 'contain' }}
+          />
+          <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>City Construction</h1>
           <p style={{ color: 'var(--text2)', fontSize: 13 }}>Sign in to your account</p>
         </div>
 
