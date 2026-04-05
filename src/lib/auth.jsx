@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase } from './supabase'
 
 const AuthContext = createContext(null)
 
@@ -39,16 +39,21 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut()
   }
 
+  // Simplified can() - admins can do everything, check role directly
   const can = (action) => {
     if (!profile) return false
     const role = profile.role
+
+    // Admin can do everything
+    if (role === 'admin') return true
+
     const permissions = {
-      manage_users: ['admin'],
-      manage_subcontractors: ['admin', 'project_manager'],
-      manage_documents: ['admin', 'project_manager', 'document_controller'],
-      manage_projects: ['admin', 'project_manager'],
-      view_all: ['admin', 'project_manager', 'document_controller', 'viewer'],
-      delete: ['admin'],
+      manage_subcontractors: ['project_manager'],
+      manage_documents: ['project_manager', 'document_controller'],
+      manage_projects: ['project_manager'],
+      view_all: ['project_manager', 'document_controller', 'viewer'],
+      delete: [],
+      manage_users: [],
     }
     return permissions[action]?.includes(role) ?? false
   }
