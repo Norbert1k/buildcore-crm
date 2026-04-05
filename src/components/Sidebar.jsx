@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings } from './ui'
+import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
 
 export default function Sidebar({ expCount }) {
   const { profile } = useAuth()
@@ -10,6 +10,7 @@ export default function Sidebar({ expCount }) {
     { to: '/subcontractors', label: 'Subcontractors', icon: <IconUsers /> },
     { to: '/documents', label: 'Documents', icon: <IconDoc />, badge: expCount > 0 ? expCount : null },
     { to: '/projects', label: 'Projects', icon: <IconProject /> },
+    { to: '/suppliers', label: 'Suppliers', icon: <IconBuilding /> },
   ]
 
   return (

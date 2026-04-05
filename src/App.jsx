@@ -11,6 +11,7 @@ import Documents from './pages/Documents'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import Settings from './pages/Settings'
+import Suppliers from './pages/Suppliers'
 import { Spinner } from './components/ui'
 
 function ProtectedLayout() {
@@ -46,6 +47,7 @@ function ProtectedLayout() {
     '/documents': 'Documents & Compliance',
     '/projects': 'Projects',
     '/settings': 'Settings',
+    '/suppliers': 'Suppliers',
   }
   const title = pageTitles[location.pathname] || 'BuildCore CRM'
 
@@ -68,6 +70,7 @@ function ProtectedLayout() {
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/suppliers" element={<Suppliers />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
