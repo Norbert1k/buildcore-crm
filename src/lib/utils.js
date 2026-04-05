@@ -1,4 +1,4 @@
-import { differenceInDays, format, parseISO, isValid } from 'date-fns'
+import { differenceInDays, format, parseISO } from 'date-fns'
 
 export const TRADES = [
   'Electrical','Plumbing','HVAC','Scaffolding','Groundworks','Brickwork',
@@ -49,6 +49,15 @@ export const ROLES = {
   viewer: { label: 'Viewer', cls: 'pill-gray' },
 }
 
+export const NOTE_TYPES = {
+  note: { label: 'Note', icon: '📝', color: 'var(--text2)' },
+  call: { label: 'Call', icon: '📞', color: 'var(--blue)' },
+  email: { label: 'Email', icon: '✉️', color: 'var(--purple)' },
+  visit: { label: 'Site Visit', icon: '🏗️', color: 'var(--green)' },
+  issue: { label: 'Issue', icon: '⚠️', color: 'var(--red)' },
+  document: { label: 'Document', icon: '📄', color: 'var(--amber)' },
+}
+
 export function docStatus(expiryDate) {
   if (!expiryDate) return 'no_expiry'
   const days = differenceInDays(parseISO(expiryDate), new Date())
@@ -76,6 +85,11 @@ export function daysUntilExpiry(expiryDate) {
 export function formatDate(dateStr) {
   if (!dateStr) return '—'
   try { return format(parseISO(dateStr), 'd MMM yyyy') } catch (e) { return dateStr }
+}
+
+export function formatDateTime(dateStr) {
+  if (!dateStr) return '—'
+  try { return format(parseISO(dateStr), 'd MMM yyyy, HH:mm') } catch (e) { return dateStr }
 }
 
 export function formatCurrency(val) {
@@ -111,4 +125,33 @@ export function subDocSummary(documents) {
     else valid++
   })
   return { expired, expiring, valid, total: (documents?.length || 0) }
+}
+
+export function complianceScore(documents) {
+  if (!documents || documents.length === 0) return null
+  const { expired, expiring, valid, total } = subDocSummary(documents)
+  const score = Math.round((valid / total) * 100)
+  return { score, expired, expiring, valid, total }
+}
+
+// CSV export utility
+export function exportToCSV(data, filename) {
+  if (!data || data.length === 0) return
+  const headers = Object.keys(data[0])
+  const rows = data.map(row => headers.map(h => {
+    const val = row[h]
+    if (val === null || val === undefined) return ''
+    const str = String(val)
+    return str.includes(',') || str.includes('"') || str.includes('\n')
+      ? `"${str.replace(/"/g, '""')}"`
+      : str
+  }).join(','))
+  const csv = [headers.join(','), ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }

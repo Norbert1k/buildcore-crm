@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { DOCUMENT_TYPES, formatDate, daysUntilExpiry, docStatusInfo } from '../lib/utils'
+import { DOCUMENT_TYPES, formatDate, daysUntilExpiry, docStatusInfo, exportToCSV } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState } from '../components/ui'
 
 export default function Documents() {
   const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
   const navigate = useNavigate()
 
@@ -26,6 +27,7 @@ export default function Documents() {
   function filtered() {
     let list = docs
     if (filter !== 'all') list = list.filter(d => d.status === filter)
+    if (typeFilter !== 'all') list = list.filter(d => d.document_type === typeFilter)
     if (search) {
       const q = search.toLowerCase()
       list = list.filter(d =>
@@ -37,6 +39,22 @@ export default function Documents() {
     return list
   }
 
+  function doExport() {
+    const list = filtered()
+    const rows = list.map(d => ({
+      Contractor: d.subcontractors?.company_name || '',
+      Trade: d.subcontractors?.trade || '',
+      'Document Type': DOCUMENT_TYPES[d.document_type] || d.document_type,
+      'Document Name': d.document_name,
+      Reference: d.reference_number || '',
+      'Issue Date': formatDate(d.issue_date),
+      'Expiry Date': formatDate(d.expiry_date),
+      Status: d.status || '',
+      Notes: d.notes || '',
+    }))
+    exportToCSV(rows, 'compliance-documents.csv')
+  }
+
   const counts = {
     all: docs.length,
     expired: docs.filter(d => d.status === 'expired').length,
@@ -45,39 +63,46 @@ export default function Documents() {
     no_expiry: docs.filter(d => d.status === 'no_expiry').length,
   }
 
+  // Get unique document types present
+  const docTypesPresent = [...new Set(docs.map(d => d.document_type))].sort()
+
   const list = filtered()
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600 }}>Documents & Compliance</h2>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>Track all subcontractor paperwork and expiry dates</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Documents & Compliance</h2>
+          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>Track all subcontractor paperwork and expiry dates</p>
+        </div>
+        <button className="btn btn-sm" onClick={doExport}>↓ Export CSV</button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: 10, marginBottom: 20 }}>
         <div className="stat-card"><div className="stat-label">Total Documents</div><div className="stat-value">{counts.all}</div></div>
         <div className="stat-card"><div className="stat-label">Expired</div><div className={`stat-value ${counts.expired > 0 ? 'red' : ''}`}>{counts.expired}</div></div>
-        <div className="stat-card"><div className="stat-label">Expiring ≤ 30d</div><div className={`stat-value ${counts.expiring_soon > 0 ? 'amber' : ''}`}>{counts.expiring_soon}</div></div>
+        <div className="stat-card"><div className="stat-label">Expiring Soon</div><div className={`stat-value ${counts.expiring_soon > 0 ? 'amber' : ''}`}>{counts.expiring_soon}</div></div>
         <div className="stat-card"><div className="stat-label">Valid</div><div className="stat-value green">{counts.valid}</div></div>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input
-          value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search documents or contractors…"
-          style={{ width: 260 }}
-        />
-        <div className="filter-tabs" style={{ marginBottom: 0 }}>
-          {[
-            ['all', 'All'],
-            ['expired', `Expired (${counts.expired})`],
-            ['expiring_soon', `Expiring Soon (${counts.expiring_soon})`],
-            ['valid', `Valid (${counts.valid})`],
-            ['no_expiry', 'No Expiry'],
-          ].map(([k, v]) => (
-            <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>{v}</div>
-          ))}
-        </div>
+      {/* Search */}
+      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search documents or contractors..." style={{ marginBottom: 12 }} />
+
+      {/* Status filter */}
+      <div className="filter-tabs">
+        {[['all','All'], ['expired',`Expired (${counts.expired})`], ['expiring_soon',`Expiring Soon (${counts.expiring_soon})`], ['valid',`Valid (${counts.valid})`], ['no_expiry','No Expiry']].map(([k,v]) => (
+          <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>{v}</div>
+        ))}
+      </div>
+
+      {/* Document type filter */}
+      <div className="filter-tabs">
+        <div className={`filter-tab ${typeFilter === 'all' ? 'active' : ''}`} onClick={() => setTypeFilter('all')}>All Types</div>
+        {docTypesPresent.map(t => (
+          <div key={t} className={`filter-tab ${typeFilter === t ? 'active' : ''}`} onClick={() => setTypeFilter(t)}>
+            {DOCUMENT_TYPES[t] || t}
+          </div>
+        ))}
       </div>
 
       {loading ? <Spinner /> : list.length === 0 ? (
@@ -86,22 +111,14 @@ export default function Documents() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr>
-                <th>Contractor</th>
-                <th>Document Type</th>
-                <th>Document Name</th>
-                <th>Reference</th>
-                <th>Expiry Date</th>
-                <th>Status</th>
-              </tr>
+              <tr><th>Contractor</th><th>Document</th><th>Reference</th><th>Expiry</th><th>Status</th></tr>
             </thead>
             <tbody>
               {list.map(doc => {
                 const info = docStatusInfo(doc.expiry_date)
                 const days = daysUntilExpiry(doc.expiry_date)
                 return (
-                  <tr key={doc.id} style={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/subcontractors/${doc.subcontractors?.id}`)}>
+                  <tr key={doc.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${doc.subcontractors?.id}`)}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <Avatar name={doc.subcontractors?.company_name} size="sm" />
@@ -111,8 +128,10 @@ export default function Documents() {
                         </div>
                       </div>
                     </td>
-                    <td className="td-muted">{DOCUMENT_TYPES[doc.document_type] || doc.document_type}</td>
-                    <td style={{ fontWeight: 500 }}>{doc.document_name}</td>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{DOCUMENT_TYPES[doc.document_type] || doc.document_name}</div>
+                      <div className="td-muted">{doc.document_name}</div>
+                    </td>
                     <td className="td-muted">{doc.reference_number || '—'}</td>
                     <td>
                       <div style={{ fontWeight: doc.status !== 'valid' ? 500 : 400 }}>{formatDate(doc.expiry_date)}</div>

@@ -11,6 +11,7 @@ import Documents from './pages/Documents'
 import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import Suppliers from './pages/Suppliers'
+import GlobalSearch from './components/GlobalSearch'
 import Settings from './pages/Settings'
 import { Spinner } from './components/ui'
 
@@ -72,7 +73,8 @@ function ProtectedLayout() {
           <button className="topbar-menu-btn" onClick={() => setSidebarOpen(o => !o)}>
             <HamburgerIcon />
           </button>
-          <div style={{ flex: 1, fontWeight: 600, fontSize: 15 }}>{title}</div>
+          <div style={{ fontWeight: 600, fontSize: 15, flexShrink: 0 }}>{title}</div>
+          <GlobalSearch />
           <div style={{ fontSize: 12, color: 'var(--text3)', display: 'none' }} className="topbar-date">
             {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
