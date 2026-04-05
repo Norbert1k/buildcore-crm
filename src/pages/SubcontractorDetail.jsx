@@ -5,8 +5,9 @@ import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import SubcontractorModal from '../components/SubcontractorModal'
-import ContactsTab from '../components/ContactsTab'
 import DocumentModal from '../components/DocumentModal'
+import ContactsTab from '../components/ContactsTab'
+import PerformanceTab, { RatingBadge, calcRating } from '../components/PerformanceTab'
 
 export default function SubcontractorDetail() {
   const { id } = useParams()
@@ -16,13 +17,14 @@ export default function SubcontractorDetail() {
   const [docs, setDocs] = useState([])
   const [projects, setProjects] = useState([])
   const [notes, setNotes] = useState([])
+  const [contacts, setContacts] = useState([])
+  const [ratings, setRatings] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('documents')
   const [showEditSub, setShowEditSub] = useState(false)
   const [showDocModal, setShowDocModal] = useState(false)
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [contacts, setContacts] = useState([])
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteForm, setNoteForm] = useState({ note: '', note_type: 'note' })
   const [savingNote, setSavingNote] = useState(false)
@@ -31,18 +33,20 @@ export default function SubcontractorDetail() {
 
   async function load() {
     setLoading(true)
-    const [subRes, docsRes, projRes, notesRes, contactsRes] = await Promise.all([
+    const [subRes, docsRes, projRes, notesRes, contactsRes, ratingsRes] = await Promise.all([
       supabase.from('subcontractors').select('*').eq('id', id).single(),
       supabase.from('documents_with_status').select('*').eq('subcontractor_id', id).order('document_type'),
       supabase.from('project_subcontractors').select('*, projects(id, project_name, project_ref, status, start_date, end_date)').eq('subcontractor_id', id),
       supabase.from('subcontractor_notes').select('*, profiles(full_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
+      supabase.from('performance_ratings').select('*, profiles(full_name), projects(project_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
     ])
     setSub(subRes.data)
     setDocs(docsRes.data || [])
     setProjects(projRes.data || [])
     setNotes(notesRes.data || [])
     setContacts(contactsRes.data || [])
+    setRatings(ratingsRes.data || [])
     setLoading(false)
   }
 
@@ -91,6 +95,13 @@ export default function SubcontractorDetail() {
   const expired = docs.filter(d => d.status === 'expired')
   const expiring = docs.filter(d => d.status === 'expiring_soon')
   const score = complianceScore(docs)
+  const rating = calcRating(ratings)
+  const allProjects = projects.map(ps => ps.projects).filter(Boolean)
+
+  // Format address properly
+  const addressParts = [sub.address, sub.city, sub.postcode].filter(Boolean)
+  const fullAddress = addressParts.join(', ')
+  const locationDisplay = [sub.city, sub.postcode].filter(Boolean).join(', ')
 
   return (
     <div>
@@ -109,30 +120,69 @@ export default function SubcontractorDetail() {
               <Pill cls="pill-blue">{sub.trade}</Pill>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-            {score && <ComplianceBadge score={score.score} />}
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {score && <div style={{ background: score.score >= 80 ? 'var(--green-bg)' : score.score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)', color: score.score >= 80 ? 'var(--green)' : score.score >= 50 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>Docs {score.score}%</div>}
+            {rating && <RatingBadge ratings={ratings} />}
             {can('manage_subcontractors') && (
               <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
             )}
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 24px', marginTop: 4 }}>
+
+        {/* Contact details grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 24px', marginBottom: sub.vat_number || sub.cis_number ? 12 : 0 }}>
           {[
             ['Contact', sub.contact_name ? `${sub.contact_name}${sub.contact_role ? ` (${sub.contact_role})` : ''}` : null],
             ['Email', sub.email],
             ['Phone', sub.phone],
-            ['Location', [sub.city, sub.postcode].filter(Boolean).join(' ')],
-            ['Address', sub.address],
-            ['Website', sub.website],
+            ['Location', locationDisplay],
+            ['Address', fullAddress],
           ].filter(([, v]) => v).map(([k, v]) => (
             <div key={k} style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</span>
-              <span style={{ color: k === 'Email' || k === 'Website' ? 'var(--blue)' : 'var(--text)', wordBreak: 'break-all' }}>{v}</span>
+              {k === 'Email' ? (
+                <a href={`mailto:${v}`} style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>{v}</a>
+              ) : k === 'Website' ? (
+                <a href={v.startsWith('http') ? v : `https://${v}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none' }}>{v}</a>
+              ) : (
+                <span style={{ color: 'var(--text)', wordBreak: 'break-word' }}>{v}</span>
+              )}
             </div>
           ))}
+
+          {/* Website — clickable */}
+          {sub.website && (
+            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Website</span>
+              <a href={sub.website.startsWith('http') ? sub.website : `https://${sub.website}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
+                {sub.website}
+              </a>
+            </div>
+          )}
         </div>
+
+        {/* VAT & CIS */}
+        {(sub.vat_number || sub.cis_number) && (
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 4 }}>
+            {sub.vat_number && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>VAT No.</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.vat_number}</span>
+              </div>
+            )}
+            {sub.cis_number && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>CIS No.</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.cis_number}</span>
+                {sub.cis_verified && <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>✓ Verified</span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Notes */}
         {sub.notes && (
-          <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+          <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
             {sub.notes}
           </div>
         )}
@@ -148,19 +198,24 @@ export default function SubcontractorDetail() {
 
       {/* Tabs */}
       <div className="filter-tabs">
-        <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Documents ({docs.length})</div>
-        <div className={`filter-tab ${activeTab === 'activity' ? 'active' : ''}`} onClick={() => setActiveTab('activity')}>Activity ({notes.length})</div>
-        <div className={`filter-tab ${activeTab === 'contacts' ? 'active' : ''}`} onClick={() => setActiveTab('contacts')}>Contacts ({contacts.length})</div>
-        <div className={`filter-tab ${activeTab === 'projects' ? 'active' : ''}`} onClick={() => setActiveTab('projects')}>Projects ({projects.length})</div>
+        {[
+          ['documents', `Documents (${docs.length})`],
+          ['contacts', `Contacts (${contacts.length})`],
+          ['performance', `Performance (${ratings.length})`],
+          ['activity', `Activity (${notes.length})`],
+          ['projects', `Projects (${projects.length})`],
+        ].map(([key, label]) => (
+          <div key={key} className={`filter-tab ${activeTab === key ? 'active' : ''}`} onClick={() => setActiveTab(key)}>{label}</div>
+        ))}
       </div>
 
-      {/* Documents tab */}
+      {/* Documents */}
       {activeTab === 'documents' && (
         <div>
           <div className="section-header">
             <div className="section-title">Compliance Documents</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {docs.length > 0 && <button className="btn btn-sm" onClick={exportDocs}>↓ Export CSV</button>}
+              {docs.length > 0 && <button className="btn btn-sm" onClick={exportDocs}>↓ CSV</button>}
               {can('manage_documents') && (
                 <button className="btn btn-primary btn-sm" onClick={() => { setEditingDoc(null); setShowDocModal(true) }}>
                   <IconPlus size={13} /> Add Document
@@ -173,9 +228,7 @@ export default function SubcontractorDetail() {
           ) : (
             <div className="table-wrap">
               <table>
-                <thead>
-                  <tr><th>Document</th><th>Reference</th><th>Issue Date</th><th>Expiry Date</th><th>Status</th><th></th></tr>
-                </thead>
+                <thead><tr><th>Document</th><th>Reference</th><th>Issue Date</th><th>Expiry Date</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {docs.map(doc => {
                     const info = docStatusInfo(doc.expiry_date)
@@ -185,7 +238,6 @@ export default function SubcontractorDetail() {
                         <td>
                           <div style={{ fontWeight: 500 }}>{DOCUMENT_TYPES[doc.document_type] || doc.document_name}</div>
                           {doc.document_name !== DOCUMENT_TYPES[doc.document_type] && <div className="td-muted">{doc.document_name}</div>}
-                          {doc.file_name && <div style={{ fontSize: 11, color: 'var(--blue)', marginTop: 2 }}>📎 {doc.file_name}</div>}
                         </td>
                         <td className="td-muted">{doc.reference_number || '—'}</td>
                         <td className="td-muted">{formatDate(doc.issue_date)}</td>
@@ -214,7 +266,24 @@ export default function SubcontractorDetail() {
         </div>
       )}
 
-      {/* Activity tab */}
+      {/* Contacts */}
+      {activeTab === 'contacts' && (
+        <ContactsTab subcontractorId={id} contacts={contacts} onRefresh={load} />
+      )}
+
+      {/* Performance */}
+      {activeTab === 'performance' && (
+        <PerformanceTab
+          subcontractorId={id}
+          subName={sub.company_name}
+          subEmail={sub.email}
+          ratings={ratings}
+          projects={allProjects}
+          onRefresh={load}
+        />
+      )}
+
+      {/* Activity */}
       {activeTab === 'activity' && (
         <div>
           <div className="section-header">
@@ -224,7 +293,7 @@ export default function SubcontractorDetail() {
             </button>
           </div>
           {notes.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No activity recorded yet. Add a note to track calls, visits or issues.</div>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No activity recorded yet.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {notes.map(n => {
@@ -251,12 +320,7 @@ export default function SubcontractorDetail() {
         </div>
       )}
 
-      {/* Contacts tab */}
-      {activeTab === 'contacts' && (
-        <ContactsTab subcontractorId={id} contacts={contacts} onRefresh={load} />
-      )}
-
-      {/* Projects tab */}
+      {/* Projects */}
       {activeTab === 'projects' && (
         <div>
           <div className="section-title" style={{ marginBottom: 12 }}>Assigned Projects</div>
@@ -265,7 +329,7 @@ export default function SubcontractorDetail() {
           ) : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Contract Value</th><th>Status</th></tr></thead>
+                <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Value</th><th>Status</th></tr></thead>
                 <tbody>
                   {projects.map(ps => (
                     <tr key={ps.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${ps.project_id}`)}>
@@ -293,20 +357,14 @@ export default function SubcontractorDetail() {
             </select>
           </Field>
           <Field label="Note *">
-            <textarea value={noteForm.note} onChange={e => setNoteForm(f => ({ ...f, note: e.target.value }))} placeholder="What happened? Add any relevant details..." style={{ minHeight: 100 }} autoFocus />
+            <textarea value={noteForm.note} onChange={e => setNoteForm(f => ({ ...f, note: e.target.value }))} placeholder="What happened?" style={{ minHeight: 100 }} autoFocus />
           </Field>
         </div>
       </Modal>
 
       {showEditSub && <SubcontractorModal sub={sub} onClose={() => setShowEditSub(false)} onSaved={() => { setShowEditSub(false); load() }} />}
       {showDocModal && <DocumentModal doc={editingDoc} subcontractorId={id} onClose={() => setShowDocModal(false)} onSaved={() => { setShowDocModal(false); load() }} />}
-      <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)} title="Delete document" message="Are you sure you want to delete this document? This cannot be undone." danger />
+      <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)} title="Delete document" message="Are you sure? This cannot be undone." danger />
     </div>
   )
-}
-
-function ComplianceBadge({ score }) {
-  const color = score >= 80 ? 'var(--green)' : score >= 50 ? 'var(--amber)' : 'var(--red)'
-  const bg = score >= 80 ? 'var(--green-bg)' : score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)'
-  return <div style={{ background: bg, color, fontWeight: 700, fontSize: 13, padding: '4px 10px', borderRadius: 20, flexShrink: 0 }}>{score}%</div>
 }

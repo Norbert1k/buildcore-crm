@@ -20,6 +20,9 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
     postcode: sub?.postcode || '',
     website: sub?.website || '',
     status: sub?.status || 'active',
+    vat_number: sub?.vat_number || '',
+    cis_number: sub?.cis_number || '',
+    cis_verified: sub?.cis_verified || false,
     notes: sub?.notes || '',
   })
   const [errors, setErrors] = useState({})
@@ -120,6 +123,19 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
         <Field label="Postcode">
           <input value={form.postcode} onChange={e => set('postcode', e.target.value)} placeholder="SW1A 1AA" />
         </Field>
+        <div className="form-section">Compliance Numbers</div>
+        <Field label="VAT Number">
+          <input value={form.vat_number} onChange={e => set('vat_number', e.target.value)} placeholder="e.g. GB123456789" />
+        </Field>
+        <Field label="CIS Number">
+          <input value={form.cis_number} onChange={e => set('cis_number', e.target.value)} placeholder="e.g. 1234567890" />
+        </Field>
+        <div className="full">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 400, fontSize: 13 }}>
+            <input type="checkbox" checked={form.cis_verified} onChange={e => set('cis_verified', e.target.checked)} style={{ width: 16, height: 16 }} />
+            CIS verified with HMRC
+          </label>
+        </div>
         <div className="form-section">Notes</div>
         <div className="full">
           <Field label="Internal Notes">

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEye, IconEdit } from '../components/ui'
+import { RatingBadge } from '../components/PerformanceTab'
 import { useAuth } from '../lib/auth'
 import SubcontractorModal from '../components/SubcontractorModal'
 
@@ -22,7 +23,7 @@ export default function Subcontractors() {
     setLoading(true)
     const { data } = await supabase
       .from('subcontractors')
-      .select('*, documents_with_status(id, expiry_date, status)')
+      .select('*, documents_with_status(id, expiry_date, status), performance_ratings(id, rating_type)')
       .order('company_name')
     setSubs(data || [])
     setLoading(false)
@@ -94,6 +95,7 @@ export default function Subcontractors() {
                 <th>Location</th>
                 <th>Status</th>
                 <th>Documents</th>
+                <th>Rating</th>
                 <th></th>
               </tr>
             </thead>
@@ -126,6 +128,7 @@ export default function Subcontractors() {
                     <td>{s.city || '—'}</td>
                     <td><Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill></td>
                     <td>{docPill}</td>
+                    <td><RatingBadge ratings={s.performance_ratings} /></td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
                         <button className="btn btn-sm" onClick={() => navigate(`/subcontractors/${s.id}`)}><IconEye size={13} /></button>
