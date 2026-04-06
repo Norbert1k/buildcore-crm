@@ -292,9 +292,9 @@ export default function CompanyDocuments() {
                       <div style={{ padding: '8px 10px' }}>
                         <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>{doc.file_name}</div>
                         <div style={{ fontSize: 10, color: 'var(--text3)' }}>{formatSize(doc.file_size)} · {formatDate(doc.created_at)}</div>
-                        <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
-                          <button className="btn btn-sm" style={{ flex: 1, fontSize: 10, padding: '3px 6px' }} onClick={() => openPreview(doc)}>👁 View</button>
-                          <button className="btn btn-sm btn-primary" style={{ flex: 1, fontSize: 10, padding: '3px 6px' }} onClick={() => downloadSingle(doc)}>↓</button>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
+                          <button className="btn btn-sm" style={{ flex: 1, fontSize: 10, padding: '4px 6px' }} onClick={() => openPreview(doc)}>👁 View</button>
+                          <button onClick={() => downloadSingle(doc)} title="Download" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--green)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'white', fontSize: 13 }}>↓</button>
                         </div>
                       </div>
                     </div>
@@ -333,9 +333,22 @@ export default function CompanyDocuments() {
               ) : previewDoc.file_type?.includes('image') ? (
                 <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }} />
               ) : previewDoc.file_type?.includes('pdf') ? (
-                <iframe src={previewUrl} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewDoc.file_name} />
+                <iframe
+                  src={`${previewUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitH`}
+                  style={{ width: '100%', height: '80vh', border: 'none', background: 'white' }}
+                  title={previewDoc.file_name}
+                />
               ) : previewDoc.file_type?.includes('video') ? (
                 <video controls src={previewUrl} style={{ maxWidth: '100%', maxHeight: '80vh' }} />
+              ) : (previewDoc.file_type?.includes('word') || previewDoc.file_type?.includes('document') ||
+                   previewDoc.file_type?.includes('spreadsheet') || previewDoc.file_type?.includes('excel') ||
+                   previewDoc.file_type?.includes('presentation') || previewDoc.file_type?.includes('powerpoint') ||
+                   previewDoc.file_name?.match(/\.(docx?|xlsx?|pptx?)$/i)) ? (
+                <iframe
+                  src={`https://docs.google.com/viewer?url=${encodeURIComponent(previewUrl)}&embedded=true`}
+                  style={{ width: '100%', height: '80vh', border: 'none', background: 'white' }}
+                  title={previewDoc.file_name}
+                />
               ) : (
                 <div style={{ color: 'white', textAlign: 'center', padding: 40 }}>
                   <div style={{ fontSize: 56, marginBottom: 16 }}>{fileIcon(previewDoc.file_type)}</div>
