@@ -201,7 +201,7 @@ function IssueRatingModal({ subcontractorId, subName, subEmail, projects, issued
     // Send email notification if requested and not a commendation... or commendation too
     if (form.send_email && subEmail) {
       try {
-        await supabase.functions.invoke('send-performance-email', {
+        await supabase.functions.invoke('smooth-task', {
           body: {
             to: subEmail,
             subName,
