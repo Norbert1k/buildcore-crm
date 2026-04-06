@@ -1,161 +1,295 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+import { useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { formatDate, formatDateTime } from '../lib/utils'
+import { Avatar, Pill, Modal, Field, IconPlus, IconTrash, ConfirmDialog } from './ui'
+import { useAuth } from '../lib/auth'
 
-:root {
-  --font: 'DM Sans', sans-serif;
-  --mono: 'DM Mono', monospace;
-  --bg: #F5F4F0;
-  --surface: #FFFFFF;
-  --surface2: #F5F4F0;
-  --border: #E2E0D8;
-  --border2: #C8C6BC;
-  --text: #1C1B18;
-  --text2: #5C5A54;
-  --text3: #9C9A94;
-  --accent: #1C1B18;
-  --red: #A32D2D; --red-bg: #FCEBEB; --red-border: #F7C1C1;
-  --amber: #854F0B; --amber-bg: #FAEEDA; --amber-border: #FAC775;
-  --green: #3B6D11; --green-bg: #EAF3DE; --green-border: #C0DD97;
-  --blue: #185FA5; --blue-bg: #E6F1FB; --blue-border: #B5D4F4;
-  --purple: #3C3489; --purple-bg: #EEEDFE; --purple-border: #AFA9EC;
-  --radius: 8px; --radius-lg: 12px;
-  --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+const RATING_TYPES = {
+  commendation: { label: 'Commendation', icon: '👍', color: 'var(--green)', bg: 'var(--green-bg)', border: 'var(--green-border)', pill: 'pill-green' },
+  yellow_card:  { label: 'Yellow Card',  icon: '🟡', color: 'var(--amber)', bg: 'var(--amber-bg)', border: 'var(--amber-border)', pill: 'pill-amber' },
+  red_card:     { label: 'Red Card',     icon: '🔴', color: 'var(--red)',   bg: 'var(--red-bg)',   border: 'var(--red-border)',   pill: 'pill-red'   },
 }
 
-html, body, #root { height: 100%; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
-
-/* Forms */
-input, select, textarea {
-  font-family: var(--font); font-size: 13px; color: var(--text);
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 8px 10px; width: 100%;
-  outline: none; transition: border .15s;
+const CATEGORIES = {
+  quality_of_work:  'Quality of Work',
+  health_safety:    'Health & Safety',
+  timekeeping:      'Timekeeping',
+  communication:    'Communication',
+  site_cleanliness: 'Site Cleanliness',
+  documentation:    'Documentation',
+  attitude:         'Attitude & Conduct',
+  general:          'General',
 }
-input:focus, select:focus, textarea:focus { border-color: var(--accent); }
-input::placeholder { color: var(--text3); }
-label { font-size: 12px; font-weight: 500; color: var(--text2); display: block; margin-bottom: 4px; }
-textarea { resize: vertical; min-height: 80px; }
 
-/* Buttons */
-button { font-family: var(--font); cursor: pointer; border: none; outline: none; transition: all .15s; }
-.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius); font-size: 13px; font-weight: 500; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
-.btn:hover { background: var(--surface2); border-color: var(--border2); }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-.btn-primary:hover { background: #3a3830; }
-.btn-danger { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
-.btn-danger:hover { background: #F7C1C1; }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
-.btn-icon { padding: 6px; border-radius: var(--radius); }
-button:disabled { opacity: .45; cursor: not-allowed; }
+export function calcRating(ratings) {
+  if (!ratings || ratings.length === 0) return null
+  const commendations = ratings.filter(r => r.rating_type === 'commendation').length
+  const yellows = ratings.filter(r => r.rating_type === 'yellow_card').length
+  const reds = ratings.filter(r => r.rating_type === 'red_card').length
+  const score = Math.max(0, Math.min(100, Math.round(
+    ((commendations * 10) - (yellows * 15) - (reds * 30) + 50)
+  ))
+  )
+  let label, color, bg
+  if (reds >= 3)        { label = 'Blacklisted'; color = '#fff'; bg = '#1C1B18' }
+  else if (score >= 80) { label = 'Excellent';   color = 'var(--green)'; bg = 'var(--green-bg)' }
+  else if (score >= 60) { label = 'Good';        color = 'var(--blue)';  bg = 'var(--blue-bg)'  }
+  else if (score >= 40) { label = 'Fair';        color = 'var(--amber)'; bg = 'var(--amber-bg)' }
+  else if (score >= 20) { label = 'Poor';        color = 'var(--red)';   bg = 'var(--red-bg)'   }
+  else                  { label = 'Very Poor';   color = 'var(--red)';   bg = 'var(--red-bg)'   }
+  return { score, label, color, bg, commendations, yellows, reds, total: ratings.length }
+}
 
-/* Cards */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
-.card-pad { padding: 20px; }
+export function RatingBadge({ ratings, size = 'sm' }) {
+  const r = calcRating(ratings)
+  if (!r) return null
+  const fontSize = size === 'lg' ? 13 : 11
+  const padding = size === 'lg' ? '5px 12px' : '2px 8px'
+  return (
+    <div style={{ background: r.bg, color: r.color, fontWeight: 700, fontSize, padding, borderRadius: 20, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      {r.label}
+    </div>
+  )
+}
 
-/* Badges / Pills */
-.pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
-.pill-green { background: var(--green-bg); color: var(--green); }
-.pill-amber { background: var(--amber-bg); color: var(--amber); }
-.pill-red { background: var(--red-bg); color: var(--red); }
-.pill-blue { background: var(--blue-bg); color: var(--blue); }
-.pill-purple { background: var(--purple-bg); color: var(--purple); }
-.pill-gray { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+export default function PerformanceTab({ subcontractorId, subName, subEmail, ratings, projects, onRefresh }) {
+  const { can, profile } = useAuth()
+  const [showModal, setShowModal] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [filterType, setFilterType] = useState('all')
 
-/* Table */
-.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
-table { width: 100%; border-collapse: collapse; }
-th { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; padding: 10px 16px; background: var(--surface2); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
-td { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); vertical-align: middle; }
-tr:last-child td { border-bottom: none; }
-tbody tr:hover td { background: var(--surface2); }
-.td-muted { color: var(--text2); font-size: 12px; }
+  const r = calcRating(ratings)
+  const filtered = filterType === 'all' ? ratings : ratings.filter(x => x.rating_type === filterType)
 
-/* Layout */
-.app-layout { display: flex; height: 100vh; overflow: hidden; }
-.sidebar { width: 232px; min-width: 232px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; }
-.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.topbar { height: 56px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; gap: 12px; flex-shrink: 0; }
-.page-content { flex: 1; overflow-y: auto; padding: 24px; }
+  async function deleteRating(id) {
+    await supabase.from('performance_ratings').delete().eq('id', id)
+    setConfirmDelete(null)
+    onRefresh()
+  }
 
-/* Sidebar nav */
-.sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--border); }
-.nav-section { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; padding: 14px 16px 4px; }
-.nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 12px; margin: 1px 8px; border-radius: var(--radius); font-size: 13px; color: var(--text2); cursor: pointer; transition: all .15s; text-decoration: none; }
-.nav-item:hover { background: var(--surface2); color: var(--text); }
-.nav-item.active { background: var(--accent); color: #fff; font-weight: 500; }
-.nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
-.nav-badge { margin-left: auto; padding: 1px 6px; border-radius: 10px; font-size: 10px; font-weight: 600; background: var(--red-bg); color: var(--red); }
-.nav-item.active .nav-badge { background: rgba(255,255,255,.2); color: #fff; }
+  return (
+    <div>
+      {/* Summary */}
+      {r && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Overall Rating</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ background: r.bg, color: r.color, fontWeight: 700, fontSize: 15, padding: '6px 14px', borderRadius: 20 }}>{r.label}</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>{r.total} rating{r.total !== 1 ? 's' : ''} total</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 16 }}>
+            <RatingStat icon="👍" label="Commendations" value={r.commendations} color="var(--green)" />
+            <RatingStat icon="🟡" label="Yellow Cards" value={r.yellows} color="var(--amber)" />
+            <RatingStat icon="🔴" label="Red Cards" value={r.reds} color="var(--red)" />
+          </div>
+        </div>
+      )}
 
-/* Modal */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.modal { background: var(--surface); border-radius: var(--radius-lg); border: 1px solid var(--border); width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.15); }
-.modal-sm { max-width: 440px; }
-.modal-md { max-width: 580px; }
-.modal-lg { max-width: 720px; }
-.modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-.modal-title { font-size: 16px; font-weight: 600; }
-.modal-body { padding: 20px 24px; }
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+      <div className="section-header">
+        <div style={{ display: 'flex', gap: 6 }}>
+          {['all','commendation','yellow_card','red_card'].map(t => (
+            <button key={t} className={`filter-tab ${filterType === t ? 'active' : ''}`} onClick={() => setFilterType(t)} style={{ fontSize: 12 }}>
+              {t === 'all' ? `All (${ratings.length})` : `${RATING_TYPES[t].icon} ${RATING_TYPES[t].label} (${ratings.filter(x=>x.rating_type===t).length})`}
+            </button>
+          ))}
+        </div>
+        {can('manage_projects') && (
+          <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
+            <IconPlus size={13} /> Issue Rating
+          </button>
+        )}
+      </div>
 
-/* Side panel */
-.side-panel { position: fixed; right: 0; top: 0; width: 480px; height: 100vh; background: var(--surface); border-left: 1px solid var(--border); z-index: 150; display: flex; flex-direction: column; transform: translateX(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); box-shadow: -4px 0 24px rgba(0,0,0,.08); }
-.side-panel.open { transform: translateX(0); }
-.panel-header { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.panel-body { flex: 1; overflow-y: auto; padding: 20px; }
-.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.2); z-index: 140; opacity: 0; pointer-events: none; transition: opacity .25s; }
-.backdrop.open { opacity: 1; pointer-events: all; }
+      {filtered.length === 0 ? (
+        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+          No performance ratings issued yet.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {filtered.map(rating => {
+            const rt = RATING_TYPES[rating.rating_type]
+            return (
+              <div key={rating.id} style={{ background: 'var(--surface)', border: `1px solid ${rt.border}`, borderRadius: 'var(--radius)', borderLeft: `4px solid ${rt.color}`, padding: '12px 14px', display: 'flex', gap: 12 }}>
+                <div style={{ fontSize: 22, flexShrink: 0, lineHeight: 1 }}>{rt.icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: rt.color }}>{rt.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text3)', background: 'var(--surface2)', padding: '1px 7px', borderRadius: 10 }}>{CATEGORIES[rating.category] || rating.category}</span>
+                    {rating.projects?.project_name && (
+                      <span style={{ fontSize: 11, color: 'var(--blue)' }}>📋 {rating.projects.project_name}</span>
+                    )}
+                    {rating.email_sent && <span style={{ fontSize: 11, color: 'var(--green)' }}>✓ Email sent</span>}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, marginBottom: 4, whiteSpace: 'pre-wrap' }}>{rating.description}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                    {formatDateTime(rating.created_at)}
+                    {rating.profiles?.full_name && ` · Issued by ${rating.profiles.full_name}`}
+                  </div>
+                </div>
+                {can('manage_projects') && (
+                  <button className="btn btn-sm btn-danger" style={{ flexShrink: 0, alignSelf: 'flex-start' }} onClick={() => setConfirmDelete(rating.id)}>
+                    <IconTrash size={12} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
-/* Form grid */
-.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.form-grid .full { grid-column: 1 / -1; }
-.form-section { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; padding-top: 6px; border-top: 1px solid var(--border); margin-top: 4px; grid-column: 1 / -1; }
+      {showModal && (
+        <IssueRatingModal
+          subcontractorId={subcontractorId}
+          subName={subName}
+          subEmail={subEmail}
+          projects={projects}
+          issuedBy={profile}
+          onClose={() => setShowModal(false)}
+          onSaved={() => { setShowModal(false); onRefresh() }}
+        />
+      )}
 
-/* Stats row */
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
-.stat-card { background: var(--surface2); border-radius: var(--radius); padding: 14px 16px; }
-.stat-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-.stat-value { font-size: 26px; font-weight: 600; color: var(--text); line-height: 1; }
-.stat-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
-.stat-value.red { color: var(--red); }
-.stat-value.amber { color: var(--amber); }
-.stat-value.green { color: var(--green); }
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => deleteRating(confirmDelete)}
+        title="Remove rating"
+        message="Remove this performance rating? This cannot be undone."
+        danger
+      />
+    </div>
+  )
+}
 
-/* Avatar */
-.avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
-.avatar-sm { width: 26px; height: 26px; font-size: 10px; }
-.avatar-lg { width: 44px; height: 44px; font-size: 15px; }
+function RatingStat({ icon, label, value, color }) {
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontSize: 20 }}>{icon}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.2 }}>{value}</div>
+      <div style={{ fontSize: 10, color: 'var(--text3)' }}>{label}</div>
+    </div>
+  )
+}
 
-/* Misc */
-.divider { height: 1px; background: var(--border); margin: 16px 0; }
-.text-muted { color: var(--text2); }
-.text-sm { font-size: 12px; }
-.flex { display: flex; }
-.flex-center { display: flex; align-items: center; }
-.gap-8 { gap: 8px; }
-.gap-12 { gap: 12px; }
-.flex-1 { flex: 1; }
-.fw-500 { font-weight: 500; }
-.fw-600 { font-weight: 600; }
-.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.section-title { font-size: 14px; font-weight: 600; }
-.alert-item { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: var(--radius); margin-bottom: 6px; font-size: 13px; }
-.alert-expired { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
-.alert-warning { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); }
-.empty-state { text-align: center; padding: 48px 20px; color: var(--text3); font-size: 13px; }
-.search-wrap { position: relative; }
-.search-wrap input { padding-left: 32px; width: 240px; }
-.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
-.filter-tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
-.filter-tab { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text2); transition: all .15s; }
-.filter-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-.doc-status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-.dot-green { background: var(--green); }
-.dot-amber { background: var(--amber); }
-.dot-red { background: var(--red); }
-.dot-gray { background: var(--text3); }
+function IssueRatingModal({ subcontractorId, subName, subEmail, projects, issuedBy, onClose, onSaved }) {
+  const [form, setForm] = useState({ rating_type: 'yellow_card', category: 'quality_of_work', project_id: '', description: '', send_email: true })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  const rt = RATING_TYPES[form.rating_type]
+
+  async function save() {
+    if (!form.description.trim()) { setError('Please describe the reason for this rating'); return }
+    setSaving(true)
+
+    const payload = {
+      subcontractor_id: subcontractorId,
+      rating_type: form.rating_type,
+      category: form.category,
+      project_id: form.project_id || null,
+      description: form.description,
+      issued_by: issuedBy?.id,
+      email_sent: false,
+    }
+
+    const { data, error: err } = await supabase.from('performance_ratings').insert(payload).select().single()
+    if (err) { setError(err.message); setSaving(false); return }
+
+    // Send email notification if requested and not a commendation... or commendation too
+    if (form.send_email && subEmail) {
+      try {
+        await supabase.functions.invoke('smooth-task', {
+          body: {
+            to: subEmail,
+            subName,
+            ratingType: form.rating_type,
+            ratingLabel: rt.label,
+            category: CATEGORIES[form.category],
+            description: form.description,
+            issuedBy: issuedBy?.full_name || 'City Construction',
+          }
+        })
+        await supabase.from('performance_ratings').update({ email_sent: true }).eq('id', data.id)
+      } catch (e) {
+        // Email failed silently — rating still saved
+        console.warn('Email send failed:', e)
+      }
+    }
+
+    setSaving(false)
+    onSaved()
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`Issue Rating: ${subName}`} size="md"
+      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving} style={{ background: rt.color, borderColor: rt.color }}>{saving ? 'Saving...' : `Issue ${rt.label}`}</button></>}>
+      {error && <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Rating type selector */}
+        <div>
+          <label>Rating Type</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginTop: 6 }}>
+            {Object.entries(RATING_TYPES).map(([k, v]) => (
+              <button key={k} type="button" onClick={() => set('rating_type', k)} style={{
+                padding: '10px 8px', borderRadius: 'var(--radius)', border: `2px solid ${form.rating_type === k ? v.color : 'var(--border)'}`,
+                background: form.rating_type === k ? v.bg : 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all .15s'
+              }}>
+                <span style={{ fontSize: 22 }}>{v.icon}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: form.rating_type === k ? v.color : 'var(--text2)' }}>{v.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Field label="Category">
+          <select value={form.category} onChange={e => set('category', e.target.value)}>
+            {Object.entries(CATEGORIES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Field>
+
+        {projects && projects.length > 0 && (
+          <Field label="Related Project (optional)">
+            <select value={form.project_id} onChange={e => set('project_id', e.target.value)}>
+              <option value="">— No specific project —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
+            </select>
+          </Field>
+        )}
+
+        <Field label="Description *">
+          <textarea value={form.description} onChange={e => set('description', e.target.value)}
+            placeholder={
+              form.rating_type === 'commendation' ? 'Describe what was done well...' :
+              form.rating_type === 'yellow_card' ? 'Describe the issue and what improvement is expected...' :
+              'Describe the serious issue and consequences...'
+            }
+            style={{ minHeight: 100 }} />
+        </Field>
+
+        {subEmail && (
+          <div
+            onClick={() => set('send_email', !form.send_email)}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', fontSize: 13, background: form.send_email ? 'var(--green-bg)' : 'var(--surface2)', padding: '12px 14px', borderRadius: 'var(--radius)', border: form.send_email ? '1px solid var(--green-border)' : '1px solid var(--border)', userSelect: 'none' }}>
+            <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${form.send_email ? 'var(--green)' : 'var(--border2)'}`, background: form.send_email ? 'var(--green)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}>
+              {form.send_email && <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, color: form.send_email ? 'var(--green)' : 'var(--text)' }}>Send email notification to subcontractor</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{subEmail}</div>
+            </div>
+          </div>
+        )}
+        {!subEmail && (
+          <div style={{ fontSize: 12, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '8px 12px', borderRadius: 'var(--radius)' }}>
+            No email address on file — notification cannot be sent. Add an email to this subcontractor to enable notifications.
+          </div>
+        )}
+      </div>
+    </Modal>
+  )
+}

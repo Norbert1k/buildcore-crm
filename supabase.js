@@ -1,112 +1,212 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
-import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit } from '../components/ui'
-import { useAuth } from '../lib/auth'
-import ProjectModal from '../components/ProjectModal'
+@import url('https://fonts.googleapis.com/css2?family=Fahkwang:wght@400;600&display=swap');
 
-export default function Projects() {
-  const [projects, setProjects] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
-  const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState(null)
-  const navigate = useNavigate()
-  const { can } = useAuth()
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  useEffect(() => { load() }, [])
+:root {
+  --font: 'Fahkwang', 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --bg: #F5F4F0;
+  --surface: #FFFFFF;
+  --surface2: #F5F4F0;
+  --border: #E2E0D8;
+  --border2: #C8C6BC;
+  --text: #1C1B18;
+  --text2: #5C5A54;
+  --text3: #9C9A94;
+  --accent: #448a40;
+  --accent-dark: #2d6129;
+  --accent-light: #e8f5e7;
+  --red: #A32D2D; --red-bg: #FCEBEB; --red-border: #F7C1C1;
+  --amber: #854F0B; --amber-bg: #FAEEDA; --amber-border: #FAC775;
+  --green: #448a40; --green-bg: #e8f5e7; --green-border: #b8ddb6;
+  --blue: #185FA5; --blue-bg: #E6F1FB; --blue-border: #B5D4F4;
+  --purple: #3C3489; --purple-bg: #EEEDFE; --purple-border: #AFA9EC;
+  --radius: 8px; --radius-lg: 12px;
+  --sidebar-width: 232px;
+  --topbar-height: 56px;
+}
 
-  async function load() {
-    setLoading(true)
-    const { data } = await supabase
-      .from('projects')
-      .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
-      .order('created_at', { ascending: false })
-    setProjects(data || [])
-    setLoading(false)
+html, body, #root { height: 100%; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+input, select, textarea {
+  font-family: var(--font); font-size: 14px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; width: 100%;
+  outline: none; transition: border .15s;
+  -webkit-appearance: none; appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,138,64,.1); }
+input::placeholder { color: var(--text3); }
+label { font-size: 12px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
+textarea { resize: vertical; min-height: 80px; }
+
+button { font-family: var(--font); cursor: pointer; border: none; outline: none; transition: all .15s; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap; }
+.btn:hover { background: var(--surface2); border-color: var(--border2); }
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn-danger { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-icon { padding: 8px; border-radius: var(--radius); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.card-pad { padding: 20px; }
+
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill-green { background: var(--green-bg); color: var(--green); }
+.pill-amber { background: var(--amber-bg); color: var(--amber); }
+.pill-red { background: var(--red-bg); color: var(--red); }
+.pill-blue { background: var(--blue-bg); color: var(--blue); }
+.pill-purple { background: var(--purple-bg); color: var(--purple); }
+.pill-gray { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+
+/* ── App Layout ── */
+.app-layout { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-width); min-width: var(--sidebar-width);
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto;
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+  z-index: 300;
+}
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.4); z-index: 299;
+}
+
+/* ── Main area ── */
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ── Topbar ── */
+.topbar {
+  height: var(--topbar-height); background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
+}
+.topbar-menu-btn {
+  display: none; padding: 6px; border-radius: var(--radius);
+  background: none; border: 1px solid var(--border);
+  color: var(--text); cursor: pointer; flex-shrink: 0;
+}
+.page-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+/* ── Sidebar Nav ── */
+.sidebar-logo { padding: 16px; border-bottom: 1px solid var(--border); }
+.nav-section { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; padding: 14px 16px 4px; }
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 10px 12px; margin: 1px 8px; border-radius: var(--radius); font-size: 13px; color: var(--text2); cursor: pointer; transition: all .15s; text-decoration: none; }
+.nav-item:hover { background: var(--accent-light); color: var(--accent-dark); }
+.nav-item.active { background: var(--accent); color: #fff; font-weight: 600; }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.nav-badge { margin-left: auto; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; background: var(--red-bg); color: var(--red); }
+.nav-item.active .nav-badge { background: rgba(255,255,255,.25); color: #fff; }
+.nav-user { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 400; display: flex; align-items: flex-end; justify-content: center; padding: 0; }
+.modal { background: var(--surface); border-radius: var(--radius-lg) var(--radius-lg) 0 0; border: 1px solid var(--border); width: 100%; max-height: 92vh; overflow-y: auto; box-shadow: 0 -8px 40px rgba(0,0,0,.15); }
+.modal-sm { max-width: 100%; }
+.modal-md { max-width: 100%; }
+.modal-lg { max-width: 100%; }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.modal-title { font-size: 15px; font-weight: 600; }
+.modal-body { padding: 16px 20px; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: var(--surface); }
+
+/* ── Forms ── */
+.form-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.form-grid .full { grid-column: 1; }
+.form-section { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; padding-top: 6px; border-top: 2px solid var(--accent-light); margin-top: 4px; }
+
+/* ── Stats ── */
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; border-left: 3px solid var(--accent); }
+.stat-label { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.stat-value { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.stat-value.red { color: var(--red); }
+.stat-value.amber { color: var(--amber); }
+.stat-value.green { color: var(--green); }
+
+/* ── Tables — scroll on mobile ── */
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; min-width: 500px; }
+th { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+.td-muted { color: var(--text2); font-size: 12px; }
+
+/* ── Avatar ── */
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.avatar-sm { width: 28px; height: 28px; font-size: 10px; }
+.avatar-lg { width: 46px; height: 46px; font-size: 15px; }
+
+/* ── Mobile Cards (replaces table rows on small screens) ── */
+.mobile-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s; }
+.mobile-card:active { border-color: var(--accent); }
+.mobile-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.mobile-card-title { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; }
+.mobile-card-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--text2); }
+.mobile-card-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.mobile-card-actions .btn { flex: 1; justify-content: center; }
+
+/* ── Misc ── */
+.divider { height: 1px; background: var(--border); margin: 14px 0; }
+.text-muted { color: var(--text2); }
+.text-sm { font-size: 12px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+.section-title { font-size: 14px; font-weight: 600; }
+.alert-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 6px; font-size: 13px; }
+.alert-expired { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+.alert-warning { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 13px; }
+.filter-tabs { display: flex; gap: 4px; margin-bottom: 14px; flex-wrap: wrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+.filter-tab { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text2); transition: all .15s; white-space: nowrap; flex-shrink: 0; }
+.filter-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.filter-tab:hover:not(.active) { background: var(--accent-light); color: var(--accent-dark); border-color: var(--accent); }
+
+/* ── Desktop: wider modal, 2-col form grid ── */
+@media (min-width: 640px) {
+  .modal-overlay { align-items: center; padding: 20px; }
+  .modal { border-radius: var(--radius-lg); max-height: 90vh; }
+  .modal-sm { max-width: 440px; }
+  .modal-md { max-width: 580px; }
+  .modal-lg { max-width: 720px; }
+  .form-grid { grid-template-columns: 1fr 1fr; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .form-section { grid-column: 1 / -1; }
+  .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .page-content { padding: 24px; }
+}
+
+/* ── Tablet: show sidebar permanently ── */
+@media (min-width: 768px) {
+  .topbar-menu-btn { display: none !important; }
+  .sidebar { transform: none !important; position: relative !important; }
+  .sidebar-overlay { display: none !important; }
+}
+
+/* ── Mobile: hide sidebar, show hamburger ── */
+@media (max-width: 767px) {
+  .topbar-menu-btn { display: flex !important; align-items: center; justify-content: center; }
+  .sidebar {
+    position: fixed !important; left: 0; top: 0; height: 100vh;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0,0,0,.12);
   }
-
-  const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter)
-  const counts = ['active', 'tender', 'on_hold', 'completed', 'cancelled'].reduce((acc, s) => {
-    acc[s] = projects.filter(p => p.status === s).length; return acc
-  }, {})
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Projects</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{projects.length} projects total</p>
-        </div>
-        {can('manage_projects') && (
-          <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
-            <IconPlus size={14} /> New Project
-          </button>
-        )}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
-        <div className="stat-card"><div className="stat-label">Active</div><div className="stat-value green">{counts.active}</div></div>
-        <div className="stat-card"><div className="stat-label">Tender</div><div className="stat-value">{counts.tender}</div></div>
-        <div className="stat-card"><div className="stat-label">On Hold</div><div className="stat-value amber">{counts.on_hold}</div></div>
-        <div className="stat-card"><div className="stat-label">Completed</div><div className="stat-value">{counts.completed}</div></div>
-      </div>
-
-      <div className="filter-tabs">
-        <div className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>All ({projects.length})</div>
-        {Object.entries(PROJECT_STATUSES).map(([k, v]) => (
-          <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
-            {v.label} ({counts[k] || 0})
-          </div>
-        ))}
-      </div>
-
-      {loading ? <Spinner /> : filtered.length === 0 ? (
-        <EmptyState icon="🏗️" title="No projects" message="Create your first project to start assigning subcontractors." action={can('manage_projects') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> New Project</button>} />
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Project</th>
-                <th>Client</th>
-                <th>Project Manager</th>
-                <th>Start</th>
-                <th>End</th>
-                <th>Subcontractors</th>
-                <th>Value</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(p => (
-                <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
-                  <td>
-                    <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                    {p.project_ref && <div className="td-muted">{p.project_ref}</div>}
-                  </td>
-                  <td>{p.client_name || '—'}</td>
-                  <td>{p.profiles?.full_name || '—'}</td>
-                  <td className="td-muted">{formatDate(p.start_date)}</td>
-                  <td className="td-muted">{formatDate(p.end_date)}</td>
-                  <td><Pill cls="pill-blue">{p.project_subcontractors?.length || 0} assigned</Pill></td>
-                  <td>{formatCurrency(p.value)}</td>
-                  <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill></td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {can('manage_projects') && (
-                      <button className="btn btn-sm" onClick={() => { setEditing(p); setShowModal(true) }}><IconEdit size={13}/></button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {showModal && <ProjectModal project={editing} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}
-    </div>
-  )
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-overlay.open { display: block; }
+  .page-content { padding: 16px; }
+  .topbar { padding: 0 14px; }
+  table { min-width: 600px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
 }

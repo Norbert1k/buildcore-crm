@@ -1,134 +1,174 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { DOCUMENT_TYPES, formatDate, daysUntilExpiry, docStatusInfo } from '../lib/utils'
-import { Avatar, Pill, Spinner, EmptyState } from '../components/ui'
+import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
+import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEye, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
+import { RatingBadge } from '../components/PerformanceTab'
+import { useAuth } from '../lib/auth'
+import SubcontractorModal from '../components/SubcontractorModal'
 
-export default function Documents() {
-  const [docs, setDocs] = useState([])
+export default function Subcontractors() {
+  const [subs, setSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [editing, setEditing] = useState(null)
   const navigate = useNavigate()
+  const { can } = useAuth()
 
   useEffect(() => { load() }, [])
+
+  async function deleteSub(id) {
+    await supabase.from('subcontractors').delete().eq('id', id)
+    setConfirmDelete(null)
+    load()
+  }
 
   async function load() {
     setLoading(true)
     const { data } = await supabase
-      .from('documents_with_status')
-      .select('*, subcontractors(id, company_name, trade)')
-      .order('expiry_date', { nullsFirst: false })
-    setDocs(data || [])
+      .from('subcontractors')
+      .select('*, documents_with_status(id, expiry_date, status), performance_ratings(id, rating_type)')
+      .order('company_name')
+    setSubs(data || [])
     setLoading(false)
   }
 
   function filtered() {
-    let list = docs
-    if (filter !== 'all') list = list.filter(d => d.status === filter)
+    let list = subs
+    if (filter !== 'all') list = list.filter(s => s.status === filter)
     if (search) {
       const q = search.toLowerCase()
-      list = list.filter(d =>
-        d.subcontractors?.company_name?.toLowerCase().includes(q) ||
-        d.document_name?.toLowerCase().includes(q) ||
-        DOCUMENT_TYPES[d.document_type]?.toLowerCase().includes(q)
+      list = list.filter(s =>
+        s.company_name.toLowerCase().includes(q) ||
+        s.contact_name.toLowerCase().includes(q) ||
+        s.trade.toLowerCase().includes(q) ||
+        s.city?.toLowerCase().includes(q)
       )
     }
     return list
   }
 
   const counts = {
-    all: docs.length,
-    expired: docs.filter(d => d.status === 'expired').length,
-    expiring_soon: docs.filter(d => d.status === 'expiring_soon').length,
-    valid: docs.filter(d => d.status === 'valid').length,
-    no_expiry: docs.filter(d => d.status === 'no_expiry').length,
+    all: subs.length,
+    active: subs.filter(s => s.status === 'active').length,
+    approved: subs.filter(s => s.status === 'approved').length,
+    on_hold: subs.filter(s => s.status === 'on_hold').length,
+    inactive: subs.filter(s => s.status === 'inactive').length,
   }
 
   const list = filtered()
 
   return (
     <div>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600 }}>Documents & Compliance</h2>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>Track all subcontractor paperwork and expiry dates</p>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-        <div className="stat-card"><div className="stat-label">Total Documents</div><div className="stat-value">{counts.all}</div></div>
-        <div className="stat-card"><div className="stat-label">Expired</div><div className={`stat-value ${counts.expired > 0 ? 'red' : ''}`}>{counts.expired}</div></div>
-        <div className="stat-card"><div className="stat-label">Expiring ≤ 30d</div><div className={`stat-value ${counts.expiring_soon > 0 ? 'amber' : ''}`}>{counts.expiring_soon}</div></div>
-        <div className="stat-card"><div className="stat-label">Valid</div><div className="stat-value green">{counts.valid}</div></div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Subcontractors</h2>
+          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{subs.length} registered contractors</p>
+        </div>
+        {can('manage_subcontractors') && (
+          <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
+            <IconPlus size={14} /> Add Subcontractor
+          </button>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input
-          value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search documents or contractors…"
-          style={{ width: 260 }}
-        />
+        <div className="search-wrap" style={{ position: 'relative' }}>
+          <span className="search-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><IconSearch size={13} /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, trade, city…" style={{ paddingLeft: 32, width: 260 }} />
+        </div>
         <div className="filter-tabs" style={{ marginBottom: 0 }}>
-          {[
-            ['all', 'All'],
-            ['expired', `Expired (${counts.expired})`],
-            ['expiring_soon', `Expiring Soon (${counts.expiring_soon})`],
-            ['valid', `Valid (${counts.valid})`],
-            ['no_expiry', 'No Expiry'],
-          ].map(([k, v]) => (
-            <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>{v}</div>
+          {Object.entries({ all: 'All', active: 'Active', approved: 'Approved', on_hold: 'On Hold', inactive: 'Inactive' }).map(([k, v]) => (
+            <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
+              {v} ({counts[k]})
+            </div>
           ))}
         </div>
       </div>
 
       {loading ? <Spinner /> : list.length === 0 ? (
-        <EmptyState icon="📄" title="No documents found" message="Add documents to subcontractor profiles to track compliance." />
+        <EmptyState icon="👷" title="No subcontractors found" message={search ? 'Try adjusting your search.' : 'Add your first subcontractor to get started.'} action={can('manage_subcontractors') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> Add Subcontractor</button>} />
       ) : (
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Contractor</th>
-                <th>Document Type</th>
-                <th>Document Name</th>
-                <th>Reference</th>
-                <th>Expiry Date</th>
+                <th>Company</th>
+                <th>Trade</th>
+                <th>Contact</th>
+                <th>Location</th>
                 <th>Status</th>
+                <th>Documents</th>
+                <th>Rating</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
-              {list.map(doc => {
-                const info = docStatusInfo(doc.expiry_date)
-                const days = daysUntilExpiry(doc.expiry_date)
+              {list.map(s => {
+                const { expired, expiring, valid, total } = subDocSummary(s.documents_with_status)
+                const docPill = expired > 0
+                  ? <Pill cls="pill-red">{expired} expired</Pill>
+                  : expiring > 0
+                  ? <Pill cls="pill-amber">{expiring} expiring</Pill>
+                  : total > 0
+                  ? <Pill cls="pill-green">All valid</Pill>
+                  : <Pill cls="pill-gray">No docs</Pill>
                 return (
-                  <tr key={doc.id} style={{ cursor: 'pointer' }}
-                    onClick={() => navigate(`/subcontractors/${doc.subcontractors?.id}`)}>
+                  <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${s.id}`)}>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Avatar name={doc.subcontractors?.company_name} size="sm" />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Avatar name={s.company_name} />
                         <div>
-                          <div style={{ fontWeight: 500 }}>{doc.subcontractors?.company_name}</div>
-                          <div className="td-muted">{doc.subcontractors?.trade}</div>
+                          <div style={{ fontWeight: 500 }}>{s.company_name}</div>
+                          <div className="td-muted">{s.email}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="td-muted">{DOCUMENT_TYPES[doc.document_type] || doc.document_type}</td>
-                    <td style={{ fontWeight: 500 }}>{doc.document_name}</td>
-                    <td className="td-muted">{doc.reference_number || '—'}</td>
+                    <td><Pill cls="pill-blue">{s.trade}</Pill></td>
                     <td>
-                      <div style={{ fontWeight: doc.status !== 'valid' ? 500 : 400 }}>{formatDate(doc.expiry_date)}</div>
-                      {days !== null && doc.status !== 'valid' && doc.status !== 'no_expiry' && (
-                        <div style={{ fontSize: 11, color: days < 0 ? 'var(--red)' : 'var(--amber)' }}>
-                          {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d remaining`}
-                        </div>
-                      )}
+                      <div>{s.contact_name}</div>
+                      <div className="td-muted">{s.phone}</div>
                     </td>
-                    <td><Pill cls={info?.cls || 'pill-gray'}>{info?.label}</Pill></td>
+                    <td>{s.city || '—'}</td>
+                    <td><Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill></td>
+                    <td>{docPill}</td>
+                    <td><RatingBadge ratings={s.performance_ratings} /></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+                        <button className="btn btn-sm" onClick={() => navigate(`/subcontractors/${s.id}`)}><IconEye size={13} /></button>
+                        {can('manage_subcontractors') && (
+                          <button className="btn btn-sm" onClick={() => { setEditing(s); setShowModal(true) }}><IconEdit size={13} /></button>
+                        )}
+                        {can('delete') && (
+                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(s)}><IconTrash size={13} /></button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => deleteSub(confirmDelete?.id)}
+        title="Delete subcontractor"
+        message={`Are you sure you want to permanently delete ${confirmDelete?.company_name}? All their documents, contacts and ratings will also be deleted. This cannot be undone.`}
+        danger
+      />
+      {showModal && (
+        <SubcontractorModal
+          sub={editing}
+          onClose={() => setShowModal(false)}
+          onSaved={() => { setShowModal(false); load() }}
+        />
       )}
     </div>
   )

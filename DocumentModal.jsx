@@ -1,114 +1,74 @@
-import { differenceInDays, format, parseISO, isValid } from 'date-fns'
+import { NavLink } from 'react-router-dom'
+import { useAuth } from '../lib/auth'
+import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
+import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
 
-export const TRADES = [
-  'Electrical','Plumbing','HVAC','Scaffolding','Groundworks','Brickwork',
-  'Carpentry','Roofing','Steel Erection','Painting & Decorating','Plastering',
-  'Glazing','Demolition','Drainage','Landscaping','Fire Protection',
-  'Lift Installation','Flooring','Insulation','Other'
-]
+export default function Sidebar({ expCount, open, onClose }) {
+  const { profile } = useAuth()
+  const role = profile?.role || 'viewer'
+  const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer
 
-export const DOCUMENT_TYPES = {
-  public_liability: 'Public Liability Insurance',
-  employers_liability: "Employer's Liability Insurance",
-  professional_indemnity: 'Professional Indemnity Insurance',
-  rams: 'RAMS (Risk Assessment & Method Statement)',
-  method_statement: 'Method Statement',
-  risk_assessment: 'Risk Assessment',
-  cscs_card: 'CSCS Card',
-  gas_safe: 'Gas Safe Certificate',
-  niceic: 'NICEIC Certificate',
-  chas: 'CHAS Accreditation',
-  constructionline: 'Constructionline',
-  iso_9001: 'ISO 9001 Quality',
-  iso_14001: 'ISO 14001 Environmental',
-  iso_45001: 'ISO 45001 Health & Safety',
-  f10_notification: 'F10 CDM Notification',
-  trade_certificate: 'Trade Certificate',
-  other: 'Other Document',
-}
-
-export const PROJECT_STATUSES = {
-  tender: { label: 'Tender', cls: 'pill-purple' },
-  active: { label: 'Active', cls: 'pill-green' },
-  on_hold: { label: 'On Hold', cls: 'pill-amber' },
-  completed: { label: 'Completed', cls: 'pill-blue' },
-  cancelled: { label: 'Cancelled', cls: 'pill-gray' },
-}
-
-export const SUB_STATUSES = {
-  active: { label: 'Active', cls: 'pill-green' },
-  approved: { label: 'Approved', cls: 'pill-blue' },
-  on_hold: { label: 'On Hold', cls: 'pill-amber' },
-  inactive: { label: 'Inactive', cls: 'pill-gray' },
-}
-
-export const ROLES = {
-  admin: { label: 'Admin', cls: 'pill-red' },
-  project_manager: { label: 'Project Manager', cls: 'pill-blue' },
-  document_controller: { label: 'Document Controller', cls: 'pill-purple' },
-  viewer: { label: 'Viewer', cls: 'pill-gray' },
-}
-
-export function docStatus(expiryDate) {
-  if (!expiryDate) return 'no_expiry'
-  const days = differenceInDays(parseISO(expiryDate), new Date())
-  if (days < 0) return 'expired'
-  if (days <= 30) return 'expiring_soon'
-  return 'valid'
-}
-
-export function docStatusInfo(expiryDate) {
-  const status = docStatus(expiryDate)
-  const map = {
-    expired: { label: 'Expired', cls: 'pill-red', dotCls: 'dot-red' },
-    expiring_soon: { label: 'Expiring Soon', cls: 'pill-amber', dotCls: 'dot-amber' },
-    valid: { label: 'Valid', cls: 'pill-green', dotCls: 'dot-green' },
-    no_expiry: { label: 'No Expiry', cls: 'pill-gray', dotCls: 'dot-gray' },
+  function handleNav() {
+    if (window.innerWidth < 768) onClose()
   }
-  return map[status]
-}
 
-export function daysUntilExpiry(expiryDate) {
-  if (!expiryDate) return null
-  return differenceInDays(parseISO(expiryDate), new Date())
-}
+  const allNavItems = [
+    { to: '/',               key: 'dashboard',       label: 'Dashboard',       icon: <IconDashboard /> },
+    { to: '/subcontractors', key: 'subcontractors',  label: 'Subcontractors',  icon: <IconUsers />, badge: expCount > 0 ? expCount : null },
+    { to: '/documents',      key: 'documents',       label: 'Documents',       icon: <IconDoc /> },
+    { to: '/projects',       key: 'projects',        label: 'Projects',        icon: <IconProject /> },
+    { to: '/suppliers',      key: 'suppliers',       label: 'Suppliers',       icon: <IconBuilding /> },
+  ]
 
-export function formatDate(dateStr) {
-  if (!dateStr) return '—'
-  try { return format(parseISO(dateStr), 'd MMM yyyy') } catch (e) { return dateStr }
-}
+  const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))
 
-export function formatCurrency(val) {
-  if (val == null) return '—'
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(val)
-}
+  return (
+    <>
+      <div className={`sidebar-overlay ${open ? 'open' : ''}`} onClick={onClose} />
+      <aside className={`sidebar ${open ? 'open' : ''}`}>
+        <div className="sidebar-logo">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src="/logo.png" alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
+            </div>
+          </div>
+        </div>
 
-export function initials(name) {
-  if (!name) return '?'
-  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-}
+        <nav style={{ flex: 1, padding: '8px 0' }}>
+          <div className="nav-section">Navigation</div>
+          {visibleItems.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+              onClick={handleNav}
+            >
+              {item.icon}
+              {item.label}
+              {item.badge && <span className="nav-badge">{item.badge}</span>}
+            </NavLink>
+          ))}
 
-const AVATAR_COLORS = [
-  { bg: '#EEEDFE', color: '#3C3489' }, { bg: '#E1F5EE', color: '#085041' },
-  { bg: '#FAECE7', color: '#712B13' }, { bg: '#E6F1FB', color: '#0C447C' },
-  { bg: '#FAEEDA', color: '#633806' }, { bg: '#EAF3DE', color: '#27500A' },
-  { bg: '#FBEAF0', color: '#72243E' }, { bg: '#F1EFE8', color: '#444441' },
-]
+          <div className="nav-section" style={{ marginTop: 8 }}>Account</div>
+          <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={handleNav}>
+            <IconSettings />
+            Settings
+          </NavLink>
+        </nav>
 
-export function avatarColor(str) {
-  if (!str) return AVATAR_COLORS[0]
-  let hash = 0
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash)
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
-}
-
-export function subDocSummary(documents) {
-  let expired = 0, expiring = 0, valid = 0
-  documents?.forEach(d => {
-    const s = docStatus(d.expiry_date)
-    if (s === 'expired') expired++
-    else if (s === 'expiring_soon') expiring++
-    else valid++
-  })
-  return { expired, expiring, valid, total: (documents?.length || 0) }
+        {profile && (
+          <div className="nav-user">
+            <Avatar name={profile.full_name} size="sm" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{ROLES[role]?.label || role}</div>
+            </div>
+          </div>
+        )}
+      </aside>
+    </>
+  )
 }
