@@ -25,12 +25,12 @@ export default function Sidebar({ expCount, open, onClose }) {
       <div className={`sidebar-overlay ${open ? 'open' : ''}`} onClick={onClose} />
 
       <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <div className="sidebar-logo">
+        <div className="sidebar-logo" style={{ background: '#448a40', margin: '-1px -1px 0', borderRadius: '0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/logo.png" alt="City Construction" style={{ height: 34, width: 'auto', objectFit: 'contain' }} />
+            <img src="/logo.png" alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
             <div>
-              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2, color: '#fff' }}>City Construction</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>CRM System</div>
             </div>
           </div>
         </div>
