@@ -54,9 +54,7 @@ export default function Login() {
     <div style={{ minHeight: '100vh', background: '#f5f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ background: '#448a40', borderRadius: 16, padding: '16px 24px', display: 'inline-block', marginBottom: 20 }}>
-            <img src="/logo.png" alt="City Construction" style={{ height: 70, display: 'block', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
-          </div>
+          <img src="/logo.png" alt="City Construction" style={{ height: 90, margin: '0 auto 20px', display: 'block', objectFit: 'contain' }} />
         </div>
 
         <div style={{ background: '#fff', border: '1px solid #e2e0d8', borderRadius: 12, padding: 28, borderTop: '3px solid #448a40' }}>
