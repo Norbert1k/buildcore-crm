@@ -3,19 +3,23 @@ import { supabase } from './supabase'
 
 const AuthContext = createContext(null)
 
+function applyTheme(theme) {
+  const t = theme || 'light'
+  document.documentElement.setAttribute('data-theme', t)
+  localStorage.setItem('theme', t)
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [projectAccess, setProjectAccess] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // Apply saved theme immediately before any Supabase calls
   useEffect(() => {
+    // Apply theme from localStorage immediately on mount
     const saved = localStorage.getItem('theme') || 'light'
-    document.documentElement.setAttribute('data-theme', saved)
-  }, [])
+    applyTheme(saved)
 
-  useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
@@ -25,27 +29,29 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
       if (session?.user) fetchProfile(session.user.id)
-      else { setProfile(null); setProjectAccess([]); setLoading(false) }
+      else {
+        setProfile(null)
+        setProjectAccess([])
+        // Keep theme from localStorage when signed out
+        const saved = localStorage.getItem('theme') || 'light'
+        applyTheme(saved)
+        setLoading(false)
+      }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     setProfile(data)
-    applyTheme(data?.theme || 'light')
+    // Apply theme from profile, save to localStorage
+    if (data?.theme) applyTheme(data.theme)
     if (data?.role === 'site_manager') {
       const { data: access } = await supabase.from('user_project_access').select('project_id').eq('user_id', userId)
       setProjectAccess((access || []).map(a => a.project_id))
     }
     setLoading(false)
-  }
-
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
   }
 
   async function setTheme(theme) {
@@ -61,7 +67,7 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     await supabase.auth.signOut()
-    applyTheme('light')
+    // Theme stays as-is from localStorage — don't reset it
   }
 
   const role = profile?.role
