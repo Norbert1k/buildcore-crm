@@ -246,7 +246,14 @@ export default function CompanyDocuments() {
           const count = docs[cat.key]?.length || 0
           const isActive = activeCategory === cat.key
           return (
-            <div key={cat.key} onClick={() => { setActiveCategory(isActive ? null : cat.key); setSelected(new Set()) }}
+            <div key={cat.key} onClick={() => {
+              const newCat = isActive ? null : cat.key
+              setActiveCategory(newCat)
+              setSelected(new Set())
+              if (!isActive && docs[cat.key]?.length) {
+                setTimeout(() => loadThumbnailsForCategory(docs[cat.key]), 150)
+              }
+            }}
               style={{ background: isActive ? 'var(--green-bg)' : 'var(--surface)', border: `1.5px solid ${isActive ? 'var(--green)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', padding: '14px 10px', textAlign: 'center', cursor: 'pointer', transition: 'all .15s', position: 'relative' }}
               onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--surface2)' }}
               onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'var(--surface)' }}>
