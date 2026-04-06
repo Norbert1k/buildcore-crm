@@ -15,20 +15,18 @@ export default function CompanyDocuments() {
   useEffect(() => { loadSetting() }, [])
 
   async function loadSetting() {
-    const { data } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', COMPANY_FOLDER_KEY)
-      .single()
-    if (data?.value) setFolderId(data.value)
-
-    const { data: nameData } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', COMPANY_FOLDER_NAME_KEY)
-      .single()
-    if (nameData?.value) setFolderName(nameData.value)
+    const { data: d1 } = await supabase.from('app_settings').select('value').eq('key', COMPANY_FOLDER_KEY).single()
+    const { data: d2 } = await supabase.from('app_settings').select('value').eq('key', COMPANY_FOLDER_NAME_KEY).single()
+    if (d1?.value) setFolderId(d1.value)
+    if (d2?.value) setFolderName(d2.value)
     setLoading(false)
+  }
+
+  async function handleLinkFolder(id, name) {
+    setFolderId(id)
+    setFolderName(name)
+    await supabase.from('app_settings').upsert({ key: COMPANY_FOLDER_KEY, value: id }, { onConflict: 'key' })
+    await supabase.from('app_settings').upsert({ key: COMPANY_FOLDER_NAME_KEY, value: name || id }, { onConflict: 'key' })
   }
 
   async function handleUnlinkFolder() {
@@ -38,23 +36,28 @@ export default function CompanyDocuments() {
     await supabase.from('app_settings').delete().eq('key', COMPANY_FOLDER_NAME_KEY)
   }
 
-  async function handleLinkFolder(id, name) {
-    setFolderId(id)
-    setFolderName(name)
-    // Upsert folder ID
-    await supabase.from('app_settings').upsert({ key: COMPANY_FOLDER_KEY, value: id }, { onConflict: 'key' })
-    await supabase.from('app_settings').upsert({ key: COMPANY_FOLDER_NAME_KEY, value: name || id }, { onConflict: 'key' })
-  }
-
   return (
     <div>
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600 }}>Company Documents</h2>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4, lineHeight: 1.6 }}>
-          {folderId
-            ? `Linked to: ${folderName || folderId} — Browse, upload and manage your company-wide documents`
-            : 'Connect your Google Drive and link your company documents folder'}
-        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' }}>
+          {folderId ? (
+            <>
+              <span style={{ fontSize: 13, color: 'var(--text2)' }}>
+                Linked to: <strong style={{ color: 'var(--text)' }}>{folderName || folderId}</strong>
+              </span>
+              {can('manage_users') && (
+                <button className="btn btn-sm btn-danger" onClick={handleUnlinkFolder}>
+                  ✕ Unlink folder
+                </button>
+              )}
+            </>
+          ) : (
+            <span style={{ fontSize: 13, color: 'var(--text2)' }}>
+              Connect your Google Drive and link your company documents folder
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Quick access tiles */}
@@ -69,14 +72,13 @@ export default function CompanyDocuments() {
           { icon: '🚗', label: 'Car Fleet' },
           { icon: '📝', label: 'Templates' },
         ].map(item => (
-          <div key={item.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '12px 10px', textAlign: 'center', fontSize: 12, color: 'var(--text2)', cursor: 'default' }}>
+          <div key={item.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '12px 10px', textAlign: 'center', fontSize: 12, color: 'var(--text2)' }}>
             <div style={{ fontSize: 24, marginBottom: 6 }}>{item.icon}</div>
             <div style={{ fontWeight: 500 }}>{item.label}</div>
           </div>
         ))}
       </div>
 
-      {/* Google Drive Browser */}
       {!loading && (
         <GoogleDriveBrowser
           linkedFolderId={folderId}
