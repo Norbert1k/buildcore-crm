@@ -12,6 +12,7 @@ export default function Settings() {
   const [showAddUser, setShowAddUser] = useState(false)
   const [showEditUser, setShowEditUser] = useState(null)
   const [show2FA, setShow2FA] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
   const [addForm, setAddForm] = useState({ email: '', full_name: '', password: '', role: 'viewer' })
   const [editForm, setEditForm] = useState({ full_name: '', role: 'viewer', projectIds: [] })
   const [saving, setSaving] = useState(false)
@@ -53,7 +54,7 @@ export default function Settings() {
     })
     if (error) { setAddError(error.message); setSaving(false); return }
     if (data?.user) {
-      await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role })
+      await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, must_change_password: true })
     }
     setSaving(false)
     setAddSuccess(`Account created for ${addForm.full_name}. They can log in at crm.cltd.co.uk`)
@@ -109,6 +110,7 @@ export default function Settings() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" onClick={() => setShowChangePassword(true)}>🔑 Change Password</button>
             <button className="btn btn-primary btn-sm" onClick={() => setShow2FA(true)}>🔐 Two-Factor Authentication</button>
             <button className="btn btn-danger btn-sm" onClick={signOut}>Sign out</button>
           </div>
@@ -188,6 +190,9 @@ export default function Settings() {
           )}
         </div>
       )}
+
+      {/* Change Password Modal */}
+      {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
 
       {/* 2FA Modal */}
       {show2FA && <TwoFAModal onClose={() => setShow2FA(false)} profile={profile} />}
@@ -400,6 +405,96 @@ function TwoFAModal({ onClose, profile }) {
               <button className="btn btn-danger btn-sm" onClick={() => removeFactor(f.id)} disabled={loading}>{loading ? '...' : 'Remove'}</button>
             </div>
           ))}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+// ── Change Password Modal ─────────────────────────────────────
+function ChangePasswordModal({ onClose }) {
+  const [current, setCurrent] = useState('')
+  const [newPass, setNewPass] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  async function changePassword() {
+    setError('')
+    if (!newPass || newPass.length < 8) { setError('New password must be at least 8 characters'); return }
+    if (newPass !== confirm) { setError('Passwords do not match'); return }
+    if (newPass === current) { setError('New password must be different from your current password'); return }
+    setSaving(true)
+
+    // Re-authenticate first with current password to verify identity
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: current,
+    })
+    if (signInError) { setError('Current password is incorrect'); setSaving(false); return }
+
+    // Update password
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPass })
+    setSaving(false)
+    if (updateError) { setError(updateError.message); return }
+    setSuccess(true)
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Change Password" size="sm"
+      footer={
+        success ? (
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        ) : (
+          <>
+            <button className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary" onClick={changePassword} disabled={saving || !current || !newPass || !confirm}>
+              {saving ? 'Updating...' : 'Update Password'}
+            </button>
+          </>
+        )
+      }>
+      {success ? (
+        <div style={{ textAlign: 'center', padding: '10px 0' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Password updated successfully</div>
+          <div style={{ fontSize: 13, color: 'var(--text2)' }}>Your new password is now active.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {error && (
+            <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13 }}>
+              {error}
+            </div>
+          )}
+          <Field label="Current Password">
+            <input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="Enter your current password" autoFocus />
+          </Field>
+          <Field label="New Password">
+            <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 8 characters" />
+          </Field>
+          <Field label="Confirm New Password">
+            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat new password" />
+          </Field>
+          {newPass && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {[
+                { label: '8+ characters', ok: newPass.length >= 8 },
+                { label: 'Uppercase letter', ok: /[A-Z]/.test(newPass) },
+                { label: 'Number', ok: /[0-9]/.test(newPass) },
+                { label: 'Passwords match', ok: newPass === confirm && confirm.length > 0 },
+              ].map(r => (
+                <span key={r.label} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: r.ok ? 'var(--green-bg)' : 'var(--surface2)', color: r.ok ? 'var(--green)' : 'var(--text3)', fontWeight: 500 }}>
+                  {r.ok ? '✓' : '○'} {r.label}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: 'var(--text3)', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '8px 10px' }}>
+            Use at least 8 characters with a mix of letters, numbers and symbols for a strong password.
+          </div>
         </div>
       )}
     </Modal>

@@ -38,3 +38,6 @@ create policy "Admins can manage project access" on public.user_project_access
 
 create policy "Users can view own project access" on public.user_project_access
   for select using (user_id = auth.uid());
+
+-- Add must_change_password flag to profiles
+alter table public.profiles add column if not exists must_change_password boolean default false;
