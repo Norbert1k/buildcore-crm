@@ -296,21 +296,21 @@ export default function CompanyDocuments() {
                   const color = fileColor(doc.file_type)
                   const ext = fileExt(doc.file_name)
                   return (
-                    <div style={{ borderRadius: 'var(--radius)', border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`, background: isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'hidden', userSelect: 'none' }}>
+                    <div style={{ borderRadius: 'var(--radius)', border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`, background: isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'visible', userSelect: 'none', position: 'relative' }}>
                       {/* Checkbox */}
                       <div onClick={e => { e.stopPropagation(); toggleSelect(doc.id) }}
-                        style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(128,128,128,0.6)'}`, background: isSelected ? 'var(--green)' : 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        style={{ position: 'absolute', top: 8, left: 8, zIndex: 50, width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(128,128,128,0.6)'}`, background: isSelected ? 'var(--green)' : 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                         {isSelected && <svg width="10" height="10" viewBox="0 0 12 12" fill="white"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
                       </div>
                       {/* Delete */}
                       {can('manage_subcontractors') && (
-                        <div onClick={e => { e.stopPropagation(); setConfirmDelete(doc) }}
-                          style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, width: 20, height: 20, borderRadius: 4, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white', fontSize: 11 }}>
+                        <div onClick={e => { e.stopPropagation(); e.preventDefault(); setConfirmDelete(doc) }}
+                          style={{ position: 'absolute', top: 8, right: 8, zIndex: 50, width: 22, height: 22, borderRadius: 4, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white', fontSize: 12, pointerEvents: 'all' }}>
                           ✕
                         </div>
                       )}
                       {/* Thumbnail */}
-                      <div onClick={e => { e.stopPropagation(); openPreview(doc) }} style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: thumb ? (isImage ? '#000' : '#fff') : `${color}15`, overflow: 'hidden', cursor: 'pointer' }}>
+                      <div onClick={e => { e.stopPropagation(); openPreview(doc) }} style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: thumb ? (isImage ? '#000' : '#fff') : `${color}15`, overflow: 'hidden', cursor: 'pointer', borderRadius: 'calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0' }}>
                         {thumb ? (
                           <img src={thumb} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: isImage ? 'cover' : 'contain', padding: isImage ? 0 : 4 }} />
                         ) : (

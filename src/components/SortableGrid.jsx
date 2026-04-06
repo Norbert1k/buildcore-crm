@@ -1,32 +1,38 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 
 export default function SortableGrid({ items, onReorder, renderItem, columns = 'repeat(auto-fill, minmax(160px, 1fr))' }) {
-  const [order, setOrder] = useState(items.map(i => i.id))
+  const [order, setOrder] = useState(() => items.map(i => i.id))
   const [dragId, setDragId] = useState(null)
   const [overId, setOverId] = useState(null)
   const [insertBefore, setInsertBefore] = useState(true)
+  const ghostRef = useRef(null)
   const saving = useRef(false)
 
-  // Sync order when items change externally
-  useEffect(() => {
+  // Keep order in sync when items change
+  const itemIds = items.map(i => i.id).sort().join(',')
+  const prevIds = useRef(itemIds)
+  if (prevIds.current !== itemIds) {
+    prevIds.current = itemIds
     setOrder(items.map(i => i.id))
-  }, [items.map(i => i.id).join(',')])
+  }
 
   const sortedItems = order.map(id => items.find(i => i.id === id)).filter(Boolean)
 
   function onDragStart(e, id) {
     e.dataTransfer.effectAllowed = 'move'
-    // Use a 1x1 transparent image as drag ghost to hide browser default
+    // Create invisible ghost — keep it alive until dragend
     const ghost = document.createElement('div')
-    ghost.style.cssText = 'position:fixed;top:-999px;width:1px;height:1px;'
+    ghost.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;'
     document.body.appendChild(ghost)
+    ghostRef.current = ghost
     e.dataTransfer.setDragImage(ghost, 0, 0)
-    setTimeout(() => document.body.removeChild(ghost), 0)
-    setDragId(id)
+    // Small delay so browser captures the ghost image first
+    requestAnimationFrame(() => setDragId(id))
   }
 
   function onDragOver(e, id) {
     e.preventDefault()
+    e.stopPropagation()
     e.dataTransfer.dropEffect = 'move'
     if (id === dragId) return
     const rect = e.currentTarget.getBoundingClientRect()
@@ -36,26 +42,27 @@ export default function SortableGrid({ items, onReorder, renderItem, columns = '
 
   function onDrop(e, id) {
     e.preventDefault()
+    e.stopPropagation()
     if (!dragId || dragId === id) return
     const newOrder = [...order]
     const fromIdx = newOrder.indexOf(dragId)
-    const toIdx = newOrder.indexOf(id)
     newOrder.splice(fromIdx, 1)
     const insertAt = insertBefore ? newOrder.indexOf(id) : newOrder.indexOf(id) + 1
-    newOrder.splice(insertAt, 0, dragId)
+    newOrder.splice(Math.max(0, insertAt), 0, dragId)
     setOrder(newOrder)
     setDragId(null)
     setOverId(null)
-    // Save to DB
+    if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null }
     if (!saving.current) {
       saving.current = true
-      onReorder(newOrder).finally(() => { saving.current = false })
+      Promise.resolve(onReorder(newOrder)).finally(() => { saving.current = false })
     }
   }
 
   function onDragEnd() {
     setDragId(null)
     setOverId(null)
+    if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null }
   }
 
   return (
@@ -73,23 +80,19 @@ export default function SortableGrid({ items, onReorder, renderItem, columns = '
             onDragEnd={onDragEnd}
             style={{
               position: 'relative',
-              opacity: isDragging ? 0.3 : 1,
-              transform: isOver ? `translateX(${insertBefore ? 10 : -10}px)` : 'none',
-              transition: isDragging ? 'none' : 'transform 0.15s ease, opacity 0.15s ease',
-              cursor: 'grab',
+              opacity: isDragging ? 0.25 : 1,
+              transform: isOver ? `translateX(${insertBefore ? 12 : -12}px)` : 'none',
+              transition: isDragging ? 'opacity 0.1s' : 'transform 0.12s ease, opacity 0.1s',
+              cursor: isDragging ? 'grabbing' : 'grab',
+              zIndex: isDragging ? 0 : 1,
             }}
           >
-            {/* Blue insert line */}
             {isOver && (
               <div style={{
-                position: 'absolute',
-                top: 0, bottom: 0,
-                [insertBefore ? 'left' : 'right']: -2,
-                width: 3,
-                background: '#378ADD',
-                borderRadius: 2,
-                zIndex: 20,
-                pointerEvents: 'none',
+                position: 'absolute', top: 0, bottom: 0,
+                [insertBefore ? 'left' : 'right']: -3,
+                width: 3, background: '#378ADD', borderRadius: 2,
+                zIndex: 30, pointerEvents: 'none',
               }} />
             )}
             {renderItem(item, isDragging)}
