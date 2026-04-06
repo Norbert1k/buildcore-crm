@@ -43,19 +43,30 @@ export const SUB_STATUSES = {
 }
 
 export const ROLES = {
-  admin: { label: 'Admin', cls: 'pill-red' },
-  project_manager: { label: 'Project Manager', cls: 'pill-blue' },
-  document_controller: { label: 'Document Controller', cls: 'pill-purple' },
-  viewer: { label: 'Viewer', cls: 'pill-gray' },
+  admin:                { label: 'Admin',               cls: 'pill-red',    desc: 'Full access including user management' },
+  project_manager:      { label: 'Project Manager',     cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
+  accountant:           { label: 'Accountant',          cls: 'pill-purple', desc: 'View financials, suppliers & contract values' },
+  site_manager:         { label: 'Site Manager',        cls: 'pill-amber',  desc: 'Access assigned projects & compliance docs only' },
+  document_controller:  { label: 'Document Controller', cls: 'pill-green',  desc: 'Add & edit compliance documents' },
+  viewer:               { label: 'Viewer',              cls: 'pill-gray',   desc: 'Read-only access to all areas' },
+}
+
+export const ROLE_PERMISSIONS = {
+  admin:               { nav: ['dashboard','subcontractors','documents','projects','suppliers','settings'], financials: true, performance: true },
+  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','suppliers','settings'], financials: true, performance: true },
+  accountant:          { nav: ['dashboard','suppliers'], financials: true, performance: false },
+  site_manager:        { nav: ['dashboard','subcontractors','documents','projects'], financials: false, performance: true },
+  document_controller: { nav: ['dashboard','subcontractors','documents','projects'], financials: false, performance: false },
+  viewer:              { nav: ['dashboard','subcontractors','documents','projects'], financials: false, performance: false },
 }
 
 export const NOTE_TYPES = {
-  note: { label: 'Note', icon: '📝', color: 'var(--text2)' },
-  call: { label: 'Call', icon: '📞', color: 'var(--blue)' },
-  email: { label: 'Email', icon: '✉️', color: 'var(--purple)' },
-  visit: { label: 'Site Visit', icon: '🏗️', color: 'var(--green)' },
-  issue: { label: 'Issue', icon: '⚠️', color: 'var(--red)' },
-  document: { label: 'Document', icon: '📄', color: 'var(--amber)' },
+  note:     { label: 'Note',      icon: '📝', color: 'var(--text2)' },
+  call:     { label: 'Call',      icon: '📞', color: 'var(--blue)' },
+  email:    { label: 'Email',     icon: '✉️',  color: 'var(--purple)' },
+  visit:    { label: 'Site Visit',icon: '🏗️',  color: 'var(--green)' },
+  issue:    { label: 'Issue',     icon: '⚠️',  color: 'var(--red)' },
+  document: { label: 'Document',  icon: '📄', color: 'var(--amber)' },
 }
 
 export function docStatus(expiryDate) {
@@ -69,10 +80,10 @@ export function docStatus(expiryDate) {
 export function docStatusInfo(expiryDate) {
   const status = docStatus(expiryDate)
   const map = {
-    expired: { label: 'Expired', cls: 'pill-red', dotCls: 'dot-red' },
-    expiring_soon: { label: 'Expiring Soon', cls: 'pill-amber', dotCls: 'dot-amber' },
-    valid: { label: 'Valid', cls: 'pill-green', dotCls: 'dot-green' },
-    no_expiry: { label: 'No Expiry', cls: 'pill-gray', dotCls: 'dot-gray' },
+    expired:      { label: 'Expired',       cls: 'pill-red',   dotCls: 'dot-red'   },
+    expiring_soon:{ label: 'Expiring Soon', cls: 'pill-amber', dotCls: 'dot-amber' },
+    valid:        { label: 'Valid',          cls: 'pill-green', dotCls: 'dot-green' },
+    no_expiry:    { label: 'No Expiry',      cls: 'pill-gray',  dotCls: 'dot-gray'  },
   }
   return map[status]
 }
@@ -134,7 +145,6 @@ export function complianceScore(documents) {
   return { score, expired, expiring, valid, total }
 }
 
-// CSV export utility
 export function exportToCSV(data, filename) {
   if (!data || data.length === 0) return
   const headers = Object.keys(data[0])
@@ -143,15 +153,12 @@ export function exportToCSV(data, filename) {
     if (val === null || val === undefined) return ''
     const str = String(val)
     return str.includes(',') || str.includes('"') || str.includes('\n')
-      ? `"${str.replace(/"/g, '""')}"`
-      : str
+      ? `"${str.replace(/"/g, '""')}"` : str
   }).join(','))
   const csv = [headers.join(','), ...rows].join('\n')
   const blob = new Blob([csv], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
+  a.href = url; a.download = filename; a.click()
   URL.revokeObjectURL(url)
 }

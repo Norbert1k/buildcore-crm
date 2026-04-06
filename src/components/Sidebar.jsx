@@ -1,29 +1,30 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
 import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
 
 export default function Sidebar({ expCount, open, onClose }) {
   const { profile } = useAuth()
-  const location = useLocation()
+  const role = profile?.role || 'viewer'
+  const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer
 
-  // Close sidebar on nav on mobile
   function handleNav() {
     if (window.innerWidth < 768) onClose()
   }
 
-  const navItems = [
-    { to: '/', label: 'Dashboard', icon: <IconDashboard /> },
-    { to: '/subcontractors', label: 'Subcontractors', icon: <IconUsers /> },
-    { to: '/documents', label: 'Documents', icon: <IconDoc />, badge: expCount > 0 ? expCount : null },
-    { to: '/projects', label: 'Projects', icon: <IconProject /> },
-    { to: '/suppliers', label: 'Suppliers', icon: <IconBuilding /> },
+  const allNavItems = [
+    { to: '/',               key: 'dashboard',       label: 'Dashboard',       icon: <IconDashboard /> },
+    { to: '/subcontractors', key: 'subcontractors',  label: 'Subcontractors',  icon: <IconUsers />, badge: expCount > 0 ? expCount : null },
+    { to: '/documents',      key: 'documents',       label: 'Documents',       icon: <IconDoc /> },
+    { to: '/projects',       key: 'projects',        label: 'Projects',        icon: <IconProject /> },
+    { to: '/suppliers',      key: 'suppliers',       label: 'Suppliers',       icon: <IconBuilding /> },
   ]
+
+  const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))
 
   return (
     <>
-      {/* Mobile overlay */}
       <div className={`sidebar-overlay ${open ? 'open' : ''}`} onClick={onClose} />
-
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-logo">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -37,7 +38,7 @@ export default function Sidebar({ expCount, open, onClose }) {
 
         <nav style={{ flex: 1, padding: '8px 0' }}>
           <div className="nav-section">Navigation</div>
-          {navItems.map(item => (
+          {visibleItems.map(item => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -63,7 +64,7 @@ export default function Sidebar({ expCount, open, onClose }) {
             <Avatar name={profile.full_name} size="sm" />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'capitalize' }}>{profile.role?.replace('_', ' ')}</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{ROLES[role]?.label || role}</div>
             </div>
           </div>
         )}
