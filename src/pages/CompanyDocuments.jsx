@@ -251,7 +251,7 @@ export default function CompanyDocuments() {
               <span style={{ fontSize: 20 }}>{activeCat?.icon}</span>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 15 }}>{activeCat?.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>{activeDocs.length} file{activeDocs.length !== 1 ? 's' : ''} · drag cards to reorder</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>{activeDocs.length} file{activeDocs.length !== 1 ? 's' : ''}</div>
               </div>
               {activeDocs.length > 1 && <button className="btn btn-sm" onClick={selectAll} style={{ fontSize: 11 }}>{selectedCount === activeDocs.length ? 'Deselect all' : 'Select all'}</button>}
             </div>
@@ -296,23 +296,24 @@ export default function CompanyDocuments() {
                   const color = fileColor(doc.file_type)
                   const ext = fileExt(doc.file_name)
                   return (
-                    <div style={{ borderRadius: 'var(--radius)', border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`, background: isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'visible', userSelect: 'none', position: 'relative' }}>
-                      {/* Checkbox */}
-                      <div onClick={e => { e.stopPropagation(); toggleSelect(doc.id) }}
-                        style={{ position: 'absolute', top: 8, left: 8, zIndex: 50, width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(128,128,128,0.6)'}`, background: isSelected ? 'var(--green)' : 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                        {isSelected && <svg width="10" height="10" viewBox="0 0 12 12" fill="white"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
-                      </div>
-                      {/* Delete */}
-                      {can('manage_subcontractors') && (
-                        <div onClick={e => { e.stopPropagation(); e.preventDefault(); setConfirmDelete(doc) }}
-                          style={{ position: 'absolute', top: 8, right: 8, zIndex: 50, width: 22, height: 22, borderRadius: 4, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white', fontSize: 12, pointerEvents: 'all' }}>
-                          ✕
+                    <div style={{ borderRadius: 'var(--radius)', border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`, background: isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'hidden', position: 'relative' }}>
+                      {/* Top bar with checkbox and delete */}
+                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', padding: '6px 6px', zIndex: 10, background: 'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%)' }}>
+                        <div onClick={e => { e.stopPropagation(); toggleSelect(doc.id) }}
+                          style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(255,255,255,0.8)'}`, background: isSelected ? 'var(--green)' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                          {isSelected && <svg width="10" height="10" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
                         </div>
-                      )}
+                        {can('manage_subcontractors') && (
+                          <div onClick={e => { e.stopPropagation(); setConfirmDelete(doc) }}
+                            style={{ width: 20, height: 20, borderRadius: 4, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white', fontSize: 11, flexShrink: 0 }}>
+                            ✕
+                          </div>
+                        )}
+                      </div>
                       {/* Thumbnail */}
-                      <div onClick={e => { e.stopPropagation(); openPreview(doc) }} style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: thumb ? (isImage ? '#000' : '#fff') : `${color}15`, overflow: 'hidden', cursor: 'pointer', borderRadius: 'calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0' }}>
+                      <div onClick={() => openPreview(doc)} style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: thumb ? (isImage ? '#000' : '#f5f5f5') : `${color}15`, overflow: 'hidden', cursor: 'pointer' }}>
                         {thumb ? (
-                          <img src={thumb} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: isImage ? 'cover' : 'contain', padding: isImage ? 0 : 4 }} />
+                          <img src={thumb} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: isImage ? 'cover' : 'contain', padding: isImage ? 0 : 8 }} />
                         ) : (
                           <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: 36, marginBottom: 4 }}>{icon}</div>
@@ -325,8 +326,8 @@ export default function CompanyDocuments() {
                         <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4, marginBottom: 2, wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={doc.file_name}>{doc.file_name}</div>
                         <div style={{ fontSize: 10, color: 'var(--text3)' }}>{formatSize(doc.file_size)} · {formatDate(doc.created_at)}</div>
                         <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
-                          <button className="btn btn-sm" style={{ flex: 1, fontSize: 10, padding: '4px 6px' }} onClick={e => { e.stopPropagation(); openPreview(doc) }}>👁 View</button>
-                          <button onClick={e => { e.stopPropagation(); downloadSingle(doc) }} title="Download" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--green)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'white', fontSize: 13 }}>↓</button>
+                          <button className="btn btn-sm" style={{ flex: 1, fontSize: 10, padding: '4px 6px' }} onClick={() => openPreview(doc)}>👁 View</button>
+                          <button onClick={() => downloadSingle(doc)} title="Download" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--green)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'white', fontSize: 13 }}>↓</button>
                         </div>
                       </div>
                     </div>
