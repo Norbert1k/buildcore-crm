@@ -272,13 +272,17 @@ function IssueRatingModal({ subcontractorId, subName, subEmail, projects, issued
         </Field>
 
         {subEmail && (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 400, background: 'var(--surface2)', padding: '10px 12px', borderRadius: 'var(--radius)' }}>
-            <input type="checkbox" checked={form.send_email} onChange={e => set('send_email', e.target.checked)} style={{ width: 16, height: 16, flexShrink: 0 }} />
+          <div
+            onClick={() => set('send_email', !form.send_email)}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', fontSize: 13, background: form.send_email ? 'var(--green-bg)' : 'var(--surface2)', padding: '12px 14px', borderRadius: 'var(--radius)', border: form.send_email ? '1px solid var(--green-border)' : '1px solid var(--border)', userSelect: 'none' }}>
+            <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${form.send_email ? 'var(--green)' : 'var(--border2)'}`, background: form.send_email ? 'var(--green)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}>
+              {form.send_email && <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+            </div>
             <div>
-              <div style={{ fontWeight: 600 }}>Send email notification to subcontractor</div>
+              <div style={{ fontWeight: 600, color: form.send_email ? 'var(--green)' : 'var(--text)' }}>Send email notification to subcontractor</div>
               <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{subEmail}</div>
             </div>
-          </label>
+          </div>
         )}
         {!subEmail && (
           <div style={{ fontSize: 12, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '8px 12px', borderRadius: 'var(--radius)' }}>
