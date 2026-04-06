@@ -5,7 +5,7 @@ import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit } from '../comp
 import { useAuth } from '../lib/auth'
 
 export default function Settings() {
-  const { profile, can, signOut } = useAuth()
+  const { profile, can, signOut, setTheme } = useAuth()
   const [users, setUsers] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -109,7 +109,24 @@ export default function Settings() {
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{ROLES[profile?.role]?.desc}</div>
             </div>
           </div>
+          {/* Theme switcher */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Appearance</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[
+                { value: 'light', label: '☀️ Light', },
+                { value: 'dark',  label: '🌙 Dark', },
+              ].map(t => (
+                <button key={t.value} onClick={() => setTheme(t.value)}
+                  className={`btn btn-sm ${profile?.theme === t.value || (!profile?.theme && t.value === 'light') ? 'btn-primary' : ''}`}
+                  style={{ minWidth: 90 }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm" onClick={() => setShowChangePassword(true)}>🔑 Change Password</button>
             <button className="btn btn-sm" onClick={() => setShowChangePassword(true)}>🔑 Change Password</button>
             <button className="btn btn-primary btn-sm" onClick={() => setShow2FA(true)}>🔐 Two-Factor Authentication</button>
             <button className="btn btn-danger btn-sm" onClick={signOut}>Sign out</button>

@@ -84,3 +84,9 @@ create policy "Admins and PMs can manage company docs" on public.company_documen
   for all using (
     exists (select 1 from public.profiles where id = auth.uid() and role in ('admin','project_manager'))
   );
+
+-- Add sort_order to company_documents for drag reordering
+alter table public.company_documents add column if not exists sort_order integer default 0;
+
+-- Add theme preference to profiles
+alter table public.profiles add column if not exists theme text default 'light' check (theme in ('light', 'dark'));

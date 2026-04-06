@@ -6,7 +6,7 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
-  const [projectAccess, setProjectAccess] = useState([]) // project IDs site manager can access
+  const [projectAccess, setProjectAccess] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -28,16 +28,23 @@ export function AuthProvider({ children }) {
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     setProfile(data)
-
-    // If site manager, load their project access
+    applyTheme(data?.theme || 'light')
     if (data?.role === 'site_manager') {
-      const { data: access } = await supabase
-        .from('user_project_access')
-        .select('project_id')
-        .eq('user_id', userId)
+      const { data: access } = await supabase.from('user_project_access').select('project_id').eq('user_id', userId)
       setProjectAccess((access || []).map(a => a.project_id))
     }
     setLoading(false)
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }
+
+  async function setTheme(theme) {
+    applyTheme(theme)
+    setProfile(p => ({ ...p, theme }))
+    if (user) await supabase.from('profiles').update({ theme }).eq('id', user.id)
   }
 
   async function signIn(email, password) {
@@ -47,26 +54,21 @@ export function AuthProvider({ children }) {
 
   async function signOut() {
     await supabase.auth.signOut()
+    applyTheme('light')
   }
 
   const role = profile?.role
 
   const can = (action) => {
     if (!profile) return false
-
-    // Admin can do everything
     if (role === 'admin') return true
-
     const permissions = {
-      // Core management
       manage_subcontractors: ['project_manager', 'site_manager', 'accountant'],
       manage_documents:      ['project_manager', 'site_manager', 'document_controller'],
       manage_projects:       ['project_manager'],
-      manage_suppliers:      ['project_manager', 'accountant', 'site_manager'],
+      manage_suppliers:      ['project_manager', 'accountant'],
       manage_users:          [],
       delete:                [],
-
-      // View permissions
       view_financials:       ['project_manager', 'accountant'],
       view_subcontractors:   ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
       view_projects:         ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
@@ -75,20 +77,18 @@ export function AuthProvider({ children }) {
       issue_ratings:         ['project_manager', 'site_manager'],
       view_all:              ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
     }
-
     return permissions[action]?.includes(role) ?? false
   }
 
-  // Check if user can access a specific project
   const canAccessProject = (projectId) => {
     if (!profile) return false
-    if (role === 'admin' || role === 'project_manager' || role === 'accountant' || role === 'document_controller' || role === 'viewer') return true
+    if (['admin', 'project_manager', 'accountant', 'document_controller', 'viewer'].includes(role)) return true
     if (role === 'site_manager') return projectAccess.includes(projectId)
     return false
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, projectAccess, role }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, projectAccess, role, setTheme }}>
       {children}
     </AuthContext.Provider>
   )
