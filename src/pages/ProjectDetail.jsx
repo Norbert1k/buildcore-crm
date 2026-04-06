@@ -103,7 +103,30 @@ export default function ProjectDetail() {
       <div className="filter-tabs">
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => setActiveTab('subcontractors')}>Subcontractors ({subs.length})</div>
         <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Project Documents ({docs.length})</div>
+        <div className={`filter-tab ${activeTab === 'files' ? 'active' : ''}`} onClick={() => setActiveTab('files')}>📁 Google Drive</div>
       </div>
+
+      {activeTab === 'files' && (
+        <div>
+          <div className="section-header" style={{ marginBottom: 14 }}>
+            <div>
+              <div className="section-title">Google Drive</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                {driveFolderId ? `Linked folder: ${driveFolderName || driveFolderId}` : 'Connect Google Drive to browse and upload files for this project'}
+              </div>
+            </div>
+          </div>
+          <GoogleDriveBrowser
+            linkedFolderId={driveFolderId}
+            projectName={project?.project_name}
+            onLinkFolder={async (folderId, folderName) => {
+              await supabase.from('projects').update({ drive_folder_id: folderId, drive_folder_name: folderName }).eq('id', id)
+              setDriveFolderId(folderId)
+              setDriveFolderName(folderName)
+            }}
+          />
+        </div>
+      )}
 
       {activeTab === 'subcontractors' && (
         <div>
