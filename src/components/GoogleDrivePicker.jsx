@@ -120,6 +120,13 @@ export async function renameFile(accessToken, fileId, newName) {
   })
 }
 
+export async function deleteFile(accessToken, fileId) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
+    method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` }
+  })
+  if (!res.ok && res.status !== 204) throw new Error('Delete failed')
+}
+
 export async function downloadFile(accessToken, fileId, fileName, mimeType) {
   // Google Docs need export
   let url
@@ -185,6 +192,8 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
   const [renamingName, setRenamingName] = useState('')
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [downloadingId, setDownloadingId] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState(null)
   const newFolderRef = useRef(null)
   const renameRef = useRef(null)
 
@@ -262,6 +271,16 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
     try { await downloadFile(accessToken, file.id, file.name, file.mimeType) }
     catch { setError('Download failed') }
     setDownloadingId(null)
+  }
+
+  async function handleDeleteFile(file) {
+    setDeletingId(file.id)
+    try {
+      await deleteFile(accessToken, file.id)
+      setConfirmDeleteFile(null)
+      if (currentFolder) await loadFiles(currentFolder); else await loadRoot()
+    } catch { setError('Delete failed — you may not have permission') }
+    setDeletingId(null)
   }
 
   function handleDrop(e) {
@@ -366,7 +385,7 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
             {files.length > 0 && <>
               <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>My Drive</div>
               {files.filter(f => f.mimeType === FOLDER_MIME).map(f => (
-                <FileRow key={f.id} file={f} onOpen={() => openFolder(f)} onRename={() => { setRenamingId(f.id); setRenamingName(f.name) }} onDownload={() => handleDownload(f)} renamingId={renamingId} renamingName={renamingName} setRenamingName={setRenamingName} onRenameSubmit={() => handleRename(f.id)} onRenameCancel={() => setRenamingId(null)} renameRef={renameRef} downloadingId={downloadingId} />
+                <FileRow key={f.id} file={f} onOpen={() => openFolder(f)} onRename={() => { setRenamingId(f.id); setRenamingName(f.name) }} onDownload={() => handleDownload(f)} renamingId={renamingId} renamingName={renamingName} setRenamingName={setRenamingName} onRenameSubmit={() => handleRename(f.id)} onRenameCancel={() => setRenamingId(null)} renameRef={renameRef} downloadingId={downloadingId} onDelete={() => setConfirmDeleteFile(f)} />
               ))}
             </>}
           </div>
@@ -377,23 +396,41 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
         ) : (
           <div>
             {folders.map(f => (
-              <FileRow key={f.id} file={f} onOpen={() => openFolder(f)} onRename={() => { setRenamingId(f.id); setRenamingName(f.name) }} onDownload={() => handleDownload(f)} renamingId={renamingId} renamingName={renamingName} setRenamingName={setRenamingName} onRenameSubmit={() => handleRename(f.id)} onRenameCancel={() => setRenamingId(null)} renameRef={renameRef} downloadingId={downloadingId} />
+              <FileRow key={f.id} file={f} onOpen={() => openFolder(f)} onRename={() => { setRenamingId(f.id); setRenamingName(f.name) }} onDownload={() => handleDownload(f)} renamingId={renamingId} renamingName={renamingName} setRenamingName={setRenamingName} onRenameSubmit={() => handleRename(f.id)} onRenameCancel={() => setRenamingId(null)} renameRef={renameRef} downloadingId={downloadingId} onDelete={() => setConfirmDeleteFile(f)} />
             ))}
             {docFiles.map(f => (
-              <FileRow key={f.id} file={f} onOpen={() => window.open(f.webViewLink, '_blank')} onRename={() => { setRenamingId(f.id); setRenamingName(f.name) }} onDownload={() => handleDownload(f)} renamingId={renamingId} renamingName={renamingName} setRenamingName={setRenamingName} onRenameSubmit={() => handleRename(f.id)} onRenameCancel={() => setRenamingId(null)} renameRef={renameRef} downloadingId={downloadingId} />
+              <FileRow key={f.id} file={f} onOpen={() => window.open(f.webViewLink, '_blank')} onRename={() => { setRenamingId(f.id); setRenamingName(f.name) }} onDownload={() => handleDownload(f)} renamingId={renamingId} renamingName={renamingName} setRenamingName={setRenamingName} onRenameSubmit={() => handleRename(f.id)} onRenameCancel={() => setRenamingId(null)} renameRef={renameRef} downloadingId={downloadingId} onDelete={() => setConfirmDeleteFile(f)} />
             ))}
           </div>
         )}
       </div>
 
       <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6, textAlign: 'center' }}>
-        Double-click folders to open · Drag files to upload · Right-click or use ✏️ to rename
+        Double-click folders to open · Drag files to upload · ✏️ rename · 🗑 delete
       </div>
+
+      {/* Confirm delete dialog */}
+      {confirmDeleteFile && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 24, maxWidth: 380, width: '100%', border: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Delete from Google Drive?</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
+              "<strong>{confirmDeleteFile.name}</strong>" will be moved to Google Drive trash. This cannot be undone from the CRM.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDeleteFile(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => handleDeleteFile(confirmDeleteFile)} disabled={deletingId === confirmDeleteFile.id}>
+                {deletingId === confirmDeleteFile.id ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function FileRow({ file, onOpen, onRename, onDownload, renamingId, renamingName, setRenamingName, onRenameSubmit, onRenameCancel, renameRef, downloadingId }) {
+function FileRow({ file, onOpen, onRename, onDownload, onDelete, renamingId, renamingName, setRenamingName, onRenameSubmit, onRenameCancel, renameRef, downloadingId }) {
   const isFolder = file.mimeType === FOLDER_MIME
   const isRenaming = renamingId === file.id
   const isDownloading = downloadingId === file.id
@@ -438,6 +475,9 @@ function FileRow({ file, onOpen, onRename, onDownload, renamingId, renamingName,
                 {isDownloading ? '...' : '↓'}
               </button>
             )}
+            <button className="btn btn-sm btn-danger" onClick={e => { e.stopPropagation(); onDelete() }} style={{ fontSize: 11, padding: '2px 8px' }} title="Delete">
+              🗑
+            </button>
           </>
         )}
       </div>
