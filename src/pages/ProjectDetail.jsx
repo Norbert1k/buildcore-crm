@@ -111,8 +111,17 @@ export default function ProjectDetail() {
           <div className="section-header" style={{ marginBottom: 14 }}>
             <div>
               <div className="section-title">Google Drive</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-                {driveFolderId ? `Linked folder: ${driveFolderName || driveFolderId}` : 'Connect Google Drive to browse and upload files for this project'}
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {driveFolderId ? (
+                  <>
+                    <span>Linked: <strong>{driveFolderName || driveFolderId}</strong></span>
+                    <button className="btn btn-sm btn-danger" style={{ fontSize: 11 }} onClick={async () => {
+                      await supabase.from('projects').update({ drive_folder_id: null, drive_folder_name: null }).eq('id', id)
+                      setDriveFolderId(null)
+                      setDriveFolderName(null)
+                    }}>✕ Unlink</button>
+                  </>
+                ) : 'Connect Google Drive to browse and upload files for this project'}
               </div>
             </div>
           </div>

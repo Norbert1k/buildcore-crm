@@ -31,6 +31,13 @@ export default function CompanyDocuments() {
     setLoading(false)
   }
 
+  async function handleUnlinkFolder() {
+    setFolderId(null)
+    setFolderName(null)
+    await supabase.from('app_settings').delete().eq('key', COMPANY_FOLDER_KEY)
+    await supabase.from('app_settings').delete().eq('key', COMPANY_FOLDER_NAME_KEY)
+  }
+
   async function handleLinkFolder(id, name) {
     setFolderId(id)
     setFolderName(name)
