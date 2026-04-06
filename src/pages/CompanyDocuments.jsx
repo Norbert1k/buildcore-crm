@@ -4,6 +4,28 @@ import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
 import { Spinner, ConfirmDialog, IconTrash } from '../components/ui'
 
+// Generate PDF thumbnail using PDF.js
+async function generatePdfThumbnail(url) {
+  try {
+    if (!window.pdfjsLib) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+        s.onload = resolve; s.onerror = reject
+        document.head.appendChild(s)
+      })
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+    }
+    const pdf = await window.pdfjsLib.getDocument(url).promise
+    const page = await pdf.getPage(1)
+    const viewport = page.getViewport({ scale: 0.5 })
+    const canvas = document.createElement('canvas')
+    canvas.width = viewport.width; canvas.height = viewport.height
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
+    return canvas.toDataURL()
+  } catch (e) { return null }
+}
+
 const CATEGORIES = [
   { key: 'logo',           icon: '🏢', label: 'Logo & Branding' },
   { key: 'policies',       icon: '📋', label: 'Policies' },
@@ -76,11 +98,20 @@ export default function CompanyDocuments() {
     ;(data || []).forEach(d => { if (grouped[d.category] !== undefined) grouped[d.category].push(d) })
     setDocs(grouped)
     setLoading(false)
-    // Load thumbnails for images
-    const imageDocs = (data || []).filter(d => d.file_type?.includes('image'))
-    for (const doc of imageDocs.slice(0, 20)) {
+    // Load thumbnails for images and PDFs
+    const previewDocs = (data || []).filter(d => d.file_type?.includes('image') || d.file_type?.includes('pdf'))
+    for (const doc of previewDocs.slice(0, 20)) {
       const { data: urlData } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
-      if (urlData?.signedUrl) setThumbnails(t => ({ ...t, [doc.id]: urlData.signedUrl }))
+      if (urlData?.signedUrl) {
+        if (doc.file_type?.includes('image')) {
+          setThumbnails(t => ({ ...t, [doc.id]: urlData.signedUrl }))
+        } else if (doc.file_type?.includes('pdf')) {
+          // Generate PDF thumbnail
+          generatePdfThumbnail(urlData.signedUrl).then(thumb => {
+            if (thumb) setThumbnails(t => ({ ...t, [doc.id]: thumb }))
+          })
+        }
+      }
     }
   }
 
@@ -255,6 +286,7 @@ export default function CompanyDocuments() {
                 {activeDocs.map(doc => {
                   const isSelected = selected.has(doc.id)
                   const isImage = doc.file_type?.includes('image')
+                  const isPdf = doc.file_type?.includes('pdf')
                   const thumb = thumbnails[doc.id]
                   const icon = fileIcon(doc.file_type)
                   const color = fileColor(doc.file_type)
@@ -278,8 +310,8 @@ export default function CompanyDocuments() {
 
                       {/* Thumbnail / preview area */}
                       <div onClick={() => openPreview(doc)} style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isImage && thumb ? '#000' : `${color}15`, overflow: 'hidden' }}>
-                        {isImage && thumb ? (
-                          <img src={thumb} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {thumb ? (
+                          <img src={thumb} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: isImage ? 'cover' : 'contain', padding: isImage ? 0 : 4, background: isImage ? '#000' : '#fff' }} />
                         ) : (
                           <div style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: 36, marginBottom: 4 }}>{icon}</div>
