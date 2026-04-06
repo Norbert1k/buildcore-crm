@@ -52,10 +52,10 @@ export const ROLES = {
 }
 
 export const ROLE_PERMISSIONS = {
-  admin:               { nav: ['dashboard','subcontractors','documents','projects','suppliers','company','settings'], financials: true, performance: true },
-  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','suppliers','company','settings'], financials: true, performance: true },
-  accountant:          { nav: ['dashboard','subcontractors','suppliers','company'], financials: true, performance: false },
-  site_manager:        { nav: ['dashboard','subcontractors','documents','projects','company'], financials: false, performance: true },
+  admin:               { nav: ['dashboard','subcontractors','documents','projects','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  accountant:          { nav: ['dashboard','subcontractors','suppliers','company','gdrive'], financials: true, performance: false },
+  site_manager:        { nav: ['dashboard','subcontractors','documents','projects','company','gdrive'], financials: false, performance: true },
   document_controller: { nav: ['dashboard','subcontractors','documents','projects','company'], financials: false, performance: false },
   viewer:              { nav: ['dashboard','subcontractors','documents','projects','company'], financials: false, performance: false },
 }

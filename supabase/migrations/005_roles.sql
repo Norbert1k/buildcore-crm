@@ -62,3 +62,25 @@ create policy "Admins can manage settings" on public.app_settings
   for all using (
     exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
   );
+
+-- Company documents library
+create table if not exists public.company_documents (
+  id uuid default uuid_generate_v4() primary key,
+  category text not null,
+  file_name text not null,
+  file_size bigint,
+  file_type text,
+  storage_path text not null,
+  uploaded_by uuid references public.profiles(id),
+  created_at timestamptz default now()
+);
+
+alter table public.company_documents enable row level security;
+
+create policy "Authenticated users can view company docs" on public.company_documents
+  for select using (auth.role() = 'authenticated');
+
+create policy "Admins and PMs can manage company docs" on public.company_documents
+  for all using (
+    exists (select 1 from public.profiles where id = auth.uid() and role in ('admin','project_manager'))
+  );
