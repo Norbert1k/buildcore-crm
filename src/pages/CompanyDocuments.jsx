@@ -322,7 +322,7 @@ export default function CompanyDocuments() {
 
                       {/* File info */}
                       <div style={{ padding: '8px 10px' }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>{doc.file_name}</div>
+                        <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4, marginBottom: 2, wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={doc.file_name}>{doc.file_name}</div>
                         <div style={{ fontSize: 10, color: 'var(--text3)' }}>{formatSize(doc.file_size)} · {formatDate(doc.created_at)}</div>
                         <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
                           <button className="btn btn-sm" style={{ flex: 1, fontSize: 10, padding: '4px 6px' }} onClick={() => openPreview(doc)}>👁 View</button>
