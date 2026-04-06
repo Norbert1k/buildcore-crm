@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
@@ -91,16 +91,7 @@ export default function CompanyDocuments() {
 
   useEffect(() => { loadDocs() }, [])
 
-  useEffect(() => {
-    if (dragging) {
-      window.addEventListener('pointermove', handlePointerMove)
-      window.addEventListener('pointerup', handlePointerUp)
-      return () => {
-        window.removeEventListener('pointermove', handlePointerMove)
-        window.removeEventListener('pointerup', handlePointerUp)
-      }
-    }
-  }, [dragging, handlePointerMove, handlePointerUp])
+
 
   async function loadDocs() {
     setLoading(true)
@@ -212,37 +203,33 @@ export default function CompanyDocuments() {
     loadDocs()
   }
 
-  const handlePointerDown = useCallback((e, docId) => {
+  // Use refs to avoid stale closure issues
+  const dragStateRef = useRef({ dragging: null, dragOverDoc: null, dragOverBefore: true })
+
+  function handlePointerDown(e, docId) {
     if (e.target.closest('button') || e.target.closest('input')) return
-    e.preventDefault()
-    setDragging({ id: docId, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY })
-  }, [])
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragStateRef.current.dragging = docId
+    setDragging({ id: docId })
+  }
 
-  const handlePointerMove = useCallback((e) => {
-    if (!dragging) return
-    setDragging(d => ({ ...d, x: e.clientX, y: e.clientY }))
-    // Find which card we're over
-    const el = document.elementFromPoint(e.clientX, e.clientY)
-    const card = el?.closest('[data-doc-id]')
-    if (card) {
-      const id = card.dataset.docId
-      if (id !== dragging.id) {
-        const rect = card.getBoundingClientRect()
-        setDragOverDoc(id)
-        setDragOverBefore(e.clientX < rect.left + rect.width / 2)
-      }
-    } else {
-      setDragOverDoc(null)
-    }
-  }, [dragging])
+  function handlePointerMove(e, docId) {
+    if (!dragStateRef.current.dragging || dragStateRef.current.dragging === docId) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const before = e.clientX < rect.left + rect.width / 2
+    dragStateRef.current.dragOverDoc = docId
+    dragStateRef.current.dragOverBefore = before
+    setDragOverDoc(docId)
+    setDragOverBefore(before)
+  }
 
-  const handlePointerUp = useCallback(() => {
-    if (dragging && dragOverDoc && dragging.id !== dragOverDoc) {
-      handleReorder(dragging.id, dragOverDoc, dragOverBefore)
-    }
+  function handlePointerUp(e) {
+    const { dragging: dId, dragOverDoc: overId, dragOverBefore: before } = dragStateRef.current
+    if (dId && overId && dId !== overId) handleReorder(dId, overId, before)
+    dragStateRef.current = { dragging: null, dragOverDoc: null, dragOverBefore: true }
     setDragging(null)
     setDragOverDoc(null)
-  }, [dragging, dragOverDoc, dragOverBefore])
+  }
 
   async function handleReorder(draggedId, targetId, before) {
     if (draggedId === targetId) return
@@ -374,6 +361,9 @@ export default function CompanyDocuments() {
                     <div key={doc.id}
                       data-doc-id={doc.id}
                       onPointerDown={e => handlePointerDown(e, doc.id)}
+                      onPointerMove={e => handlePointerMove(e, doc.id)}
+                      onPointerUp={handlePointerUp}
+                      onPointerCancel={handlePointerUp}
                       style={{
                         position: 'relative', borderRadius: 'var(--radius)',
                         border: `2px solid ${dragOverDoc === doc.id ? 'var(--blue)' : isSelected ? 'var(--green)' : 'var(--border)'}`,
