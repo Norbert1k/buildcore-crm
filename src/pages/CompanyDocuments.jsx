@@ -100,15 +100,18 @@ export default function CompanyDocuments() {
     ;(data || []).forEach(d => { if (grouped[d.category] !== undefined) grouped[d.category].push(d) })
     setDocs(grouped)
     setLoading(false)
-    // Load thumbnails for images and PDFs
-    const previewDocs = (data || []).filter(d => d.file_type?.includes('image') || d.file_type?.includes('pdf'))
-    for (const doc of previewDocs.slice(0, 20)) {
+    // Thumbnails loaded lazily when category is opened
+  }
+
+  async function loadThumbnailsForCategory(categoryDocs) {
+    for (const doc of categoryDocs) {
+      if (thumbnails[doc.id]) continue // already loaded
+      if (!doc.file_type?.includes('image') && !doc.file_type?.includes('pdf')) continue
       const { data: urlData } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
       if (urlData?.signedUrl) {
         if (doc.file_type?.includes('image')) {
           setThumbnails(t => ({ ...t, [doc.id]: urlData.signedUrl }))
         } else if (doc.file_type?.includes('pdf')) {
-          // Generate PDF thumbnail
           generatePdfThumbnail(urlData.signedUrl).then(thumb => {
             if (thumb) setThumbnails(t => ({ ...t, [doc.id]: thumb }))
           })
