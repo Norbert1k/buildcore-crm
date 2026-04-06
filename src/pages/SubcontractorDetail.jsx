@@ -77,6 +77,11 @@ export default function SubcontractorDetail() {
     load()
   }
 
+  async function deleteSub() {
+    await supabase.from('subcontractors').delete().eq('id', id)
+    navigate('/subcontractors')
+  }
+
   function exportDocs() {
     const rows = docs.map(d => ({
       Document: DOCUMENT_TYPES[d.document_type] || d.document_name,
