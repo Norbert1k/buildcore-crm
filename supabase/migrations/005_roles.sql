@@ -45,3 +45,20 @@ alter table public.profiles add column if not exists must_change_password boolea
 -- Add Google Drive folder link to projects
 alter table public.projects add column if not exists drive_folder_id text;
 alter table public.projects add column if not exists drive_folder_name text;
+
+-- App settings table for storing company-wide config like Drive folder links
+create table if not exists public.app_settings (
+  key text primary key,
+  value text,
+  updated_at timestamptz default now()
+);
+
+alter table public.app_settings enable row level security;
+
+create policy "Authenticated users can view settings" on public.app_settings
+  for select using (auth.role() = 'authenticated');
+
+create policy "Admins can manage settings" on public.app_settings
+  for all using (
+    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  );

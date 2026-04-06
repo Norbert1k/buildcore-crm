@@ -18,6 +18,7 @@ export default function Sidebar({ expCount, open, onClose }) {
     { to: '/documents',      key: 'documents',       label: 'Documents',       icon: <IconDoc /> },
     { to: '/projects',       key: 'projects',        label: 'Projects',        icon: <IconProject /> },
     { to: '/suppliers',      key: 'suppliers',       label: 'Suppliers',       icon: <IconBuilding /> },
+    { to: '/company-documents', key: 'company',         label: 'Company Docs',    icon: <IconDoc /> },
   ]
 
   const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))

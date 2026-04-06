@@ -13,6 +13,7 @@ import ProjectDetail from './pages/ProjectDetail'
 import Suppliers from './pages/Suppliers'
 import GlobalSearch from './components/GlobalSearch'
 import Settings from './pages/Settings'
+import CompanyDocuments from './pages/CompanyDocuments'
 import { Spinner } from './components/ui'
 
 function HamburgerIcon() {
@@ -89,6 +90,7 @@ function ProtectedLayout() {
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/suppliers" element={<Suppliers />} />
             <Route path="/settings" element={<Settings />} />
+          <Route path="/company-documents" element={<CompanyDocuments />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
