@@ -1,10 +1,20 @@
 import { NavLink } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
 import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
 
 export default function Sidebar({ expCount, open, onClose }) {
   const { profile } = useAuth()
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.getAttribute('data-theme') === 'dark')
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
   const role = profile?.role || 'viewer'
   const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer
 
@@ -30,7 +40,7 @@ export default function Sidebar({ expCount, open, onClose }) {
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="sidebar-logo">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src="/logo.png" alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
+            <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
               <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>

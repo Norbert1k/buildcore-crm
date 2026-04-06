@@ -1,10 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function Login() {
   const { signIn } = useAuth()
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
+  useEffect(() => {
+    const obs = new MutationObserver(() => setIsDark(document.documentElement.getAttribute('data-theme') === 'dark'))
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => obs.disconnect()
+  }, [])
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -76,7 +82,7 @@ export default function Login() {
       <div style={{ width: '100%', maxWidth: 400 }}>
 
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <img src="/logo.png" alt="City Construction" style={{ height: 90, margin: '0 auto 20px', display: 'block', objectFit: 'contain' }} />
+          <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 90, margin: '0 auto 20px', display: 'block', objectFit: 'contain' }} />
         </div>
 
         <div style={{ background: '#fff', border: '1px solid #e2e0d8', borderRadius: 12, padding: 28, borderTop: '3px solid #448a40' }}>

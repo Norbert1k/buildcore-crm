@@ -9,6 +9,12 @@ export function AuthProvider({ children }) {
   const [projectAccess, setProjectAccess] = useState([])
   const [loading, setLoading] = useState(true)
 
+  // Apply saved theme immediately before any Supabase calls
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') || 'light'
+    document.documentElement.setAttribute('data-theme', saved)
+  }, [])
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
@@ -24,6 +30,7 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe()
   }, [])
+
 
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
