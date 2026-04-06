@@ -53,14 +53,14 @@ serve(async (req) => {
 <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e0d8;">
 
   <!-- Header -->
-  <tr><td style="background:#448a40;padding:20px 32px;">
+  <tr><td style="background:#1a2e1a;padding:20px 32px;">
     <table cellpadding="0" cellspacing="0"><tr>
-      <td style="width:44px;height:44px;background:rgba(255,255,255,0.2);border-radius:8px;text-align:center;vertical-align:middle;padding:10px;">
-        <span style="color:white;font-size:20px;font-weight:bold;">CC</span>
+      <td style="vertical-align:middle;">
+        <img src="https://crm.cltd.co.uk/logo.png" alt="City Construction" style="height:44px;width:auto;display:block;" />
       </td>
-      <td style="padding-left:12px;">
-        <div style="color:white;font-weight:600;font-size:16px;">City Construction Group</div>
-        <div style="color:rgba(255,255,255,0.75);font-size:12px;">Subcontractor Performance Notification</div>
+      <td style="padding-left:14px;border-left:1px solid rgba(255,255,255,0.2);margin-left:14px;">
+        <div style="color:white;font-weight:600;font-size:16px;padding-left:14px;">City Construction Group</div>
+        <div style="color:rgba(255,255,255,0.65);font-size:12px;padding-left:14px;">Subcontractor Performance Notification</div>
       </td>
     </tr></table>
   </td></tr>
