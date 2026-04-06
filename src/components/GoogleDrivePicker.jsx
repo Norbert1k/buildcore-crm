@@ -16,14 +16,40 @@ function loadScript(src, id) {
 }
 
 export function useGoogleDrive() {
-  const [accessToken, setAccessToken] = useState(null)
+  const [accessToken, setAccessToken] = useState(() => sessionStorage.getItem('gd_token') || null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const tokenClientRef = useRef(null)
 
   useEffect(() => {
-    loadScript('https://accounts.google.com/gsi/client', 'google-gsi')
+    loadScript('https://accounts.google.com/gsi/client', 'google-gsi').then(() => {
+      // Try silent sign-in if no token stored
+      if (!sessionStorage.getItem('gd_token')) {
+        setTimeout(() => tryAutoSignIn(), 1000)
+      }
+    })
   }, [])
+
+  async function tryAutoSignIn() {
+    // Silent sign-in attempt — won't show popup if not already authorised
+    try {
+      if (!window.google?.accounts?.oauth2) return
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: SCOPES,
+        prompt: '',  // Empty prompt = silent, no popup
+        callback: (resp) => {
+          if (resp.access_token) {
+            sessionStorage.setItem('gd_token', resp.access_token)
+            setAccessToken(resp.access_token)
+          }
+        },
+      })
+      client.requestAccessToken({ prompt: '' })
+    } catch (e) {
+      // Silent fail — user will click Connect manually
+    }
+  }
 
   const signIn = useCallback(async () => {
     setLoading(true)
@@ -69,6 +95,7 @@ export function useGoogleDrive() {
   const signOut = useCallback(() => {
     if (accessToken) {
       window.google?.accounts?.oauth2?.revoke(accessToken, () => {})
+      sessionStorage.removeItem('gd_token')
       setAccessToken(null)
     }
   }, [accessToken])
@@ -142,7 +169,7 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, projectName }) {
+export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, projectName, externalSearch, onSearchClear }) {
   const { accessToken, loading: authLoading, error: authError, signIn, signOut } = useGoogleDrive()
   const [files, setFiles] = useState([])
   const [currentFolder, setCurrentFolder] = useState(linkedFolderId || null)
@@ -163,6 +190,16 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
       else loadFiles(currentFolder, currentDriveId)
     }
   }, [accessToken, currentFolder])
+
+  useEffect(() => {
+    if (externalSearch && accessToken) {
+      setSearch(externalSearch)
+      searchFiles(accessToken, externalSearch).then(results => setSearchResults(results)).catch(() => {})
+    } else if (!externalSearch) {
+      setSearch('')
+      setSearchResults(null)
+    }
+  }, [externalSearch, accessToken])
 
   async function loadRoot() {
     setLoading(true); setError('')
