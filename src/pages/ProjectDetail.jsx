@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
 
 export default function ProjectDetail() {
@@ -16,6 +17,8 @@ export default function ProjectDetail() {
   const [allSubs, setAllSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('subcontractors')
+  const [driveFolderId, setDriveFolderId] = useState(null)
+  const [driveFolderName, setDriveFolderName] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
   const [showAssignSub, setShowAssignSub] = useState(false)
   const [showAddDoc, setShowAddDoc] = useState(false)
@@ -34,6 +37,8 @@ export default function ProjectDetail() {
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
     ])
     setProject(projRes.data)
+    setDriveFolderId(projRes.data?.drive_folder_id || null)
+    setDriveFolderName(projRes.data?.drive_folder_name || null)
     setSubs(subsRes.data || [])
     setDocs(docsRes.data || [])
     setAllSubs(allSubsRes.data || [])

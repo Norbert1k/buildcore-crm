@@ -41,3 +41,7 @@ create policy "Users can view own project access" on public.user_project_access
 
 -- Add must_change_password flag to profiles
 alter table public.profiles add column if not exists must_change_password boolean default false;
+
+-- Add Google Drive folder link to projects
+alter table public.projects add column if not exists drive_folder_id text;
+alter table public.projects add column if not exists drive_folder_name text;
