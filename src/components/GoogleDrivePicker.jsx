@@ -24,17 +24,28 @@ export function useGoogleDrive() {
     return new Promise((resolve, reject) => {
       setLoading(true)
       setError('')
-      const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: SCOPES,
-        callback: (response) => {
-          setLoading(false)
-          if (response.error) { setError(response.error); reject(response.error); return }
-          setAccessToken(response.access_token)
-          resolve(response.access_token)
-        },
-      })
-      client.requestAccessToken()
+      try {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: SCOPES,
+          callback: (response) => {
+            setLoading(false)
+            if (response.error) { setError(response.error); reject(response.error); return }
+            setAccessToken(response.access_token)
+            resolve(response.access_token)
+          },
+          error_callback: (err) => {
+            setLoading(false)
+            setError('Google sign-in failed — please try again')
+            reject(err)
+          }
+        })
+        client.requestAccessToken({ prompt: 'consent' })
+      } catch(e) {
+        setLoading(false)
+        setError('Google sign-in unavailable — check your Client ID in settings')
+        reject(e)
+      }
     })
   }, [])
 
