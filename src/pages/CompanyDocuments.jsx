@@ -82,6 +82,8 @@ export default function CompanyDocuments() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [dragOver, setDragOver] = useState(false)
+  const [draggedDoc, setDraggedDoc] = useState(null)
+  const [dragOverDoc, setDragOverDoc] = useState(null)
   const [thumbnails, setThumbnails] = useState({})
   const [downloading, setDownloading] = useState(false)
 
@@ -92,7 +94,7 @@ export default function CompanyDocuments() {
     const { data } = await supabase
       .from('company_documents')
       .select('*, profiles(full_name)')
-      .order('created_at', { ascending: false })
+      .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
     const grouped = {}
     CATEGORIES.forEach(c => grouped[c.key] = [])
     ;(data || []).forEach(d => { if (grouped[d.category] !== undefined) grouped[d.category].push(d) })
@@ -122,9 +124,11 @@ export default function CompanyDocuments() {
       const path = `company/${category}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
       if (!error) {
+        const { data: existing } = await supabase.from('company_documents').select('sort_order').eq('category', category).order('sort_order', { ascending: false }).limit(1).single()
+        const nextOrder = (existing?.sort_order || 0) + 1
         await supabase.from('company_documents').insert({
           category, file_name: file.name, file_size: file.size,
-          file_type: file.type, storage_path: path, uploaded_by: profile?.id,
+          file_type: file.type, storage_path: path, uploaded_by: profile?.id, sort_order: nextOrder,
         })
       }
     }
@@ -189,6 +193,22 @@ export default function CompanyDocuments() {
     await supabase.from('company_documents').delete().eq('id', doc.id)
     setConfirmDelete(null)
     setSelected(s => { const n = new Set(s); n.delete(doc.id); return n })
+    loadDocs()
+  }
+
+  async function handleReorder(draggedId, targetId) {
+    if (draggedId === targetId) return
+    const activeDocs = docs[activeCategory] || []
+    const items = [...activeDocs]
+    const fromIdx = items.findIndex(d => d.id === draggedId)
+    const toIdx = items.findIndex(d => d.id === targetId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const reordered = [...items]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    // Update sort_order for all affected items
+    const updates = reordered.map((d, i) => supabase.from('company_documents').update({ sort_order: i + 1 }).eq('id', d.id))
+    await Promise.all(updates)
     loadDocs()
   }
 
@@ -293,7 +313,15 @@ export default function CompanyDocuments() {
                   const ext = fileExt(doc.file_name)
 
                   return (
-                    <div key={doc.id} style={{ position: 'relative', borderRadius: 'var(--radius)', border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`, background: isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'hidden', transition: 'all .15s', cursor: 'pointer' }}>
+                    <div key={doc.id}
+                      draggable
+                      onDragStart={() => setDraggedDoc(doc.id)}
+                      onDragEnd={() => { setDraggedDoc(null); setDragOverDoc(null) }}
+                      onDragOver={e => { e.preventDefault(); setDragOverDoc(doc.id) }}
+                      onDrop={e => { e.preventDefault(); if (draggedDoc && draggedDoc !== doc.id) handleReorder(draggedDoc, doc.id); setDragOverDoc(null) }}
+                      style={{ position: 'relative', borderRadius: 'var(--radius)', border: `2px solid ${dragOverDoc === doc.id ? 'var(--blue)' : isSelected ? 'var(--green)' : 'var(--border)'}`, background: dragOverDoc === doc.id ? 'var(--blue-bg)' : isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'hidden', transition: 'all .15s', cursor: 'grab', opacity: draggedDoc === doc.id ? 0.5 : 1 }}>
+                      {/* Drag handle */}
+                      <div style={{ position: 'absolute', top: 8, left: 34, zIndex: 2, fontSize: 10, color: 'rgba(255,255,255,0.6)', pointerEvents: 'none' }}>⠿</div>
                       {/* Checkbox */}
                       <div onClick={() => toggleSelect(doc.id)}
                         style={{ position: 'absolute', top: 8, left: 8, zIndex: 2, width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(255,255,255,0.8)'}`, background: isSelected ? 'var(--green)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}>
