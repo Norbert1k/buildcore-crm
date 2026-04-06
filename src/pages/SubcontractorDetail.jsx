@@ -25,6 +25,7 @@ export default function SubcontractorDetail() {
   const [showDocModal, setShowDocModal] = useState(false)
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  const [confirmDeleteSub, setConfirmDeleteSub] = useState(false)
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteForm, setNoteForm] = useState({ note: '', note_type: 'note' })
   const [savingNote, setSavingNote] = useState(false)
@@ -125,6 +126,9 @@ export default function SubcontractorDetail() {
             {rating && <RatingBadge ratings={ratings} />}
             {can('manage_subcontractors') && (
               <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
+            )}
+            {can('delete') && (
+              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteSub(true)}><IconTrash size={13} /> Delete</button>
             )}
           </div>
         </div>
@@ -362,6 +366,14 @@ export default function SubcontractorDetail() {
         </div>
       </Modal>
 
+      <ConfirmDialog
+        open={confirmDeleteSub}
+        onClose={() => setConfirmDeleteSub(false)}
+        onConfirm={deleteSub}
+        title="Delete subcontractor"
+        message={`Are you sure you want to permanently delete ${sub?.company_name}? This will also delete all their documents, contacts, notes and performance ratings. This cannot be undone.`}
+        danger
+      />
       {showEditSub && <SubcontractorModal sub={sub} onClose={() => setShowEditSub(false)} onSaved={() => { setShowEditSub(false); load() }} />}
       {showDocModal && <DocumentModal doc={editingDoc} subcontractorId={id} onClose={() => setShowDocModal(false)} onSaved={() => { setShowDocModal(false); load() }} />}
       <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)} title="Delete document" message="Are you sure? This cannot be undone." danger />

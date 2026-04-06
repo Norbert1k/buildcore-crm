@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
-import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEye, IconEdit } from '../components/ui'
+import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEye, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { RatingBadge } from '../components/PerformanceTab'
 import { useAuth } from '../lib/auth'
 import SubcontractorModal from '../components/SubcontractorModal'
@@ -13,11 +13,18 @@ export default function Subcontractors() {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [editing, setEditing] = useState(null)
   const navigate = useNavigate()
   const { can } = useAuth()
 
   useEffect(() => { load() }, [])
+
+  async function deleteSub(id) {
+    await supabase.from('subcontractors').delete().eq('id', id)
+    setConfirmDelete(null)
+    load()
+  }
 
   async function load() {
     setLoading(true)
@@ -135,6 +142,9 @@ export default function Subcontractors() {
                         {can('manage_subcontractors') && (
                           <button className="btn btn-sm" onClick={() => { setEditing(s); setShowModal(true) }}><IconEdit size={13} /></button>
                         )}
+                        {can('delete') && (
+                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(s)}><IconTrash size={13} /></button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -145,6 +155,14 @@ export default function Subcontractors() {
         </div>
       )}
 
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => deleteSub(confirmDelete?.id)}
+        title="Delete subcontractor"
+        message={`Are you sure you want to permanently delete ${confirmDelete?.company_name}? All their documents, contacts and ratings will also be deleted. This cannot be undone.`}
+        danger
+      />
       {showModal && (
         <SubcontractorModal
           sub={editing}
