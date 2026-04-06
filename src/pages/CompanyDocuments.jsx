@@ -84,6 +84,7 @@ export default function CompanyDocuments() {
   const [dragOver, setDragOver] = useState(false)
   const [draggedDoc, setDraggedDoc] = useState(null)
   const [dragOverDoc, setDragOverDoc] = useState(null)
+  const [dragOverBefore, setDragOverBefore] = useState(true)
   const [thumbnails, setThumbnails] = useState({})
   const [downloading, setDownloading] = useState(false)
 
@@ -199,19 +200,22 @@ export default function CompanyDocuments() {
     loadDocs()
   }
 
-  async function handleReorder(draggedId, targetId) {
+  async function handleReorder(draggedId, targetId, before) {
     if (draggedId === targetId) return
     const activeDocs = docs[activeCategory] || []
     const items = [...activeDocs]
     const fromIdx = items.findIndex(d => d.id === draggedId)
-    const toIdx = items.findIndex(d => d.id === targetId)
+    let toIdx = items.findIndex(d => d.id === targetId)
     if (fromIdx < 0 || toIdx < 0) return
     const reordered = [...items]
     const [moved] = reordered.splice(fromIdx, 1)
-    reordered.splice(toIdx, 0, moved)
-    // Update sort_order for all affected items
+    // Recalculate toIdx after splice
+    toIdx = reordered.findIndex(d => d.id === targetId)
+    reordered.splice(before ? toIdx : toIdx + 1, 0, moved)
     const updates = reordered.map((d, i) => supabase.from('company_documents').update({ sort_order: i + 1 }).eq('id', d.id))
     await Promise.all(updates)
+    setDraggedDoc(null)
+    setDragOverDoc(null)
     loadDocs()
   }
 
@@ -318,11 +322,33 @@ export default function CompanyDocuments() {
                   return (
                     <div key={doc.id}
                       draggable
-                      onDragStart={() => setDraggedDoc(doc.id)}
+                      onDragStart={e => { setDraggedDoc(doc.id); e.dataTransfer.effectAllowed = 'move' }}
                       onDragEnd={() => { setDraggedDoc(null); setDragOverDoc(null) }}
-                      onDragOver={e => { e.preventDefault(); setDragOverDoc(doc.id) }}
-                      onDrop={e => { e.preventDefault(); if (draggedDoc && draggedDoc !== doc.id) handleReorder(draggedDoc, doc.id); setDragOverDoc(null) }}
-                      style={{ position: 'relative', borderRadius: 'var(--radius)', border: `2px solid ${dragOverDoc === doc.id ? 'var(--blue)' : isSelected ? 'var(--green)' : 'var(--border)'}`, background: dragOverDoc === doc.id ? 'var(--blue-bg)' : isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'hidden', transition: 'all .15s', cursor: 'grab', opacity: draggedDoc === doc.id ? 0.5 : 1 }}>
+                      onDragOver={e => {
+                        e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const before = e.clientX < rect.left + rect.width / 2
+                        setDragOverDoc(doc.id); setDragOverBefore(before)
+                      }}
+                      onDrop={e => {
+                        e.preventDefault()
+                        if (draggedDoc && draggedDoc !== doc.id) handleReorder(draggedDoc, doc.id, dragOverBefore)
+                        setDragOverDoc(null)
+                      }}
+                      style={{
+                        position: 'relative', borderRadius: 'var(--radius)',
+                        border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`,
+                        background: isSelected ? 'var(--green-bg)' : 'var(--surface)',
+                        overflow: 'visible', transition: 'transform .15s, opacity .15s, box-shadow .15s',
+                        cursor: draggedDoc ? 'grabbing' : 'grab',
+                        opacity: draggedDoc === doc.id ? 0.35 : 1,
+                        transform: dragOverDoc === doc.id ? (dragOverBefore ? 'translateX(6px)' : 'translateX(-6px)') : 'translateX(0)',
+                        boxShadow: draggedDoc === doc.id ? '0 8px 24px rgba(0,0,0,0.15)' : 'none',
+                      }}>
+                      {/* Drop indicator line */}
+                      {dragOverDoc === doc.id && (
+                        <div style={{ position: 'absolute', top: 0, bottom: 0, [dragOverBefore ? 'left' : 'right']: -3, width: 3, background: 'var(--blue)', borderRadius: 2, zIndex: 10 }} />
+                      )}
                       {/* Drag handle */}
                       <div style={{ position: 'absolute', top: 8, left: 34, zIndex: 2, fontSize: 10, color: 'rgba(255,255,255,0.6)', pointerEvents: 'none' }}>⠿</div>
                       {/* Checkbox */}
