@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
@@ -82,13 +82,25 @@ export default function CompanyDocuments() {
   const [previewLoading, setPreviewLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [dragOver, setDragOver] = useState(false)
-  const [draggedDoc, setDraggedDoc] = useState(null)
+  const [dragging, setDragging] = useState(null) // { id, startX, startY, x, y }
   const [dragOverDoc, setDragOverDoc] = useState(null)
   const [dragOverBefore, setDragOverBefore] = useState(true)
+  const gridRef = useRef(null)
   const [thumbnails, setThumbnails] = useState({})
   const [downloading, setDownloading] = useState(false)
 
   useEffect(() => { loadDocs() }, [])
+
+  useEffect(() => {
+    if (dragging) {
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+      return () => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+      }
+    }
+  }, [dragging, handlePointerMove, handlePointerUp])
 
   async function loadDocs() {
     setLoading(true)
@@ -199,6 +211,38 @@ export default function CompanyDocuments() {
     setSelected(s => { const n = new Set(s); n.delete(doc.id); return n })
     loadDocs()
   }
+
+  const handlePointerDown = useCallback((e, docId) => {
+    if (e.target.closest('button') || e.target.closest('input')) return
+    e.preventDefault()
+    setDragging({ id: docId, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY })
+  }, [])
+
+  const handlePointerMove = useCallback((e) => {
+    if (!dragging) return
+    setDragging(d => ({ ...d, x: e.clientX, y: e.clientY }))
+    // Find which card we're over
+    const el = document.elementFromPoint(e.clientX, e.clientY)
+    const card = el?.closest('[data-doc-id]')
+    if (card) {
+      const id = card.dataset.docId
+      if (id !== dragging.id) {
+        const rect = card.getBoundingClientRect()
+        setDragOverDoc(id)
+        setDragOverBefore(e.clientX < rect.left + rect.width / 2)
+      }
+    } else {
+      setDragOverDoc(null)
+    }
+  }, [dragging])
+
+  const handlePointerUp = useCallback(() => {
+    if (dragging && dragOverDoc && dragging.id !== dragOverDoc) {
+      handleReorder(dragging.id, dragOverDoc, dragOverBefore)
+    }
+    setDragging(null)
+    setDragOverDoc(null)
+  }, [dragging, dragOverDoc, dragOverBefore])
 
   async function handleReorder(draggedId, targetId, before) {
     if (draggedId === targetId) return
@@ -328,33 +372,23 @@ export default function CompanyDocuments() {
 
                   return (
                     <div key={doc.id}
-                      draggable
-                      onDragStart={e => { setDraggedDoc(doc.id); e.dataTransfer.effectAllowed = 'move' }}
-                      onDragEnd={() => { setDraggedDoc(null); setDragOverDoc(null) }}
-                      onDragOver={e => {
-                        e.preventDefault(); e.dataTransfer.dropEffect = 'move'
-                        const rect = e.currentTarget.getBoundingClientRect()
-                        const before = e.clientX < rect.left + rect.width / 2
-                        setDragOverDoc(doc.id); setDragOverBefore(before)
-                      }}
-                      onDrop={e => {
-                        e.preventDefault()
-                        if (draggedDoc && draggedDoc !== doc.id) handleReorder(draggedDoc, doc.id, dragOverBefore)
-                        setDragOverDoc(null)
-                      }}
+                      data-doc-id={doc.id}
+                      onPointerDown={e => handlePointerDown(e, doc.id)}
                       style={{
                         position: 'relative', borderRadius: 'var(--radius)',
-                        border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`,
-                        background: isSelected ? 'var(--green-bg)' : 'var(--surface)',
-                        overflow: 'visible', transition: 'transform .15s, opacity .15s, box-shadow .15s',
-                        cursor: draggedDoc ? 'grabbing' : 'grab',
-                        opacity: draggedDoc === doc.id ? 0.35 : 1,
-                        transform: dragOverDoc === doc.id ? (dragOverBefore ? 'translateX(6px)' : 'translateX(-6px)') : 'translateX(0)',
-                        boxShadow: draggedDoc === doc.id ? '0 8px 24px rgba(0,0,0,0.15)' : 'none',
+                        border: `2px solid ${dragOverDoc === doc.id ? 'var(--blue)' : isSelected ? 'var(--green)' : 'var(--border)'}`,
+                        background: dragOverDoc === doc.id ? 'var(--blue-bg)' : isSelected ? 'var(--green-bg)' : 'var(--surface)',
+                        overflow: 'hidden',
+                        transition: 'border-color .1s, background .1s, transform .15s',
+                        cursor: dragging?.id === doc.id ? 'grabbing' : 'grab',
+                        opacity: dragging?.id === doc.id ? 0.4 : 1,
+                        transform: dragOverDoc === doc.id
+                          ? `translateX(${dragOverBefore ? '8px' : '-8px'})`
+                          : 'translateX(0)',
+                        userSelect: 'none',
                       }}>
-                      {/* Drop indicator line */}
                       {dragOverDoc === doc.id && (
-                        <div style={{ position: 'absolute', top: 0, bottom: 0, [dragOverBefore ? 'left' : 'right']: -3, width: 3, background: 'var(--blue)', borderRadius: 2, zIndex: 10 }} />
+                        <div style={{ position: 'absolute', top: 0, bottom: 0, [dragOverBefore ? 'left' : 'right']: 0, width: 3, background: 'var(--blue)', zIndex: 10, borderRadius: 2 }} />
                       )}
                       {/* Drag handle */}
                       <div style={{ position: 'absolute', top: 8, left: 34, zIndex: 2, fontSize: 10, color: 'rgba(255,255,255,0.6)', pointerEvents: 'none' }}>⠿</div>
