@@ -59,10 +59,10 @@ export function AuthProvider({ children }) {
 
     const permissions = {
       // Core management
-      manage_subcontractors: ['project_manager', 'site_manager'],
+      manage_subcontractors: ['project_manager', 'site_manager', 'accountant'],
       manage_documents:      ['project_manager', 'site_manager', 'document_controller'],
       manage_projects:       ['project_manager'],
-      manage_suppliers:      ['project_manager', 'accountant'],
+      manage_suppliers:      ['project_manager', 'accountant', 'site_manager'],
       manage_users:          [],
       delete:                [],
 

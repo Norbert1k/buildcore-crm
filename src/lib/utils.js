@@ -45,7 +45,7 @@ export const SUB_STATUSES = {
 export const ROLES = {
   admin:                { label: 'Admin',               cls: 'pill-red',    desc: 'Full access including user management' },
   project_manager:      { label: 'Project Manager',     cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
-  accountant:           { label: 'Accountant',          cls: 'pill-purple', desc: 'View financials, suppliers & contract values' },
+  accountant:           { label: 'Accountant',          cls: 'pill-purple', desc: 'Manage suppliers, add/edit subcontractor VAT & CIS, view financials' },
   site_manager:         { label: 'Site Manager',        cls: 'pill-amber',  desc: 'Access assigned projects & compliance docs only' },
   document_controller:  { label: 'Document Controller', cls: 'pill-green',  desc: 'Add & edit compliance documents' },
   viewer:               { label: 'Viewer',              cls: 'pill-gray',   desc: 'Read-only access to all areas' },
@@ -54,7 +54,7 @@ export const ROLES = {
 export const ROLE_PERMISSIONS = {
   admin:               { nav: ['dashboard','subcontractors','documents','projects','suppliers','settings'], financials: true, performance: true },
   project_manager:     { nav: ['dashboard','subcontractors','documents','projects','suppliers','settings'], financials: true, performance: true },
-  accountant:          { nav: ['dashboard','suppliers'], financials: true, performance: false },
+  accountant:          { nav: ['dashboard','subcontractors','suppliers'], financials: true, performance: false },
   site_manager:        { nav: ['dashboard','subcontractors','documents','projects'], financials: false, performance: true },
   document_controller: { nav: ['dashboard','subcontractors','documents','projects'], financials: false, performance: false },
   viewer:              { nav: ['dashboard','subcontractors','documents','projects'], financials: false, performance: false },
