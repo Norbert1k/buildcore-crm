@@ -25,12 +25,10 @@ export default function Login() {
     setLoading(false)
     if (error) { setError(error.message); return }
 
-    const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (data?.nextLevel === 'aal2' && data?.nextLevel !== data?.currentLevel) {
-      const { data: fd } = await supabase.auth.mfa.listFactors()
-      const totp = fd?.totp?.[0]
-      if (totp) { setFactorId(totp.id); setStep('2fa'); return }
-    }
+    // Always check if user has 2FA enrolled — require it every login
+    const { data: fd } = await supabase.auth.mfa.listFactors()
+    const totp = fd?.totp?.find(f => f.status === 'verified')
+    if (totp) { setFactorId(totp.id); setStep('2fa'); return }
 
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
@@ -70,7 +68,9 @@ export default function Login() {
     <div style={{ minHeight: '100vh', background: 'var(--bg, #f5f4f0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <img src="/logo.png" alt="City Construction" style={{ height: 90, margin: '0 auto 20px', display: 'block', objectFit: 'contain' }} />
+          <div style={{ background: '#1a2e1a', borderRadius: 16, padding: '16px 28px', display: 'inline-block', marginBottom: 20 }}>
+            <img src="/logo.png" alt="City Construction" style={{ height: 70, display: 'block', objectFit: 'contain' }} />
+          </div>
         </div>
 
         <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e2e0d8)', borderRadius: 12, padding: 28, borderTop: '3px solid #448a40' }}>
