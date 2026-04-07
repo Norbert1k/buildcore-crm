@@ -25,16 +25,26 @@ export default function Login() {
     setLoading(false)
     if (error) { setError(error.message); return }
 
-    // Always check if user has 2FA enrolled — require it every login
-    const { data: fd } = await supabase.auth.mfa.listFactors()
-    const totp = fd?.totp?.find(f => f.status === 'verified')
-    if (totp) { setFactorId(totp.id); setStep('2fa'); return }
+    // Check 2FA — always require if enrolled
+    try {
+      const { data: factorsData } = await supabase.auth.mfa.listFactors()
+      const verifiedTotp = factorsData?.totp?.find(f => f.status === 'verified')
+      if (verifiedTotp) {
+        setFactorId(verifiedTotp.id)
+        setStep('2fa')
+        return
+      }
+    } catch (e) {}
 
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: profileData } = await supabase.from('profiles').select('must_change_password').eq('id', user.id).single()
-      if (profileData?.must_change_password) { setStep('change_password'); return }
-    }
+    // Check forced password change
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profileData } = await supabase.from('profiles').select('must_change_password').eq('id', user.id).single()
+        if (profileData?.must_change_password) { setStep('change_password'); return }
+      }
+    } catch (e) {}
+
     navigate('/')
   }
 
@@ -42,12 +52,24 @@ export default function Login() {
     e.preventDefault()
     if (!code || code.length !== 6) { setError('Please enter the 6-digit code'); return }
     setError(''); setLoading(true)
-    const { data: cd, error: ce } = await supabase.auth.mfa.challenge({ factorId })
-    if (ce) { setError(ce.message); setLoading(false); return }
-    const { error: ve } = await supabase.auth.mfa.verify({ factorId, challengeId: cd.id, code })
-    setLoading(false)
-    if (ve) { setError('Incorrect code — please try again'); return }
-    navigate('/')
+    try {
+      const { data: cd, error: ce } = await supabase.auth.mfa.challenge({ factorId })
+      if (ce) { setError(ce.message); setLoading(false); return }
+      const { error: ve } = await supabase.auth.mfa.verify({ factorId, challengeId: cd.id, code })
+      setLoading(false)
+      if (ve) { setError('Incorrect code — please try again'); return }
+
+      // Check forced password change after 2FA
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profileData } = await supabase.from('profiles').select('must_change_password').eq('id', user.id).single()
+        if (profileData?.must_change_password) { setStep('change_password'); return }
+      }
+      navigate('/')
+    } catch (e) {
+      setError('Verification failed — please try again')
+      setLoading(false)
+    }
   }
 
   async function handleChangePassword(e) {
@@ -64,13 +86,26 @@ export default function Login() {
     navigate('/')
   }
 
+  const currentTheme = document.documentElement.getAttribute('data-theme')
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg, #f5f4f0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ background: '#1a2e1a', borderRadius: 16, padding: '16px 28px', display: 'inline-block', marginBottom: 20 }}>
-            <img src="/logo.png" alt="City Construction" style={{ height: 70, display: 'block', objectFit: 'contain' }} />
-          </div>
+
+        {/* Logo — transparent background, works on both themes */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <img
+            src="/logo.png"
+            alt="City Construction"
+            style={{
+              height: 90,
+              display: 'block',
+              margin: '0 auto',
+              objectFit: 'contain',
+              // Invert white logo to dark on light mode, leave as-is on dark mode
+              filter: currentTheme === 'dark' ? 'none' : 'brightness(0)',
+            }}
+          />
         </div>
 
         <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e2e0d8)', borderRadius: 12, padding: 28, borderTop: '3px solid #448a40' }}>
@@ -106,8 +141,9 @@ export default function Login() {
               <form onSubmit={handle2FA}>
                 <div style={{ marginBottom: 20 }}>
                   <label>6-Digit Code</label>
-                  <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
-                    style={{ fontSize: 24, letterSpacing: '0.4em', textAlign: 'center', fontFamily: 'monospace' }} autoFocus maxLength={6} />
+                  <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="000000" style={{ fontSize: 24, letterSpacing: '0.4em', textAlign: 'center', fontFamily: 'monospace' }}
+                    autoFocus maxLength={6} />
                 </div>
                 {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
                 <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading || code.length !== 6}>
