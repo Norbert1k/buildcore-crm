@@ -89,16 +89,34 @@ export default function ProjectDetail() {
                 ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', formatDate(project.start_date)],
                 ['End Date', formatDate(project.end_date)],
+                ['Duration', project.start_date && project.end_date ? (() => {
+                  const start = new Date(project.start_date)
+                  const end = new Date(project.end_date)
+                  const days = Math.round((end - start) / (1000 * 60 * 60 * 24))
+                  if (days < 0) return null
+                  if (days < 7) return days + ' day' + (days !== 1 ? 's' : '')
+                  if (days < 30) return Math.round(days / 7) + ' week' + (Math.round(days / 7) !== 1 ? 's' : '')
+                  if (days < 365) return Math.round(days / 30) + ' month' + (Math.round(days / 30) !== 1 ? 's' : '')
+                  const yrs = (days / 365).toFixed(1)
+                  return yrs + ' year' + (yrs !== '1.0' ? 's' : '')
+                })() : null],
                 ['Contract Value', formatCurrency(project.value)],
               ].filter(([, v]) => v && v !== '—').map(([k, v]) => (
                 <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span>{v}</span></div>
               ))}
             </div>
-            {project.description && <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text2)' }}>{project.description}</div>}
+
           </div>
           {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
         </div>
       </div>
+
+      {project.description && (
+        <div className="card card-pad" style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Project Description</div>
+          <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{project.description}</div>
+        </div>
+      )}
 
       <div className="filter-tabs">
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => setActiveTab('subcontractors')}>Subcontractors ({subs.length})</div>
@@ -141,7 +159,7 @@ export default function ProjectDetail() {
         <div>
           <div className="section-header">
             <div className="section-title">Assigned Subcontractors</div>
-            {can('manage_projects') && <button className="btn btn-primary btn-sm" onClick={() => setShowAssignSub(true)}><IconPlus size={13} /> Assign Subcontractor</button>}
+            {(can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-primary btn-sm" onClick={() => setShowAssignSub(true)}><IconPlus size={13} /> Assign Subcontractor</button>}
           </div>
           {subs.length === 0 ? (
             <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No subcontractors assigned to this project yet.</div>
