@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 
 export default function Settings() {
   const { profile, can, signOut, setTheme } = useAuth()
+  const [activeTheme, setActiveTheme] = useState(() => document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'light')
   const [users, setUsers] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -117,8 +118,8 @@ export default function Settings() {
                 { value: 'light', label: '☀️ Light', },
                 { value: 'dark',  label: '🌙 Dark', },
               ].map(t => (
-                <button key={t.value} onClick={() => setTheme(t.value)}
-                  className={`btn btn-sm ${profile?.theme === t.value || (!profile?.theme && t.value === 'light') ? 'btn-primary' : ''}`}
+                <button key={t.value} onClick={() => { setTheme(t.value); setActiveTheme(t.value) }}
+                  className={`btn btn-sm ${activeTheme === t.value ? 'btn-primary' : ''}`}
                   style={{ minWidth: 90 }}>
                   {t.label}
                 </button>
