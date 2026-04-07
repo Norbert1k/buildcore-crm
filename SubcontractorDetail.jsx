@@ -23,10 +23,6 @@ export default function SubcontractorDetail() {
   const [activeTab, setActiveTab] = useState('documents')
   const [showEditSub, setShowEditSub] = useState(false)
   const [approvingPayment, setApprovingPayment] = useState(false)
-  const [showAssignProject, setShowAssignProject] = useState(false)
-  const [availableProjects, setAvailableProjects] = useState([])
-  const [assignProjectForm, setAssignProjectForm] = useState({ project_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
-  const [savingAssign, setSavingAssign] = useState(false)
   const [showDocModal, setShowDocModal] = useState(false)
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -51,9 +47,6 @@ export default function SubcontractorDetail() {
     setSub(subRes.data)
     setDocs(docsRes.data || [])
     setProjects(projRes.data || [])
-    // Load all active projects for assign modal
-    const { data: ap } = await supabase.from('projects').select('id, project_name, project_ref').order('project_name')
-    setAllProjects(ap || [])
     setNotes(notesRes.data || [])
     setContacts(contactsRes.data || [])
     setRatings(ratingsRes.data || [])
@@ -66,25 +59,6 @@ export default function SubcontractorDetail() {
     load()
   }
 
-  async function assignToProject() {
-    if (!assignProjectForm.project_id) return
-    setSavingAssign(true)
-    await supabase.from('project_subcontractors').insert({
-      project_id: assignProjectForm.project_id,
-      subcontractor_id: id,
-      trade_on_project: assignProjectForm.trade_on_project || sub.trade,
-      start_date: assignProjectForm.start_date || null,
-      end_date: assignProjectForm.end_date || null,
-      contract_value: assignProjectForm.contract_value || null,
-      status: 'active',
-    })
-    setSavingAssign(false)
-    setShowAssignProject(false)
-    setAssignProjectForm({ project_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
-    // Reload projects
-    const { data } = await supabase.from('project_subcontractors').select('*, projects(id, project_name, project_ref, status, start_date, end_date)').eq('subcontractor_id', id)
-    setProjects(data || [])
-  }
 
   async function togglePaymentApproval() {
     setApprovingPayment(true)
@@ -398,14 +372,7 @@ export default function SubcontractorDetail() {
       {/* Projects */}
       {activeTab === 'projects' && (
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div className="section-title">Assigned Projects</div>
-            {(can('manage_projects') || can('manage_subcontractors')) && (
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAssignProject(true)}>
-                <IconPlus size={13} /> Assign to Project
-              </button>
-            )}
-          </div>
+          <div className="section-title" style={{ marginBottom: 12 }}>Assigned Projects</div>
           {projects.length === 0 ? (
             <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Not assigned to any projects.</div>
           ) : (
@@ -429,30 +396,6 @@ export default function SubcontractorDetail() {
         </div>
       )}
 
-      {/* Assign to Project Modal */}
-      <Modal open={showAssignProject} onClose={() => setShowAssignProject(false)} title="Assign to Project" size="sm"
-        footer={<><button className="btn" onClick={() => setShowAssignProject(false)}>Cancel</button><button className="btn btn-primary" onClick={assignToProject} disabled={savingAssign || !assignProjectForm.project_id}>{savingAssign ? 'Saving...' : 'Assign'}</button></>}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label="Project *">
-            <select value={assignProjectForm.project_id} onChange={e => setAssignProjectForm(f => ({ ...f, project_id: e.target.value }))}>
-              <option value="">Select a project...</option>
-              {availableProjects.filter(p => !projects.find(ps => ps.project_id === p.id)).map(p => (
-                <option key={p.id} value={p.id}>{p.project_name}{p.project_ref ? ` (${p.project_ref})` : ''}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Trade on Project">
-            <input value={assignProjectForm.trade_on_project} onChange={e => setAssignProjectForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder={sub?.trade || 'e.g. Electrical'} />
-          </Field>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Field label="Start Date"><input type="date" value={assignProjectForm.start_date} onChange={e => setAssignProjectForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
-            <Field label="End Date"><input type="date" value={assignProjectForm.end_date} onChange={e => setAssignProjectForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
-          </div>
-          <Field label="Contract Value (£)">
-            <input type="number" value={assignProjectForm.contract_value} onChange={e => setAssignProjectForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" />
-          </Field>
-        </div>
-      </Modal>
 
       {/* Add Note Modal */}
       <Modal open={showNoteModal} onClose={() => setShowNoteModal(false)} title="Add Activity Note" size="sm"
