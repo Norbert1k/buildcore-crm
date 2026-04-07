@@ -1,175 +1,485 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
-import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEye, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
-import { RatingBadge } from '../components/PerformanceTab'
+import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo, daysUntilExpiry, formatCurrency, complianceScore, NOTE_TYPES, exportToCSV } from '../lib/utils'
+import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import SubcontractorModal from '../components/SubcontractorModal'
+import DocumentModal from '../components/DocumentModal'
+import ContactsTab from '../components/ContactsTab'
+import PerformanceTab, { RatingBadge, calcRating } from '../components/PerformanceTab'
 
-export default function Subcontractors() {
-  const [subs, setSubs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('all')
-  const [search, setSearch] = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(null)
-  const [editing, setEditing] = useState(null)
+export default function SubcontractorDetail() {
+  const { id } = useParams()
   const navigate = useNavigate()
-  const { can } = useAuth()
+  const { can, profile } = useAuth()
+  const [sub, setSub] = useState(null)
+  const [docs, setDocs] = useState([])
+  const [projects, setProjects] = useState([])
+  const [notes, setNotes] = useState([])
+  const [contacts, setContacts] = useState([])
+  const [ratings, setRatings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('documents')
+  const [showEditSub, setShowEditSub] = useState(false)
+  const [approvingPayment, setApprovingPayment] = useState(false)
+  const [showAssignProject, setShowAssignProject] = useState(false)
+  const [allProjects, setAllProjects] = useState([])
+  const [assignProjectForm, setAssignProjectForm] = useState({ project_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
+  const [savingAssign, setSavingAssign] = useState(false)
+  const [showDocModal, setShowDocModal] = useState(false)
+  const [editingDoc, setEditingDoc] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [confirmDeleteSub, setConfirmDeleteSub] = useState(false)
+  const [showNoteModal, setShowNoteModal] = useState(false)
+  const [noteForm, setNoteForm] = useState({ note: '', note_type: 'note' })
+  const [savingNote, setSavingNote] = useState(false)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [id])
 
-  async function deleteSub(id) {
-    await supabase.from('subcontractors').delete().eq('id', id)
+  async function load() {
+    setLoading(true)
+    const [subRes, docsRes, projRes, notesRes, contactsRes, ratingsRes] = await Promise.all([
+      supabase.from('subcontractors').select('*').eq('id', id).single(),
+      supabase.from('documents_with_status').select('*').eq('subcontractor_id', id).order('document_type'),
+      supabase.from('project_subcontractors').select('*, projects(id, project_name, project_ref, status, start_date, end_date)').eq('subcontractor_id', id),
+      supabase.from('projects').select('id, project_name, project_ref, status').eq('status', 'active').order('project_name'),
+      supabase.from('subcontractor_notes').select('*, profiles(full_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
+      supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
+      supabase.from('performance_ratings').select('*, profiles(full_name), projects(project_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
+    ])
+    setSub(subRes.data)
+    setDocs(docsRes.data || [])
+    setProjects(projRes.data || [])
+    // Load all active projects for assign modal
+    const { data: ap } = await supabase.from('projects').select('id, project_name, project_ref').order('project_name')
+    setAllProjects(ap || [])
+    setNotes(notesRes.data || [])
+    setContacts(contactsRes.data || [])
+    setRatings(ratingsRes.data || [])
+    setLoading(false)
+  }
+
+  async function deleteDoc(docId) {
+    await supabase.from('documents').delete().eq('id', docId)
     setConfirmDelete(null)
     load()
   }
 
-  async function load() {
-    setLoading(true)
-    const { data } = await supabase
-      .from('subcontractors')
-      .select('*, documents_with_status(id, expiry_date, status), performance_ratings(id, rating_type)')
-      .order('company_name')
-    setSubs(data || [])
-    setLoading(false)
+  async function assignToProject() {
+    if (!assignProjectForm.project_id) return
+    setSavingAssign(true)
+    await supabase.from('project_subcontractors').insert({
+      project_id: assignProjectForm.project_id,
+      subcontractor_id: id,
+      trade_on_project: assignProjectForm.trade_on_project || sub.trade,
+      start_date: assignProjectForm.start_date || null,
+      end_date: assignProjectForm.end_date || null,
+      contract_value: assignProjectForm.contract_value || null,
+      status: 'active',
+    })
+    setSavingAssign(false)
+    setShowAssignProject(false)
+    setAssignProjectForm({ project_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
+    // Reload projects
+    const { data } = await supabase.from('project_subcontractors').select('*, projects(id, project_name, project_ref, status, start_date, end_date)').eq('subcontractor_id', id)
+    setProjects(data || [])
   }
 
-  function filtered() {
-    let list = subs
-    if (filter !== 'all') list = list.filter(s => s.status === filter)
-    if (search) {
-      const q = search.toLowerCase()
-      list = list.filter(s =>
-        s.company_name.toLowerCase().includes(q) ||
-        s.contact_name.toLowerCase().includes(q) ||
-        s.trade.toLowerCase().includes(q) ||
-        s.city?.toLowerCase().includes(q)
-      )
-    }
-    return list
+  async function togglePaymentApproval() {
+    setApprovingPayment(true)
+    const newVal = !sub.approved
+    await supabase.from('subcontractors').update({
+      approved: newVal,
+      approved_by: newVal ? profile?.id : null,
+      approved_at: newVal ? new Date().toISOString() : null,
+    }).eq('id', id)
+    setSub(s => ({ ...s, approved: newVal, approved_by: newVal ? profile?.id : null, approved_at: newVal ? new Date().toISOString() : null }))
+    setApprovingPayment(false)
   }
 
-  const counts = {
-    all: subs.length,
-    active: subs.filter(s => s.status === 'active').length,
-    approved: subs.filter(s => s.status === 'approved').length,
-    on_hold: subs.filter(s => s.status === 'on_hold').length,
-    inactive: subs.filter(s => s.status === 'inactive').length,
+  async function saveNote() {
+    if (!noteForm.note.trim()) return
+    setSavingNote(true)
+    await supabase.from('subcontractor_notes').insert({
+      subcontractor_id: id,
+      note: noteForm.note,
+      note_type: noteForm.note_type,
+      created_by: profile?.id,
+    })
+    setSavingNote(false)
+    setShowNoteModal(false)
+    setNoteForm({ note: '', note_type: 'note' })
+    load()
   }
 
-  const list = filtered()
+  async function deleteNote(noteId) {
+    await supabase.from('subcontractor_notes').delete().eq('id', noteId)
+    load()
+  }
+
+  async function deleteSub() {
+    await supabase.from('subcontractors').delete().eq('id', id)
+    navigate('/subcontractors')
+  }
+
+  function exportDocs() {
+    const rows = docs.map(d => ({
+      Document: DOCUMENT_TYPES[d.document_type] || d.document_name,
+      Name: d.document_name,
+      Reference: d.reference_number || '',
+      'Issue Date': formatDate(d.issue_date),
+      'Expiry Date': formatDate(d.expiry_date),
+      Status: d.status || '',
+      Notes: d.notes || '',
+    }))
+    exportToCSV(rows, `${sub.company_name}-documents.csv`)
+  }
+
+  if (loading) return <Spinner />
+  if (!sub) return <div style={{ padding: 40, color: 'var(--text2)' }}>Subcontractor not found.</div>
+
+  const expired = docs.filter(d => d.status === 'expired')
+  const expiring = docs.filter(d => d.status === 'expiring_soon')
+  const score = complianceScore(docs)
+  const rating = calcRating(ratings)
+  const assignedProjectsList = projects.map(ps => ps.projects).filter(Boolean)
+
+  // Format address properly
+  const addressParts = [sub.address, sub.city, sub.postcode].filter(Boolean)
+  const fullAddress = addressParts.join(', ')
+  const locationDisplay = [sub.city, sub.postcode].filter(Boolean).join(', ')
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Subcontractors</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{subs.length} registered contractors</p>
+      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/subcontractors')}>
+        <IconChevron size={13} dir="left" /> Back
+      </button>
+
+      {/* Header */}
+      <div className="card card-pad" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
+          <Avatar name={sub.company_name} size="lg" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+              <h2 style={{ fontSize: 18, fontWeight: 600 }}>{sub.company_name}</h2>
+              <Pill cls={SUB_STATUSES[sub.status]?.cls || 'pill-gray'}>{SUB_STATUSES[sub.status]?.label || sub.status}</Pill>
+              <Pill cls="pill-blue">{sub.trade}</Pill>
+              {sub.approved ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>
+                  ✓ Approved for Payment
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>
+                  ⏳ Pending Approval
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {score && <div style={{ background: score.score >= 80 ? 'var(--green-bg)' : score.score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)', color: score.score >= 80 ? 'var(--green)' : score.score >= 50 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>Docs {score.score}%</div>}
+            {rating && <RatingBadge ratings={ratings} />}
+            {(can('manage_users') || profile?.role === 'accountant') && (
+              <button
+                className={`btn btn-sm ${sub.approved ? 'btn-danger' : 'btn-primary'}`}
+                onClick={togglePaymentApproval}
+                disabled={approvingPayment}
+                title={sub.approved ? 'Click to revoke payment approval' : 'Click to approve for payment'}
+              >
+                {approvingPayment ? '...' : sub.approved ? '✕ Revoke Approval' : '✓ Approve for Payment'}
+              </button>
+            )}
+            {can('manage_subcontractors') && (
+              <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
+            )}
+            {can('delete') && (
+              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteSub(true)}><IconTrash size={13} /> Delete</button>
+            )}
+          </div>
         </div>
-        {can('manage_subcontractors') && (
-          <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
-            <IconPlus size={14} /> Add Subcontractor
-          </button>
+
+        {/* Payment approval info */}
+        {sub.approved && sub.approved_at && (
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, marginTop: -6 }}>
+            Approved for payment by accounts on {new Date(sub.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </div>
+        )}
+        {/* Contact details grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 24px', marginBottom: sub.vat_number || sub.cis_number ? 12 : 0 }}>
+          {[
+            ['Contact', sub.contact_name ? `${sub.contact_name}${sub.contact_role ? ` (${sub.contact_role})` : ''}` : null],
+            ['Email', sub.email],
+            ['Phone', sub.phone],
+            ['Location', locationDisplay],
+            ['Address', fullAddress],
+          ].filter(([, v]) => v).map(([k, v]) => (
+            <div key={k} style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</span>
+              {k === 'Email' ? (
+                <a href={`mailto:${v}`} style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>{v}</a>
+              ) : k === 'Website' ? (
+                <a href={v.startsWith('http') ? v : `https://${v}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none' }}>{v}</a>
+              ) : (
+                <span style={{ color: 'var(--text)', wordBreak: 'break-word' }}>{v}</span>
+              )}
+            </div>
+          ))}
+
+          {/* Website — clickable */}
+          {sub.website && (
+            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Website</span>
+              <a href={sub.website.startsWith('http') ? sub.website : `https://${sub.website}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
+                {sub.website}
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* VAT & CIS */}
+        {(sub.vat_number || sub.cis_number) && (
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 4 }}>
+            {sub.vat_number && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>VAT No.</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.vat_number}</span>
+              </div>
+            )}
+            {sub.cis_number && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>CIS No.</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.cis_number}</span>
+                {sub.cis_verified && <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>✓ Verified</span>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Notes */}
+        {sub.notes && (
+          <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+            {sub.notes}
+          </div>
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div className="search-wrap" style={{ position: 'relative' }}>
-          <span className="search-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><IconSearch size={13} /></span>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, trade, city…" style={{ paddingLeft: 32, width: 260 }} />
+      {/* Compliance alerts */}
+      {(expired.length > 0 || expiring.length > 0) && (
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          {expired.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--red)', fontWeight: 500 }}>⚠ {expired.length} expired document{expired.length > 1 ? 's' : ''}</div>}
+          {expiring.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--amber)', fontWeight: 500 }}>! {expiring.length} expiring within 30 days</div>}
         </div>
-        <div className="filter-tabs" style={{ marginBottom: 0 }}>
-          {Object.entries({ all: 'All', active: 'Active', approved: 'Approved', on_hold: 'On Hold', inactive: 'Inactive' }).map(([k, v]) => (
-            <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
-              {v} ({counts[k]})
-            </div>
-          ))}
-        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="filter-tabs">
+        {[
+          ['documents', `Documents (${docs.length})`],
+          ['contacts', `Contacts (${contacts.length})`],
+          ['performance', `Performance (${ratings.length})`],
+          ['activity', `Activity (${notes.length})`],
+          ['projects', `Projects (${projects.length})`],
+        ].map(([key, label]) => (
+          <div key={key} className={`filter-tab ${activeTab === key ? 'active' : ''}`} onClick={() => setActiveTab(key)}>{label}</div>
+        ))}
       </div>
 
-      {loading ? <Spinner /> : list.length === 0 ? (
-        <EmptyState icon="👷" title="No subcontractors found" message={search ? 'Try adjusting your search.' : 'Add your first subcontractor to get started.'} action={can('manage_subcontractors') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> Add Subcontractor</button>} />
-      ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Company</th>
-                <th>Trade</th>
-                <th>Contact</th>
-                <th>Location</th>
-                <th>Status</th>
-                <th>Documents</th>
-                <th>Rating</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map(s => {
-                const { expired, expiring, valid, total } = subDocSummary(s.documents_with_status)
-                const docPill = expired > 0
-                  ? <Pill cls="pill-red">{expired} expired</Pill>
-                  : expiring > 0
-                  ? <Pill cls="pill-amber">{expiring} expiring</Pill>
-                  : total > 0
-                  ? <Pill cls="pill-green">All valid</Pill>
-                  : <Pill cls="pill-gray">No docs</Pill>
-                return (
-                  <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${s.id}`)}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Avatar name={s.company_name} />
-                        <div>
-                          <div style={{ fontWeight: 500 }}>{s.company_name}</div>
-                          <div className="td-muted">{s.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td><Pill cls="pill-blue">{s.trade}</Pill></td>
-                    <td>
-                      <div>{s.contact_name}</div>
-                      <div className="td-muted">{s.phone}</div>
-                    </td>
-                    <td>{s.city || '—'}</td>
-                    <td><Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill></td>
-                    <td>{docPill}</td>
-                    <td><RatingBadge ratings={s.performance_ratings} /></td>
-                    <td>
-                      <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-                        <button className="btn btn-sm" onClick={() => navigate(`/subcontractors/${s.id}`)}><IconEye size={13} /></button>
-                        {can('manage_subcontractors') && (
-                          <button className="btn btn-sm" onClick={() => { setEditing(s); setShowModal(true) }}><IconEdit size={13} /></button>
-                        )}
-                        {can('delete') && (
-                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(s)}><IconTrash size={13} /></button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+      {/* Documents */}
+      {activeTab === 'documents' && (
+        <div>
+          <div className="section-header">
+            <div className="section-title">Compliance Documents</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {docs.length > 0 && <button className="btn btn-sm" onClick={exportDocs}>↓ CSV</button>}
+              {can('manage_documents') && (
+                <button className="btn btn-primary btn-sm" onClick={() => { setEditingDoc(null); setShowDocModal(true) }}>
+                  <IconPlus size={13} /> Add Document
+                </button>
+              )}
+            </div>
+          </div>
+          {docs.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No documents uploaded yet.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Document</th><th>Reference</th><th>Issue Date</th><th>Expiry Date</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  {docs.map(doc => {
+                    const info = docStatusInfo(doc.expiry_date)
+                    const days = daysUntilExpiry(doc.expiry_date)
+                    return (
+                      <tr key={doc.id}>
+                        <td>
+                          <div style={{ fontWeight: 500 }}>{DOCUMENT_TYPES[doc.document_type] || doc.document_name}</div>
+                          {doc.document_name !== DOCUMENT_TYPES[doc.document_type] && <div className="td-muted">{doc.document_name}</div>}
+                        </td>
+                        <td className="td-muted">{doc.reference_number || '—'}</td>
+                        <td className="td-muted">{formatDate(doc.issue_date)}</td>
+                        <td>
+                          <div style={{ fontWeight: 500 }}>{formatDate(doc.expiry_date)}</div>
+                          {days !== null && <div style={{ fontSize: 11, color: days < 0 ? 'var(--red)' : days <= 30 ? 'var(--amber)' : 'var(--text3)' }}>
+                            {days < 0 ? `${Math.abs(days)}d ago` : days === 0 ? 'Today' : `${days}d left`}
+                          </div>}
+                        </td>
+                        <td><Pill cls={info?.cls || 'pill-gray'}>{info?.label || 'Unknown'}</Pill></td>
+                        <td>
+                          {can('manage_documents') && (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn btn-sm" onClick={() => { setEditingDoc(doc); setShowDocModal(true) }}><IconEdit size={12} /></button>
+                              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(doc.id)}><IconTrash size={12} /></button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
-      <ConfirmDialog
-        open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
-        onConfirm={() => deleteSub(confirmDelete?.id)}
-        title="Delete subcontractor"
-        message={`Are you sure you want to permanently delete ${confirmDelete?.company_name}? All their documents, contacts and ratings will also be deleted. This cannot be undone.`}
-        danger
-      />
-      {showModal && (
-        <SubcontractorModal
-          sub={editing}
-          onClose={() => setShowModal(false)}
-          onSaved={() => { setShowModal(false); load() }}
+      {/* Contacts */}
+      {activeTab === 'contacts' && (
+        <ContactsTab subcontractorId={id} contacts={contacts} onRefresh={load} />
+      )}
+
+      {/* Performance */}
+      {activeTab === 'performance' && (
+        <PerformanceTab
+          subcontractorId={id}
+          subName={sub.company_name}
+          subEmail={sub.email}
+          ratings={ratings}
+          projects={assignedProjectsList}
+          onRefresh={load}
         />
       )}
+
+      {/* Activity */}
+      {activeTab === 'activity' && (
+        <div>
+          <div className="section-header">
+            <div className="section-title">Activity Log</div>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowNoteModal(true)}>
+              <IconPlus size={13} /> Add Note
+            </button>
+          </div>
+          {notes.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No activity recorded yet.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {notes.map(n => {
+                const nt = NOTE_TYPES[n.note_type] || NOTE_TYPES.note
+                return (
+                  <div key={n.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '12px 14px', display: 'flex', gap: 12 }}>
+                    <div style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{nt.icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: nt.color, background: 'var(--surface2)', padding: '1px 7px', borderRadius: 10 }}>{nt.label}</span>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{formatDateTime(n.created_at)}</span>
+                        {n.profiles?.full_name && <span style={{ fontSize: 11, color: 'var(--text3)' }}>by {n.profiles.full_name}</span>}
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{n.note}</div>
+                    </div>
+                    {can('manage_subcontractors') && (
+                      <button className="btn btn-sm btn-danger" style={{ flexShrink: 0, alignSelf: 'flex-start' }} onClick={() => deleteNote(n.id)}><IconTrash size={12} /></button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Projects */}
+      {activeTab === 'projects' && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div className="section-title">Assigned Projects</div>
+            {(can('manage_projects') || can('manage_subcontractors')) && (
+              <button className="btn btn-primary btn-sm" onClick={() => setShowAssignProject(true)}>
+                <IconPlus size={13} /> Assign to Project
+              </button>
+            )}
+          </div>
+          {projects.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Not assigned to any projects.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Value</th><th>Status</th></tr></thead>
+                <tbody>
+                  {projects.map(ps => (
+                    <tr key={ps.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${ps.project_id}`)}>
+                      <td style={{ fontWeight: 500 }}>{ps.projects?.project_name}</td>
+                      <td className="td-muted">{ps.projects?.project_ref || '—'}</td>
+                      <td className="td-muted">{formatDate(ps.start_date)} – {formatDate(ps.end_date)}</td>
+                      <td>{formatCurrency(ps.contract_value)}</td>
+                      <td><Pill cls={ps.status === 'active' ? 'pill-green' : ps.status === 'completed' ? 'pill-blue' : 'pill-gray'}>{ps.status}</Pill></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Assign to Project Modal */}
+      <Modal open={showAssignProject} onClose={() => setShowAssignProject(false)} title="Assign to Project" size="sm"
+        footer={<><button className="btn" onClick={() => setShowAssignProject(false)}>Cancel</button><button className="btn btn-primary" onClick={assignToProject} disabled={savingAssign || !assignProjectForm.project_id}>{savingAssign ? 'Saving...' : 'Assign'}</button></>}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Project *">
+            <select value={assignProjectForm.project_id} onChange={e => setAssignProjectForm(f => ({ ...f, project_id: e.target.value }))}>
+              <option value="">Select a project...</option>
+              {allProjects.filter(p => !projects.find(ps => ps.project_id === p.id)).map(p => (
+                <option key={p.id} value={p.id}>{p.project_name}{p.project_ref ? ` (${p.project_ref})` : ''}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Trade on Project">
+            <input value={assignProjectForm.trade_on_project} onChange={e => setAssignProjectForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder={sub?.trade || 'e.g. Electrical'} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <Field label="Start Date"><input type="date" value={assignProjectForm.start_date} onChange={e => setAssignProjectForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
+            <Field label="End Date"><input type="date" value={assignProjectForm.end_date} onChange={e => setAssignProjectForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
+          </div>
+          <Field label="Contract Value (£)">
+            <input type="number" value={assignProjectForm.contract_value} onChange={e => setAssignProjectForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" />
+          </Field>
+        </div>
+      </Modal>
+
+      {/* Add Note Modal */}
+      <Modal open={showNoteModal} onClose={() => setShowNoteModal(false)} title="Add Activity Note" size="sm"
+        footer={<><button className="btn" onClick={() => setShowNoteModal(false)}>Cancel</button><button className="btn btn-primary" onClick={saveNote} disabled={savingNote || !noteForm.note.trim()}>{savingNote ? 'Saving...' : 'Add Note'}</button></>}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Field label="Type">
+            <select value={noteForm.note_type} onChange={e => setNoteForm(f => ({ ...f, note_type: e.target.value }))}>
+              {Object.entries(NOTE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Note *">
+            <textarea value={noteForm.note} onChange={e => setNoteForm(f => ({ ...f, note: e.target.value }))} placeholder="What happened?" style={{ minHeight: 100 }} autoFocus />
+          </Field>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmDeleteSub}
+        onClose={() => setConfirmDeleteSub(false)}
+        onConfirm={deleteSub}
+        title="Delete subcontractor"
+        message={`Are you sure you want to permanently delete ${sub?.company_name}? This will also delete all their documents, contacts, notes and performance ratings. This cannot be undone.`}
+        danger
+      />
+      {showEditSub && <SubcontractorModal sub={sub} onClose={() => setShowEditSub(false)} onSaved={() => { setShowEditSub(false); load() }} />}
+      {showDocModal && <DocumentModal doc={editingDoc} subcontractorId={id} onClose={() => setShowDocModal(false)} onSaved={() => { setShowDocModal(false); load() }} />}
+      <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)} title="Delete document" message="Are you sure? This cannot be undone." danger />
     </div>
   )
 }
