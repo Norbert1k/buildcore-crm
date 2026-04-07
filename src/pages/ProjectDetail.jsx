@@ -7,6 +7,17 @@ import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
 
+function calcDuration(start, end) {
+  if (!start || !end) return null
+  const days = Math.round((new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24))
+  if (days < 0) return null
+  if (days < 7) return days + ' day' + (days !== 1 ? 's' : '')
+  if (days < 30) return Math.round(days / 7) + ' week' + (Math.round(days / 7) !== 1 ? 's' : '')
+  if (days < 365) return Math.round(days / 30) + ' month' + (Math.round(days / 30) !== 1 ? 's' : '')
+  const yrs = (new Date(end).getFullYear() - new Date(start).getFullYear())
+  return yrs + ' year' + (yrs !== 1 ? 's' : '')
+}
+
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -89,17 +100,7 @@ export default function ProjectDetail() {
                 ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', formatDate(project.start_date)],
                 ['End Date', formatDate(project.end_date)],
-                ['Duration', project.start_date && project.end_date ? (() => {
-                  const start = new Date(project.start_date)
-                  const end = new Date(project.end_date)
-                  const days = Math.round((end - start) / (1000 * 60 * 60 * 24))
-                  if (days < 0) return null
-                  if (days < 7) return days + ' day' + (days !== 1 ? 's' : '')
-                  if (days < 30) return Math.round(days / 7) + ' week' + (Math.round(days / 7) !== 1 ? 's' : '')
-                  if (days < 365) return Math.round(days / 30) + ' month' + (Math.round(days / 30) !== 1 ? 's' : '')
-                  const yrs = (days / 365).toFixed(1)
-                  return yrs + ' year' + (yrs !== '1.0' ? 's' : '')
-                })() : null],
+                ['Duration', calcDuration(project.start_date, project.end_date)],
                 ['Contract Value', formatCurrency(project.value)],
               ].filter(([, v]) => v && v !== '—').map(([k, v]) => (
                 <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span>{v}</span></div>
