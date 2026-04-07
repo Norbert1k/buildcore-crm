@@ -131,10 +131,16 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
           <input value={form.cis_number} onChange={e => set('cis_number', e.target.value)} placeholder="e.g. 1234567890" />
         </Field>
         <div className="full">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 400, fontSize: 13 }}>
-            <input type="checkbox" checked={form.cis_verified} onChange={e => set('cis_verified', e.target.checked)} style={{ width: 16, height: 16 }} />
-            CIS verified with HMRC
-          </label>
+          <div onClick={() => set('cis_verified', !form.cis_verified)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 'var(--radius)', border: `1.5px solid ${form.cis_verified ? 'var(--green)' : 'var(--border)'}`, background: form.cis_verified ? 'var(--green-bg)' : 'var(--surface2)' }}>
+            <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${form.cis_verified ? 'var(--green)' : 'var(--border2)'}`, background: form.cis_verified ? 'var(--green)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {form.cis_verified && <svg width="11" height="11" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: form.cis_verified ? 'var(--green)' : 'var(--text)' }}>✓ CIS verified with HMRC</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Tick when HMRC verification has been completed</div>
+            </div>
+          </div>
         </div>
         <div className="form-section">Notes</div>
         <div className="full">
