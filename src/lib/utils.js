@@ -4,7 +4,8 @@ export const TRADES = [
   'Electrical','Plumbing','HVAC','Scaffolding','Groundworks','Brickwork',
   'Carpentry','Roofing','Steel Erection','Painting & Decorating','Plastering',
   'Glazing','Demolition','Drainage','Landscaping','Fire Protection',
-  'Lift Installation','Flooring','Insulation','Other'
+  'Lift Installation','Flooring','Insulation',
+  'Core Drilling & Sawing','Setting Out Engineer','Consultant','Sprinkler System','Other'
 ]
 
 export const DOCUMENT_TYPES = {
