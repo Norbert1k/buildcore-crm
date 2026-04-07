@@ -1,4 +1,4 @@
-# BuildCore CRM
+# BuildCore CRM 
 ### Internal Subcontractor Management System
 
 A full-stack CRM built for construction companies to manage subcontractors, track compliance documents (RAMS, insurances, certificates), and link subcontractors to projects — with live expiry alerts.
