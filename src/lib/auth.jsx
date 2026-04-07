@@ -66,7 +66,7 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     // Theme stays as-is from localStorage — don't reset it
   }
 
