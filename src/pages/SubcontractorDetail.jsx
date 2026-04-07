@@ -143,7 +143,7 @@ export default function SubcontractorDetail() {
   const expiring = docs.filter(d => d.status === 'expiring_soon')
   const score = complianceScore(docs)
   const rating = calcRating(ratings)
-  const allProjects = projects.map(ps => ps.projects).filter(Boolean)
+  const assignedProjectsList = projects.map(ps => ps.projects).filter(Boolean)
 
   // Format address properly
   const addressParts = [sub.address, sub.city, sub.postcode].filter(Boolean)
@@ -353,7 +353,7 @@ export default function SubcontractorDetail() {
           subName={sub.company_name}
           subEmail={sub.email}
           ratings={ratings}
-          projects={allProjects}
+          projects={assignedProjectsList}
           onRefresh={load}
         />
       )}
