@@ -58,6 +58,18 @@ export default function SubcontractorDetail() {
     load()
   }
 
+  async function togglePaymentApproval() {
+    setApprovingPayment(true)
+    const newVal = !sub.approved
+    await supabase.from('subcontractors').update({
+      approved: newVal,
+      approved_by: newVal ? profile?.id : null,
+      approved_at: newVal ? new Date().toISOString() : null,
+    }).eq('id', id)
+    setSub(s => ({ ...s, approved: newVal, approved_by: newVal ? profile?.id : null, approved_at: newVal ? new Date().toISOString() : null }))
+    setApprovingPayment(false)
+  }
+
   async function saveNote() {
     if (!noteForm.note.trim()) return
     setSavingNote(true)
