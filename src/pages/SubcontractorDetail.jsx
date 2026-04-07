@@ -22,6 +22,7 @@ export default function SubcontractorDetail() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('documents')
   const [showEditSub, setShowEditSub] = useState(false)
+  const [approvingPayment, setApprovingPayment] = useState(false)
   const [showDocModal, setShowDocModal] = useState(false)
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -124,11 +125,30 @@ export default function SubcontractorDetail() {
               <h2 style={{ fontSize: 18, fontWeight: 600 }}>{sub.company_name}</h2>
               <Pill cls={SUB_STATUSES[sub.status]?.cls || 'pill-gray'}>{SUB_STATUSES[sub.status]?.label || sub.status}</Pill>
               <Pill cls="pill-blue">{sub.trade}</Pill>
+              {sub.approved ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>
+                  ✓ Approved for Payment
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>
+                  ⏳ Pending Approval
+                </div>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {score && <div style={{ background: score.score >= 80 ? 'var(--green-bg)' : score.score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)', color: score.score >= 80 ? 'var(--green)' : score.score >= 50 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>Docs {score.score}%</div>}
             {rating && <RatingBadge ratings={ratings} />}
+            {(can('manage_users') || profile?.role === 'accountant') && (
+              <button
+                className={`btn btn-sm ${sub.approved ? 'btn-danger' : 'btn-primary'}`}
+                onClick={togglePaymentApproval}
+                disabled={approvingPayment}
+                title={sub.approved ? 'Click to revoke payment approval' : 'Click to approve for payment'}
+              >
+                {approvingPayment ? '...' : sub.approved ? '✕ Revoke Approval' : '✓ Approve for Payment'}
+              </button>
+            )}
             {can('manage_subcontractors') && (
               <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
             )}
@@ -138,6 +158,12 @@ export default function SubcontractorDetail() {
           </div>
         </div>
 
+        {/* Payment approval info */}
+        {sub.approved && sub.approved_at && (
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, marginTop: -6 }}>
+            Approved for payment by accounts on {new Date(sub.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </div>
+        )}
         {/* Contact details grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 24px', marginBottom: sub.vat_number || sub.cis_number ? 12 : 0 }}>
           {[
