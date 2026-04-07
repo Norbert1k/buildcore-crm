@@ -6,6 +6,17 @@ import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit } from '../compon
 import { useAuth } from '../lib/auth'
 import ProjectModal from '../components/ProjectModal'
 
+function calcDuration(start, end) {
+  if (!start || !end) return null
+  const days = Math.round((new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24))
+  if (days < 0) return null
+  if (days < 7) return days + 'd'
+  if (days < 30) return Math.round(days / 7) + 'w'
+  if (days < 365) return Math.round(days / 30) + ' mo'
+  const yrs = Math.round(days / 365)
+  return yrs + ' yr'
+}
+
 export default function Projects() {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -92,15 +103,7 @@ export default function Projects() {
                   <td>{p.profiles?.full_name || '—'}</td>
                   <td className="td-muted">{formatDate(p.start_date)}</td>
                   <td className="td-muted">{formatDate(p.end_date)}</td>
-                  <td className="td-muted">{(() => {
-                    if (!p.start_date || !p.end_date) return '—'
-                    const days = Math.round((new Date(p.end_date) - new Date(p.start_date)) / (1000 * 60 * 60 * 24))
-                    if (days < 0) return '—'
-                    if (days < 7) return days + 'd'
-                    if (days < 30) return Math.round(days / 7) + 'w'
-                    if (days < 365) return Math.round(days / 30) + ' mo'
-                    return (days / 365).toFixed(1) + ' yr'
-                  })()}</td>
+                  <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
                   <td><Pill cls="pill-blue">{p.project_subcontractors?.length || 0} assigned</Pill></td>
                   <td>{formatCurrency(p.value)}</td>
                   <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill></td>
