@@ -74,6 +74,7 @@ export default function Projects() {
                 <th>Project Manager</th>
                 <th>Start</th>
                 <th>End</th>
+                <th>Duration</th>
                 <th>Subcontractors</th>
                 <th>Value</th>
                 <th>Status</th>
@@ -91,6 +92,15 @@ export default function Projects() {
                   <td>{p.profiles?.full_name || '—'}</td>
                   <td className="td-muted">{formatDate(p.start_date)}</td>
                   <td className="td-muted">{formatDate(p.end_date)}</td>
+                  <td className="td-muted">{(() => {
+                    if (!p.start_date || !p.end_date) return '—'
+                    const days = Math.round((new Date(p.end_date) - new Date(p.start_date)) / (1000 * 60 * 60 * 24))
+                    if (days < 0) return '—'
+                    if (days < 7) return days + 'd'
+                    if (days < 30) return Math.round(days / 7) + 'w'
+                    if (days < 365) return Math.round(days / 30) + ' mo'
+                    return (days / 365).toFixed(1) + ' yr'
+                  })()}</td>
                   <td><Pill cls="pill-blue">{p.project_subcontractors?.length || 0} assigned</Pill></td>
                   <td>{formatCurrency(p.value)}</td>
                   <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill></td>
