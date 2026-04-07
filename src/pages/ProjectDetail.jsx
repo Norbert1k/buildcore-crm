@@ -31,6 +31,10 @@ export default function ProjectDetail() {
   const [driveFolderId, setDriveFolderId] = useState(null)
   const [driveFolderName, setDriveFolderName] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
+  const [photos, setPhotos] = useState([])
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoCaption, setPhotoCaption] = useState('')
+  const [previewPhoto, setPreviewPhoto] = useState(null)
   const [showAssignSub, setShowAssignSub] = useState(false)
   const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
@@ -53,7 +57,48 @@ export default function ProjectDetail() {
     setSubs(subsRes.data || [])
     setDocs(docsRes.data || [])
     setAllSubs(allSubsRes.data || [])
+    // Load project photos
+    const { data: photosData } = await supabase.from('project_photos').select('*').eq('project_id', id).order('created_at', { ascending: false })
+    setPhotos(photosData || [])
     setLoading(false)
+  }
+
+  async function uploadPhoto(files) {
+    if (!files.length) return
+    setUploadingPhoto(true)
+    for (const file of files) {
+      const path = `projects/${id}/${Date.now()}-${file.name}`
+      const { error } = await supabase.storage.from('company-docs').upload(path, file)
+      if (!error) {
+        await supabase.from('project_photos').insert({
+          project_id: id,
+          storage_path: path,
+          file_name: file.name,
+          file_size: file.size,
+          caption: photoCaption || '',
+        })
+      }
+    }
+    setPhotoCaption('')
+    setUploadingPhoto(false)
+    const { data } = await supabase.from('project_photos').select('*').eq('project_id', id).order('created_at', { ascending: false })
+    setPhotos(data || [])
+  }
+
+  async function deletePhoto(photo) {
+    await supabase.storage.from('company-docs').remove([photo.storage_path])
+    await supabase.from('project_photos').delete().eq('id', photo.id)
+    setPhotos(p => p.filter(x => x.id !== photo.id))
+  }
+
+  async function getPhotoUrl(path) {
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(path, 3600)
+    return data?.signedUrl
+  }
+
+  async function openPhotoPreview(photo) {
+    const url = await getPhotoUrl(photo.storage_path)
+    setPreviewPhoto({ ...photo, url })
   }
 
   async function assignSub() {
@@ -122,7 +167,8 @@ export default function ProjectDetail() {
       <div className="filter-tabs">
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => setActiveTab('subcontractors')}>Subcontractors ({subs.length})</div>
         <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Project Documents ({docs.length})</div>
-        <div className={`filter-tab ${activeTab === 'files' ? 'active' : ''}`} onClick={() => setActiveTab('files')}>📁 Google Drive</div>
+        <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => setActiveTab('photos')}>📷 Photos ({photos.length})</div>
+        <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => setActiveTab('casestudy')}>📄 Case Study</div>
       </div>
 
       {activeTab === 'files' && (
@@ -154,6 +200,48 @@ export default function ProjectDetail() {
             }}
           />
         </div>
+      )}
+
+      {activeTab === 'photos' && (
+        <div>
+          <div className="section-header" style={{ marginBottom: 16 }}>
+            <div className="section-title">Project Photos</div>
+            {can('manage_projects') && (
+              <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
+                {uploadingPhoto ? 'Uploading...' : '📷 Upload Photos'}
+                <input type="file" multiple accept="image/*" style={{ display: 'none' }}
+                  onChange={e => uploadPhoto(Array.from(e.target.files))} disabled={uploadingPhoto} />
+              </label>
+            )}
+          </div>
+          {photos.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>
+              No photos yet — upload project photos to showcase your work
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+              {photos.map(photo => (
+                <PhotoCard key={photo.id} photo={photo} onPreview={() => openPhotoPreview(photo)} onDelete={() => deletePhoto(photo)} canDelete={can('manage_projects')} />
+              ))}
+            </div>
+          )}
+          {/* Photo preview modal */}
+          {previewPhoto && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewPhoto(null)}>
+              <div style={{ maxWidth: 900, width: '100%' }} onClick={e => e.stopPropagation()}>
+                <img src={previewPhoto.url} alt={previewPhoto.caption || previewPhoto.file_name} style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }} />
+                {previewPhoto.caption && <div style={{ color: 'white', textAlign: 'center', marginTop: 12, fontSize: 14 }}>{previewPhoto.caption}</div>}
+                <div style={{ textAlign: 'center', marginTop: 12 }}>
+                  <button className="btn" onClick={() => setPreviewPhoto(null)} style={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}>✕ Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'casestudy' && (
+        <CaseStudy project={project} subs={subs} docs={docs} photos={photos} />
       )}
 
       {activeTab === 'subcontractors' && (
@@ -251,6 +339,179 @@ export default function ProjectDetail() {
       </Modal>
 
       <ConfirmDialog open={!!confirmRemove} onClose={() => setConfirmRemove(null)} onConfirm={() => removeSub(confirmRemove)} title="Remove subcontractor" message="Remove this subcontractor from the project? Their profile and documents are not affected." danger />
+    </div>
+  )
+}
+
+// ── Photo Card Component ─────────────────────────────────────
+function PhotoCard({ photo, onPreview, onDelete, canDelete }) {
+  const [url, setUrl] = useState(null)
+
+  useEffect(() => {
+    supabase.storage.from('company-docs').createSignedUrl(photo.storage_path, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
+  }, [photo.storage_path])
+
+  return (
+    <div style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+      <div style={{ height: 160, background: 'var(--surface2)', overflow: 'hidden', cursor: 'pointer', position: 'relative' }} onClick={onPreview}>
+        {url ? (
+          <img src={url} alt={photo.caption || photo.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)' }}>Loading...</div>
+        )}
+      </div>
+      <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ flex: 1, fontSize: 12, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {photo.caption || photo.file_name}
+        </div>
+        {canDelete && (
+          <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '2px 6px', flexShrink: 0 }} onClick={onDelete}>✕</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Case Study Component ─────────────────────────────────────
+function CaseStudy({ project, subs, docs, photos }) {
+  const [photoUrls, setPhotoUrls] = useState({})
+
+  useEffect(() => {
+    photos.slice(0, 6).forEach(async p => {
+      const { data } = await supabase.storage.from('company-docs').createSignedUrl(p.storage_path, 3600)
+      if (data?.signedUrl) setPhotoUrls(u => ({ ...u, [p.id]: data.signedUrl }))
+    })
+  }, [photos])
+
+  function exportPDF() {
+    const el = document.getElementById('case-study-content')
+    if (!el) return
+    // Load html2pdf
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
+    script.onload = () => {
+      window.html2pdf().set({
+        margin: 0,
+        filename: `${project.project_name} - Case Study.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(el).save()
+    }
+    document.head.appendChild(script)
+  }
+
+  const duration = calcDuration(project.start_date, project.end_date)
+
+  return (
+    <div>
+      <div className="section-header" style={{ marginBottom: 16 }}>
+        <div>
+          <div className="section-title">Case Study</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>Auto-compiled from project data — export as professional PDF</div>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={exportPDF}>⬇ Export PDF</button>
+      </div>
+
+      <div id="case-study-content" style={{ background: 'white', color: '#1a1a1a', fontFamily: 'Arial, sans-serif', maxWidth: 794 }}>
+        {/* Header */}
+        <div style={{ background: '#448a40', padding: '32px 40px', color: 'white' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+            <div>
+              <div style={{ fontSize: 11, letterSpacing: '0.1em', opacity: 0.8, marginBottom: 4 }}>PROJECT CASE STUDY</div>
+              <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.2 }}>{project.project_name}</div>
+            </div>
+            <div style={{ textAlign: 'right', fontSize: 12, opacity: 0.9 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>City Construction</div>
+              <div>cltd.co.uk</div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+            {[
+              ['Client', project.client_name || '—'],
+              ['Duration', duration || '—'],
+              ['Value', project.value ? `£${Number(project.value).toLocaleString()}` : '—'],
+              ['Status', project.status?.charAt(0).toUpperCase() + project.status?.slice(1) || '—'],
+            ].map(([k, v]) => (
+              <div key={k} style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 4 }}>{k.toUpperCase()}</div>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ padding: '32px 40px' }}>
+          {/* Description */}
+          {project.description && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT OVERVIEW</div>
+              <div style={{ fontSize: 13, lineHeight: 1.8, color: '#333' }}>{project.description}</div>
+            </div>
+          )}
+
+          {/* Project details */}
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT DETAILS</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 13 }}>
+              {[
+                ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
+                ['Start Date', project.start_date ? new Date(project.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
+                ['Completion Date', project.end_date ? new Date(project.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
+                ['Project Manager', project.profiles?.full_name],
+                ['Reference', project.project_ref],
+              ].filter(([, v]) => v).map(([k, v]) => (
+                <div key={k} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 6, paddingTop: 6, display: 'flex', gap: 8 }}>
+                  <span style={{ color: '#888', minWidth: 120 }}>{k}:</span>
+                  <span style={{ fontWeight: 500 }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Photos */}
+          {Object.keys(photoUrls).length > 0 && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT PHOTOGRAPHY</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {photos.slice(0, 6).map(p => photoUrls[p.id] ? (
+                  <div key={p.id}>
+                    <img src={photoUrls[p.id]} alt={p.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 4 }} crossOrigin="anonymous" />
+                    {p.caption && <div style={{ fontSize: 10, color: '#888', textAlign: 'center', marginTop: 3 }}>{p.caption}</div>}
+                  </div>
+                ) : null)}
+              </div>
+            </div>
+          )}
+
+          {/* Subcontractors */}
+          {subs.length > 0 && (
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT TEAM</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                {subs.map(ps => (
+                  <div key={ps.id} style={{ border: '1px solid #eee', borderRadius: 6, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e8f5e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#448a40', flexShrink: 0 }}>
+                      {ps.subcontractors?.company_name?.charAt(0) || '?'}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{ps.subcontractors?.company_name}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{ps.trade_on_project || ps.subcontractors?.trade}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{ borderTop: '1px solid #eee', paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 11, color: '#999' }}>City Construction Ltd · cltd.co.uk</div>
+            <div style={{ fontSize: 11, color: '#999' }}>Generated {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
