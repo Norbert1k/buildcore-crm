@@ -26,15 +26,14 @@ export default function Login() {
     if (error) { setError(error.message); return }
 
     // Check 2FA — always require if enrolled
-    try {
-      const { data: factorsData } = await supabase.auth.mfa.listFactors()
-      const verifiedTotp = factorsData?.totp?.find(f => f.status === 'verified')
-      if (verifiedTotp) {
-        setFactorId(verifiedTotp.id)
-        setStep('2fa')
-        return
-      }
-    } catch (e) {}
+  try {
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  if (aal?.nextLevel === 'aal2') {
+    const { data: fd } = await supabase.auth.mfa.listFactors()
+    const totp = fd?.totp?.[0]
+    if (totp) { setFactorId(totp.id); setStep('2fa'); return }
+  }
+} catch (e) {}
 
     // Check forced password change
     try {
