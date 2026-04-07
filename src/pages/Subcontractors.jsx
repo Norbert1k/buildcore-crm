@@ -133,7 +133,12 @@ export default function Subcontractors() {
                       <div className="td-muted">{s.phone}</div>
                     </td>
                     <td>{s.city || '—'}</td>
-                    <td><Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill></td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                        <Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill>
+                        {s.approved && <span title="Approved for payment" style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 10, padding: '1px 7px', fontWeight: 700 }}>✓ Paid</span>}
+                      </div>
+                    </td>
                     <td>{docPill}</td>
                     <td><RatingBadge ratings={s.performance_ratings} /></td>
                     <td>
