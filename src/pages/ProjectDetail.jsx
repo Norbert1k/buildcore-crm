@@ -376,6 +376,9 @@ function PhotoCard({ photo, onPreview, onDelete, canDelete }) {
 // ── Case Study Component ─────────────────────────────────────
 function CaseStudy({ project, subs, docs, photos }) {
   const [photoUrls, setPhotoUrls] = useState({})
+  const [aiOverview, setAiOverview] = useState(null)
+  const [generatingAI, setGeneratingAI] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     photos.slice(0, 6).forEach(async p => {
@@ -384,10 +387,45 @@ function CaseStudy({ project, subs, docs, photos }) {
     })
   }, [photos])
 
+  async function generateAIOverview() {
+    if (!project.description) return
+    setGeneratingAI(true)
+    try {
+      const duration = calcDuration(project.start_date, project.end_date)
+      const trades = subs.map(s => s.trade_on_project || s.subcontractors?.trade).filter(Boolean).join(', ')
+      const prompt = `You are writing a professional project case study for City Construction Ltd, a UK construction company. 
+Rewrite the following project description into a compelling, professional 2-3 paragraph overview suitable for a client-facing case study PDF.
+Use professional construction industry language. Highlight the scope, complexity and value delivered. Do not invent facts.
+
+Project: ${project.project_name}
+Client: ${project.client_name || 'Confidential'}
+Value: ${project.value ? '£' + Number(project.value).toLocaleString() : 'Not specified'}
+Duration: ${duration || 'Not specified'}
+Trades involved: ${trades || 'Various'}
+Original description: ${project.description}
+
+Write only the overview text, no headings or labels.`
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      })
+      const data = await response.json()
+      const text = data.content?.[0]?.text
+      if (text) setAiOverview(text)
+    } catch (e) { console.error(e) }
+    setGeneratingAI(false)
+  }
+
   function exportPDF() {
     const el = document.getElementById('case-study-content')
     if (!el) return
-    // Load html2pdf
+    setExporting(true)
     const script = document.createElement('script')
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
     script.onload = () => {
@@ -397,22 +435,38 @@ function CaseStudy({ project, subs, docs, photos }) {
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      }).from(el).save()
+      }).from(el).save().then(() => setExporting(false))
     }
     document.head.appendChild(script)
   }
 
   const duration = calcDuration(project.start_date, project.end_date)
+  const overviewText = aiOverview || project.description
 
   return (
     <div>
       <div className="section-header" style={{ marginBottom: 16 }}>
         <div>
           <div className="section-title">Case Study</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)' }}>Auto-compiled from project data — export as professional PDF</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>Auto-compiled from project data — AI enhances the overview</div>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={exportPDF}>⬇ Export PDF</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {project.description && (
+            <button className="btn btn-sm" onClick={generateAIOverview} disabled={generatingAI}>
+              {generatingAI ? '✨ Writing...' : aiOverview ? '✨ Regenerate' : '✨ AI Overview'}
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={exportPDF} disabled={exporting}>
+            {exporting ? 'Generating...' : '⬇ Export PDF'}
+          </button>
+        </div>
       </div>
+
+      {aiOverview && (
+        <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 12, color: 'var(--green)', marginBottom: 16 }}>
+          ✨ AI has enhanced the project overview — review below before exporting
+        </div>
+      )}
 
       <div id="case-study-content" style={{ background: 'white', color: '#1a1a1a', fontFamily: 'Arial, sans-serif', maxWidth: 794 }}>
         {/* Header */}
@@ -443,22 +497,22 @@ function CaseStudy({ project, subs, docs, photos }) {
         </div>
 
         <div style={{ padding: '32px 40px' }}>
-          {/* Description */}
-          {project.description && (
+          {/* Overview */}
+          {overviewText && (
             <div style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT OVERVIEW</div>
-              <div style={{ fontSize: 13, lineHeight: 1.8, color: '#333' }}>{project.description}</div>
+              <div style={{ fontSize: 13, lineHeight: 1.8, color: '#333', whiteSpace: 'pre-wrap' }}>{overviewText}</div>
             </div>
           )}
 
-          {/* Project details */}
+          {/* Details */}
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT DETAILS</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 13 }}>
               {[
                 ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', project.start_date ? new Date(project.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
-                ['Completion Date', project.end_date ? new Date(project.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
+                ['Completion', project.end_date ? new Date(project.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
                 ['Project Manager', project.profiles?.full_name],
                 ['Reference', project.project_ref],
               ].filter(([, v]) => v).map(([k, v]) => (
@@ -485,7 +539,7 @@ function CaseStudy({ project, subs, docs, photos }) {
             </div>
           )}
 
-          {/* Subcontractors */}
+          {/* Team */}
           {subs.length > 0 && (
             <div style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT TEAM</div>
