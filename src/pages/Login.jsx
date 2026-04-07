@@ -30,7 +30,6 @@ export default function Login() {
       const { data: factorsData } = await supabase.auth.mfa.listFactors()
 const verifiedTotp = factorsData?.totp?.find(f => f.status === 'verified')
 if (verifiedTotp) { setFactorId(verifiedTotp.id); setStep('2fa'); return }
-      }
     } catch (e) {}
 
     // Check forced password change
