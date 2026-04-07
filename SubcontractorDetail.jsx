@@ -24,7 +24,7 @@ export default function SubcontractorDetail() {
   const [showEditSub, setShowEditSub] = useState(false)
   const [approvingPayment, setApprovingPayment] = useState(false)
   const [showAssignProject, setShowAssignProject] = useState(false)
-  const [allProjects, setAllProjects] = useState([])
+  const [availableProjects, setAvailableProjects] = useState([])
   const [assignProjectForm, setAssignProjectForm] = useState({ project_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
   const [savingAssign, setSavingAssign] = useState(false)
   const [showDocModal, setShowDocModal] = useState(false)
@@ -436,7 +436,7 @@ export default function SubcontractorDetail() {
           <Field label="Project *">
             <select value={assignProjectForm.project_id} onChange={e => setAssignProjectForm(f => ({ ...f, project_id: e.target.value }))}>
               <option value="">Select a project...</option>
-              {allProjects.filter(p => !projects.find(ps => ps.project_id === p.id)).map(p => (
+              {availableProjects.filter(p => !projects.find(ps => ps.project_id === p.id)).map(p => (
                 <option key={p.id} value={p.id}>{p.project_name}{p.project_ref ? ` (${p.project_ref})` : ''}</option>
               ))}
             </select>
