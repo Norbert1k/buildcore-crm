@@ -65,7 +65,15 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       result = await supabase.from('projects').insert(payload)
     }
     setSaving(false)
-    if (result.error) { setErrors({ _global: result.error.message }); return }
+    if (result.error) {
+      const msg = result.error.message
+      if (msg.includes('projects_project_ref_key') || msg.includes('unique constraint')) {
+        setErrors({ _global: 'This Project Reference is already in use — please use a different ref number.' })
+      } else {
+        setErrors({ _global: msg })
+      }
+      return
+    }
     onSaved()
   }
 
