@@ -22,7 +22,8 @@ export default function Suppliers() {
   const [editing, setEditing] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [showPasswords, setShowPasswords] = useState({})
-  const { can } = useAuth()
+  const [approvingSupplier, setApprovingSupplier] = useState(false)
+  const { can, profile } = useAuth()
 
   useEffect(() => { load() }, [])
 
@@ -130,7 +131,17 @@ export default function Suppliers() {
                     {s.credit_limit ? formatCurrency(s.credit_limit) : '—'}
                   </td>
                   <td className="td-muted">{s.payment_terms || '—'}</td>
-                  <td><Pill cls={s.status === 'active' ? 'pill-green' : 'pill-gray'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill></td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                      <Pill cls={s.status === 'active' ? 'pill-green' : 'pill-gray'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill>
+                      {s.approved && (
+                        <span style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 10, padding: '1px 7px', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Approved</span>
+                      )}
+                      {!s.approved && (
+                        <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber-border)', borderRadius: 10, padding: '1px 7px', fontWeight: 700, whiteSpace: 'nowrap' }}>⏳ Pending</span>
+                      )}
+                    </div>
+                  </td>
                   <td onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button className="btn btn-sm" onClick={() => setViewing(s)}><IconEye size={13}/></button>
@@ -153,10 +164,23 @@ export default function Suppliers() {
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <Avatar name={viewing.company_name} size="lg" />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 16 }}>{viewing.company_name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                  <div style={{ fontWeight: 600, fontSize: 16 }}>{viewing.company_name}</div>
+                  {viewing.approved ? (
+                    <span style={{ fontSize: 11, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 20, padding: '2px 10px', fontWeight: 700 }}>✓ Approved for Payment</span>
+                  ) : (
+                    <span style={{ fontSize: 11, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber-border)', borderRadius: 20, padding: '2px 10px', fontWeight: 700 }}>⏳ Pending Approval</span>
+                  )}
+                </div>
                 <div style={{ color: 'var(--text2)', fontSize: 13 }}>{viewing.category}</div>
+                {viewing.approved && viewing.approved_at && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Approved {new Date(viewing.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {(can('manage_users') || profile?.role === 'accountant') && (
+                  <button className={`btn btn-sm ${viewing.approved ? 'btn-danger' : 'btn-primary'}`} onClick={() => toggleSupplierApproval(viewing)} disabled={approvingSupplier}>
+                    {approvingSupplier ? '...' : viewing.approved ? '✕ Revoke' : '✓ Approve for Payment'}
+                  </button>
+                )}
                 {can('manage_subcontractors') && (
                   <button className="btn btn-sm" onClick={() => { setEditing(viewing); setViewing(null); setShowModal(true) }}><IconEdit size={13}/> Edit</button>
                 )}
