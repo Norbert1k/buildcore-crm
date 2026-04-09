@@ -8,9 +8,9 @@ import Dashboard from './pages/Dashboard'
 import Subcontractors from './pages/Subcontractors'
 import SubcontractorDetail from './pages/SubcontractorDetail'
 import Documents from './pages/Documents'
-import ProjectCalendar from './pages/ProjectCalendar'
-import ProjectCalendar from './pages/ProjectCalendar'
+import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
+import ProjectCalendar from './pages/ProjectCalendar'
 import Suppliers from './pages/Suppliers'
 import GlobalSearch from './components/GlobalSearch'
 import Settings from './pages/Settings'
@@ -36,7 +36,6 @@ function ProtectedLayout() {
 
   useEffect(() => {
     if (user) fetchExpCount()
-    // Close sidebar on route change (mobile)
     setSidebarOpen(false)
   }, [user, location.pathname])
 
@@ -87,14 +86,14 @@ function ProtectedLayout() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/subcontractors" element={<Subcontractors />} />
             <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
-            <Route path="/projects/calendar" element={<ProjectCalendar />} />
+            <Route path="/documents" element={<Documents />} />
             <Route path="/projects" element={<Projects />} />
-          <Route path="/projects/calendar" element={<ProjectCalendar />} />
+            <Route path="/projects/calendar" element={<ProjectCalendar />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/suppliers" element={<Suppliers />} />
             <Route path="/settings" element={<Settings />} />
-          <Route path="/company-documents" element={<CompanyDocuments />} />
-          <Route path="/google-drive" element={<GoogleDrive />} />
+            <Route path="/company-documents" element={<CompanyDocuments />} />
+            <Route path="/google-drive" element={<GoogleDrive />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
