@@ -8,7 +8,7 @@ import Dashboard from './pages/Dashboard'
 import Subcontractors from './pages/Subcontractors'
 import SubcontractorDetail from './pages/SubcontractorDetail'
 import Documents from './pages/Documents'
-import Projects from './pages/Projects'
+import ProjectCalendar from './pages/ProjectCalendar'
 import ProjectCalendar from './pages/ProjectCalendar'
 import ProjectDetail from './pages/ProjectDetail'
 import Suppliers from './pages/Suppliers'
@@ -87,7 +87,7 @@ function ProtectedLayout() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/subcontractors" element={<Subcontractors />} />
             <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
-            <Route path="/documents" element={<Documents />} />
+            <Route path="/projects/calendar" element={<ProjectCalendar />} />
             <Route path="/projects" element={<Projects />} />
           <Route path="/projects/calendar" element={<ProjectCalendar />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
