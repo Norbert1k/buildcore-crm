@@ -9,6 +9,7 @@ import Subcontractors from './pages/Subcontractors'
 import SubcontractorDetail from './pages/SubcontractorDetail'
 import Documents from './pages/Documents'
 import Projects from './pages/Projects'
+import ProjectCalendar from './pages/ProjectCalendar'
 import ProjectDetail from './pages/ProjectDetail'
 import Suppliers from './pages/Suppliers'
 import GlobalSearch from './components/GlobalSearch'
@@ -88,6 +89,7 @@ function ProtectedLayout() {
             <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
             <Route path="/documents" element={<Documents />} />
             <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/calendar" element={<ProjectCalendar />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/suppliers" element={<Suppliers />} />
             <Route path="/settings" element={<Settings />} />
