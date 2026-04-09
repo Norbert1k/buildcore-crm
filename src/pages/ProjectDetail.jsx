@@ -647,6 +647,7 @@ Write only the overview text, no headings or labels.`
 function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
   const [pdfThumb, setPdfThumb] = useState(null)
   const [loadingThumb, setLoadingThumb] = useState(false)
+  const [viewUrl, setViewUrl] = useState(null)
   const isPdf = prog.file_type === 'pdf'
   const isMpp = prog.file_type === 'mpp'
 
@@ -655,10 +656,16 @@ function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
     setLoadingThumb(true)
     supabase.storage.from('company-docs').createSignedUrl(prog.storage_path, 3600)
       .then(({ data }) => {
-        if (data?.signedUrl) setPdfThumb(data.signedUrl)
+        if (data?.signedUrl) { setPdfThumb(data.signedUrl); setViewUrl(data.signedUrl) }
         setLoadingThumb(false)
       })
   }, [prog.storage_path, isPdf])
+
+  async function openView() {
+    if (viewUrl) { window.open(viewUrl, '_blank'); return }
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(prog.storage_path, 3600)
+    if (data?.signedUrl) { setViewUrl(data.signedUrl); window.open(data.signedUrl, '_blank') }
+  }
 
   const fileSize = prog.file_size ? (prog.file_size / 1024 / 1024).toFixed(1) + ' MB' : ''
 
@@ -697,14 +704,21 @@ function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
         </button>
       </div>
       {/* Footer */}
-      <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prog.file_name}</div>
-          {fileSize && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fileSize}</div>}
+      <div style={{ padding: '10px 12px' }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{prog.file_name}</div>
+        {fileSize && <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>{fileSize}</div>}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button className="btn btn-sm" style={{ flex: 1, fontSize: 11, padding: '5px 6px' }} onClick={openView}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            {isMpp ? 'Download to View' : 'View'}
+          </button>
+          <button className="btn btn-sm" style={{ fontSize: 11, padding: '5px 8px' }} onClick={onDownload} title="Download">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+          {canDelete && (
+            <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '5px 8px' }} onClick={onDelete}>✕</button>
+          )}
         </div>
-        {canDelete && (
-          <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '2px 7px', flexShrink: 0 }} onClick={onDelete}>✕</button>
-        )}
       </div>
     </div>
   )
