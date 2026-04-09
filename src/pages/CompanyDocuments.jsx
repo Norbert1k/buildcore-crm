@@ -14,6 +14,7 @@ const CATEGORIES = [
   { key: 'certifications', icon: '📜', label: 'Certifications' },
   { key: 'fleet',          icon: '🚗', label: 'Car Fleet' },
   { key: 'templates',      icon: '📝', label: 'Templates' },
+  { key: 'site_folder',    icon: '📁', label: 'Site Folder' },
 ]
 
 function formatSize(bytes) {
