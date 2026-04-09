@@ -32,6 +32,8 @@ export default function ProjectDetail() {
   const [driveFolderName, setDriveFolderName] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
   const [photos, setPhotos] = useState([])
+  const [programmes, setProgrammes] = useState([])
+  const [uploadingProgramme, setUploadingProgramme] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [photoCaption, setPhotoCaption] = useState('')
   const [previewPhoto, setPreviewPhoto] = useState(null)
@@ -60,7 +62,48 @@ export default function ProjectDetail() {
     // Load project photos
     const { data: photosData } = await supabase.from('project_photos').select('*').eq('project_id', id).order('created_at', { ascending: false })
     setPhotos(photosData || [])
+    const { data: progData } = await supabase.from('project_programmes').select('*').eq('project_id', id).order('created_at', { ascending: false })
+    setProgrammes(progData || [])
     setLoading(false)
+  }
+
+  async function uploadProgramme(files) {
+    if (!files.length) return
+    setUploadingProgramme(true)
+    for (const file of files) {
+      const path = `projects/${id}/programmes/${Date.now()}-${file.name}`
+      const { error } = await supabase.storage.from('company-docs').upload(path, file)
+      if (!error) {
+        const isPdf = file.name.toLowerCase().endsWith('.pdf')
+        const isMpp = file.name.toLowerCase().endsWith('.mpp') || file.name.toLowerCase().endsWith('.mppx')
+        await supabase.from('project_programmes').insert({
+          project_id: id,
+          storage_path: path,
+          file_name: file.name,
+          file_size: file.size,
+          file_type: isPdf ? 'pdf' : isMpp ? 'mpp' : 'other',
+        })
+      }
+    }
+    setUploadingProgramme(false)
+    const { data } = await supabase.from('project_programmes').select('*').eq('project_id', id).order('created_at', { ascending: false })
+    setProgrammes(data || [])
+  }
+
+  async function deleteProgramme(prog) {
+    await supabase.storage.from('company-docs').remove([prog.storage_path])
+    await supabase.from('project_programmes').delete().eq('id', prog.id)
+    setProgrammes(p => p.filter(x => x.id !== prog.id))
+  }
+
+  async function downloadProgramme(prog) {
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(prog.storage_path, 60)
+    if (data?.signedUrl) {
+      const a = document.createElement('a')
+      a.href = data.signedUrl
+      a.download = prog.file_name
+      a.click()
+    }
   }
 
   async function uploadPhoto(files) {
@@ -168,6 +211,7 @@ export default function ProjectDetail() {
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => setActiveTab('subcontractors')}>Subcontractors ({subs.length})</div>
         <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Project Documents ({docs.length})</div>
         <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => setActiveTab('photos')}>📷 Photos ({photos.length})</div>
+        <div className={`filter-tab ${activeTab === 'programme' ? 'active' : ''}`} onClick={() => setActiveTab('programme')}>📅 Programme ({programmes.length})</div>
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => setActiveTab('casestudy')}>📄 Case Study</div>
       </div>
 
@@ -199,6 +243,35 @@ export default function ProjectDetail() {
               setDriveFolderName(folderName)
             }}
           />
+        </div>
+      )}
+
+      {activeTab === 'programme' && (
+        <div>
+          <div className="section-header" style={{ marginBottom: 16 }}>
+            <div>
+              <div className="section-title">Project Programme</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Upload PDF or Microsoft Project (.mpp) files</div>
+            </div>
+            {can('manage_projects') && (
+              <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
+                {uploadingProgramme ? 'Uploading...' : '+ Upload Programme'}
+                <input type="file" multiple accept=".pdf,.mpp,.mppx,.xlsx,.xls" style={{ display: 'none' }}
+                  onChange={e => uploadProgramme(Array.from(e.target.files))} disabled={uploadingProgramme} />
+              </label>
+            )}
+          </div>
+          {programmes.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>
+              No programme uploaded yet — upload a PDF or Microsoft Project file
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+              {programmes.map(prog => (
+                <ProgrammeCard key={prog.id} prog={prog} onDownload={() => downloadProgramme(prog)} onDelete={() => deleteProgramme(prog)} canDelete={can('manage_projects')} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -565,6 +638,73 @@ Write only the overview text, no headings or labels.`
             <div style={{ fontSize: 11, color: '#999' }}>Generated {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Programme Card Component ─────────────────────────────────
+function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
+  const [pdfThumb, setPdfThumb] = useState(null)
+  const [loadingThumb, setLoadingThumb] = useState(false)
+  const isPdf = prog.file_type === 'pdf'
+  const isMpp = prog.file_type === 'mpp'
+
+  useEffect(() => {
+    if (!isPdf) return
+    setLoadingThumb(true)
+    supabase.storage.from('company-docs').createSignedUrl(prog.storage_path, 3600)
+      .then(({ data }) => {
+        if (data?.signedUrl) setPdfThumb(data.signedUrl)
+        setLoadingThumb(false)
+      })
+  }, [prog.storage_path, isPdf])
+
+  const fileSize = prog.file_size ? (prog.file_size / 1024 / 1024).toFixed(1) + ' MB' : ''
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--surface)' }}>
+      {/* Thumbnail area — larger than company docs */}
+      <div style={{ height: 180, background: 'var(--surface2)', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {isPdf && pdfThumb ? (
+          <iframe
+            src={`${pdfThumb}#page=1&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=0`}
+            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }}
+            title={prog.file_name}
+          />
+        ) : isPdf && loadingThumb ? (
+          <div style={{ color: 'var(--text3)', fontSize: 12 }}>Loading preview...</div>
+        ) : isMpp ? (
+          <div style={{ textAlign: 'center', padding: 20 }}>
+            <div style={{ width: 56, height: 56, background: '#1a73e8', borderRadius: 8, margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" fill="white" fillOpacity=".2"/><path d="M7 8h10M7 12h6M7 16h8" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#1a73e8' }}>Microsoft Project</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>.{prog.file_name.split('.').pop().toUpperCase()} file</div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: 20 }}>
+            <div style={{ width: 56, height: 56, background: 'var(--surface3, var(--border))', borderRadius: 8, margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="var(--text3)" strokeWidth="1.5"/><polyline points="14 2 14 8 20 8" stroke="var(--text3)" strokeWidth="1.5"/></svg>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{prog.file_name.split('.').pop().toUpperCase()} file</div>
+          </div>
+        )}
+        {/* Overlay download button */}
+        <button onClick={onDownload} style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span style={{ fontSize: 11, color: 'white', fontWeight: 600 }}>Download</span>
+        </button>
+      </div>
+      {/* Footer */}
+      <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prog.file_name}</div>
+          {fileSize && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fileSize}</div>}
+        </div>
+        {canDelete && (
+          <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '2px 7px', flexShrink: 0 }} onClick={onDelete}>✕</button>
+        )}
       </div>
     </div>
   )
