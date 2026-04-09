@@ -42,6 +42,8 @@ export default function Projects() {
   const counts = ['active', 'tender', 'on_hold', 'completed', 'cancelled'].reduce((acc, s) => {
     acc[s] = projects.filter(p => p.status === s).length; return acc
   }, {})
+  const activeValue = projects.filter(p => p.status === 'active').reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0)
+  const tenderValue = projects.filter(p => p.status === 'tender').reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0)
 
   return (
     <div>
@@ -57,11 +59,16 @@ export default function Projects() {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
         <div className="stat-card"><div className="stat-label">Active</div><div className="stat-value green">{counts.active}</div></div>
         <div className="stat-card"><div className="stat-label">Tender</div><div className="stat-value">{counts.tender}</div></div>
         <div className="stat-card"><div className="stat-label">On Hold</div><div className="stat-value amber">{counts.on_hold}</div></div>
         <div className="stat-card"><div className="stat-label">Completed</div><div className="stat-value">{counts.completed}</div></div>
+        <div className="stat-card" style={{ borderTop: '3px solid var(--green)', gridColumn: 'span 2' }}>
+          <div className="stat-label">Active Projects Value</div>
+          <div className="stat-value green" style={{ fontSize: 22 }}>{activeValue > 0 ? formatCurrency(activeValue) : '—'}</div>
+          {tenderValue > 0 && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>+ {formatCurrency(tenderValue)} in tender</div>}
+        </div>
       </div>
 
       <div className="filter-tabs">
