@@ -287,7 +287,7 @@ export default function CompanyDocuments() {
               <SortableGrid
                 items={activeDocs}
                 onReorder={handleReorder}
-                columns="repeat(auto-fill, minmax(160px, 1fr))"
+                columns="repeat(auto-fill, minmax(220px, 1fr))"
                 renderItem={(doc) => {
                   const isSelected = selected.has(doc.id)
                   const isImage = doc.file_type?.includes('image')
@@ -311,7 +311,7 @@ export default function CompanyDocuments() {
                         )}
                       </div>
                       {/* Thumbnail */}
-                      <div onClick={() => openPreview(doc)} style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: thumb ? (isImage ? '#000' : '#f5f5f5') : `${color}15`, overflow: 'hidden', cursor: 'pointer' }}>
+                      <div onClick={() => openPreview(doc)} style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: thumb ? (isImage ? '#000' : '#f5f5f5') : `${color}15`, overflow: 'hidden', cursor: 'pointer' }}>
                         {thumb ? (
                           <img src={thumb} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: isImage ? 'cover' : 'contain', padding: isImage ? 0 : 8 }} />
                         ) : (
