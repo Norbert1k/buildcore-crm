@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEye, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
@@ -16,9 +16,10 @@ export default function Subcontractors() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [editing, setEditing] = useState(null)
   const navigate = useNavigate()
+  const location = useLocation()
   const { can } = useAuth()
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [location.key])
 
   async function deleteSub(id) {
     await supabase.from('subcontractors').delete().eq('id', id)
