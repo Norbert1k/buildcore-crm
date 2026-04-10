@@ -521,8 +521,10 @@ export default function ProjectDetail() {
       <Modal open={showAssignSub} onClose={() => setShowAssignSub(false)} title="Assign Subcontractor" size="sm"
         footer={<><button className="btn" onClick={() => setShowAssignSub(false)}>Cancel</button><button className="btn btn-primary" onClick={assignSub}>Assign</button></>}>
         <div className="form-grid">
-          <div className="full"><Field label="Subcontractor *"><select value={assignForm.subcontractor_id} onChange={e => setAssignForm(f => ({ ...f, subcontractor_id: e.target.value }))}><option value="">Select…</option>{allSubs.filter(s => !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
-          <div className="full"><Field label="Role / Trade on this project"><input value={assignForm.trade_on_project} onChange={e => setAssignForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder="e.g. Electrical installation" /></Field></div>
+          <div className="full"><Field label="Subcontractor *"><select value={assignForm.subcontractor_id} onChange={e => {
+            const selected = allSubs.find(s => s.id === e.target.value)
+            setAssignForm(f => ({ ...f, subcontractor_id: e.target.value, trade_on_project: selected?.trade || '' }))
+          }}><option value="">Select…</option>{allSubs.filter(s => !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
           <div className="full"><Field label="Order Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" /></Field></div>
