@@ -91,15 +91,25 @@ export default function Documents() {
       {/* Status filter */}
       <div className="filter-tabs">
         {[['all','All'], ['expired',`Expired (${counts.expired})`], ['expiring_soon',`Expiring Soon (${counts.expiring_soon})`], ['valid',`Valid (${counts.valid})`], ['no_expiry','No Expiry']].map(([k,v]) => (
-          <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>{v}</div>
+          <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
+            {k === 'all'
+              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              : <span style={{ width: 8, height: 8, borderRadius: '50%', background: k === 'valid' ? '#448a40' : k === 'expiring_soon' ? '#BA7517' : '#E24B4A', display: 'inline-block', flexShrink: 0 }} />
+            }
+            {v}
+          </div>
         ))}
       </div>
 
       {/* Document type filter */}
       <div className="filter-tabs">
-        <div className={`filter-tab ${typeFilter === 'all' ? 'active' : ''}`} onClick={() => setTypeFilter('all')}>All Types</div>
+        <div className={`filter-tab ${typeFilter === 'all' ? 'active' : ''}`} onClick={() => setTypeFilter('all')}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          All Types
+        </div>
         {docTypesPresent.map(t => (
           <div key={t} className={`filter-tab ${typeFilter === t ? 'active' : ''}`} onClick={() => setTypeFilter(t)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             {DOCUMENT_TYPES[t] || t}
           </div>
         ))}
