@@ -39,7 +39,7 @@ export default function SubcontractorDetail() {
     const [subRes, docsRes, projRes, allProjRes, notesRes, contactsRes, ratingsRes] = await Promise.all([
       supabase.from('subcontractors').select('*').eq('id', id).single(),
       supabase.from('documents_with_status').select('*').eq('subcontractor_id', id).order('document_type'),
-      supabase.from('project_subcontractors').select('*, projects(id, project_name, project_ref, status, start_date, end_date)').eq('subcontractor_id', id),
+      supabase.from('project_subcontractors').select('id, project_id, start_date, end_date, contract_value, variation_amount, variation_notes, status, trade_on_project, projects(id, project_name, project_ref, status, start_date, end_date, client_name)').eq('subcontractor_id', id),
       supabase.from('projects').select('id, project_name, project_ref, status').eq('status', 'active').order('project_name'),
       supabase.from('subcontractor_notes').select('*, profiles(full_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
@@ -372,31 +372,117 @@ export default function SubcontractorDetail() {
       )}
 
       {/* Projects */}
-      {activeTab === 'projects' && (
-        <div>
-          <div className="section-title" style={{ marginBottom: 12 }}>Assigned Projects</div>
-          {projects.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Not assigned to any projects.</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Value</th><th>Status</th></tr></thead>
-                <tbody>
-                  {projects.map(ps => (
-                    <tr key={ps.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${ps.project_id}`)}>
-                      <td style={{ fontWeight: 500 }}>{ps.projects?.project_name}</td>
-                      <td className="td-muted">{ps.projects?.project_ref || '—'}</td>
-                      <td className="td-muted">{formatDate(ps.start_date)} – {formatDate(ps.end_date)}</td>
-                      <td>{formatCurrency(ps.contract_value)}</td>
-                      <td><Pill cls={ps.status === 'active' ? 'pill-green' : ps.status === 'completed' ? 'pill-blue' : 'pill-gray'}>{ps.status}</Pill></td>
-                    </tr>
+      {activeTab === 'projects' && (() => {
+        const running = projects.filter(ps => ps.projects?.status === 'active' || ps.projects?.status === 'tender' || ps.projects?.status === 'on_hold')
+        const completed = projects.filter(ps => ps.projects?.status === 'completed' || ps.projects?.status === 'cancelled')
+        const totalOrderValue = projects.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
+        const totalVariation = projects.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
+
+        const ProjectRow = ({ ps }) => (
+          <tr key={ps.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${ps.project_id}`)}>
+            <td>
+              <div style={{ fontWeight: 500, color: 'var(--text)' }}>{ps.projects?.project_name}</div>
+              {ps.projects?.client_name && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{ps.projects?.client_name}</div>}
+            </td>
+            <td className="td-muted">{ps.projects?.project_ref || '—'}</td>
+            <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>
+              {formatDate(ps.start_date)} – {formatDate(ps.end_date)}
+            </td>
+            <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+            <td>
+              {ps.variation_amount > 0 ? (
+                <div>
+                  <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
+                  {ps.variation_notes && ps.variation_notes.split('
+').map((line, i) => (
+                    <div key={i} style={{ fontSize: 10, color: 'var(--text2)' }}>{line}</div>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+                </div>
+              ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+            </td>
+            <td style={{ fontWeight: 600 }}>
+              {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
+                ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
+                : '—'}
+            </td>
+            <td>
+              <Pill cls={ps.projects?.status === 'active' ? 'pill-green' : ps.projects?.status === 'tender' ? 'pill-blue' : ps.projects?.status === 'completed' ? 'pill-gray' : 'pill-amber'}>
+                {ps.projects?.status?.charAt(0).toUpperCase() + ps.projects?.status?.slice(1) || ps.status}
+              </Pill>
+            </td>
+          </tr>
+        )
+
+        return (
+          <div>
+            {projects.length === 0 ? (
+              <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>Not assigned to any projects yet.</div>
+            ) : (
+              <>
+                {/* Summary cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
+                  <div className="stat-card">
+                    <div className="stat-label">Running</div>
+                    <div className="stat-value green">{running.length}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Completed</div>
+                    <div className="stat-value">{completed.length}</div>
+                  </div>
+                  <div className="stat-card">
+                    <div className="stat-label">Total Order Value</div>
+                    <div className="stat-value" style={{ fontSize: 16 }}>{totalOrderValue > 0 ? formatCurrency(totalOrderValue) : '—'}</div>
+                  </div>
+                  {totalVariation > 0 && (
+                    <div className="stat-card">
+                      <div className="stat-label">Total Variations</div>
+                      <div className="stat-value amber" style={{ fontSize: 16 }}>+{formatCurrency(totalVariation)}</div>
+                    </div>
+                  )}
+                  {totalOrderValue > 0 && (
+                    <div className="stat-card" style={{ borderTop: '3px solid var(--green)' }}>
+                      <div className="stat-label">Grand Total</div>
+                      <div className="stat-value green" style={{ fontSize: 16 }}>{formatCurrency(totalOrderValue + totalVariation)}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Running projects */}
+                {running.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }} />
+                      Running Projects ({running.length})
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th></tr></thead>
+                        <tbody>{running.map(ps => <ProjectRow key={ps.id} ps={ps} />)}</tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed projects */}
+                {completed.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text3)' }} />
+                      Completed Projects ({completed.length})
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th></tr></thead>
+                        <tbody>{completed.map(ps => <ProjectRow key={ps.id} ps={ps} />)}</tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )
+      })()}
 
 
       {/* Add Note Modal */}
