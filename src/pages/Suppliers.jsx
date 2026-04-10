@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, avatarColor, initials } from '../lib/utils'
-import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconEye, Modal, Field, ConfirmDialog } from '../components/ui'
+import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, Modal, Field, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
 const CATEGORIES = [
@@ -142,7 +142,6 @@ export default function Suppliers() {
                   <td><Pill cls={s.status === 'active' ? 'pill-green' : 'pill-gray'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill></td>
                   <td onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-sm" onClick={() => setViewing(s)}><IconEye size={13}/></button>
                       {can('manage_subcontractors') && (
                         <button className="btn btn-sm" onClick={() => { setEditing(s); setShowModal(true) }}><IconEdit size={13}/></button>
                       )}
