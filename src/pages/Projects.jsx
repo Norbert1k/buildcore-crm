@@ -84,7 +84,8 @@ export default function Projects() {
         </div>
         {Object.entries(PROJECT_STATUSES).map(([k, v]) => (
           <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
-            {v.label} ({counts[k] || 0})
+            <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: k === 'active' ? '#448a40' : k === 'tender' ? '#378ADD' : k === 'on_hold' ? '#BA7517' : k === 'completed' ? '#888780' : '#E24B4A', display: 'inline-block' }} />
+            {v.label}<span className="tab-badge">{counts[k] || 0}</span>
           </div>
         ))}
       </div>
