@@ -90,7 +90,7 @@ export default function PerformanceTab({ subcontractorId, subName, subEmail, rat
       <div className="section-header">
         <div style={{ display: 'flex', gap: 6 }}>
           {['all','commendation','yellow_card','red_card'].map(t => (
-            <button key={t} className={`filter-tab ${filterType === t ? 'active' : ''}`} onClick={() => setFilterType(t)} style={{ fontSize: 12 }}>
+            <button key={t} className={`filter-tab ${filterType === t ? 'active' : ''}`} onClick={() => setFilterType(t)}>
               {t === 'all' ? `All (${ratings.length})` : `${RATING_TYPES[t].icon} ${RATING_TYPES[t].label} (${ratings.filter(x=>x.rating_type===t).length})`}
             </button>
           ))}
