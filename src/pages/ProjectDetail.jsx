@@ -38,9 +38,12 @@ export default function ProjectDetail() {
   const [photoCaption, setPhotoCaption] = useState('')
   const [previewPhoto, setPreviewPhoto] = useState(null)
   const [showAssignSub, setShowAssignSub] = useState(false)
+  const [showVariation, setShowVariation] = useState(null)
+  const [variationForm, setVariationForm] = useState({ amount: '', notes: '' })
+  const [savingVariation, setSavingVariation] = useState(false)
   const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
-  const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
+  const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
   const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
 
   useEffect(() => { load() }, [id])
@@ -144,10 +147,30 @@ export default function ProjectDetail() {
     setPreviewPhoto({ ...photo, url })
   }
 
+  async function saveVariation() {
+    if (!variationForm.amount) return
+    setSavingVariation(true)
+    const ps = showVariation
+    const currentVariation = parseFloat(ps.variation_amount) || 0
+    const addAmount = parseFloat(variationForm.amount) || 0
+    const newVariation = currentVariation + addAmount
+    const newNotes = ps.variation_notes
+      ? ps.variation_notes + '\n' + new Date().toLocaleDateString('en-GB') + ': £' + addAmount.toLocaleString() + (variationForm.notes ? ' — ' + variationForm.notes : '')
+      : new Date().toLocaleDateString('en-GB') + ': £' + addAmount.toLocaleString() + (variationForm.notes ? ' — ' + variationForm.notes : '')
+    await supabase.from('project_subcontractors').update({
+      variation_amount: newVariation,
+      variation_notes: newNotes
+    }).eq('id', ps.id)
+    setSavingVariation(false)
+    setShowVariation(null)
+    setVariationForm({ amount: '', notes: '' })
+    load()
+  }
+
   async function assignSub() {
     await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: assignForm.contract_value || null })
     setShowAssignSub(false)
-    setAssignForm({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
+    setAssignForm({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
     load()
   }
 
@@ -328,7 +351,7 @@ export default function ProjectDetail() {
           ) : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Company</th><th>Trade on Project</th><th>Contact</th><th>Start</th><th>End</th><th>Contract Value</th><th>Status</th><th></th></tr></thead>
+                <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {subs.map(ps => (
                     <tr key={ps.id}>
@@ -339,15 +362,62 @@ export default function ProjectDetail() {
                         </div>
                       </td>
                       <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
-                      <td className="td-muted">{ps.subcontractors?.phone || '—'}</td>
                       <td className="td-muted">{formatDate(ps.start_date)}</td>
                       <td className="td-muted">{formatDate(ps.end_date)}</td>
-                      <td>{formatCurrency(ps.contract_value)}</td>
+                      <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                      <td>
+                        {ps.variation_amount > 0 ? (
+                          <div>
+                            <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
+                            {ps.variation_notes && (
+                              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ps.variation_notes}>
+                                {ps.variation_notes.split('\n').length} variation{ps.variation_notes.split('\n').length !== 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          can('manage_projects') && (
+                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                              + Add
+                            </button>
+                          )
+                        )}
+                      </td>
+                      <td style={{ fontWeight: 600, color: (parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                        {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
+                          ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
+                          : '—'}
+                      </td>
                       <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
-                      <td>{can('manage_projects') && <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemove(ps.id)}><IconTrash size={12}/></button>}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {can('manage_projects') && ps.variation_amount > 0 && (
+                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                              +VAR
+                            </button>
+                          )}
+                          {can('manage_projects') && <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemove(ps.id)}><IconTrash size={12}/></button>}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
+                {subs.length > 1 && (() => {
+                  const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
+                  const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
+                  const totalAll = totalOrder + totalVar
+                  return (
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
+                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>Total</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{formatCurrency(totalOrder)}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--amber)' }}>{totalVar > 0 ? '+' + formatCurrency(totalVar) : '—'}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--green)' }}>{formatCurrency(totalAll)}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  )
+                })()}
               </table>
             </div>
           )}
@@ -381,9 +451,70 @@ export default function ProjectDetail() {
                     )
                   })}
                 </tbody>
+                {subs.length > 1 && (() => {
+                  const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
+                  const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
+                  const totalAll = totalOrder + totalVar
+                  return (
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
+                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>Total</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{formatCurrency(totalOrder)}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--amber)' }}>{totalVar > 0 ? '+' + formatCurrency(totalVar) : '—'}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--green)' }}>{formatCurrency(totalAll)}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  )
+                })()}
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Variation Modal */}
+      {showVariation && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setShowVariation(null)}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Add Variation</h3>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
+              {showVariation.subcontractors?.company_name} · Current order: {formatCurrency(showVariation.contract_value)}
+              {showVariation.variation_amount > 0 && <> · Existing variation: <span style={{ color: 'var(--amber)' }}>+{formatCurrency(showVariation.variation_amount)}</span></>}
+            </div>
+            {showVariation.variation_notes && (
+              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 12, color: 'var(--text2)', marginBottom: 16, maxHeight: 100, overflowY: 'auto' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 4 }}>VARIATION HISTORY</div>
+                {showVariation.variation_notes.split('\n').map((line, i) => <div key={i}>{line}</div>)}
+              </div>
+            )}
+            <Field label="Variation Amount (£) *">
+              <input type="number" value={variationForm.amount} onChange={e => setVariationForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="e.g. 5000" autoFocus />
+            </Field>
+            <div style={{ marginTop: 12 }}>
+              <Field label="Description (optional)">
+                <input value={variationForm.notes} onChange={e => setVariationForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="e.g. Additional groundworks due to unforeseen conditions" />
+              </Field>
+            </div>
+            {variationForm.amount && (
+              <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, marginTop: 12 }}>
+                <div style={{ color: 'var(--amber)', fontWeight: 600 }}>New total for {showVariation.subcontractors?.company_name}:</div>
+                <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>
+                  {formatCurrency((parseFloat(showVariation.contract_value)||0) + (parseFloat(showVariation.variation_amount)||0) + (parseFloat(variationForm.amount)||0))}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button className="btn" onClick={() => setShowVariation(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveVariation} disabled={savingVariation || !variationForm.amount}>
+                {savingVariation ? 'Saving...' : 'Save Variation'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -396,7 +527,7 @@ export default function ProjectDetail() {
           <div className="full"><Field label="Role / Trade on this project"><input value={assignForm.trade_on_project} onChange={e => setAssignForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder="e.g. Electrical installation" /></Field></div>
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
-          <div className="full"><Field label="Contract Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="0" /></Field></div>
+          <div className="full"><Field label="Order Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" /></Field></div>
         </div>
       </Modal>
 
