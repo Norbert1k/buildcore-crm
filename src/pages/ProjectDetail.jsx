@@ -238,24 +238,18 @@ export default function ProjectDetail() {
         </div>
         <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Documents<span className="tab-badge">{docs.length}</span>
+          Documents
         </div>
         <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => setActiveTab('photos')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           Photos<span className="tab-badge">{photos.length}</span>
         </div>
-        <div className={`filter-tab ${activeTab === 'programme' ? 'active' : ''}`} onClick={() => setActiveTab('programme')}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Programme<span className="tab-badge">{programmes.length}</span>
-        </div>
+
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => setActiveTab('casestudy')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Case Study
         </div>
-        <div className={`filter-tab ${activeTab === 'projectdocs' ? 'active' : ''}`} onClick={() => setActiveTab('projectdocs')}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          Project Documentation
-        </div>
+
       </div>
 
       {activeTab === 'files' && (
@@ -289,34 +283,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === 'programme' && (
-        <div>
-          <div className="section-header" style={{ marginBottom: 16 }}>
-            <div>
-              <div className="section-title">Project Programme</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Upload PDF or Microsoft Project (.mpp) files</div>
-            </div>
-            {can('manage_projects') && (
-              <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
-                {uploadingProgramme ? 'Uploading...' : '+ Upload Programme'}
-                <input type="file" multiple accept=".pdf,.mpp,.mppx,.xlsx,.xls" style={{ display: 'none' }}
-                  onChange={e => uploadProgramme(Array.from(e.target.files))} disabled={uploadingProgramme} />
-              </label>
-            )}
-          </div>
-          {programmes.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>
-              No programme uploaded yet — upload a PDF or Microsoft Project file
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-              {programmes.map(prog => (
-                <ProgrammeCard key={prog.id} prog={prog} onDownload={() => downloadProgramme(prog)} onDelete={() => deleteProgramme(prog)} canDelete={can('manage_projects')} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+
 
       {activeTab === 'photos' && (
         <div>
@@ -444,8 +411,15 @@ export default function ProjectDetail() {
 
       {activeTab === 'documents' && (
         <div>
+          {/* Project Documentation folder system */}
+          <ProjectDocumentation projectId={id} projectName={project?.project_name} />
+
+          {/* Divider */}
+          <div style={{ margin: '24px 0', borderTop: '1px solid var(--border)' }} />
+
+          {/* RAMS / Certs / project-linked docs */}
           <div className="section-header">
-            <div className="section-title">Project Documents (RAMS, Certs, etc.)</div>
+            <div className="section-title">RAMS & Compliance Documents</div>
             {can('manage_documents') && <button className="btn btn-primary btn-sm" onClick={() => setShowAddDoc(true)}><IconPlus size={13}/> Add Document</button>}
           </div>
           {docs.length === 0 ? (
@@ -534,10 +508,6 @@ export default function ProjectDetail() {
             </div>
           </div>
         </div>
-      )}
-
-      {activeTab === 'projectdocs' && (
-        <ProjectDocumentation projectId={id} projectName={project?.project_name} />
       )}
 
       {showEdit && <ProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load() }} />}
