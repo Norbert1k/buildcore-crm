@@ -6,6 +6,7 @@ import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, Conf
 import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
+import ProjectDocumentation from '../components/ProjectDocumentation'
 
 function calcDuration(start, end) {
   if (!start || !end) return null
@@ -250,6 +251,10 @@ export default function ProjectDetail() {
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => setActiveTab('casestudy')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Case Study
+        </div>
+        <div className={`filter-tab ${activeTab === 'projectdocs' ? 'active' : ''}`} onClick={() => setActiveTab('projectdocs')}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Project Documentation
         </div>
       </div>
 
@@ -529,6 +534,10 @@ export default function ProjectDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeTab === 'projectdocs' && (
+        <ProjectDocumentation projectId={id} projectName={project?.project_name} />
       )}
 
       {showEdit && <ProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load() }} />}
