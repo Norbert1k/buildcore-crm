@@ -173,8 +173,8 @@ tbody tr:hover td { background: var(--surface2); }
 .alert-expired { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
 .alert-warning { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); }
 .empty-state { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 13px; }
-.filter-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.filter-tab { padding: 10px 18px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text2); border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; flex-shrink: 0; background: transparent; display: flex; align-items: center; gap: 7px; transition: color .15s, border-color .15s; }
+.filter-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
+.filter-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text2); border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; flex-shrink: 0; background: transparent; display: flex; align-items: center; gap: 6px; transition: color .15s, border-color .15s; }
 .filter-tab .tab-badge { background: var(--surface2); border-radius: 10px; padding: 1px 7px; font-size: 10px; font-weight: 600; color: var(--text3); transition: background .15s, color .15s; }
 .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 .filter-tab.active .tab-badge { background: var(--green-bg); color: var(--green); }
