@@ -78,7 +78,7 @@ export default function Projects() {
       </div>
 
       <div className="filter-tabs">
-        <div className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>All ({projects.length})</div>
+        <div className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>All<span className="tab-badge">{projects.length}</span></div>
         {Object.entries(PROJECT_STATUSES).map(([k, v]) => (
           <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
             {v.label} ({counts[k] || 0})
