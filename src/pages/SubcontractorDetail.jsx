@@ -19,6 +19,7 @@ export default function SubcontractorDetail() {
   const [notes, setNotes] = useState([])
   const [contacts, setContacts] = useState([])
   const [ratings, setRatings] = useState([])
+  const [availableProjects, setAvailableProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('documents')
   const [showEditSub, setShowEditSub] = useState(false)
