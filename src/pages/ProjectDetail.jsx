@@ -369,11 +369,9 @@ export default function ProjectDetail() {
                         {ps.variation_amount > 0 ? (
                           <div>
                             <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
-                            {ps.variation_notes && (
-                              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ps.variation_notes}>
-                                {ps.variation_notes.split('\n').length} variation{ps.variation_notes.split('\n').length !== 1 ? 's' : ''}
-                              </div>
-                            )}
+                            {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
+                              <div key={i} style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
+                            ))}
                           </div>
                         ) : (
                           can('manage_projects') && (
