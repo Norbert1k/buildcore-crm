@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
-import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEye, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
+import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { RatingBadge } from '../components/PerformanceTab'
 import { useAuth } from '../lib/auth'
 import SubcontractorModal from '../components/SubcontractorModal'
@@ -148,8 +148,7 @@ export default function Subcontractors() {
                     <td><RatingBadge ratings={s.performance_ratings} /></td>
                     <td>
                       <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
-                        <button className="btn btn-sm" onClick={() => navigate(`/subcontractors/${s.id}`)}><IconEye size={13} /></button>
-                        {can('manage_subcontractors') && (
+{can('manage_subcontractors') && (
                           <button className="btn btn-sm" onClick={() => { setEditing(s); setShowModal(true) }}><IconEdit size={13} /></button>
                         )}
                         {can('delete') && (
