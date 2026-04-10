@@ -84,7 +84,11 @@ export default function Subcontractors() {
         <div className="filter-tabs" style={{ marginBottom: 0 }}>
           {Object.entries({ all: 'All', active: 'Active', approved: 'Approved', on_hold: 'On Hold', inactive: 'Inactive' }).map(([k, v]) => (
             <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
-              {v} ({counts[k]})
+              {k === 'all'
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                : <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: k === 'active' ? '#448a40' : k === 'approved' ? '#378ADD' : k === 'on_hold' ? '#BA7517' : '#888780', display: 'inline-block' }} />
+              }
+              {v}<span className="tab-badge">{k === 'all' ? subs.length : counts[k] || 0}</span>
             </div>
           ))}
         </div>
