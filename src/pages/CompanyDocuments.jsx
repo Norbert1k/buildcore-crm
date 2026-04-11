@@ -155,6 +155,9 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   return (
     <div style={{ marginBottom: 3 }}>
       <div onClick={() => setOpen(o => !o)}
+        onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = 'rgba(68,138,64,0.2)'; e.currentTarget.style.outline = '2px dashed #448a40' }}
+        onDragLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.outline = '' }}
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = ''; e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) { moveFile(docId); return } const f = Array.from(e.dataTransfer.files); if (f.length) { upload(f); if (!open) setOpen(true) } }}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'all .1s', outline: 'none' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent'; e.currentTarget.style.outline = 'none' }}
