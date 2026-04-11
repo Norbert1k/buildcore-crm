@@ -515,6 +515,10 @@ export default function ProjectDetail() {
         </div>
       )}
 
+      {activeTab === 'hs' && (
+        <HSHandover projectId={id} projectName={project?.project_name} />
+      )}
+
       {showEdit && <ProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load() }} />}
 
       <Modal open={showAssignSub} onClose={() => setShowAssignSub(false)} title="Assign Subcontractor" size="sm"
