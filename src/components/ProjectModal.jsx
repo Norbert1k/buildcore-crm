@@ -117,17 +117,12 @@ export default function ProjectModal({ project, onClose, onSaved }) {
             <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments â Phase 2" autoFocus />
           </Field>
         </div>
-        <Field label="Project Reference">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14 }}>
-            <span style={{ flex: 1, color: form.project_ref ? 'var(--text)' : 'var(--text3)' }}>
-              {form.project_ref || 'Generating...'}
-            </span>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-          </div>
-        </Field>
+     <Field label="Project Reference">
+  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, color: form.project_ref ? 'var(--text)' : 'var(--text3)' }}>
+    <span style={{ flex: 1 }}>{form.project_ref || 'Generating...'}</span>
+    <span style={{ fontSize: 12 }}>🔒</span>
+  </div>
+</Field>
         <Field label="Client">
           <select value={form.client_id} onChange={e => set('client_id', e.target.value)}>
             <option value="">â Select client â</option>
