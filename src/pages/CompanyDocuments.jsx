@@ -202,6 +202,9 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   const [showAddSub, setShowAddSub] = useState(false)
   const [newSubName, setNewSubName] = useState('')
   const [savingSub, setSavingSub] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameVal, setRenameVal] = useState('')
+  const [confirmDelFolder, setConfirmDelFolder] = useState(false)
 
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
 
@@ -228,6 +231,22 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     })
     setNewSubName(''); setShowAddSub(false); setSavingSub(false)
     loadChildFolders()
+  }
+
+  async function renameFolder() {
+    if (!renameVal.trim()) return
+    await supabase.from('company_doc_subfolders').update({ label: renameVal.trim() }).eq('folder_key', subfolder.key)
+    subfolder.label = renameVal.trim()
+    setRenaming(false)
+    setRenameVal('')
+  }
+
+  async function deleteFolder() {
+    // Move all files in this folder to root first
+    await supabase.from('company_documents').update({ subfolder_key: null }).eq('subfolder_key', subfolder.key)
+    await supabase.from('company_doc_subfolders').delete().eq('folder_key', subfolder.key)
+    setConfirmDelFolder(false)
+    if (onReload) onReload('__folder_deleted__')
   }
 
   async function moveFile(docId) {
@@ -299,10 +318,36 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}
       >
         <div style={{ width: 24, height: 24, borderRadius: 5, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13 }}>📁</div>
-        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
+        {renaming ? (
+          <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') renameFolder(); if (e.key === 'Escape') setRenaming(false) }}
+            onClick={e => e.stopPropagation()}
+            style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
+        ) : (
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
+        )}
         <span style={{ fontSize: 10, color: 'var(--text3)', marginRight: 4 }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
-        {canManage && (
-          <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
+        {canManage && !renaming && (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setRenameVal(subfolder.label); setRenaming(true) }}
+              style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', display: 'inline-block', verticalAlign: 'middle' }}
+              title="Rename folder">✏</button>
+            {confirmDelFolder ? (
+              <>
+                <button onClick={deleteFolder}
+                  style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', verticalAlign: 'middle' }}>
+                  Confirm
+                </button>
+                <button onClick={() => setConfirmDelFolder(false)}
+                  style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', display: 'inline-block', verticalAlign: 'middle' }}>
+                  ✕
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmDelFolder(true)}
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', display: 'inline-block', verticalAlign: 'middle' }}
+                title="Delete folder">🗑️</button>
+            )}
             {showAddSub ? (
               <>
                 <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
@@ -318,6 +363,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
               {uploading ? '...' : '+ Upload'}
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
+          </div>
           </div>
         )}
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
