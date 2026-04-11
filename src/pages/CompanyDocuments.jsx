@@ -46,8 +46,17 @@ function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
       .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
   }, [doc.storage_path])
 
+  function handleDragStart(e) {
+    const ghost = document.createElement('div')
+    ghost.style.cssText = 'position:fixed;top:-999px;background:#1a1d27;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:12px;color:#e8e9f0;white-space:nowrap;'
+    ghost.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9a9db0" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>' + doc.file_name.slice(0, 30) + (doc.file_name.length > 30 ? '...' : '') + '</span>'
+    document.body.appendChild(ghost)
+    e.dataTransfer.setDragImage(ghost, 16, 20)
+    setTimeout(() => document.body.removeChild(ghost), 0)
+  }
+
   return (
-    <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)' }}>
+    <div onDragStart={handleDragStart} style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)' }}>
       <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
         onClick={() => onPreview(doc)}>
         {isImage && url
@@ -165,7 +174,10 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview 
               Empty — {canManage ? 'click + Upload above to add files' : 'no files yet'}
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+            <div onDragOver={e => { e.preventDefault(); e.currentTarget.style.background = 'rgba(68,138,64,0.1)'; e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
+              onDragLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.outline = '' }}
+              onDrop={e => { e.preventDefault(); e.currentTarget.style.background = ''; e.currentTarget.style.outline = ''; const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8, padding: 4, borderRadius: 6, transition: 'all .15s' }}>
               {files.map(f => (
                 <FileCard key={f.id} doc={f} onPreview={onPreview}
                   onDownload={async () => download(f)}
@@ -173,9 +185,9 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview 
                   canDelete={canManage} />
               ))}
               {canManage && (
-                <label style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 150, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Add file
+                <label style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Drop or click to add
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
                 </label>
               )}
