@@ -11,9 +11,9 @@ const CATEGORIES = [
   { key: 'vat',            icon: '💰', label: 'VAT & UTR',          color: '#888780', bg: '#F1EFE8' },
   { key: 'bank',           icon: '🏦', label: 'Bank Details',       color: '#448a40', bg: '#e8f5e7' },
   { key: 'certifications', icon: '📜', label: 'Certifications',     color: '#534AB7', bg: '#EEEDFE' },
-  { key: 'fleet',          icon: '🚗', label: 'Car Fleet',          color: '#993C1D', bg: '#FAECE7' },
   { key: 'templates',      icon: '📝', label: 'Templates',          color: '#0F6E56', bg: '#E1F5EE' },
   { key: 'site_folder',    icon: '📁', label: 'Site Folder',        color: '#888780', bg: '#F1EFE8' },
+  { key: 'other',           icon: '🗃️', label: 'Other Documents',     color: '#6B5B93', bg: '#EEE8F8' },
 ]
 
 function fmtSize(b) {
