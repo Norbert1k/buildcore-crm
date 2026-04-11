@@ -92,7 +92,7 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, sel
         draggable={!selected}
         onDragStart={handleDragStart}
         onClick={() => onPreview(doc)}
-        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: selected ? 'var(--accent-light)' : 'var(--surface)', cursor: 'grab', position: 'relative' }}
+        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: 'grab', position: 'relative', transition: 'border .1s' }}
       >
         <div onClick={e => { e.stopPropagation(); onSelect(doc.id) }}
           style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.5)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -133,7 +133,7 @@ function BulkBar({ selected, files, subfolders, onZip, onMove, onClear }) {
   const [showMove, setShowMove] = useState(false)
   if (!selected.size) return null
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 100, background: 'var(--accent)', color: '#fff', borderRadius: 8, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+    <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap', flexWrap: 'nowrap' }}>
       <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
       <button onClick={onZip} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
         ↓ Download ZIP
