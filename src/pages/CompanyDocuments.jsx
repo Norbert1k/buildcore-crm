@@ -257,6 +257,11 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     setSubfolders(data || [])
   }
 
+  async function moveToRoot(docId) {
+    await supabase.from('company_documents').update({ subfolder_key: null }).eq('id', docId)
+    loadFiles()
+  }
+
   async function upload(fileList) {
     if (!fileList.length) return
     setUploading(true)
