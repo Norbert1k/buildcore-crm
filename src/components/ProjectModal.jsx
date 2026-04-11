@@ -81,7 +81,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     if (result.error) {
       const msg = result.error.message
       if (msg.includes('projects_project_ref_key') || msg.includes('unique constraint')) {
-        setErrors({ _global: 'This Project Reference is already in use â please use a different ref number.' })
+        setErrors({ _global: 'This Project Reference is already in use Ã¢ÂÂ please use a different ref number.' })
       } else {
         setErrors({ _global: msg })
       }
@@ -100,7 +100,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Savingâ¦' : editing ? 'Save Changes' : 'Create Project'}
+            {saving ? 'SavingÃ¢ÂÂ¦' : editing ? 'Save Changes' : 'Create Project'}
           </button>
         </>
       }
@@ -114,18 +114,18 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <div className="form-section">Project Details</div>
         <div className="full">
           <Field label="Project Name *" error={errors.project_name}>
-            <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments â Phase 2" autoFocus />
+            <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments Ã¢ÂÂ Phase 2" autoFocus />
           </Field>
         </div>
      <Field label="Project Reference">
-  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, color: form.project_ref ? 'var(--text)' : 'var(--text3)' }}>
-    <span style={{ flex: 1 }}>{form.project_ref || 'Generating...'}</span>
-    <span style={{ fontSize: 12 }}>🔒</span>
-  </div>
-</Field>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, color: form.project_ref ? 'var(--text)' : 'var(--text3)', cursor: 'default' }}>
+            <span style={{ flex: 1, fontWeight: 600 }}>{form.project_ref || 'Generating...'}</span>
+            <span style={{ fontSize: 13, opacity: .5 }}>🔒</span>
+          </div>
+        </Field>
         <Field label="Client">
           <select value={form.client_id} onChange={e => set('client_id', e.target.value)}>
-            <option value="">â Select client â</option>
+            <option value="">Ã¢ÂÂ Select client Ã¢ÂÂ</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
@@ -136,11 +136,11 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         </Field>
         <Field label="Project Manager">
           <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
-            <option value="">â Unassigned â</option>
+            <option value="">Ã¢ÂÂ Unassigned Ã¢ÂÂ</option>
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select>
         </Field>
-        <Field label="Contract Value (Â£)">
+        <Field label="Contract Value (ÃÂ£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
         <div className="form-section">Dates</div>
@@ -165,7 +165,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <div className="form-section">Additional Info</div>
         <div className="full">
           <Field label="Description / Notes">
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional detailsâ¦" />
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional detailsÃ¢ÂÂ¦" />
           </Field>
         </div>
       </div>
