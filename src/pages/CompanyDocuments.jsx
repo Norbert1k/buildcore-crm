@@ -94,12 +94,21 @@ function FileTypeBadge({ doc, size = 36 }) {
 function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameVal, setRenameVal] = useState('')
   const { isImage, isPdf } = fileTypeInfo(doc)
 
   useEffect(() => {
     supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
       .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
   }, [doc.storage_path])
+
+  async function renameFile() {
+    if (!renameVal.trim() || renameVal.trim() === doc.file_name) { setRenaming(false); return }
+    await supabase.from('company_documents').update({ file_name: renameVal.trim() }).eq('id', doc.id)
+    doc.file_name = renameVal.trim()
+    setRenaming(false)
+  }
 
   function handleDragStart(e) {
     e.dataTransfer.setData('text/plain', doc.id)
@@ -130,7 +139,18 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
           <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(doc.file_name)}</div>
         </div>
         <div style={{ padding: '7px 9px' }}>
-          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>{doc.file_name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+            {renaming
+              ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
+                  onBlur={renameFile}
+                  style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
+              : <>
+                  <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={doc.file_name}>{doc.file_name}</div>
+                  {canDelete && <svg onClick={e => { e.stopPropagation(); setRenameVal(doc.file_name); setRenaming(true) }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ flexShrink: 0, cursor: 'pointer', opacity: 0.6 }}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
+                </>
+            }
+          </div>
           <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {url && <button onClick={e => { e.stopPropagation(); onPreview(doc) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: '0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
@@ -148,6 +168,8 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
 function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameVal, setRenameVal] = useState('')
   const { isWord, isExcel, isPpt, isPdf, isImage } = fileTypeInfo(doc)
   const iconColor = isPdf ? '#E24B4A' : isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : isImage ? '#448a40' : '#888'
   const iconLetter = isPdf ? 'PDF' : isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
@@ -156,6 +178,13 @@ function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }
     supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
       .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
   }, [doc.storage_path])
+
+  async function renameFile() {
+    if (!renameVal.trim() || renameVal.trim() === doc.file_name) { setRenaming(false); return }
+    await supabase.from('company_documents').update({ file_name: renameVal.trim() }).eq('id', doc.id)
+    doc.file_name = renameVal.trim()
+    setRenaming(false)
+  }
 
   function handleDragStart(e) {
     e.dataTransfer.setData('text/plain', doc.id)
@@ -176,9 +205,21 @@ function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }
             : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           }
         </div>
-        <div onClick={() => onPreview(doc)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3' }}>{doc.file_name}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {renaming && (
+            <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
+              onBlur={renameFile}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', marginBottom: 2 }} />
+          )}
+          {!renaming && <div onClick={() => onPreview(doc)} style={{ cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{doc.file_name}</div>
+              {canDelete && <svg onClick={e => { e.stopPropagation(); setRenameVal(doc.file_name); setRenaming(true) }} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ flexShrink: 0, cursor: 'pointer', opacity: 0.6 }}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>}
+            </div>
           <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}</div>
+          </div>}
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
           {url && <button onClick={e => { e.stopPropagation(); onPreview(doc) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
