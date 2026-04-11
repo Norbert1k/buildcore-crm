@@ -68,6 +68,9 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
   const [confirmDel, setConfirmDel] = useState(false)
   const isImage = doc.file_type?.includes('image')
   const isPdf = doc.file_type?.includes('pdf')
+  const isWord = doc.file_type?.includes('word') || doc.file_type?.includes('document') || /\.docx?$/i.test(doc.file_name || '')
+  const isExcel = doc.file_type?.includes('spreadsheet') || doc.file_type?.includes('excel') || /\.xlsx?$/i.test(doc.file_name || '')
+  const isPpt = doc.file_type?.includes('presentation') || doc.file_type?.includes('powerpoint') || /\.pptx?$/i.test(doc.file_name || '')
 
   useEffect(() => {
     supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
@@ -106,6 +109,12 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
             ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : isPdf && url
             ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={doc.file_name} />
+            : isWord
+            ? <div style={{ width: 48, height: 56, background: '#1B5EAE', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ color: '#fff', fontSize: 22, fontWeight: 700, fontFamily: 'Arial' }}>W</span></div>
+            : isExcel
+            ? <div style={{ width: 48, height: 56, background: '#1D7B45', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ color: '#fff', fontSize: 22, fontWeight: 700, fontFamily: 'Arial' }}>X</span></div>
+            : isPpt
+            ? <div style={{ width: 48, height: 56, background: '#C55A25', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ color: '#fff', fontSize: 22, fontWeight: 700, fontFamily: 'Arial' }}>P</span></div>
             : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
@@ -199,7 +208,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     const { data } = await supabase.from('company_documents')
       .select('*, profiles(full_name)').eq('category', categoryKey).eq('subfolder_key', subfolder.key)
       .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
-    setFiles(data || [])
+    setFiles((data || []).sort((a, b) => a.file_name.localeCompare(b.file_name, undefined, { numeric: true, sensitivity: 'base' })))
   }
   async function loadChildFolders() {
     const { data } = await supabase.from('company_doc_subfolders').select('*').eq('parent_folder_key', subfolder.key).order('label')
@@ -389,7 +398,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     const { data } = await supabase.from('company_documents')
       .select('*, profiles(full_name)').eq('category', cat.key).is('subfolder_key', null)
       .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
-    setFiles(data || [])
+    setFiles((data || []).sort((a, b) => a.file_name.localeCompare(b.file_name, undefined, { numeric: true, sensitivity: 'base' })))
   }
   async function loadSubfolders() {
     const { data } = await supabase.from('company_doc_subfolders').select('*').eq('category_key', cat.key).is('parent_folder_key', null).order('label')
@@ -593,7 +602,9 @@ export default function CompanyDocuments() {
           {previewLoading ? <Spinner /> : previewUrl
             ? previewDoc.file_type?.includes('image')
               ? <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
-              : <iframe src={previewUrl} style={{ width: '85vw', height: '80vh', border: 'none', borderRadius: 8 }} title={previewDoc.file_name} />
+              : previewDoc.file_type?.includes('pdf')
+              ? <iframe src={previewUrl} style={{ width: '85vw', height: '80vh', border: 'none', borderRadius: 8 }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
+              : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '85vw', height: '80vh', border: 'none', borderRadius: 8, background: '#fff' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
             : <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Unable to preview this file</div>
           }
         </div>
