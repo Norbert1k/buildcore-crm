@@ -91,9 +91,9 @@ export default function Clients() {
 
   function fmt(n) {
     if (!n) return 'â'
-    if (n >= 1000000) return `Â£${(n / 1000000).toFixed(1)}m`
-    if (n >= 1000) return `Â£${(n / 1000).toFixed(0)}k`
-    return `Â£${n.toLocaleString()}`
+    if (n >= 1000000) return `£${(n / 1000000).toFixed(1)}m`
+    if (n >= 1000) return `£${(n / 1000).toFixed(0)}k`
+    return `£${n.toLocaleString()}`
   }
 
   return (
@@ -102,7 +102,7 @@ export default function Clients() {
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Clients</h2>
           <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>
-            {clients.length} client{clients.length !== 1 ? 's' : ''} Â· {activeClients} active
+            {clients.length} client{clients.length !== 1 ? 's' : ''} · {activeClients} active
           </p>
         </div>
         {isAdmin && (
@@ -147,9 +147,9 @@ export default function Clients() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{c.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                    {c.ea ? `EA: ${c.ea} Â· ` : 'No EA Â· '}
+                    {c.ea ? `EA: ${c.ea} · ` : 'No EA · '}
                     {c.projects.length} project{c.projects.length !== 1 ? 's' : ''}
-                    {c.website ? ` Â· ${c.website.replace(/https?:\/\/(www\.)?/, '')}` : ''}
+                    {c.website ? ` · ${c.website.replace(/https?:\/\/(www\.)?/, '')}` : ''}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
