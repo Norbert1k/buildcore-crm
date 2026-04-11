@@ -435,6 +435,9 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
           ) : null}
         </div>
       )}
+    )
+  )
+}
 
 // ── Category Folder ───────────────────────────────────────────────────────────
 function CategoryFolder({ cat, canManage, onPreview }) {
