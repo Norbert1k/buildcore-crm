@@ -36,7 +36,7 @@ function fileColor(type) {
 }
 
 // ── File Card (same design as Project Documentation) ─────────
-function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
+function FileCard({ doc, onPreview, onDownload, onDelete, canDelete, selected, onSelect }) {
   const [url, setUrl] = useState(null)
   const isImage = doc.file_type?.includes('image')
   const isPdf = doc.file_type?.includes('pdf')
@@ -58,9 +58,18 @@ function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
   }
 
   return (
-    <div draggable={true} onDragStart={handleDragStart} style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: 'grab' }}>
+    <div draggable={!selected} onDragStart={handleDragStart}
+      style={{ border: selected ? '2px solid #448a40' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: selected ? 'rgba(68,138,64,0.06)' : 'var(--surface)', cursor: selected ? 'default' : 'grab', position: 'relative' }}>
+      {onSelect && (
+        <div onClick={e => { e.stopPropagation(); onSelect(doc.id) }}
+          style={{ position: 'absolute', top: 6, left: 6, zIndex: 10, width: 18, height: 18, borderRadius: 4,
+            background: selected ? '#448a40' : 'rgba(0,0,0,0.5)', border: selected ? 'none' : '1.5px solid rgba(255,255,255,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+        </div>
+      )}
       <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
-        onClick={() => onPreview(doc)}>
+        onClick={() => selected ? onSelect?.(doc.id) : onPreview(doc)}>
         {isImage && url
           ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : isPdf && url
@@ -204,11 +213,21 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
                 const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
               }}
               style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8, padding: 4, borderRadius: 6, transition: 'all .15s' }}>
+              {selected.size > 0 && (
+                <div style={{ gridColumn: '1/-1', display:'flex', alignItems:'center', gap:8, padding:'6px 8px', background:'rgba(68,138,64,0.1)', borderRadius:6, marginBottom:4, fontSize:12 }}>
+                  <span style={{ flex:1, color:'var(--text2)' }}>{selected.size} selected</span>
+                  <button onClick={selectAll} style={{ fontSize:11, padding:'2px 8px', border:'0.5px solid var(--border)', borderRadius:4, background:'transparent', cursor:'pointer', color:'var(--text2)' }}>All</button>
+                  <button onClick={clearSelect} style={{ fontSize:11, padding:'2px 8px', border:'0.5px solid var(--border)', borderRadius:4, background:'transparent', cursor:'pointer', color:'var(--text2)' }}>None</button>
+                  <button onClick={deleteSelected} style={{ fontSize:11, padding:'2px 8px', border:'0.5px solid var(--red-border)', borderRadius:4, background:'transparent', cursor:'pointer', color:'var(--red)' }}>Delete {selected.size}</button>
+                </div>
+              )}
               {files.map(f => (
                 <FileCard key={f.id} doc={f} onPreview={onPreview}
                   onDownload={async () => download(f)}
                   onDelete={() => setConfirmDelete(f)}
-                  canDelete={canManage} />
+                  canDelete={canManage}
+                  selected={selected.has(f.id)}
+                  onSelect={canManage ? toggleSelect : null} />
               ))}
               {canManage && (
                 <label onDragOver={e => { e.preventDefault(); e.currentTarget.style.background='rgba(68,138,64,0.1)'; e.currentTarget.style.borderColor='#448a40' }}
@@ -252,7 +271,19 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   const [savingSub, setSavingSub] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [zipping, setZipping] = useState(false)
+  const [selected, setSelected] = useState(new Set())
   const { profile } = useAuth()
+
+  function toggleSelect(id) { setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s }) }
+  function selectAll() { setSelected(new Set(files.map(f => f.id))) }
+  function clearSelect() { setSelected(new Set()) }
+  async function deleteSelected() {
+    for (const id of selected) {
+      const f = files.find(x => x.id === id)
+      if (f) { await supabase.storage.from('company-docs').remove([f.storage_path]); await supabase.from('company_documents').delete().eq('id', id) }
+    }
+    clearSelect(); loadFiles()
+  }
 
   useEffect(() => {
     if (open) { loadFiles(); loadSubfolders() }
@@ -428,11 +459,21 @@ function CategoryFolder({ cat, canManage, onPreview }) {
                 <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>
               )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                {selected.size > 0 && (
+                  <div style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:8, padding:'6px 8px', background:'rgba(68,138,64,0.1)', borderRadius:6, marginBottom:4, fontSize:12 }}>
+                    <span style={{ flex:1, color:'var(--text2)' }}>{selected.size} selected</span>
+                    <button onClick={selectAll} style={{ fontSize:11, padding:'2px 8px', border:'0.5px solid var(--border)', borderRadius:4, background:'transparent', cursor:'pointer', color:'var(--text2)' }}>All</button>
+                    <button onClick={clearSelect} style={{ fontSize:11, padding:'2px 8px', border:'0.5px solid var(--border)', borderRadius:4, background:'transparent', cursor:'pointer', color:'var(--text2)' }}>None</button>
+                    <button onClick={deleteSelected} style={{ fontSize:11, padding:'2px 8px', border:'0.5px solid var(--red-border)', borderRadius:4, background:'transparent', cursor:'pointer', color:'var(--red)' }}>Delete {selected.size}</button>
+                  </div>
+                )}
                 {files.map(f => (
                   <FileCard key={f.id} doc={f} onPreview={onPreview}
                     onDownload={async () => download(f)}
                     onDelete={() => setConfirmDelete(f)}
-                    canDelete={canManage} />
+                    canDelete={canManage}
+                    selected={selected.has(f.id)}
+                    onSelect={canManage ? toggleSelect : null} />
                 ))}
               </div>
             </div>
