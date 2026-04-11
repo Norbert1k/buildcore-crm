@@ -90,7 +90,7 @@ export default function Clients() {
   const activeClients = clients.filter(c => c.activeCount > 0).length
 
   function fmt(n) {
-    if (!n) return 'â'
+    if (!n) return '—'
     if (n >= 1000000) return `£${(n / 1000000).toFixed(1)}m`
     if (n >= 1000) return `£${(n / 1000).toFixed(0)}k`
     return `£${n.toLocaleString()}`
