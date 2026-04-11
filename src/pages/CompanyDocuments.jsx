@@ -542,6 +542,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   const [totalCount, setTotalCount] = useState(0)
   const [selected, setSelected] = useState(new Set())
   const [allSubfolders, setAllSubfolders] = useState({})
+  const [selectedSubs, setSelectedSubs] = useState(new Set())
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('docView_' + cat.key) || 'grid' } catch { return 'grid' }
   })
@@ -637,6 +638,26 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
   }
+  async function zipSelected() {
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    s.onload = async () => {
+      const zip = new window.JSZip()
+      for (const sfKey of selectedSubs) {
+        const sf = subfolders.find(s => s.folder_key === sfKey)
+        const folderName = sf ? sf.label : sfKey
+        const { data: sfFiles } = await supabase.from('company_documents').select('*').eq('subfolder_key', sfKey)
+        for (const f of (sfFiles || [])) {
+          const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
+          if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
+        }
+      }
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '-selected.zip'; a.click()
+      setSelectedSubs(new Set())
+    }
+    document.head.appendChild(s)
+  }
+
   function onDropFolder(e) {
     e.preventDefault(); e.stopPropagation()
     const subKey = e.dataTransfer.getData('subfolder')
@@ -657,6 +678,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
   }
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
+  function toggleSub(key) { setSelectedSubs(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n }) }
 
   return (
     <div style={{ marginBottom: 6 }}>
@@ -685,8 +707,14 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             <>
               <button onClick={zipFolder} disabled={zipping} style={{ ...B, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-                {zipping ? '...' : 'Zip'}
+                {zipping ? '...' : 'Zip all'}
               </button>
+              {selectedSubs.size > 0 && (
+                <button onClick={zipSelected} style={{ ...BG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+                  ↓ {selectedSubs.size} folder{selectedSubs.size > 1 ? 's' : ''}
+                </button>
+              )}
               {canManage && <button onClick={() => setShowAddSub(true)} style={B}>+ Subfolder</button>}
               {canManage && (
                 <label style={BG}>
@@ -708,13 +736,21 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: '1.5px solid ' + cat.color + '30', paddingTop: 8, paddingBottom: 8 }}>
           <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => setSelected(new Set())} allSubfolders={allSubfolders} />
           {subfolders.map(sf => (
-            <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
-              categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview} viewMode={viewMode}
-              onReload={id => {
-                if (id === '__folder_deleted__') { loadSubfolders(); loadAllSubfolders() }
-                else if (id === '__folder_renamed__') { loadAllSubfolders() }
-                else setFiles(prev => prev.filter(f => f.id !== id))
-              }} />
+            <div key={sf.folder_key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div onClick={() => toggleSub(sf.folder_key)}
+                style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.folder_key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.folder_key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginTop: 1 }}>
+                {selectedSubs.has(sf.folder_key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <SubfolderSection subfolder={{ key: sf.folder_key, label: sf.label }}
+                  categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview} viewMode={viewMode}
+                  onReload={id => {
+                    if (id === '__folder_deleted__') { loadSubfolders(); loadAllSubfolders() }
+                    else if (id === '__folder_renamed__') { loadAllSubfolders() }
+                    else setFiles(prev => prev.filter(f => f.id !== id))
+                  }} />
+              </div>
+            </div>
           ))}
           {files.length > 0 && (
             <div style={{ marginTop: subfolders.length > 0 ? 10 : 0 }}>
