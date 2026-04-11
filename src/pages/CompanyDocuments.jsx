@@ -28,6 +28,7 @@ function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4
 // File Card
 function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
   const [url, setUrl] = useState(null)
+  const [confirmDel, setConfirmDel] = useState(false)
   const isImage = doc.file_type?.includes('image')
   const isPdf = doc.file_type?.includes('pdf')
 
@@ -73,11 +74,12 @@ function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
           {fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
-          {url && <button onClick={() => window.open(url, '_blank')} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-          <button onClick={onDownload} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
-          {canDelete && <button onClick={onDelete} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+          {url && <button onClick={() => onPreview(doc)} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          <button onClick={async () => { if (url) { const a = document.createElement('a'); a.href = url; a.download = doc.file_name; a.click() } else { onDownload() } }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
+          {canDelete && <button onClick={() => setConfirmDel(true)} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
         </div>
       </div>
+      {confirmDel && <ConfirmDialog message={`Delete "${doc.file_name}"?`} onConfirm={() => { setConfirmDel(false); onDelete() }} onCancel={() => setConfirmDel(false)} />}
     </div>
   )
 }
