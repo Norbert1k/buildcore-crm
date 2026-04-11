@@ -503,6 +503,15 @@ function CategoryFolder({ cat, canManage, onPreview }) {
 // ── Main page ─────────────────────────────────────────────────
 export default function CompanyDocuments() {
   const { can } = useAuth()
+  useEffect(() => {
+    const prevent = e => e.preventDefault()
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', prevent)
+    }
+  }, [])
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
