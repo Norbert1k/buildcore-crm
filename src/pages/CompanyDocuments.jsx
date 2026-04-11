@@ -139,14 +139,17 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
           <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(doc.file_name)}</div>
         </div>
         <div style={{ padding: '7px 9px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }} onClick={e => { if (renaming) e.stopPropagation() }}>
             {renaming
               ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
                   onFocus={e => e.target.select()}
                   onClick={e => e.stopPropagation()}
                   onMouseDown={e => e.stopPropagation()}
-                  style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
+                  onMouseUp={e => e.stopPropagation()}
+                  onPointerDown={e => e.stopPropagation()}
+                  onDragStart={e => e.preventDefault()}
+                  style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }} />
               : <>
                   <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={doc.file_name}>{doc.file_name}</div>
                   {canDelete && (
@@ -219,7 +222,11 @@ function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }
               onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
               onFocus={e => e.target.select()}
               onClick={e => e.stopPropagation()}
-              style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', marginBottom: 2 }} />
+              onMouseDown={e => e.stopPropagation()}
+              onMouseUp={e => e.stopPropagation()}
+              onPointerDown={e => e.stopPropagation()}
+              onDragStart={e => e.preventDefault()}
+              style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', marginBottom: 2, userSelect: 'text', WebkitUserSelect: 'text', cursor: 'text' }} />
           )}
           {!renaming && <div onClick={() => onPreview(doc)} style={{ cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
