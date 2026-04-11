@@ -555,6 +555,12 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           {canManage && !showAddSub && (
             <button onClick={e => { e.stopPropagation(); setShowAddSub(true) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Subfolder</button>
           )}
+          {canManage && (
+            <>
+              <input id={'upload-cat-' + cat.key} type="file" multiple style={{ display: 'none' }} onChange={e => { upload(Array.from(e.target.files)); e.target.value = '' }} />
+              <button onClick={e => { e.stopPropagation(); document.getElementById('upload-cat-' + cat.key).click() }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>{uploading ? '...' : '+ Upload'}</button>
+            </>
+          )}
           {canManage && showAddSub && (
             <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
               <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
