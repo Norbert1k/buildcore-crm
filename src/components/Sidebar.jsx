@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
@@ -7,6 +7,12 @@ import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, I
 export default function Sidebar({ expCount, open, onClose }) {
   const { profile } = useAuth()
   const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
+  const location = useLocation()
+  const [expandedKey, setExpandedKey] = useState(null)
+
+  useEffect(() => {
+    if (location.pathname.startsWith('/subcontractors')) setExpandedKey('subcontractors')
+  }, [location.pathname])
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -59,13 +65,23 @@ export default function Sidebar({ expCount, open, onClose }) {
                 to={item.to}
                 end={item.to === '/'}
                 className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-                onClick={handleNav}
+                onClick={(e) => {
+                  if (item.children) {
+                    setExpandedKey(k => k === item.key ? null : item.key)
+                  }
+                  handleNav()
+                }}
               >
                 {item.icon}
                 {item.label}
                 {item.badge && <span className="nav-badge">{item.badge}</span>}
+                {item.children && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform .2s', transform: expandedKey === item.key ? 'rotate(180deg)' : 'none' }}>
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                )}
               </NavLink>
-              {item.children && item.children
+              {item.children && expandedKey === item.key && item.children
                 .filter(child => perms.nav.includes(child.key))
                 .map(child => (
                   <NavLink
