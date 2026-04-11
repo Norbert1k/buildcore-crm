@@ -308,14 +308,14 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
                 <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
                   style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 110 }} />
-                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', color: '#448a40', cursor: 'pointer' }}>{savingSub ? '...' : 'Add'}</button>
-                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>✕</button>
+                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', color: '#448a40', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>{savingSub ? '...' : 'Add'}</button>
+                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, padding: '0 8px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>✕</button>
               </>
             ) : (
-              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>+ Sub</button>
+              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>+ Sub</button>
             )}
-            <label style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', flexShrink: 0 }}>
-              {uploading ? '...' : 'Upload'}
+            <label style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {uploading ? '...' : '+ Upload'}
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
           </div>
@@ -502,13 +502,13 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             {zipping ? '...' : 'Zip'}
           </button>
           {canManage && (
-            <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid #448a40', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: '#448a40' }}>
+            <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {uploading ? '...' : '+ Upload'}
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
           )}
           {canManage && !showAddSub && (
-            <button onClick={e => { e.stopPropagation(); setShowAddSub(true) }} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', whiteSpace: 'nowrap' }}>+ Subfolder</button>
+            <button onClick={e => { e.stopPropagation(); setShowAddSub(true) }} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>+ Subfolder</button>
           )}
           {canManage && showAddSub && (
             <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
