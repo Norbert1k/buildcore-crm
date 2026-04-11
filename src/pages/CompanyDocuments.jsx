@@ -8,7 +8,7 @@ const CATEGORIES = [
   { key: 'logo',           icon: '🏢', label: 'Logo & Branding',   color: '#448a40', bg: '#e8f5e7' },
   { key: 'policies',       icon: '📋', label: 'Policies',           color: '#378ADD', bg: '#E6F1FB' },
   { key: 'insurance',      icon: '🛡️', label: 'Insurance',          color: '#BA7517', bg: '#FAEEDA' },
-  { key: 'vat',            icon: '💰', label: 'VAT & Tax',          color: '#888780', bg: '#F1EFE8' },
+  { key: 'vat',            icon: '💰', label: 'VAT & UTR',          color: '#888780', bg: '#F1EFE8' },
   { key: 'bank',           icon: '🏦', label: 'Bank Details',       color: '#448a40', bg: '#e8f5e7' },
   { key: 'certifications', icon: '📜', label: 'Certifications',     color: '#534AB7', bg: '#EEEDFE' },
   { key: 'fleet',          icon: '🚗', label: 'Car Fleet',          color: '#993C1D', bg: '#FAECE7' },
