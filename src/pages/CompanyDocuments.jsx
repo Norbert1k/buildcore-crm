@@ -2,38 +2,28 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
-import { Spinner, ConfirmDialog, IconTrash } from '../components/ui'
-import SortableGrid from '../components/SortableGrid'
+import { Spinner, ConfirmDialog } from '../components/ui'
 
 const CATEGORIES = [
-  { key: 'logo',           icon: '🏢', label: 'Logo & Branding' },
-  { key: 'policies',       icon: '📋', label: 'Policies' },
-  { key: 'insurance',      icon: '🛡️', label: 'Insurance' },
-  { key: 'vat',            icon: '💰', label: 'VAT & Tax' },
-  { key: 'bank',           icon: '🏦', label: 'Bank Details' },
-  { key: 'certifications', icon: '📜', label: 'Certifications' },
-  { key: 'fleet',          icon: '🚗', label: 'Car Fleet' },
-  { key: 'templates',      icon: '📝', label: 'Templates' },
-  { key: 'site_folder',    icon: '📁', label: 'Site Folder' },
+  { key: 'logo',           icon: '🏢', label: 'Logo & Branding',  color: '#448a40', bg: '#e8f5e7' },
+  { key: 'policies',       icon: '📋', label: 'Policies',          color: '#378ADD', bg: '#E6F1FB' },
+  { key: 'insurance',      icon: '🛡️', label: 'Insurance',         color: '#BA7517', bg: '#FAEEDA' },
+  { key: 'vat',            icon: '💰', label: 'VAT & Tax',         color: '#888780', bg: '#F1EFE8' },
+  { key: 'bank',           icon: '🏦', label: 'Bank Details',      color: '#448a40', bg: '#e8f5e7' },
+  { key: 'certifications', icon: '📜', label: 'Certifications',    color: '#534AB7', bg: '#EEEDFE' },
+  { key: 'fleet',          icon: '🚗', label: 'Car Fleet',         color: '#993C1D', bg: '#FAECE7' },
+  { key: 'templates',      icon: '📝', label: 'Templates',         color: '#0F6E56', bg: '#E1F5EE' },
+  { key: 'site_folder',    icon: '📁', label: 'Site Folder',       color: '#888780', bg: '#F1EFE8' },
 ]
 
-function formatSize(bytes) {
-  if (!bytes) return ''
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)}KB`
-  return `${(bytes / 1048576).toFixed(1)}MB`
+function fmtSize(b) {
+  if (!b) return ''
+  if (b < 1024) return b + 'B'
+  if (b < 1048576) return (b / 1024).toFixed(0) + 'KB'
+  return (b / 1048576).toFixed(1) + 'MB'
 }
 
-function fileIcon(type) {
-  if (!type) return '📄'
-  if (type.includes('pdf')) return '📄'
-  if (type.includes('spreadsheet') || type.includes('excel') || type.includes('csv')) return '📊'
-  if (type.includes('presentation') || type.includes('powerpoint')) return '📑'
-  if (type.includes('word') || type.includes('document')) return '📝'
-  if (type.includes('image')) return null
-  if (type.includes('video')) return '🎬'
-  return '📄'
-}
+function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE' }
 
 function fileColor(type) {
   if (!type) return '#808080'
@@ -45,173 +35,432 @@ function fileColor(type) {
   return '#808080'
 }
 
-function fileExt(name) {
-  return name?.split('.').pop()?.toUpperCase() || 'FILE'
+// ── File Card (same design as Project Documentation) ─────────
+function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
+  const [url, setUrl] = useState(null)
+  const isImage = doc.file_type?.includes('image')
+  const isPdf = doc.file_type?.includes('pdf')
+
+  useEffect(() => {
+    supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
+  }, [doc.storage_path])
+
+  return (
+    <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)' }}>
+      <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
+        onClick={() => onPreview(doc)}>
+        {isImage && url
+          ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : isPdf && url
+          ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={doc.file_name} />
+          : <div style={{ textAlign: 'center' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1" style={{ marginBottom: 4, display: 'block', margin: '0 auto 4px' }}>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+        }
+        <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>
+          {fileExt(doc.file_name)}
+        </div>
+      </div>
+      <div style={{ padding: '7px 9px' }}>
+        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>
+          {doc.file_name}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>
+          {fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {url && <button onClick={() => window.open(url, '_blank')} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          <button onClick={onDownload} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
+          {canDelete && <button onClick={onDelete} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+        </div>
+      </div>
+    </div>
+  )
 }
 
-async function generatePdfThumbnail(url) {
-  try {
-    if (!window.pdfjsLib) {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script')
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-        s.onload = resolve; s.onerror = reject
-        document.head.appendChild(s)
-      })
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-    }
-    const pdf = await window.pdfjsLib.getDocument(url).promise
-    const page = await pdf.getPage(1)
-    const viewport = page.getViewport({ scale: 0.5 })
-    const canvas = document.createElement('canvas')
-    canvas.width = viewport.width; canvas.height = viewport.height
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise
-    return canvas.toDataURL()
-  } catch (e) { return null }
-}
-
-export default function CompanyDocuments() {
-  const { can, profile } = useAuth()
-  const [activeCategory, setActiveCategory] = useState(null)
-  const [docs, setDocs] = useState({})
-  const [loading, setLoading] = useState(true)
+// ── Sub-folder section ────────────────────────────────────────
+function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview }) {
+  const [open, setOpen] = useState(false)
+  const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
-  const [selected, setSelected] = useState(new Set())
-  const [previewDoc, setPreviewDoc] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [dragOver, setDragOver] = useState(false)
-  const [thumbnails, setThumbnails] = useState({})
-  const [downloading, setDownloading] = useState(false)
+  const { profile } = useAuth()
 
-  useEffect(() => { loadDocs() }, [])
+  useEffect(() => { if (open) loadFiles() }, [open])
 
-  async function loadDocs() {
-    setLoading(true)
-    const { data } = await supabase
-      .from('company_documents')
+  async function loadFiles() {
+    const { data } = await supabase.from('company_documents')
       .select('*, profiles(full_name)')
+      .eq('category', categoryKey)
+      .eq('subfolder_key', subfolder.key)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
-    const grouped = {}
-    CATEGORIES.forEach(c => grouped[c.key] = [])
-    ;(data || []).forEach(d => { if (grouped[d.category] !== undefined) grouped[d.category].push(d) })
-    setDocs(grouped)
-    setLoading(false)
+    setFiles(data || [])
   }
 
-  async function loadThumbnailsForCategory(categoryDocs) {
-    for (const doc of categoryDocs) {
-      if (thumbnails[doc.id]) continue
-      if (!doc.file_type?.includes('image') && !doc.file_type?.includes('pdf')) continue
-      const { data: urlData } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
-      if (urlData?.signedUrl) {
-        if (doc.file_type?.includes('image')) {
-          setThumbnails(t => ({ ...t, [doc.id]: urlData.signedUrl }))
-        } else if (doc.file_type?.includes('pdf')) {
-          generatePdfThumbnail(urlData.signedUrl).then(thumb => {
-            if (thumb) setThumbnails(t => ({ ...t, [doc.id]: thumb }))
-          })
-        }
-      }
-    }
-  }
-
-  async function uploadFiles(files, category) {
-    if (!category) return
+  async function upload(fileList) {
+    if (!fileList.length) return
     setUploading(true)
-    for (const file of files) {
-      const path = `company/${category}/${Date.now()}-${file.name}`
+    for (const file of fileList) {
+      const path = `company/${categoryKey}/${subfolder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
       if (!error) {
-        const { data: existing } = await supabase.from('company_documents').select('sort_order').eq('category', category).order('sort_order', { ascending: false }).limit(1).single()
+        const { data: ex } = await supabase.from('company_documents').select('sort_order')
+          .eq('category', categoryKey).eq('subfolder_key', subfolder.key)
+          .order('sort_order', { ascending: false }).limit(1).single()
         await supabase.from('company_documents').insert({
-          category, file_name: file.name, file_size: file.size,
-          file_type: file.type, storage_path: path, uploaded_by: profile?.id,
-          sort_order: (existing?.sort_order || 0) + 1,
+          category: categoryKey, subfolder_key: subfolder.key,
+          file_name: file.name, file_size: file.size, file_type: file.type,
+          storage_path: path, uploaded_by: profile?.id, sort_order: (ex?.sort_order || 0) + 1,
         })
       }
     }
     setUploading(false)
-    setSelected(new Set())
-    loadDocs()
+    loadFiles()
   }
 
-  async function getSignedUrl(doc) {
-    const { data } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 300)
-    return data?.signedUrl
-  }
-
-  async function downloadSingle(doc) {
-    const url = await getSignedUrl(doc)
-    if (url) { const a = document.createElement('a'); a.href = url; a.download = doc.file_name; a.click() }
-  }
-
-  async function downloadSelected() {
-    const activeDocs = docs[activeCategory] || []
-    const selectedDocs = activeDocs.filter(d => selected.has(d.id))
-    if (selectedDocs.length === 0) return
-    if (selectedDocs.length === 1) { downloadSingle(selectedDocs[0]); return }
-    setDownloading(true)
-    try {
-      const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-      document.head.appendChild(script)
-      await new Promise(r => script.onload = r)
-      const zip = new window.JSZip()
-      for (const doc of selectedDocs) {
-        const url = await getSignedUrl(doc)
-        if (url) { const res = await fetch(url); zip.file(doc.file_name, await res.blob()) }
-      }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `${CATEGORIES.find(c => c.key === activeCategory)?.label || 'documents'}.zip`
-      a.click(); URL.revokeObjectURL(a.href)
-    } catch(e) { console.error(e) }
-    setDownloading(false)
-  }
-
-  async function openPreview(doc) {
-    setPreviewDoc(doc); setPreviewLoading(true); setPreviewUrl(null)
-    setPreviewUrl(await getSignedUrl(doc))
-    setPreviewLoading(false)
+  async function download(doc) {
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 60)
+    if (data?.signedUrl) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = doc.file_name; a.click() }
   }
 
   async function deleteDoc(doc) {
     await supabase.storage.from('company-docs').remove([doc.storage_path])
     await supabase.from('company_documents').delete().eq('id', doc.id)
     setConfirmDelete(null)
-    setSelected(s => { const n = new Set(s); n.delete(doc.id); return n })
-    loadDocs()
+    setFiles(prev => prev.filter(f => f.id !== doc.id))
   }
 
-  async function handleReorder(newOrder) {
-    const updates = newOrder.map((id, i) =>
-      supabase.from('company_documents').update({ sort_order: i + 1 }).eq('id', id)
-    )
-    await Promise.all(updates)
-    // Update local state to reflect new order
-    setDocs(prev => ({
-      ...prev,
-      [activeCategory]: newOrder.map(id => prev[activeCategory].find(d => d.id === id)).filter(Boolean)
-    }))
+  return (
+    <div style={{ marginBottom: 3 }}>
+      <div onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
+        <div style={{ width: 28, height: 28, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
+          📁
+        </div>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
+        <span style={{ fontSize: 10, color: 'var(--text3)' }}>{files.length > 0 ? `${files.length} file${files.length !== 1 ? 's' : ''}` : open ? '0 files' : ''}</span>
+        {open && canManage && (
+          <label onClick={e => e.stopPropagation()} style={{ fontSize: 10, padding: '2px 7px', border: `0.5px solid ${color}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', color, flexShrink: 0 }}>
+            {uploading ? '...' : '+ Upload'}
+            <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
+          </label>
+        )}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
+          style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}>
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </div>
+
+      {open && (
+        <div style={{ marginLeft: 14, paddingLeft: 12, borderLeft: `1.5px solid ${color}30`, paddingTop: 8, paddingBottom: 8 }}>
+          {files.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 0', textAlign: 'center' }}>
+              Empty — {canManage ? 'click + Upload above to add files' : 'no files yet'}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+              {files.map(f => (
+                <FileCard key={f.id} doc={f} onPreview={onPreview}
+                  onDownload={async () => download(f)}
+                  onDelete={() => setConfirmDelete(f)}
+                  canDelete={canManage} />
+              ))}
+              {canManage && (
+                <label style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 150, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add file
+                  <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
+                </label>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDelete(null)}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Delete file?</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>"{confirmDelete.file_name}" will be permanently deleted.</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => deleteDoc(confirmDelete)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Category folder row ───────────────────────────────────────
+function CategoryFolder({ cat, canManage, onPreview }) {
+  const [open, setOpen] = useState(false)
+  const [files, setFiles] = useState([])
+  const [subfolders, setSubfolders] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [showAddSub, setShowAddSub] = useState(false)
+  const [newSubName, setNewSubName] = useState('')
+  const [savingSub, setSavingSub] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [zipping, setZipping] = useState(false)
+  const { profile } = useAuth()
+
+  useEffect(() => {
+    if (open) { loadFiles(); loadSubfolders() }
+  }, [open])
+
+  async function loadFiles() {
+    const { data } = await supabase.from('company_documents')
+      .select('*, profiles(full_name)')
+      .eq('category', cat.key)
+      .is('subfolder_key', null)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false })
+    setFiles(data || [])
   }
 
-  function toggleSelect(id) {
-    setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  async function loadSubfolders() {
+    const { data } = await supabase.from('company_doc_subfolders')
+      .select('*').eq('category_key', cat.key).order('created_at')
+    setSubfolders(data || [])
   }
 
-  function selectAll() {
-    const activeDocs = docs[activeCategory] || []
-    if (selected.size === activeDocs.length) setSelected(new Set())
-    else setSelected(new Set(activeDocs.map(d => d.id)))
+  async function upload(fileList) {
+    if (!fileList.length) return
+    setUploading(true)
+    for (const file of fileList) {
+      const path = `company/${cat.key}/${Date.now()}-${file.name}`
+      const { error } = await supabase.storage.from('company-docs').upload(path, file)
+      if (!error) {
+        const { data: ex } = await supabase.from('company_documents').select('sort_order')
+          .eq('category', cat.key).is('subfolder_key', null)
+          .order('sort_order', { ascending: false }).limit(1).single()
+        await supabase.from('company_documents').insert({
+          category: cat.key, file_name: file.name, file_size: file.size,
+          file_type: file.type, storage_path: path, uploaded_by: profile?.id,
+          sort_order: (ex?.sort_order || 0) + 1,
+        })
+      }
+    }
+    setUploading(false)
+    loadFiles()
   }
 
-  const activeCat = CATEGORIES.find(c => c.key === activeCategory)
-  const activeDocs = activeCategory ? (docs[activeCategory] || []) : []
-  const selectedCount = [...selected].filter(id => activeDocs.find(d => d.id === id)).length
+  async function download(doc) {
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 60)
+    if (data?.signedUrl) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = doc.file_name; a.click() }
+  }
+
+  async function deleteDoc(doc) {
+    await supabase.storage.from('company-docs').remove([doc.storage_path])
+    await supabase.from('company_documents').delete().eq('id', doc.id)
+    setConfirmDelete(null)
+    setFiles(prev => prev.filter(f => f.id !== doc.id))
+  }
+
+  async function addSubfolder() {
+    if (!newSubName.trim()) return
+    setSavingSub(true)
+    const key = `${cat.key}-sub-${Date.now()}`
+    await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label: newSubName.trim() })
+    setNewSubName('')
+    setShowAddSub(false)
+    setSavingSub(false)
+    loadSubfolders()
+  }
+
+  async function zipFolder() {
+    setZipping(true)
+    const { data: allFiles } = await supabase.from('company_documents').select('*').eq('category', cat.key)
+    if (!allFiles?.length) { alert('No files in this folder.'); setZipping(false); return }
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    s.onload = async () => {
+      const zip = new window.JSZip()
+      for (const f of allFiles) {
+        const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
+        if (data?.signedUrl) {
+          const res = await fetch(data.signedUrl)
+          const subPath = f.subfolder_key ? `${f.subfolder_key}/${f.file_name}` : f.file_name
+          zip.file(subPath, await res.blob())
+        }
+      }
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${cat.label}.zip`; a.click()
+      setZipping(false)
+    }
+    document.head.appendChild(s)
+  }
+
+  // Total file count including subfolders
+  const [totalCount, setTotalCount] = useState(0)
+  useEffect(() => {
+    supabase.from('company_documents').select('id', { count: 'exact' }).eq('category', cat.key)
+      .then(({ count }) => setTotalCount(count || 0))
+  }, [cat.key, open])
+
+  return (
+    <div style={{ marginBottom: 6 }}>
+      {/* Folder row */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
+          borderRadius: 8, cursor: 'pointer',
+          background: open ? 'var(--surface2)' : 'var(--surface)',
+          border: '0.5px solid var(--border)',
+          borderLeft: `3px solid ${cat.color}`,
+          transition: 'background .1s',
+        }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = open ? 'var(--surface2)' : 'var(--surface)' }}
+      >
+        {/* Icon in coloured circle */}
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>
+          {cat.icon}
+        </div>
+
+        {/* Name + count */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{cat.label}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
+            {totalCount > 0 ? `${totalCount} file${totalCount !== 1 ? 's' : ''}` : 'Empty'}
+            {subfolders.length > 0 ? ` · ${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          <button onClick={zipFolder} disabled={zipping} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+            {zipping ? '...' : 'Zip'}
+          </button>
+          {canManage && (
+            <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '4px 10px', border: `0.5px solid ${cat.color}`, borderRadius: 6, background: 'transparent', cursor: 'pointer', color: cat.color }}>
+              {uploading ? '...' : '+ Upload'}
+              <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
+            </label>
+          )}
+        </div>
+
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', marginLeft: 4, flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+
+      {/* Open content */}
+      {open && (
+        <div style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${cat.color}30`, paddingTop: 8, paddingBottom: 8 }}>
+
+          {/* Sub-folders */}
+          {subfolders.map(sf => (
+            <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
+              categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview} />
+          ))}
+
+          {/* Direct files in this folder (no subfolder) */}
+          {files.length > 0 && (
+            <div style={{ marginTop: subfolders.length > 0 ? 10 : 0 }}>
+              {subfolders.length > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                {files.map(f => (
+                  <FileCard key={f.id} doc={f} onPreview={onPreview}
+                    onDownload={async () => download(f)}
+                    onDelete={() => setConfirmDelete(f)}
+                    canDelete={canManage} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {files.length === 0 && subfolders.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--text3)', padding: '16px 0', textAlign: 'center' }}>
+              Empty folder — {canManage ? 'upload files or add sub-folders below' : 'no files yet'}
+            </div>
+          )}
+
+          {/* Upload drop area when empty and no subfolders */}
+          {files.length === 0 && subfolders.length === 0 && canManage && (
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11, marginTop: 4 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Drop files or click to upload
+              <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
+            </label>
+          )}
+
+          {/* Add sub-folder */}
+          {canManage && (
+            <div style={{ marginTop: 8 }}>
+              {showAddSub ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input autoFocus value={newSubName} onChange={e => setNewSubName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addSubfolder(); if (e.key === 'Escape') setShowAddSub(false) }}
+                    placeholder="Sub-folder name..."
+                    style={{ flex: 1, fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' }} />
+                  <button onClick={addSubfolder} disabled={savingSub || !newSubName.trim()}
+                    style={{ fontSize: 11, padding: '5px 10px', background: cat.color, color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                    {savingSub ? '...' : 'Add'}
+                  </button>
+                  <button onClick={() => setShowAddSub(false)}
+                    style={{ fontSize: 11, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setShowAddSub(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add sub-folder
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDelete(null)}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Delete file?</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>"{confirmDelete.file_name}" will be permanently deleted.</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => deleteDoc(confirmDelete)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────
+export default function CompanyDocuments() {
+  const { can } = useAuth()
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  const canManage = can('manage_subcontractors')
+
+  async function openPreview(doc) {
+    setPreviewDoc(doc); setPreviewLoading(true); setPreviewUrl(null)
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 300)
+    setPreviewUrl(data?.signedUrl || null)
+    setPreviewLoading(false)
+  }
 
   return (
     <div>
@@ -220,143 +469,27 @@ export default function CompanyDocuments() {
         <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>Upload and manage company-wide documents — accessible to all staff</p>
       </div>
 
-      {/* Category tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10, marginBottom: 24 }}>
-        {CATEGORIES.map(cat => {
-          const count = docs[cat.key]?.length || 0
-          const isActive = activeCategory === cat.key
-          return (
-            <div key={cat.key}
-              onClick={() => {
-                const newCat = isActive ? null : cat.key
-                setActiveCategory(newCat)
-                setSelected(new Set())
-                if (!isActive && docs[cat.key]?.length) setTimeout(() => loadThumbnailsForCategory(docs[cat.key]), 150)
-              }}
-              style={{ background: isActive ? 'var(--green-bg)' : 'var(--surface)', border: `1.5px solid ${isActive ? 'var(--green)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', padding: '14px 10px', textAlign: 'center', cursor: 'pointer', transition: 'all .15s', position: 'relative' }}
-              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--surface2)' }}
-              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'var(--surface)' }}>
-              <div style={{ fontSize: 28, marginBottom: 6 }}>{cat.icon}</div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: isActive ? 'var(--green)' : 'var(--text)', lineHeight: 1.3 }}>{cat.label}</div>
-              {count > 0 && <div style={{ position: 'absolute', top: 8, right: 8, background: isActive ? 'var(--green)' : '#808080', color: 'white', fontSize: 10, fontWeight: 700, width: 18, height: 18, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{count}</div>}
-            </div>
-          )
-        })}
+      {/* Folder rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {CATEGORIES.map(cat => (
+          <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} />
+        ))}
       </div>
-
-      {/* Document panel */}
-      {activeCategory && (
-        <div className="card card-pad">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 20 }}>{activeCat?.icon}</span>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{activeCat?.label}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>{activeDocs.length} file{activeDocs.length !== 1 ? 's' : ''}</div>
-              </div>
-              {activeDocs.length > 1 && <button className="btn btn-sm" onClick={selectAll} style={{ fontSize: 11 }}>{selectedCount === activeDocs.length ? 'Deselect all' : 'Select all'}</button>}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {selectedCount > 0 && (
-                <button className="btn btn-sm btn-primary" onClick={downloadSelected} disabled={downloading} style={{ fontSize: 12 }}>
-                  {downloading ? 'Preparing...' : `↓ Download ${selectedCount > 1 ? `${selectedCount} as ZIP` : '1 file'}`}
-                </button>
-              )}
-              {can('manage_subcontractors') && (
-                <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
-                  {uploading ? 'Uploading...' : '↑ Upload Files'}
-                  <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files), activeCategory)} disabled={uploading} />
-                </label>
-              )}
-            </div>
-          </div>
-
-          {/* Drop zone wrapper */}
-          <div onDragOver={e => { if (!e.target.closest('[draggable]')) { e.preventDefault(); setDragOver(true) }}}
-            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false) }}
-            onDrop={e => {
-              const files = Array.from(e.dataTransfer.files)
-              if (files.length) { e.preventDefault(); setDragOver(false); uploadFiles(files, activeCategory) }
-            }}
-            style={{ border: `2px dashed ${dragOver ? 'var(--green)' : 'transparent'}`, borderRadius: 'var(--radius)', background: dragOver ? 'var(--green-bg)' : 'transparent', transition: 'all .15s', minHeight: activeDocs.length === 0 ? 140 : 'auto' }}>
-
-            {activeDocs.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
-                No documents yet — drag files here or click Upload
-              </div>
-            ) : (
-              <SortableGrid
-                items={activeDocs}
-                onReorder={handleReorder}
-                columns="repeat(auto-fill, minmax(220px, 1fr))"
-                renderItem={(doc) => {
-                  const isSelected = selected.has(doc.id)
-                  const isImage = doc.file_type?.includes('image')
-                  const thumb = thumbnails[doc.id]
-                  const icon = fileIcon(doc.file_type)
-                  const color = fileColor(doc.file_type)
-                  const ext = fileExt(doc.file_name)
-                  return (
-                    <div style={{ borderRadius: 'var(--radius)', border: `2px solid ${isSelected ? 'var(--green)' : 'var(--border)'}`, background: isSelected ? 'var(--green-bg)' : 'var(--surface)', overflow: 'hidden', position: 'relative' }}>
-                      {/* Top bar with checkbox and delete */}
-                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', padding: '6px 6px', zIndex: 10, background: 'linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%)' }}>
-                        <div onClick={e => { e.stopPropagation(); toggleSelect(doc.id) }}
-                          style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${isSelected ? 'var(--green)' : 'rgba(255,255,255,0.8)'}`, background: isSelected ? 'var(--green)' : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                          {isSelected && <svg width="10" height="10" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
-                        </div>
-                        {can('manage_subcontractors') && (
-                          <div onClick={e => { e.stopPropagation(); setConfirmDelete(doc) }}
-                            style={{ width: 20, height: 20, borderRadius: 4, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'white', fontSize: 11, flexShrink: 0 }}>
-                            ✕
-                          </div>
-                        )}
-                      </div>
-                      {/* Thumbnail */}
-                      <div onClick={() => openPreview(doc)} style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: thumb ? (isImage ? '#000' : '#f5f5f5') : `${color}15`, overflow: 'hidden', cursor: 'pointer' }}>
-                        {thumb ? (
-                          <img src={thumb} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: isImage ? 'cover' : 'contain', padding: isImage ? 0 : 8 }} />
-                        ) : (
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: 36, marginBottom: 4 }}>{icon}</div>
-                            <div style={{ fontSize: 10, fontWeight: 700, color, background: `${color}20`, padding: '2px 6px', borderRadius: 4 }}>{ext}</div>
-                          </div>
-                        )}
-                      </div>
-                      {/* Info */}
-                      <div style={{ padding: '8px 10px' }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, lineHeight: 1.4, marginBottom: 2, wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={doc.file_name}>{doc.file_name}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text3)' }}>{formatSize(doc.file_size)} · {formatDate(doc.created_at)}</div>
-                        <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
-                          <button className="btn btn-sm" style={{ flex: 1, fontSize: 10, padding: '4px 6px' }} onClick={() => openPreview(doc)}>👁 View</button>
-                          <button onClick={() => downloadSingle(doc)} title="Download" style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--green)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'white', fontSize: 13 }}>↓</button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                }}
-              />
-            )}
-          </div>
-        </div>
-      )}
-
-      {!activeCategory && (
-        <div style={{ textAlign: 'center', padding: '30px 20px', color: 'var(--text3)', fontSize: 13 }}>
-          Click a category above to view and upload documents
-        </div>
-      )}
 
       {/* Preview Modal */}
       {previewDoc && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 900, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, width: '100%', maxWidth: 900, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-              <span style={{ fontSize: 20 }}>{fileIcon(previewDoc.file_type) || '🖼️'}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewDoc.file_name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{formatSize(previewDoc.file_size)} · {formatDate(previewDoc.created_at)}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fmtSize(previewDoc.file_size)} · {formatDate(previewDoc.created_at)}</div>
               </div>
-              <button className="btn btn-sm btn-primary" onClick={() => downloadSingle(previewDoc)}>↓ Download</button>
+              {previewUrl && (
+                <a href={previewUrl} download={previewDoc.file_name} className="btn btn-sm btn-primary">↓ Download</a>
+              )}
               <button className="btn btn-sm" onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }} style={{ fontSize: 16, padding: '4px 12px' }}>✕</button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', minHeight: 300 }}>
@@ -367,25 +500,22 @@ export default function CompanyDocuments() {
               ) : previewDoc.file_type?.includes('image') ? (
                 <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }} />
               ) : previewDoc.file_type?.includes('pdf') ? (
-                <iframe src={`${previewUrl}#toolbar=1`} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewDoc.file_name} />
+                <iframe src={previewUrl + '#toolbar=1'} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewDoc.file_name} />
               ) : previewDoc.file_type?.includes('video') ? (
                 <video controls src={previewUrl} style={{ maxWidth: '100%', maxHeight: '80vh' }} />
               ) : (previewDoc.file_type?.includes('word') || previewDoc.file_type?.includes('spreadsheet') || previewDoc.file_name?.match(/\.(docx?|xlsx?|pptx?)$/i)) ? (
                 <iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(previewUrl)}&embedded=true`} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewDoc.file_name} />
               ) : (
                 <div style={{ color: 'white', textAlign: 'center', padding: 40 }}>
-                  <div style={{ fontSize: 56, marginBottom: 16 }}>{fileIcon(previewDoc.file_type)}</div>
+                  <div style={{ fontSize: 56, marginBottom: 16 }}>📄</div>
                   <div style={{ fontSize: 14, marginBottom: 24 }}>{previewDoc.file_name}</div>
-                  <button className="btn btn-primary" onClick={() => downloadSingle(previewDoc)}>↓ Download File</button>
+                  {previewUrl && <a href={previewUrl} download={previewDoc.file_name} className="btn btn-primary">↓ Download File</a>}
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
-
-      <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)}
-        title="Delete document" message={`Delete "${confirmDelete?.file_name}"? This cannot be undone.`} danger />
     </div>
   )
 }
