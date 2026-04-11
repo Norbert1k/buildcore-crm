@@ -143,6 +143,63 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
   )
 }
 
+
+// ── File List Row (list view) ──────────────────────────────────────────────
+function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
+  const [url, setUrl] = useState(null)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const isWord = doc.file_type?.includes('word') || doc.file_type?.includes('document') || /\.docx?$/i.test(doc.file_name || '')
+  const isExcel = doc.file_type?.includes('spreadsheet') || doc.file_type?.includes('excel') || /\.xlsx?$/i.test(doc.file_name || '')
+  const isPpt = doc.file_type?.includes('presentation') || doc.file_type?.includes('powerpoint') || /\.pptx?$/i.test(doc.file_name || '')
+  const isPdf = doc.file_type?.includes('pdf')
+  const isImage = doc.file_type?.includes('image')
+
+  useEffect(() => {
+    supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
+  }, [doc.storage_path])
+
+  const iconColor = isPdf ? '#E24B4A' : isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : isImage ? '#448a40' : '#888'
+  const iconLetter = isPdf ? 'PDF' : isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
+
+  function handleDragStart(e) {
+    e.dataTransfer.setData('text/plain', doc.id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  return (
+    <>
+      <div draggable={true} onDragStart={handleDragStart}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', cursor: 'grab', transition: 'border .1s' }}>
+        {/* Checkbox */}
+        <div onClick={e => { e.stopPropagation(); onSelect(doc.id) }}
+          style={{ width: 16, height: 16, borderRadius: 3, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.3)'), background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+        </div>
+        {/* File type icon */}
+        <div style={{ width: 32, height: 32, borderRadius: 5, background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {iconLetter
+            ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          }
+        </div>
+        {/* Filename — full width, no truncation */}
+        <div onClick={() => onPreview(doc)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3' }}>{doc.file_name}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}</div>
+        </div>
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+          {url && <button onClick={e => { e.stopPropagation(); onPreview(doc) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, doc.file_name) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
+          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+        </div>
+      </div>
+      {confirmDel && <Confirm message={'Delete "' + doc.file_name + '"?'} onOk={() => { setConfirmDel(false); onDelete(doc) }} onCancel={() => setConfirmDel(false)} />}
+    </>
+  )
+}
+
 // ── Bulk Bar ──────────────────────────────────────────────────────────────────
 function BulkBar({ selected, onZip, onMove, onClear, allSubfolders }) {
   const [showMove, setShowMove] = useState(false)
@@ -387,6 +444,9 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   const [totalCount, setTotalCount] = useState(0)
   const [selected, setSelected] = useState(new Set())
   const [allSubfolders, setAllSubfolders] = useState({})
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('docView_' + cat.key) || 'grid')
+
+  function setView(mode) { setViewMode(mode); localStorage.setItem('docView_' + cat.key, mode) }
 
   useEffect(() => { if (open) { loadFiles(); loadSubfolders(); loadAllSubfolders() } }, [open])
   useEffect(() => {
@@ -521,6 +581,20 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             </>
           )}
         </div>
+        {open && (
+          <div style={{ display: 'flex', gap: 2, marginLeft: 4 }} onClick={e => e.stopPropagation()}>
+            {[
+              { mode: 'grid',    title: 'Grid view',    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> },
+              { mode: 'compact', title: 'Compact view', icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="4" height="4"/><rect x="10" y="3" width="4" height="4"/><rect x="17" y="3" width="4" height="4"/><rect x="3" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="17" y="10" width="4" height="4"/><rect x="3" y="17" width="4" height="4"/><rect x="10" y="17" width="4" height="4"/><rect x="17" y="17" width="4" height="4"/></svg> },
+              { mode: 'list',    title: 'List view',    icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg> },
+            ].map(({ mode, title, icon }) => (
+              <button key={mode} onClick={() => setView(mode)} title={title}
+                style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid ' + (viewMode === mode ? 'var(--accent)' : 'var(--border)'), borderRadius: 4, background: viewMode === mode ? 'var(--accent)' : 'transparent', cursor: 'pointer', color: viewMode === mode ? '#fff' : 'var(--text3)', padding: 0, flexShrink: 0 }}>
+                {icon}
+              </button>
+            ))}
+          </div>
+        )}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
           style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', marginLeft: 4, flexShrink: 0 }}>
           <polyline points="6 9 12 15 18 9"/>
@@ -539,12 +613,20 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           {files.length > 0 && (
             <div style={{ marginTop: subfolders.length > 0 ? 10 : 0 }}>
               {subfolders.length > 0 && <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
-                {files.map(f => (
-                  <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
-                    selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
-                ))}
-              </div>
+              {viewMode === 'list'
+                ? <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {files.map(f => (
+                      <FileListRow key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
+                        selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
+                    ))}
+                  </div>
+                : <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8 }}>
+                    {files.map(f => (
+                      <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
+                        selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
+                    ))}
+                  </div>
+              }
             </div>
           )}
           {files.length === 0 && subfolders.length === 0 && (
