@@ -4,6 +4,18 @@ import { useAuth } from '../lib/auth'
 import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
 import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
 
+function IconClients() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="18" rx="2"/>
+      <path d="M8 3v3"/>
+      <path d="M16 3v3"/>
+      <circle cx="12" cy="13" r="3"/>
+      <path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
+    </svg>
+  )
+}
+
 export default function Sidebar({ expCount, open, onClose }) {
   const { profile } = useAuth()
   const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
@@ -36,7 +48,7 @@ export default function Sidebar({ expCount, open, onClose }) {
       ]
     },
     { to: '/projects',          key: 'projects', label: 'Projects',     icon: <IconProject /> },
-    { to: '/clients',           key: 'clients',  label: 'Clients',      icon: <IconUsers /> },
+    { to: '/clients',           key: 'clients',  label: 'Clients',      icon: <IconClients /> },
     { to: '/suppliers',         key: 'suppliers', label: 'Suppliers',    icon: <IconBuilding /> },
     { to: '/company-documents', key: 'company',  label: 'Company Docs', icon: <IconDoc /> },
     { to: '/google-drive',      key: 'gdrive',   label: 'Google Drive', icon: <IconProject /> },
@@ -91,7 +103,7 @@ export default function Sidebar({ expCount, open, onClose }) {
                     className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`}
                     onClick={handleNav}
                   >
-                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>└</span>
+                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>â</span>
                     {child.icon}
                     {child.label}
                   </NavLink>
