@@ -497,7 +497,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-          <button onClick={zipFolder} disabled={zipping} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button onClick={zipFolder} disabled={zipping} style={{ fontSize: 11, height: 26, padding: '0 10px', boxSizing: 'border-box', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
             {zipping ? '...' : 'Zip'}
           </button>
