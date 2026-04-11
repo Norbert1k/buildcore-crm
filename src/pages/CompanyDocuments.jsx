@@ -34,7 +34,7 @@ function Confirm({ message, onOk, onCancel }) {
         onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>{message}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={{ padding: '8px 16px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--text)' }}>Cancel</button>
+          <button onClick={onCancel} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>Cancel</button>
           <button onClick={onOk} style={{ padding: '8px 16px', borderRadius: 6, background: 'var(--red)', border: 'none', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600 }}>Delete</button>
         </div>
       </div>
@@ -146,7 +146,7 @@ function BulkBar({ selected, onZip, onMove, onClear, allSubfolders, currentCateg
     <>
       <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-        <button onClick={onZip} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
+        <button onClick={onZip} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
           ↓ Download ZIP
         </button>
         <button onClick={openMove} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>
@@ -308,11 +308,11 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
                 <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
                   style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 110 }} />
-                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', color: '#448a40', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>{savingSub ? '...' : 'Add'}</button>
-                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, padding: '0 8px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>✕</button>
+                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>{savingSub ? '...' : 'Add'}</button>
+                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>✕</button>
               </>
             ) : (
-              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>+ Sub</button>
+              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Sub</button>
             )}
             <label style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>
               {uploading ? '...' : '+ Upload'}
@@ -508,7 +508,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             </label>
           )}
           {canManage && !showAddSub && (
-            <button onClick={e => { e.stopPropagation(); setShowAddSub(true) }} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>+ Subfolder</button>
+            <button onClick={e => { e.stopPropagation(); setShowAddSub(true) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Subfolder</button>
           )}
           {canManage && showAddSub && (
             <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
@@ -609,7 +609,7 @@ export default function CompanyDocuments() {
                 ↓ Download
               </button>
             )}
-            <button onClick={() => setPreviewDoc(null)} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
+            <button onClick={() => setPreviewDoc(null)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>✕ Close</button>
           </div>
           <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 12 }}>{previewDoc.file_name}</div>
           {previewLoading ? <Spinner /> : previewUrl
