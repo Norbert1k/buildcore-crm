@@ -721,6 +721,15 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 // ── Main HSHandover component ─────────────────────────────────
 export default function HSHandover({ projectId, projectName }) {
   const { can } = useAuth()
+  useEffect(() => {
+    const prevent = e => e.preventDefault()
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', prevent)
+    }
+  }, [])
   const [fileCounts, setFileCounts] = useState({})
   const [customFolders, setCustomFolders] = useState([])
   const [compilingFull, setCompilingFull] = useState(false)
