@@ -129,38 +129,66 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, sel
 }
 
 // ── Bulk Action Bar ───────────────────────────────────────────────────────────
-function BulkBar({ selected, files, subfolders, onZip, onMove, onClear }) {
+function BulkBar({ selected, onZip, onMove, onClear, allSubfolders, currentCategoryKey }) {
   const [showMove, setShowMove] = useState(false)
+  const [movePos, setMovePos] = useState({ top: 0, left: 0 })
+  const btnRef = typeof document !== 'undefined' ? { current: null } : { current: null }
+
   if (!selected.size) return null
+
+  function openMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMovePos({ bottom: window.innerHeight - rect.top + 8, left: rect.left })
+    setShowMove(v => !v)
+  }
+
   return (
-    <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap', flexWrap: 'nowrap' }}>
-      <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-      <button onClick={onZip} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
-        ↓ Download ZIP
-      </button>
-      {subfolders.length > 0 && (
-        <div style={{ position: 'relative' }}>
-          <button onClick={() => setShowMove(v => !v)} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
-            Move to ▾
-          </button>
-          {showMove && (
-            <div style={{ position: 'absolute', top: '110%', left: 0, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 8, minWidth: 180, boxShadow: '0 4px 20px rgba(0,0,0,0.2)', zIndex: 200 }}>
-              <div onClick={() => { onMove(null); setShowMove(false) }} style={{ padding: '9px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }}>
-                General files (no subfolder)
-              </div>
-              {subfolders.map(sf => (
-                <div key={sf.folder_key} onClick={() => { onMove(sf.folder_key); setShowMove(false) }} style={{ padding: '9px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}>
-                  📁 {sf.label}
-                </div>
-              ))}
+    <>
+      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
+        <button onClick={onZip} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
+          ↓ Download ZIP
+        </button>
+        <button onClick={openMove} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>
+          Move to ▾
+        </button>
+        <button onClick={onClear} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
+          ✕ Clear
+        </button>
+      </div>
+      {showMove && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 600 }} onClick={() => setShowMove(false)} />
+          <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
+            <div onClick={() => { onMove(null, null); setShowMove(false) }}
+              style={{ padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}>
+              <span style={{ fontSize: 16 }}>📂</span> General files (same folder)
             </div>
-          )}
-        </div>
+            {CATEGORIES.map(cat => (
+              <div key={cat.key}>
+                <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 600, color: cat.color, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>{cat.icon}</span> {cat.label}
+                </div>
+                {(allSubfolders[cat.key] || []).map(sf => (
+                  <div key={sf.folder_key} onClick={() => { onMove(sf.folder_key, cat.key); setShowMove(false) }}
+                    style={{ padding: '8px 14px 8px 28px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                    📁 {sf.label}
+                  </div>
+                ))}
+                {!(allSubfolders[cat.key] || []).length && (
+                  <div style={{ padding: '4px 14px 8px 28px', fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No subfolders</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
       )}
-      <button onClick={onClear} style={{ marginLeft: 'auto', fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
-        ✕ Clear
-      </button>
-    </div>
+    </>
   )
 }
 
@@ -263,7 +291,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
           style={{ marginLeft: 14, paddingLeft: 12, borderLeft: '1.5px solid ' + color + '30', paddingTop: 8, paddingBottom: 8 }}>
-          <BulkBar selected={selected} files={files} subfolders={[]} onZip={bulkZip} onMove={bulkMove} onClear={() => { setSelected(new Set()); setSelectionMode(false) }} />
+          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => { setSelected(new Set()); setSelectionMode(false) }} allSubfolders={{}} currentCategoryKey={categoryKey} />
           {files.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
@@ -307,8 +335,19 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   const [totalCount, setTotalCount] = useState(0)
   const [selected, setSelected] = useState(new Set())
   const [selectionMode, setSelectionMode] = useState(false)
+  const [allSubfolders, setAllSubfolders] = useState({})
 
-  useEffect(() => { if (open) { loadFiles(); loadSubfolders() } }, [open])
+  useEffect(() => { if (open) { loadFiles(); loadSubfolders(); loadAllSubfolders() } }, [open])
+
+  async function loadAllSubfolders() {
+    const { data } = await supabase.from('company_doc_subfolders').select('*').order('label')
+    const grouped = {}
+    ;(data || []).forEach(sf => {
+      if (!grouped[sf.category_key]) grouped[sf.category_key] = []
+      grouped[sf.category_key].push(sf)
+    })
+    setAllSubfolders(grouped)
+  }
   useEffect(() => {
     supabase.from('company_documents').select('id', { count: 'exact' }).eq('category', cat.key)
       .then(({ count }) => setTotalCount(count || 0))
@@ -384,8 +423,10 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     }
     document.head.appendChild(s)
   }
-  async function bulkMove(targetSubfolder) {
-    for (const id of selected) await supabase.from('company_documents').update({ subfolder_key: targetSubfolder }).eq('id', id)
+  async function bulkMove(targetSubfolder, targetCategory) {
+    const updateData = { subfolder_key: targetSubfolder }
+    if (targetCategory && targetCategory !== cat.key) updateData.category = targetCategory
+    for (const id of selected) await supabase.from('company_documents').update(updateData).eq('id', id)
     setSelected(new Set()); setSelectionMode(false); loadFiles()
   }
   function onDropFolder(e) { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }
@@ -430,7 +471,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
         <div onDragOver={e => e.preventDefault()} onDrop={onDropBody}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: '1.5px solid ' + cat.color + '30', paddingTop: 8, paddingBottom: 8 }}>
 
-          <BulkBar selected={selected} files={files} subfolders={subfolders} onZip={bulkZip} onMove={bulkMove} onClear={() => { setSelected(new Set()); setSelectionMode(false) }} />
+          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => { setSelected(new Set()); setSelectionMode(false) }} allSubfolders={allSubfolders} currentCategoryKey={cat.key} />
           {subfolders.map(sf => (
             <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
               categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview}
