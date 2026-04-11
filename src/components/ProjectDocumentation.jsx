@@ -23,12 +23,67 @@ const TEMPLATE_FOLDERS = [
   { key: '04-project-programme',    label: '04. Project Programme',       color: '#888780', bg: '#F1EFE8', subfolders: [] },
 ]
 
-function FolderIcon({ color, bg, size = 20 }) {
+const FOLDER_ICONS = {
+  '00-project-information': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+      <rect x="9" y="3" width="6" height="4" rx="1"/>
+      <circle cx="12" cy="13" r="1" fill={color}/>
+      <line x1="12" y1="15" x2="12" y2="17"/>
+      <line x1="9" y1="10" x2="15" y2="10"/>
+    </svg>
+  ),
+  '01-project-order': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2"/>
+      <line x1="7" y1="9" x2="17" y2="9"/>
+      <line x1="7" y1="13" x2="13" y2="13"/>
+      <polyline points="15 16 17 18 21 14"/>
+    </svg>
+  ),
+  '02-payment-application': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="20" height="13" rx="2"/>
+      <circle cx="12" cy="12.5" r="3"/>
+      <circle cx="12" cy="12.5" r="1" fill={color}/>
+      <line x1="2" y1="10" x2="5" y2="10"/>
+      <line x1="19" y1="10" x2="22" y2="10"/>
+      <line x1="2" y1="15" x2="5" y2="15"/>
+      <line x1="19" y1="15" x2="22" y2="15"/>
+    </svg>
+  ),
+  '03-payment-notice': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="9" y1="13" x2="15" y2="13"/>
+      <line x1="9" y1="17" x2="12" y2="17"/>
+      <polyline points="14 15 16 17 20 13"/>
+    </svg>
+  ),
+  '04-project-programme': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2"/>
+      <line x1="3" y1="9" x2="21" y2="9"/>
+      <line x1="7" y1="4" x2="7" y2="9"/>
+      <line x1="12" y1="4" x2="12" y2="9"/>
+      <line x1="17" y1="4" x2="17" y2="9"/>
+      <rect x="6" y="12" width="2.5" height="4.5" rx="1" fill={color}/>
+      <rect x="10.5" y="13.5" width="2.5" height="3" rx="1" fill={color}/>
+      <rect x="15" y="11" width="2.5" height="5.5" rx="1" fill={color}/>
+    </svg>
+  ),
+}
+
+function FolderIcon({ folderKey, color, bg, size = 20 }) {
+  const IconSvg = FOLDER_ICONS[folderKey]
   return (
     <div style={{ width: size + 12, height: size + 12, borderRadius: 6, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-      </svg>
+      {IconSvg ? <IconSvg color={color} size={size} /> : (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+      )}
     </div>
   )
 }
@@ -204,7 +259,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage }) {
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}
       >
-        <FolderIcon color={folder.color} bg={folder.bg} size={14} />
+        <FolderIcon folderKey={folder.key} color={folder.color} bg={folder.bg} size={14} />
         <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{files.length > 0 ? `${files.length} file${files.length !== 1 ? 's' : ''}` : open ? '0 files' : ''}</span>
         {open && canManage && (
@@ -356,7 +411,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
         onClick={() => setOpen(o => !o)}
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}
       >
-        <FolderIcon color={folder.color} bg={folder.bg} />
+        <FolderIcon folderKey={folder.key} color={folder.color} bg={folder.bg} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
           <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
