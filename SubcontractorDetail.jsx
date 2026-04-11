@@ -1,428 +1,521 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo, daysUntilExpiry, formatCurrency, complianceScore, NOTE_TYPES, exportToCSV } from '../lib/utils'
-import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
-import SubcontractorModal from '../components/SubcontractorModal'
-import DocumentModal from '../components/DocumentModal'
-import ContactsTab from '../components/ContactsTab'
-import PerformanceTab, { RatingBadge, calcRating } from '../components/PerformanceTab'
+import { formatDate } from '../lib/utils'
+import { Spinner, ConfirmDialog } from '../components/ui'
 
-export default function SubcontractorDetail() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const { can, profile } = useAuth()
-  const [sub, setSub] = useState(null)
-  const [docs, setDocs] = useState([])
-  const [projects, setProjects] = useState([])
-  const [notes, setNotes] = useState([])
-  const [contacts, setContacts] = useState([])
-  const [ratings, setRatings] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('documents')
-  const [showEditSub, setShowEditSub] = useState(false)
-  const [approvingPayment, setApprovingPayment] = useState(false)
-  const [showDocModal, setShowDocModal] = useState(false)
-  const [editingDoc, setEditingDoc] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(null)
-  const [confirmDeleteSub, setConfirmDeleteSub] = useState(false)
-  const [showNoteModal, setShowNoteModal] = useState(false)
-  const [noteForm, setNoteForm] = useState({ note: '', note_type: 'note' })
-  const [savingNote, setSavingNote] = useState(false)
+const CATEGORIES = [
+  { key: 'logo',           icon: '🏢', label: 'Logo & Branding',  color: '#448a40', bg: '#e8f5e7' },
+  { key: 'policies',       icon: '📋', label: 'Policies',          color: '#378ADD', bg: '#E6F1FB' },
+  { key: 'insurance',      icon: '🛡️', label: 'Insurance',         color: '#BA7517', bg: '#FAEEDA' },
+  { key: 'vat',            icon: '💰', label: 'VAT & Tax',         color: '#888780', bg: '#F1EFE8' },
+  { key: 'bank',           icon: '🏦', label: 'Bank Details',      color: '#448a40', bg: '#e8f5e7' },
+  { key: 'certifications', icon: '📜', label: 'Certifications',    color: '#534AB7', bg: '#EEEDFE' },
+  { key: 'fleet',          icon: '🚗', label: 'Car Fleet',         color: '#993C1D', bg: '#FAECE7' },
+  { key: 'templates',      icon: '📝', label: 'Templates',         color: '#0F6E56', bg: '#E1F5EE' },
+  { key: 'site_folder',    icon: '📁', label: 'Site Folder',       color: '#888780', bg: '#F1EFE8' },
+]
 
-  useEffect(() => { load() }, [id])
+function fmtSize(b) {
+  if (!b) return ''
+  if (b < 1024) return b + 'B'
+  if (b < 1048576) return (b / 1024).toFixed(0) + 'KB'
+  return (b / 1048576).toFixed(1) + 'MB'
+}
 
-  async function load() {
-    setLoading(true)
-    const [subRes, docsRes, projRes, notesRes, contactsRes, ratingsRes] = await Promise.all([
-      supabase.from('subcontractors').select('*').eq('id', id).single(),
-      supabase.from('documents_with_status').select('*').eq('subcontractor_id', id).order('document_type'),
-      supabase.from('project_subcontractors').select('*, projects(id, project_name, project_ref, status, start_date, end_date)').eq('subcontractor_id', id),
-      supabase.from('projects').select('id, project_name, project_ref, status').eq('status', 'active').order('project_name'),
-      supabase.from('subcontractor_notes').select('*, profiles(full_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
-      supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
-      supabase.from('performance_ratings').select('*, profiles(full_name), projects(project_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
-    ])
-    setSub(subRes.data)
-    setDocs(docsRes.data || [])
-    setProjects(projRes.data || [])
-    setNotes(notesRes.data || [])
-    setContacts(contactsRes.data || [])
-    setRatings(ratingsRes.data || [])
-    setLoading(false)
-  }
+function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE' }
 
-  async function deleteDoc(docId) {
-    await supabase.from('documents').delete().eq('id', docId)
-    setConfirmDelete(null)
-    load()
-  }
+function fileColor(type) {
+  if (!type) return '#808080'
+  if (type.includes('pdf')) return '#E24B4A'
+  if (type.includes('spreadsheet') || type.includes('excel')) return '#1D7B45'
+  if (type.includes('presentation') || type.includes('powerpoint')) return '#C55A25'
+  if (type.includes('word') || type.includes('document')) return '#1B5EAE'
+  if (type.includes('image')) return '#448a40'
+  return '#808080'
+}
 
+// ── File Card (same design as Project Documentation) ─────────
+function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
+  const [url, setUrl] = useState(null)
+  const isImage = doc.file_type?.includes('image')
+  const isPdf = doc.file_type?.includes('pdf')
 
-  async function togglePaymentApproval() {
-    setApprovingPayment(true)
-    const newVal = !sub.approved
-    await supabase.from('subcontractors').update({
-      approved: newVal,
-      approved_by: newVal ? profile?.id : null,
-      approved_at: newVal ? new Date().toISOString() : null,
-    }).eq('id', id)
-    setSub(s => ({ ...s, approved: newVal, approved_by: newVal ? profile?.id : null, approved_at: newVal ? new Date().toISOString() : null }))
-    setApprovingPayment(false)
-  }
-
-  async function saveNote() {
-    if (!noteForm.note.trim()) return
-    setSavingNote(true)
-    await supabase.from('subcontractor_notes').insert({
-      subcontractor_id: id,
-      note: noteForm.note,
-      note_type: noteForm.note_type,
-      created_by: profile?.id,
-    })
-    setSavingNote(false)
-    setShowNoteModal(false)
-    setNoteForm({ note: '', note_type: 'note' })
-    load()
-  }
-
-  async function deleteNote(noteId) {
-    await supabase.from('subcontractor_notes').delete().eq('id', noteId)
-    load()
-  }
-
-  async function deleteSub() {
-    await supabase.from('subcontractors').delete().eq('id', id)
-    navigate('/subcontractors')
-  }
-
-  function exportDocs() {
-    const rows = docs.map(d => ({
-      Document: DOCUMENT_TYPES[d.document_type] || d.document_name,
-      Name: d.document_name,
-      Reference: d.reference_number || '',
-      'Issue Date': formatDate(d.issue_date),
-      'Expiry Date': formatDate(d.expiry_date),
-      Status: d.status || '',
-      Notes: d.notes || '',
-    }))
-    exportToCSV(rows, `${sub.company_name}-documents.csv`)
-  }
-
-  if (loading) return <Spinner />
-  if (!sub) return <div style={{ padding: 40, color: 'var(--text2)' }}>Subcontractor not found.</div>
-
-  const expired = docs.filter(d => d.status === 'expired')
-  const expiring = docs.filter(d => d.status === 'expiring_soon')
-  const score = complianceScore(docs)
-  const rating = calcRating(ratings)
-  const assignedProjectsList = projects.map(ps => ps.projects).filter(Boolean)
-
-  // Format address properly
-  const addressParts = [sub.address, sub.city, sub.postcode].filter(Boolean)
-  const fullAddress = addressParts.join(', ')
-  const locationDisplay = [sub.city, sub.postcode].filter(Boolean).join(', ')
+  useEffect(() => {
+    supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 3600)
+      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
+  }, [doc.storage_path])
 
   return (
-    <div>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/subcontractors')}>
-        <IconChevron size={13} dir="left" /> Back
-      </button>
-
-      {/* Header */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
-          <Avatar name={sub.company_name} size="lg" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 600 }}>{sub.company_name}</h2>
-              <Pill cls={SUB_STATUSES[sub.status]?.cls || 'pill-gray'}>{SUB_STATUSES[sub.status]?.label || sub.status}</Pill>
-              <Pill cls="pill-blue">{sub.trade}</Pill>
-              {sub.approved ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>
-                  ✓ Approved for Payment
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>
-                  ⏳ Pending Approval
-                </div>
-              )}
+    <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)' }}>
+      <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
+        onClick={() => onPreview(doc)}>
+        {isImage && url
+          ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : isPdf && url
+          ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={doc.file_name} />
+          : <div style={{ textAlign: 'center' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1" style={{ marginBottom: 4, display: 'block', margin: '0 auto 4px' }}>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {score && <div style={{ background: score.score >= 80 ? 'var(--green-bg)' : score.score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)', color: score.score >= 80 ? 'var(--green)' : score.score >= 50 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>Docs {score.score}%</div>}
-            {rating && <RatingBadge ratings={ratings} />}
-            {(can('manage_users') || profile?.role === 'accountant') && (
-              <button
-                className={`btn btn-sm ${sub.approved ? 'btn-danger' : 'btn-primary'}`}
-                onClick={togglePaymentApproval}
-                disabled={approvingPayment}
-                title={sub.approved ? 'Click to revoke payment approval' : 'Click to approve for payment'}
-              >
-                {approvingPayment ? '...' : sub.approved ? '✕ Revoke Approval' : '✓ Approve for Payment'}
-              </button>
-            )}
-            {can('manage_subcontractors') && (
-              <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
-            )}
-            {can('delete') && (
-              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteSub(true)}><IconTrash size={13} /> Delete</button>
-            )}
-          </div>
+        }
+        <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>
+          {fileExt(doc.file_name)}
         </div>
+      </div>
+      <div style={{ padding: '7px 9px' }}>
+        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>
+          {doc.file_name}
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>
+          {fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {url && <button onClick={() => window.open(url, '_blank')} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          <button onClick={onDownload} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
+          {canDelete && <button onClick={onDelete} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+        </div>
+      </div>
+    </div>
+  )
+}
 
-        {/* Payment approval info */}
-        {sub.approved && sub.approved_at && (
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, marginTop: -6 }}>
-            Approved for payment by accounts on {new Date(sub.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </div>
+// ── Sub-folder section ────────────────────────────────────────
+function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview }) {
+  const [open, setOpen] = useState(false)
+  const [files, setFiles] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const { profile } = useAuth()
+
+  useEffect(() => { if (open) loadFiles() }, [open])
+
+  async function loadFiles() {
+    const { data } = await supabase.from('company_documents')
+      .select('*, profiles(full_name)')
+      .eq('category', categoryKey)
+      .eq('subfolder_key', subfolder.key)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false })
+    setFiles(data || [])
+  }
+
+  async function upload(fileList) {
+    if (!fileList.length) return
+    setUploading(true)
+    for (const file of fileList) {
+      const path = `company/${categoryKey}/${subfolder.key}/${Date.now()}-${file.name}`
+      const { error } = await supabase.storage.from('company-docs').upload(path, file)
+      if (!error) {
+        const { data: ex } = await supabase.from('company_documents').select('sort_order')
+          .eq('category', categoryKey).eq('subfolder_key', subfolder.key)
+          .order('sort_order', { ascending: false }).limit(1).single()
+        await supabase.from('company_documents').insert({
+          category: categoryKey, subfolder_key: subfolder.key,
+          file_name: file.name, file_size: file.size, file_type: file.type,
+          storage_path: path, uploaded_by: profile?.id, sort_order: (ex?.sort_order || 0) + 1,
+        })
+      }
+    }
+    setUploading(false)
+    loadFiles()
+  }
+
+  async function download(doc) {
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 60)
+    if (data?.signedUrl) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = doc.file_name; a.click() }
+  }
+
+  async function deleteDoc(doc) {
+    await supabase.storage.from('company-docs').remove([doc.storage_path])
+    await supabase.from('company_documents').delete().eq('id', doc.id)
+    setConfirmDelete(null)
+    setFiles(prev => prev.filter(f => f.id !== doc.id))
+  }
+
+  return (
+    <div style={{ marginBottom: 3 }}>
+      <div onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
+        <div style={{ width: 28, height: 28, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
+          📁
+        </div>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
+        <span style={{ fontSize: 10, color: 'var(--text3)' }}>{files.length > 0 ? `${files.length} file${files.length !== 1 ? 's' : ''}` : open ? '0 files' : ''}</span>
+        {open && canManage && (
+          <label onClick={e => e.stopPropagation()} style={{ fontSize: 10, padding: '2px 7px', border: '0.5px solid #448a40', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: '#448a40', flexShrink: 0 }}>
+            {uploading ? '...' : '+ Upload'}
+            <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
+          </label>
         )}
-        {/* Contact details grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 24px', marginBottom: sub.vat_number || sub.cis_number ? 12 : 0 }}>
-          {[
-            ['Contact', sub.contact_name ? `${sub.contact_name}${sub.contact_role ? ` (${sub.contact_role})` : ''}` : null],
-            ['Email', sub.email],
-            ['Phone', sub.phone],
-            ['Location', locationDisplay],
-            ['Address', fullAddress],
-          ].filter(([, v]) => v).map(([k, v]) => (
-            <div key={k} style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</span>
-              {k === 'Email' ? (
-                <a href={`mailto:${v}`} style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>{v}</a>
-              ) : k === 'Website' ? (
-                <a href={v.startsWith('http') ? v : `https://${v}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none' }}>{v}</a>
-              ) : (
-                <span style={{ color: 'var(--text)', wordBreak: 'break-word' }}>{v}</span>
-              )}
-            </div>
-          ))}
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
+          style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}>
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </div>
 
-          {/* Website — clickable */}
-          {sub.website && (
-            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Website</span>
-              <a href={sub.website.startsWith('http') ? sub.website : `https://${sub.website}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
-                {sub.website}
-              </a>
+      {open && (
+        <div style={{ marginLeft: 14, paddingLeft: 12, borderLeft: `1.5px solid ${color}30`, paddingTop: 8, paddingBottom: 8 }}>
+          {files.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 0', textAlign: 'center' }}>
+              Empty — {canManage ? 'click + Upload above to add files' : 'no files yet'}
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+              {files.map(f => (
+                <FileCard key={f.id} doc={f} onPreview={onPreview}
+                  onDownload={async () => download(f)}
+                  onDelete={() => setConfirmDelete(f)}
+                  canDelete={canManage} />
+              ))}
+              {canManage && (
+                <label style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 150, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add file
+                  <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
+                </label>
+              )}
             </div>
           )}
         </div>
-
-        {/* VAT & CIS */}
-        {(sub.vat_number || sub.cis_number) && (
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 4 }}>
-            {sub.vat_number && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>VAT No.</span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.vat_number}</span>
-              </div>
-            )}
-            {sub.cis_number && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>CIS No.</span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.cis_number}</span>
-                {sub.cis_verified && <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>✓ Verified</span>}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Notes */}
-        {sub.notes && (
-          <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-            {sub.notes}
-          </div>
-        )}
-      </div>
-
-      {/* Compliance alerts */}
-      {(expired.length > 0 || expiring.length > 0) && (
-        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-          {expired.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--red)', fontWeight: 500 }}>⚠ {expired.length} expired document{expired.length > 1 ? 's' : ''}</div>}
-          {expiring.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--amber)', fontWeight: 500 }}>! {expiring.length} expiring within 30 days</div>}
-        </div>
       )}
 
-      {/* Tabs */}
-      <div className="filter-tabs">
-        {[
-          ['documents', `Documents (${docs.length})`],
-          ['contacts', `Contacts (${contacts.length})`],
-          ['performance', `Performance (${ratings.length})`],
-          ['activity', `Activity (${notes.length})`],
-          ['projects', `Projects (${projects.length})`],
-        ].map(([key, label]) => (
-          <div key={key} className={`filter-tab ${activeTab === key ? 'active' : ''}`} onClick={() => setActiveTab(key)}>{label}</div>
-        ))}
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDelete(null)}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Delete file?</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>"{confirmDelete.file_name}" will be permanently deleted.</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => deleteDoc(confirmDelete)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Category folder row ───────────────────────────────────────
+function CategoryFolder({ cat, canManage, onPreview }) {
+  const [open, setOpen] = useState(false)
+  const [files, setFiles] = useState([])
+  const [subfolders, setSubfolders] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [showAddSub, setShowAddSub] = useState(false)
+  const [newSubName, setNewSubName] = useState('')
+  const [savingSub, setSavingSub] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [zipping, setZipping] = useState(false)
+  const { profile } = useAuth()
+
+  useEffect(() => {
+    if (open) { loadFiles(); loadSubfolders() }
+  }, [open])
+
+  async function loadFiles() {
+    const { data } = await supabase.from('company_documents')
+      .select('*, profiles(full_name)')
+      .eq('category', cat.key)
+      .is('subfolder_key', null)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false })
+    setFiles(data || [])
+  }
+
+  async function loadSubfolders() {
+    const { data } = await supabase.from('company_doc_subfolders')
+      .select('*').eq('category_key', cat.key).order('created_at')
+    setSubfolders(data || [])
+  }
+
+  async function upload(fileList) {
+    if (!fileList.length) return
+    setUploading(true)
+    for (const file of fileList) {
+      const path = `company/${cat.key}/${Date.now()}-${file.name}`
+      const { error } = await supabase.storage.from('company-docs').upload(path, file)
+      if (!error) {
+        const { data: ex } = await supabase.from('company_documents').select('sort_order')
+          .eq('category', cat.key).is('subfolder_key', null)
+          .order('sort_order', { ascending: false }).limit(1).single()
+        await supabase.from('company_documents').insert({
+          category: cat.key, file_name: file.name, file_size: file.size,
+          file_type: file.type, storage_path: path, uploaded_by: profile?.id,
+          sort_order: (ex?.sort_order || 0) + 1,
+        })
+      }
+    }
+    setUploading(false)
+    loadFiles()
+  }
+
+  async function download(doc) {
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 60)
+    if (data?.signedUrl) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = doc.file_name; a.click() }
+  }
+
+  async function deleteDoc(doc) {
+    await supabase.storage.from('company-docs').remove([doc.storage_path])
+    await supabase.from('company_documents').delete().eq('id', doc.id)
+    setConfirmDelete(null)
+    setFiles(prev => prev.filter(f => f.id !== doc.id))
+  }
+
+  async function addSubfolder() {
+    if (!newSubName.trim()) return
+    setSavingSub(true)
+    const key = `${cat.key}-sub-${Date.now()}`
+    await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label: newSubName.trim() })
+    setNewSubName('')
+    setShowAddSub(false)
+    setSavingSub(false)
+    loadSubfolders()
+  }
+
+  async function zipFolder() {
+    setZipping(true)
+    const { data: allFiles } = await supabase.from('company_documents').select('*').eq('category', cat.key)
+    if (!allFiles?.length) { alert('No files in this folder.'); setZipping(false); return }
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    s.onload = async () => {
+      const zip = new window.JSZip()
+      for (const f of allFiles) {
+        const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
+        if (data?.signedUrl) {
+          const res = await fetch(data.signedUrl)
+          const subPath = f.subfolder_key ? `${f.subfolder_key}/${f.file_name}` : f.file_name
+          zip.file(subPath, await res.blob())
+        }
+      }
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${cat.label}.zip`; a.click()
+      setZipping(false)
+    }
+    document.head.appendChild(s)
+  }
+
+  // Total file count including subfolders
+  const [totalCount, setTotalCount] = useState(0)
+  useEffect(() => {
+    supabase.from('company_documents').select('id', { count: 'exact' }).eq('category', cat.key)
+      .then(({ count }) => setTotalCount(count || 0))
+  }, [cat.key, open])
+
+  return (
+    <div style={{ marginBottom: 6 }}>
+      {/* Folder row */}
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
+          borderRadius: 8, cursor: 'pointer',
+          background: open ? 'var(--surface2)' : 'var(--surface)',
+          border: '0.5px solid var(--border)',
+          borderLeft: `3px solid ${cat.color}`,
+          transition: 'background .1s',
+        }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = open ? 'var(--surface2)' : 'var(--surface)' }}
+      >
+        {/* Icon in coloured circle */}
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>
+          {cat.icon}
+        </div>
+
+        {/* Name + count */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{cat.label}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
+            {totalCount > 0 ? `${totalCount} file${totalCount !== 1 ? 's' : ''}` : 'Empty'}
+            {subfolders.length > 0 ? ` · ${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          <button onClick={zipFolder} disabled={zipping} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+            {zipping ? '...' : 'Zip'}
+          </button>
+          {canManage && (
+            <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid #448a40', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: '#448a40' }}>
+              {uploading ? '...' : '+ Upload'}
+              <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
+            </label>
+          )}
+        </div>
+
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', marginLeft: 4, flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </div>
 
-      {/* Documents */}
-      {activeTab === 'documents' && (
-        <div>
-          <div className="section-header">
-            <div className="section-title">Compliance Documents</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {docs.length > 0 && <button className="btn btn-sm" onClick={exportDocs}>↓ CSV</button>}
-              {can('manage_documents') && (
-                <button className="btn btn-primary btn-sm" onClick={() => { setEditingDoc(null); setShowDocModal(true) }}>
-                  <IconPlus size={13} /> Add Document
+      {/* Open content */}
+      {open && (
+        <div style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${cat.color}30`, paddingTop: 8, paddingBottom: 8 }}>
+
+          {/* Sub-folders */}
+          {subfolders.map(sf => (
+            <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
+              categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview} />
+          ))}
+
+          {/* Direct files in this folder (no subfolder) */}
+          {files.length > 0 && (
+            <div style={{ marginTop: subfolders.length > 0 ? 10 : 0 }}>
+              {subfolders.length > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+                {files.map(f => (
+                  <FileCard key={f.id} doc={f} onPreview={onPreview}
+                    onDownload={async () => download(f)}
+                    onDelete={() => setConfirmDelete(f)}
+                    canDelete={canManage} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {files.length === 0 && subfolders.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--text3)', padding: '16px 0', textAlign: 'center' }}>
+              Empty folder — {canManage ? 'upload files or add sub-folders below' : 'no files yet'}
+            </div>
+          )}
+
+          {/* Upload drop area when empty and no subfolders */}
+          {files.length === 0 && subfolders.length === 0 && canManage && (
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11, marginTop: 4 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Drop files or click to upload
+              <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
+            </label>
+          )}
+
+          {/* Add sub-folder */}
+          {canManage && (
+            <div style={{ marginTop: 8 }}>
+              {showAddSub ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input autoFocus value={newSubName} onChange={e => setNewSubName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') addSubfolder(); if (e.key === 'Escape') setShowAddSub(false) }}
+                    placeholder="Sub-folder name..."
+                    style={{ flex: 1, fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' }} />
+                  <button onClick={addSubfolder} disabled={savingSub || !newSubName.trim()}
+                    style={{ fontSize: 11, padding: '5px 10px', background: '#448a40', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                    {savingSub ? '...' : 'Add'}
+                  </button>
+                  <button onClick={() => setShowAddSub(false)}
+                    style={{ fontSize: 11, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button onClick={() => setShowAddSub(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '5px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add sub-folder
                 </button>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDelete(null)}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Delete file?</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>"{confirmDelete.file_name}" will be permanently deleted.</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDelete(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={() => deleteDoc(confirmDelete)}>Delete</button>
+            </div>
           </div>
-          {docs.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No documents uploaded yet.</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Document</th><th>Reference</th><th>Issue Date</th><th>Expiry Date</th><th>Status</th><th></th></tr></thead>
-                <tbody>
-                  {docs.map(doc => {
-                    const info = docStatusInfo(doc.expiry_date)
-                    const days = daysUntilExpiry(doc.expiry_date)
-                    return (
-                      <tr key={doc.id}>
-                        <td>
-                          <div style={{ fontWeight: 500 }}>{DOCUMENT_TYPES[doc.document_type] || doc.document_name}</div>
-                          {doc.document_name !== DOCUMENT_TYPES[doc.document_type] && <div className="td-muted">{doc.document_name}</div>}
-                        </td>
-                        <td className="td-muted">{doc.reference_number || '—'}</td>
-                        <td className="td-muted">{formatDate(doc.issue_date)}</td>
-                        <td>
-                          <div style={{ fontWeight: 500 }}>{formatDate(doc.expiry_date)}</div>
-                          {days !== null && <div style={{ fontSize: 11, color: days < 0 ? 'var(--red)' : days <= 30 ? 'var(--amber)' : 'var(--text3)' }}>
-                            {days < 0 ? `${Math.abs(days)}d ago` : days === 0 ? 'Today' : `${days}d left`}
-                          </div>}
-                        </td>
-                        <td><Pill cls={info?.cls || 'pill-gray'}>{info?.label || 'Unknown'}</Pill></td>
-                        <td>
-                          {can('manage_documents') && (
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              <button className="btn btn-sm" onClick={() => { setEditingDoc(doc); setShowDocModal(true) }}><IconEdit size={12} /></button>
-                              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(doc.id)}><IconTrash size={12} /></button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
       )}
+    </div>
+  )
+}
 
-      {/* Contacts */}
-      {activeTab === 'contacts' && (
-        <ContactsTab subcontractorId={id} contacts={contacts} onRefresh={load} />
-      )}
+// ── Main page ─────────────────────────────────────────────────
+export default function CompanyDocuments() {
+  const { can } = useAuth()
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
 
-      {/* Performance */}
-      {activeTab === 'performance' && (
-        <PerformanceTab
-          subcontractorId={id}
-          subName={sub.company_name}
-          subEmail={sub.email}
-          ratings={ratings}
-          projects={assignedProjectsList}
-          onRefresh={load}
-        />
-      )}
+  const canManage = can('manage_subcontractors')
 
-      {/* Activity */}
-      {activeTab === 'activity' && (
-        <div>
-          <div className="section-header">
-            <div className="section-title">Activity Log</div>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowNoteModal(true)}>
-              <IconPlus size={13} /> Add Note
-            </button>
+  async function openPreview(doc) {
+    setPreviewDoc(doc); setPreviewLoading(true); setPreviewUrl(null)
+    const { data } = await supabase.storage.from('company-docs').createSignedUrl(doc.storage_path, 300)
+    setPreviewUrl(data?.signedUrl || null)
+    setPreviewLoading(false)
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>Company Documents</h2>
+        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>Upload and manage company-wide documents — accessible to all staff</p>
+      </div>
+
+      {/* Folder rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+        {CATEGORIES.map(cat => (
+          <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} />
+        ))}
+      </div>
+
+      {/* Preview Modal */}
+      {previewDoc && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, width: '100%', maxWidth: 900, maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewDoc.file_name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fmtSize(previewDoc.file_size)} · {formatDate(previewDoc.created_at)}</div>
+              </div>
+              {previewUrl && (
+                <a href={previewUrl} download={previewDoc.file_name} className="btn btn-sm btn-primary">↓ Download</a>
+              )}
+              <button className="btn btn-sm" onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }} style={{ fontSize: 16, padding: '4px 12px' }}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', minHeight: 300 }}>
+              {previewLoading ? (
+                <div style={{ color: 'white', fontSize: 13 }}>Loading preview...</div>
+              ) : !previewUrl ? (
+                <div style={{ color: '#aaa', fontSize: 13 }}>Could not load preview</div>
+              ) : previewDoc.file_type?.includes('image') ? (
+                <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }} />
+              ) : previewDoc.file_type?.includes('pdf') ? (
+                <iframe src={previewUrl + '#toolbar=1'} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewDoc.file_name} />
+              ) : previewDoc.file_type?.includes('video') ? (
+                <video controls src={previewUrl} style={{ maxWidth: '100%', maxHeight: '80vh' }} />
+              ) : (previewDoc.file_type?.includes('word') || previewDoc.file_type?.includes('spreadsheet') || previewDoc.file_name?.match(/\.(docx?|xlsx?|pptx?)$/i)) ? (
+                <iframe src={`https://docs.google.com/viewer?url=${encodeURIComponent(previewUrl)}&embedded=true`} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewDoc.file_name} />
+              ) : (
+                <div style={{ color: 'white', textAlign: 'center', padding: 40 }}>
+                  <div style={{ fontSize: 56, marginBottom: 16 }}>📄</div>
+                  <div style={{ fontSize: 14, marginBottom: 24 }}>{previewDoc.file_name}</div>
+                  {previewUrl && <a href={previewUrl} download={previewDoc.file_name} className="btn btn-primary">↓ Download File</a>}
+                </div>
+              )}
+            </div>
           </div>
-          {notes.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No activity recorded yet.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {notes.map(n => {
-                const nt = NOTE_TYPES[n.note_type] || NOTE_TYPES.note
-                return (
-                  <div key={n.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '12px 14px', display: 'flex', gap: 12 }}>
-                    <div style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{nt.icon}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: nt.color, background: 'var(--surface2)', padding: '1px 7px', borderRadius: 10 }}>{nt.label}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{formatDateTime(n.created_at)}</span>
-                        {n.profiles?.full_name && <span style={{ fontSize: 11, color: 'var(--text3)' }}>by {n.profiles.full_name}</span>}
-                      </div>
-                      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{n.note}</div>
-                    </div>
-                    {can('manage_subcontractors') && (
-                      <button className="btn btn-sm btn-danger" style={{ flexShrink: 0, alignSelf: 'flex-start' }} onClick={() => deleteNote(n.id)}><IconTrash size={12} /></button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
       )}
-
-      {/* Projects */}
-      {activeTab === 'projects' && (
-        <div>
-          <div className="section-title" style={{ marginBottom: 12 }}>Assigned Projects</div>
-          {projects.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Not assigned to any projects.</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Value</th><th>Status</th></tr></thead>
-                <tbody>
-                  {projects.map(ps => (
-                    <tr key={ps.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${ps.project_id}`)}>
-                      <td style={{ fontWeight: 500 }}>{ps.projects?.project_name}</td>
-                      <td className="td-muted">{ps.projects?.project_ref || '—'}</td>
-                      <td className="td-muted">{formatDate(ps.start_date)} – {formatDate(ps.end_date)}</td>
-                      <td>{formatCurrency(ps.contract_value)}</td>
-                      <td><Pill cls={ps.status === 'active' ? 'pill-green' : ps.status === 'completed' ? 'pill-blue' : 'pill-gray'}>{ps.status}</Pill></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-
-      {/* Add Note Modal */}
-      <Modal open={showNoteModal} onClose={() => setShowNoteModal(false)} title="Add Activity Note" size="sm"
-        footer={<><button className="btn" onClick={() => setShowNoteModal(false)}>Cancel</button><button className="btn btn-primary" onClick={saveNote} disabled={savingNote || !noteForm.note.trim()}>{savingNote ? 'Saving...' : 'Add Note'}</button></>}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Field label="Type">
-            <select value={noteForm.note_type} onChange={e => setNoteForm(f => ({ ...f, note_type: e.target.value }))}>
-              {Object.entries(NOTE_TYPES).map(([k, v]) => <option key={k} value={k}>{v.icon} {v.label}</option>)}
-            </select>
-          </Field>
-          <Field label="Note *">
-            <textarea value={noteForm.note} onChange={e => setNoteForm(f => ({ ...f, note: e.target.value }))} placeholder="What happened?" style={{ minHeight: 100 }} autoFocus />
-          </Field>
-        </div>
-      </Modal>
-
-      <ConfirmDialog
-        open={confirmDeleteSub}
-        onClose={() => setConfirmDeleteSub(false)}
-        onConfirm={deleteSub}
-        title="Delete subcontractor"
-        message={`Are you sure you want to permanently delete ${sub?.company_name}? This will also delete all their documents, contacts, notes and performance ratings. This cannot be undone.`}
-        danger
-      />
-      {showEditSub && <SubcontractorModal sub={sub} onClose={() => setShowEditSub(false)} onSaved={() => { setShowEditSub(false); load() }} />}
-      {showDocModal && <DocumentModal doc={editingDoc} subcontractorId={id} onClose={() => setShowDocModal(false)} onSaved={() => { setShowDocModal(false); load() }} />}
-      <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)} title="Delete document" message="Are you sure? This cannot be undone." danger />
     </div>
   )
 }

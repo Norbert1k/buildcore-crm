@@ -1,147 +1,122 @@
+import { NavLink, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES } from '../lib/utils'
-import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
+import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
+import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
 
-export default function ProjectModal({ project, onClose, onSaved }) {
+export default function Sidebar({ expCount, open, onClose }) {
   const { profile } = useAuth()
-  const editing = !!project
-  const [managers, setManagers] = useState([])
-
-  const [form, setForm] = useState({
-    project_name: project?.project_name || '',
-    project_ref: project?.project_ref || '',
-    client_name: project?.client_name || '',
-    site_address: project?.site_address || '',
-    city: project?.city || '',
-    postcode: project?.postcode || '',
-    status: project?.status || 'active',
-    start_date: project?.start_date || '',
-    end_date: project?.end_date || '',
-    project_manager_id: project?.project_manager_id || '',
-    value: project?.value || '',
-    description: project?.description || '',
-  })
-  const [errors, setErrors] = useState({})
-  const [saving, setSaving] = useState(false)
+  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
+  const location = useLocation()
+  const [expandedKey, setExpandedKey] = useState(null)
 
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('id, full_name, role')
-      .in('role', ['admin', 'project_manager'])
-      .order('full_name')
-      .then(({ data }) => setManagers(data || []))
+    if (location.pathname.startsWith('/subcontractors')) setExpandedKey('subcontractors')
+  }, [location.pathname])
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.getAttribute('data-theme') === 'dark')
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
   }, [])
+  const role = profile?.role || 'viewer'
+  const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer
 
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })) }
-
-  function validate() {
-    const e = {}
-    if (!form.project_name.trim()) e.project_name = 'Project name is required'
-    if (form.end_date && form.start_date && form.end_date < form.start_date) {
-      e.end_date = 'End date cannot be before start date'
-    }
-    setErrors(e)
-    return Object.keys(e).length === 0
+  function handleNav() {
+    if (window.innerWidth < 768) onClose()
   }
 
-  async function save() {
-    if (!validate()) return
-    setSaving(true)
-    const payload = {
-      ...form,
-      value: form.value ? parseFloat(form.value) : null,
-      project_manager_id: form.project_manager_id || null,
-      start_date: form.start_date || null,
-      end_date: form.end_date || null,
-    }
-    let result
-    if (editing) {
-      result = await supabase.from('projects').update(payload).eq('id', project.id)
-    } else {
-      payload.created_by = profile?.id
-      result = await supabase.from('projects').insert(payload)
-    }
-    setSaving(false)
-    if (result.error) { setErrors({ _global: result.error.message }); return }
-    onSaved()
-  }
+  const allNavItems = [
+    { to: '/',               key: 'dashboard',      label: 'Dashboard',      icon: <IconDashboard /> },
+    { to: '/subcontractors', key: 'subcontractors', label: 'Subcontractors', icon: <IconUsers />, badge: expCount > 0 ? expCount : null,
+      children: [
+        { to: '/subcontractors/compliance', key: 'documents', label: 'Compliance', icon: <IconDoc /> },
+      ]
+    },
+    { to: '/projects',          key: 'projects', label: 'Projects',     icon: <IconProject /> },
+    { to: '/clients',           key: 'clients',  label: 'Clients',      icon: <IconUsers /> },
+    { to: '/suppliers',         key: 'suppliers', label: 'Suppliers',    icon: <IconBuilding /> },
+    { to: '/company-documents', key: 'company',  label: 'Company Docs', icon: <IconDoc /> },
+    { to: '/google-drive',      key: 'gdrive',   label: 'Google Drive', icon: <IconProject /> },
+  ]
+
+  const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={editing ? `Edit: ${project.project_name}` : 'Create New Project'}
-      size="lg"
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Project'}
-          </button>
-        </>
-      }
-    >
-      {errors._global && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
-          {errors._global}
+    <>
+      <div className={`sidebar-overlay ${open ? 'open' : ''}`} onClick={onClose} />
+      <aside className={`sidebar ${open ? 'open' : ''}`}>
+        <div className="sidebar-logo">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
+            </div>
+          </div>
         </div>
-      )}
-      <div className="form-grid">
-        <div className="form-section">Project Details</div>
-        <div className="full">
-          <Field label="Project Name *" error={errors.project_name}>
-            <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments — Phase 2" autoFocus />
-          </Field>
-        </div>
-        <Field label="Project Reference">
-          <input value={form.project_ref} onChange={e => set('project_ref', e.target.value)} placeholder="e.g. PRJ-2025-042" />
-        </Field>
-        <Field label="Client Name">
-          <input value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Client company or individual" />
-        </Field>
-        <Field label="Status">
-          <select value={form.status} onChange={e => set('status', e.target.value)}>
-            {Object.entries(PROJECT_STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-        </Field>
-        <Field label="Project Manager">
-          <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
-            <option value="">— Unassigned —</option>
-            {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-          </select>
-        </Field>
-        <Field label="Contract Value (£)">
-          <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
-        </Field>
-        <div className="form-section">Dates</div>
-        <Field label="Start Date">
-          <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
-        </Field>
-        <Field label="End Date" error={errors.end_date}>
-          <input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} />
-        </Field>
-        <div className="form-section">Site Address</div>
-        <div className="full">
-          <Field label="Site Address">
-            <input value={form.site_address} onChange={e => set('site_address', e.target.value)} placeholder="Street address of the site" />
-          </Field>
-        </div>
-        <Field label="City / Town">
-          <input value={form.city} onChange={e => set('city', e.target.value)} placeholder="London" />
-        </Field>
-        <Field label="Postcode">
-          <input value={form.postcode} onChange={e => set('postcode', e.target.value)} placeholder="SW1A 1AA" />
-        </Field>
-        <div className="form-section">Additional Info</div>
-        <div className="full">
-          <Field label="Description / Notes">
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional details…" />
-          </Field>
-        </div>
-      </div>
-    </Modal>
+
+        <nav style={{ flex: 1, padding: '8px 0' }}>
+          <div className="nav-section">Navigation</div>
+          {visibleItems.map(item => (
+            <div key={item.to}>
+              <NavLink
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                onClick={(e) => {
+                  if (item.children) {
+                    setExpandedKey(k => k === item.key ? null : item.key)
+                  }
+                  handleNav()
+                }}
+              >
+                {item.icon}
+                {item.label}
+                {item.badge && <span className="nav-badge">{item.badge}</span>}
+                {item.children && (
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform .2s', transform: expandedKey === item.key ? 'rotate(180deg)' : 'none' }}>
+                    <polyline points="6 9 12 15 18 9"/>
+                  </svg>
+                )}
+              </NavLink>
+              {item.children && expandedKey === item.key && item.children
+                .filter(child => perms.nav.includes(child.key))
+                .map(child => (
+                  <NavLink
+                    key={child.to}
+                    to={child.to}
+                    className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`}
+                    onClick={handleNav}
+                  >
+                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>└</span>
+                    {child.icon}
+                    {child.label}
+                  </NavLink>
+                ))
+              }
+            </div>
+          ))}
+
+          <div className="nav-section" style={{ marginTop: 8 }}>Account</div>
+          <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={handleNav}>
+            <IconSettings />
+            Settings
+          </NavLink>
+        </nav>
+
+        {profile && (
+          <div className="nav-user">
+            <Avatar name={profile.full_name} size="sm" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{ROLES[role]?.label || role}</div>
+            </div>
+          </div>
+        )}
+      </aside>
+    </>
   )
 }

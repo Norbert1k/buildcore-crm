@@ -1,237 +1,350 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
-import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
-import { useAuth } from '../lib/auth'
-import GoogleDriveBrowser from '../components/GoogleDrivePicker'
-import ProjectModal from '../components/ProjectModal'
+@import url('https://fonts.googleapis.com/css2?family=Fahkwang:wght@400;600&display=swap');
 
-export default function ProjectDetail() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const { can } = useAuth()
-  const [project, setProject] = useState(null)
-  const [subs, setSubs] = useState([])
-  const [docs, setDocs] = useState([])
-  const [allSubs, setAllSubs] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('subcontractors')
-  const [driveFolderId, setDriveFolderId] = useState(null)
-  const [driveFolderName, setDriveFolderName] = useState(null)
-  const [showEdit, setShowEdit] = useState(false)
-  const [showAssignSub, setShowAssignSub] = useState(false)
-  const [showAddDoc, setShowAddDoc] = useState(false)
-  const [confirmRemove, setConfirmRemove] = useState(null)
-  const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
-  const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  useEffect(() => { load() }, [id])
-
-  async function load() {
-    setLoading(true)
-    const [projRes, subsRes, docsRes, allSubsRes] = await Promise.all([
-      supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
-      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
-      supabase.from('project_documents').select('*, subcontractors(company_name), profiles!project_documents_uploaded_by_fkey(full_name)').eq('project_id', id).order('created_at', { ascending: false }),
-      supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
-    ])
-    setProject(projRes.data)
-    setDriveFolderId(projRes.data?.drive_folder_id || null)
-    setDriveFolderName(projRes.data?.drive_folder_name || null)
-    setSubs(subsRes.data || [])
-    setDocs(docsRes.data || [])
-    setAllSubs(allSubsRes.data || [])
-    setLoading(false)
-  }
-
-  async function assignSub() {
-    await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: assignForm.contract_value || null })
-    setShowAssignSub(false)
-    setAssignForm({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '' })
-    load()
-  }
-
-  async function removeSub(psId) {
-    await supabase.from('project_subcontractors').delete().eq('id', psId)
-    setConfirmRemove(null)
-    load()
-  }
-
-  async function addDoc() {
-    await supabase.from('project_documents').insert({ project_id: id, ...docForm })
-    setShowAddDoc(false)
-    setDocForm({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
-    load()
-  }
-
-  if (loading) return <Spinner />
-  if (!project) return <div style={{ padding: 40, color: 'var(--text2)' }}>Project not found.</div>
-
-  return (
-    <div>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/projects')}>
-        <IconChevron size={13} dir="left" /> Back
-      </button>
-
-      <div className="card card-pad" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 20, fontWeight: 600 }}>{project.project_name}</h2>
-              {project.project_ref && <span style={{ color: 'var(--text3)', fontSize: 13 }}>#{project.project_ref}</span>}
-              <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px', fontSize: 13 }}>
-              {[
-                ['Client', project.client_name],
-                ['Project Manager', project.profiles?.full_name],
-                ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
-                ['Start Date', formatDate(project.start_date)],
-                ['End Date', formatDate(project.end_date)],
-                ['Contract Value', formatCurrency(project.value)],
-              ].filter(([, v]) => v && v !== '—').map(([k, v]) => (
-                <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span>{v}</span></div>
-              ))}
-            </div>
-            {project.description && <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text2)' }}>{project.description}</div>}
-          </div>
-          {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
-        </div>
-      </div>
-
-      <div className="filter-tabs">
-        <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => setActiveTab('subcontractors')}>Subcontractors ({subs.length})</div>
-        <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => setActiveTab('documents')}>Project Documents ({docs.length})</div>
-        <div className={`filter-tab ${activeTab === 'files' ? 'active' : ''}`} onClick={() => setActiveTab('files')}>📁 Google Drive</div>
-      </div>
-
-      {activeTab === 'files' && (
-        <div>
-          <div className="section-header" style={{ marginBottom: 14 }}>
-            <div>
-              <div className="section-title">Google Drive</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {driveFolderId ? (
-                  <>
-                    <span>Linked: <strong>{driveFolderName || driveFolderId}</strong></span>
-                    <button className="btn btn-sm btn-danger" style={{ fontSize: 11 }} onClick={async () => {
-                      await supabase.from('projects').update({ drive_folder_id: null, drive_folder_name: null }).eq('id', id)
-                      setDriveFolderId(null)
-                      setDriveFolderName(null)
-                    }}>✕ Unlink</button>
-                  </>
-                ) : 'Connect Google Drive to browse and upload files for this project'}
-              </div>
-            </div>
-          </div>
-          <GoogleDriveBrowser
-            linkedFolderId={driveFolderId}
-            projectName={project?.project_name}
-            onLinkFolder={async (folderId, folderName) => {
-              await supabase.from('projects').update({ drive_folder_id: folderId, drive_folder_name: folderName }).eq('id', id)
-              setDriveFolderId(folderId)
-              setDriveFolderName(folderName)
-            }}
-          />
-        </div>
-      )}
-
-      {activeTab === 'subcontractors' && (
-        <div>
-          <div className="section-header">
-            <div className="section-title">Assigned Subcontractors</div>
-            {(can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-primary btn-sm" onClick={() => setShowAssignSub(true)}><IconPlus size={13} /> Assign Subcontractor</button>}
-          </div>
-          {subs.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No subcontractors assigned to this project yet.</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Company</th><th>Trade on Project</th><th>Contact</th><th>Start</th><th>End</th><th>Contract Value</th><th>Status</th><th></th></tr></thead>
-                <tbody>
-                  {subs.map(ps => (
-                    <tr key={ps.id}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${ps.subcontractors?.id}`)}>
-                          <Avatar name={ps.subcontractors?.company_name} size="sm" />
-                          <span style={{ fontWeight: 500 }}>{ps.subcontractors?.company_name}</span>
-                        </div>
-                      </td>
-                      <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
-                      <td className="td-muted">{ps.subcontractors?.phone || '—'}</td>
-                      <td className="td-muted">{formatDate(ps.start_date)}</td>
-                      <td className="td-muted">{formatDate(ps.end_date)}</td>
-                      <td>{formatCurrency(ps.contract_value)}</td>
-                      <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
-                      <td>{can('manage_projects') && <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemove(ps.id)}><IconTrash size={12}/></button>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'documents' && (
-        <div>
-          <div className="section-header">
-            <div className="section-title">Project Documents (RAMS, Certs, etc.)</div>
-            {can('manage_documents') && <button className="btn btn-primary btn-sm" onClick={() => setShowAddDoc(true)}><IconPlus size={13}/> Add Document</button>}
-          </div>
-          {docs.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No project documents uploaded yet.</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Document</th><th>Type</th><th>Subcontractor</th><th>Expiry</th><th>Status</th><th>Approved</th></tr></thead>
-                <tbody>
-                  {docs.map(d => {
-                    const info = docStatusInfo(d.expiry_date)
-                    return (
-                      <tr key={d.id}>
-                        <td style={{ fontWeight: 500 }}>{d.document_name}</td>
-                        <td className="td-muted">{DOCUMENT_TYPES[d.document_type] || d.document_type}</td>
-                        <td>{d.subcontractors?.company_name || '—'}</td>
-                        <td className="td-muted">{formatDate(d.expiry_date)}</td>
-                        <td>{info && <Pill cls={info.cls}>{info.label}</Pill>}</td>
-                        <td>{d.approved ? <Pill cls="pill-green">Approved</Pill> : <Pill cls="pill-gray">Pending</Pill>}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {showEdit && <ProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load() }} />}
-
-      <Modal open={showAssignSub} onClose={() => setShowAssignSub(false)} title="Assign Subcontractor" size="sm"
-        footer={<><button className="btn" onClick={() => setShowAssignSub(false)}>Cancel</button><button className="btn btn-primary" onClick={assignSub}>Assign</button></>}>
-        <div className="form-grid">
-          <div className="full"><Field label="Subcontractor *"><select value={assignForm.subcontractor_id} onChange={e => setAssignForm(f => ({ ...f, subcontractor_id: e.target.value }))}><option value="">Select…</option>{allSubs.filter(s => !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
-          <div className="full"><Field label="Role / Trade on this project"><input value={assignForm.trade_on_project} onChange={e => setAssignForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder="e.g. Electrical installation" /></Field></div>
-          <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
-          <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
-          <div className="full"><Field label="Contract Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="0" /></Field></div>
-        </div>
-      </Modal>
-
-      <Modal open={showAddDoc} onClose={() => setShowAddDoc(false)} title="Add Project Document" size="sm"
-        footer={<><button className="btn" onClick={() => setShowAddDoc(false)}>Cancel</button><button className="btn btn-primary" onClick={addDoc}>Save</button></>}>
-        <div className="form-grid">
-          <div className="full"><Field label="Document Name *"><input value={docForm.document_name} onChange={e => setDocForm(f => ({ ...f, document_name: e.target.value }))} placeholder="e.g. RAMS for groundworks" /></Field></div>
-          <div className="full"><Field label="Document Type"><select value={docForm.document_type} onChange={e => setDocForm(f => ({ ...f, document_type: e.target.value }))}>{Object.entries(DOCUMENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field></div>
-          <div className="full"><Field label="Linked Subcontractor"><select value={docForm.subcontractor_id} onChange={e => setDocForm(f => ({ ...f, subcontractor_id: e.target.value || null }))}><option value="">None (project-wide)</option>{subs.map(ps => <option key={ps.id} value={ps.subcontractors?.id}>{ps.subcontractors?.company_name}</option>)}</select></Field></div>
-          <Field label="Expiry Date"><input type="date" value={docForm.expiry_date} onChange={e => setDocForm(f => ({ ...f, expiry_date: e.target.value }))} /></Field>
-          <div className="full"><Field label="Notes"><input value={docForm.notes} onChange={e => setDocForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></Field></div>
-        </div>
-      </Modal>
-
-      <ConfirmDialog open={!!confirmRemove} onClose={() => setConfirmRemove(null)} onConfirm={() => removeSub(confirmRemove)} title="Remove subcontractor" message="Remove this subcontractor from the project? Their profile and documents are not affected." danger />
-    </div>
-  )
+:root {
+  --font: 'Fahkwang', 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --bg: #F5F4F0;
+  --surface: #FFFFFF;
+  --surface2: #F5F4F0;
+  --border: #E2E0D8;
+  --border2: #C8C6BC;
+  --text: #1C1B18;
+  --text2: #5C5A54;
+  --text3: #9C9A94;
+  --accent: #448a40;
+  --accent-dark: #2d6129;
+  --accent-light: #e8f5e7;
+  --red: #A32D2D; --red-bg: #FCEBEB; --red-border: #F7C1C1;
+  --amber: #854F0B; --amber-bg: #FAEEDA; --amber-border: #FAC775;
+  --green: #448a40; --green-bg: #e8f5e7; --green-border: #b8ddb6;
+  --blue: #185FA5; --blue-bg: #E6F1FB; --blue-border: #B5D4F4;
+  --purple: #3C3489; --purple-bg: #EEEDFE; --purple-border: #AFA9EC;
+  --radius: 8px; --radius-lg: 12px;
+  --sidebar-width: 232px;
+  --topbar-height: 56px;
 }
+
+html, body, #root { height: 100%; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+input, select, textarea {
+  font-family: var(--font); font-size: 14px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; width: 100%;
+  outline: none; transition: border .15s;
+  -webkit-appearance: none; appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,138,64,.1); }
+input::placeholder { color: var(--text3); }
+label { font-size: 12px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
+textarea { resize: vertical; min-height: 80px; }
+
+button { font-family: var(--font); cursor: pointer; border: none; outline: none; transition: all .15s; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap; }
+.btn:hover { background: var(--surface2); border-color: var(--border2); }
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn-danger { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-icon { padding: 8px; border-radius: var(--radius); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.card-pad { padding: 20px; }
+
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill-green { background: var(--green-bg); color: var(--green); }
+.pill-amber { background: var(--amber-bg); color: var(--amber); }
+.pill-red { background: var(--red-bg); color: var(--red); }
+.pill-blue { background: var(--blue-bg); color: var(--blue); }
+.pill-purple { background: var(--purple-bg); color: var(--purple); }
+.pill-gray { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+
+/* ── App Layout ── */
+.app-layout { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-width); min-width: var(--sidebar-width);
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto;
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+  z-index: 300;
+}
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.4); z-index: 299;
+}
+
+/* ── Main area ── */
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+/* ── Topbar ── */
+.topbar {
+  height: var(--topbar-height); background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
+}
+.topbar-menu-btn {
+  display: none; padding: 6px; border-radius: var(--radius);
+  background: none; border: 1px solid var(--border);
+  color: var(--text); cursor: pointer; flex-shrink: 0;
+}
+.page-content { flex: 1; overflow-y: auto; padding: 20px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.page-content::-webkit-scrollbar { width: 4px; }
+.page-content::-webkit-scrollbar-track { background: transparent; }
+.page-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.page-content::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+/* ── Sidebar Nav ── */
+.sidebar-logo { padding: 16px; border-bottom: 1px solid var(--border); }
+.nav-section { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; padding: 14px 16px 4px; }
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 10px 12px; margin: 1px 8px; border-radius: var(--radius); font-size: 13px; color: var(--text2); cursor: pointer; transition: all .15s; text-decoration: none; }
+.nav-item:hover { background: var(--accent-light); color: var(--accent-dark); }
+.nav-item.active { background: var(--accent); color: #fff; font-weight: 600; }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.nav-item-child { padding-left: 24px; font-size: 12px; margin-left: 8px; margin-right: 8px; opacity: 0.9; }
+.nav-badge { margin-left: auto; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; background: var(--red-bg); color: var(--red); }
+.nav-item.active .nav-badge { background: rgba(255,255,255,.25); color: #fff; }
+.nav-user { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+
+/* ── Modal ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 400; display: flex; align-items: flex-end; justify-content: center; padding: 0; }
+.modal { background: var(--surface); border-radius: var(--radius-lg) var(--radius-lg) 0 0; border: 1px solid var(--border); width: 100%; max-height: 92vh; overflow-y: auto; box-shadow: 0 -8px 40px rgba(0,0,0,.15); }
+.modal-sm { max-width: 100%; }
+.modal-md { max-width: 100%; }
+.modal-lg { max-width: 100%; }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.modal-title { font-size: 15px; font-weight: 600; }
+.modal-body { padding: 16px 20px; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: var(--surface); }
+
+/* ── Forms ── */
+.form-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.form-grid .full { grid-column: 1; }
+.form-section { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; padding-top: 6px; border-top: 2px solid var(--accent-light); margin-top: 4px; }
+
+/* ── Stats ── */
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; border-left: 3px solid var(--accent); }
+.stat-label { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.stat-value { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.stat-value.red { color: var(--red); }
+.stat-value.amber { color: var(--amber); }
+.stat-value.green { color: var(--green); }
+
+/* ── Tables — scroll on mobile ── */
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; min-width: 500px; }
+th { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+.td-muted { color: var(--text2); font-size: 12px; }
+
+/* ── Avatar ── */
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.avatar-sm { width: 28px; height: 28px; font-size: 10px; }
+.avatar-lg { width: 46px; height: 46px; font-size: 15px; }
+
+/* ── Mobile Cards (replaces table rows on small screens) ── */
+.mobile-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s; }
+.mobile-card:active { border-color: var(--accent); }
+.mobile-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.mobile-card-title { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; }
+.mobile-card-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--text2); }
+.mobile-card-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.mobile-card-actions .btn { flex: 1; justify-content: center; }
+
+/* ── Misc ── */
+.divider { height: 1px; background: var(--border); margin: 14px 0; }
+.text-muted { color: var(--text2); }
+.text-sm { font-size: 12px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+.section-title { font-size: 14px; font-weight: 600; }
+.alert-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 6px; font-size: 13px; }
+.alert-expired { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+.alert-warning { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 13px; }
+.filter-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
+.filter-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text2); border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; flex-shrink: 0; background: transparent; display: flex; align-items: center; gap: 6px; transition: color .15s, border-color .15s; }
+.filter-tab .tab-badge { background: var(--surface2); border-radius: 10px; padding: 1px 7px; font-size: 10px; font-weight: 600; color: var(--text3); transition: background .15s, color .15s; }
+.filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.filter-tab.active .tab-badge { background: var(--green-bg); color: var(--green); }
+.filter-tab:hover:not(.active) { color: var(--text); }
+.filter-tab svg { flex-shrink: 0; }
+
+/* ── Desktop: wider modal, 2-col form grid ── */
+@media (min-width: 640px) {
+  .modal-overlay { align-items: center; padding: 20px; }
+  .modal { border-radius: var(--radius-lg); max-height: 90vh; }
+  .modal-sm { max-width: 440px; }
+  .modal-md { max-width: 580px; }
+  .modal-lg { max-width: 720px; }
+  .form-grid { grid-template-columns: 1fr 1fr; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .form-section { grid-column: 1 / -1; }
+  .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .page-content { padding: 24px; }
+}
+
+/* ── Tablet: show sidebar permanently ── */
+@media (min-width: 768px) {
+  .topbar-menu-btn { display: none !important; }
+  .sidebar { transform: none !important; position: relative !important; }
+  .sidebar-overlay { display: none !important; }
+}
+
+/* ── Mobile: hide sidebar, show hamburger ── */
+@media (max-width: 767px) {
+  .topbar-menu-btn { display: flex !important; align-items: center; justify-content: center; }
+  .sidebar {
+    position: fixed !important; left: 0; top: 0; height: 100vh;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0,0,0,.12);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-overlay.open { display: block; }
+  .page-content { padding: 16px; }
+  .topbar { padding: 0 14px; }
+  table { min-width: 600px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+}
+
+/* ── Dark Mode ──────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:          #0f1117;
+  --surface:     #1a1d27;
+  --surface2:    #22263a;
+  --border:      rgba(255,255,255,0.08);
+  --border2:     rgba(255,255,255,0.15);
+  --text:        #e8e9f0;
+  --text2:       #9a9db0;
+  --text3:       #5c6080;
+  --green:       #5cb85c;
+  --green-bg:    rgba(68,138,64,0.15);
+  --green-border:rgba(68,138,64,0.3);
+  --red:         #e06c6c;
+  --red-bg:      rgba(224,108,108,0.12);
+  --red-border:  rgba(224,108,108,0.25);
+  --amber:       #e6a23c;
+  --amber-bg:    rgba(230,162,60,0.12);
+  --amber-border:rgba(230,162,60,0.25);
+  --blue:        #5b9bd5;
+  --blue-bg:     rgba(91,155,213,0.12);
+  --blue-border: rgba(91,155,213,0.25);
+  --purple:      #9b87e0;
+  --purple-bg:   rgba(155,135,224,0.12);
+}
+
+[data-theme="dark"] body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+[data-theme="dark"] .sidebar {
+  background: #13151f;
+  border-color: rgba(255,255,255,0.07);
+}
+
+[data-theme="dark"] .nav-item:hover,
+[data-theme="dark"] .nav-item.active {
+  background: rgba(255,255,255,0.06);
+}
+
+[data-theme="dark"] .card {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: var(--surface2);
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder {
+  color: var(--text3);
+}
+
+[data-theme="dark"] .btn {
+  background: var(--surface2);
+  border-color: var(--border2);
+  color: var(--text);
+}
+
+[data-theme="dark"] .btn:hover {
+  background: #2a2f45;
+}
+
+[data-theme="dark"] .btn-primary {
+  background: var(--green) !important;
+  border-color: var(--green) !important;
+  color: white !important;
+}
+
+[data-theme="dark"] .btn-danger {
+  background: var(--red-bg) !important;
+  border-color: var(--red-border) !important;
+  color: var(--red) !important;
+}
+
+[data-theme="dark"] table thead tr {
+  background: var(--surface2);
+}
+
+[data-theme="dark"] table tbody tr:hover {
+  background: var(--surface2);
+}
+
+[data-theme="dark"] .table-wrap {
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .filter-tab { color: var(--text2); border-bottom-color: transparent; }
+[data-theme="dark"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="dark"] .filter-tab .tab-badge { background: rgba(255,255,255,0.08); color: var(--text3); }
+[data-theme="dark"] .filter-tab.active .tab-badge { background: var(--green-bg); color: var(--green); }
+
+[data-theme="dark"] .modal-overlay {
+  background: rgba(0,0,0,0.7);
+}
+
+[data-theme="dark"] .modal {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer {
+  background: var(--surface2);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .topbar {
+  background: #13151f;
+  border-color: rgba(255,255,255,0.07);
+}
+
+[data-theme="dark"] .nav-section {
+  color: var(--text3);
+}
+
+[data-theme="dark"] .nav-user {
+  border-color: var(--border);
+  background: rgba(255,255,255,0.03);
+}
+
+/* Theme toggle animation */
+html { transition: background-color 0.2s, color 0.2s; }

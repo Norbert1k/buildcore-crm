@@ -1,189 +1,58 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { Avatar, Pill, Modal, Field, IconPlus, IconEdit, IconTrash, ConfirmDialog } from './ui'
+import { TRADES, SUB_STATUSES } from '../lib/utils'
+import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
 
-const JOB_TITLES = [
-  'Director', 'Managing Director', 'Contracts Manager', 'Site Manager',
-  'Project Manager', 'Quantity Surveyor', 'Estimator', 'Foreman',
-  'Health & Safety Manager', 'Office Manager', 'Accounts', 'Engineer',
-  'Supervisor', 'Other'
-]
+export default function SubcontractorModal({ sub, onClose, onSaved }) {
+  const { profile } = useAuth()
+  const editing = !!sub
 
-export default function ContactsTab({ subcontractorId, contacts, onRefresh }) {
-  const { can } = useAuth()
-  const [showModal, setShowModal] = useState(false)
-  const [editing, setEditing] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(null)
-
-  const primary = contacts.find(c => c.is_primary)
-  const others = contacts.filter(c => !c.is_primary)
-  const sorted = [...(primary ? [primary] : []), ...others]
-
-  async function setPrimary(contactId) {
-    // Remove primary from all
-    await supabase.from('subcontractor_contacts')
-      .update({ is_primary: false })
-      .eq('subcontractor_id', subcontractorId)
-    // Set new primary
-    await supabase.from('subcontractor_contacts')
-      .update({ is_primary: true })
-      .eq('id', contactId)
-    onRefresh()
-  }
-
-  async function deleteContact(id) {
-    await supabase.from('subcontractor_contacts').delete().eq('id', id)
-    setConfirmDelete(null)
-    onRefresh()
-  }
-
-  return (
-    <div>
-      <div className="section-header">
-        <div className="section-title">Contacts ({contacts.length})</div>
-        {can('manage_documents') && (
-          <button className="btn btn-primary btn-sm" onClick={() => { setEditing(null); setShowModal(true) }}>
-            <IconPlus size={13} /> Add Contact
-          </button>
-        )}
-      </div>
-
-      {contacts.length === 0 ? (
-        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
-          No contacts added yet. Add the key people at this company.
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
-          {sorted.map(c => (
-            <ContactCard
-              key={c.id}
-              contact={c}
-              canEdit={can('manage_documents')}
-              onEdit={() => { setEditing(c); setShowModal(true) }}
-              onDelete={() => setConfirmDelete(c.id)}
-              onSetPrimary={() => setPrimary(c.id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {showModal && (
-        <ContactModal
-          contact={editing}
-          subcontractorId={subcontractorId}
-          onClose={() => setShowModal(false)}
-          onSaved={() => { setShowModal(false); onRefresh() }}
-        />
-      )}
-
-      <ConfirmDialog
-        open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
-        onConfirm={() => deleteContact(confirmDelete)}
-        title="Remove contact"
-        message="Remove this contact? This cannot be undone."
-        danger
-      />
-    </div>
-  )
-}
-
-function ContactCard({ contact, canEdit, onEdit, onDelete, onSetPrimary }) {
-  return (
-    <div style={{
-      background: 'var(--surface)', border: `1px solid ${contact.is_primary ? 'var(--accent)' : 'var(--border)'}`,
-      borderRadius: 'var(--radius-lg)', padding: '14px 16px',
-      borderTop: contact.is_primary ? '3px solid var(--accent)' : '1px solid var(--border)',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
-        <Avatar name={contact.full_name} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <div style={{ fontWeight: 600, fontSize: 14 }}>{contact.full_name}</div>
-            {contact.is_primary && <Pill cls="pill-green" style={{ fontSize: 10 }}>Primary</Pill>}
-          </div>
-          {contact.job_title && (
-            <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, marginTop: 2 }}>{contact.job_title}</div>
-          )}
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>
-        {contact.phone && (
-          <a href={`tel:${contact.phone}`} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', textDecoration: 'none' }}>
-            <span style={{ fontSize: 14 }}>📞</span>
-            <span>{contact.phone}</span>
-          </a>
-        )}
-        {contact.mobile && (
-          <a href={`tel:${contact.mobile}`} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', textDecoration: 'none' }}>
-            <span style={{ fontSize: 14 }}>📱</span>
-            <span>{contact.mobile}</span>
-          </a>
-        )}
-        {contact.email && (
-          <a href={`mailto:${contact.email}`} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--blue)', textDecoration: 'none', overflow: 'hidden' }}>
-            <span style={{ fontSize: 14 }}>✉️</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.email}</span>
-          </a>
-        )}
-        {contact.notes && (
-          <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4, fontStyle: 'italic' }}>{contact.notes}</div>
-        )}
-      </div>
-
-      {canEdit && (
-        <div style={{ display: 'flex', gap: 6, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-          {!contact.is_primary && (
-            <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }} onClick={onSetPrimary}>
-              Set Primary
-            </button>
-          )}
-          <button className="btn btn-sm" onClick={onEdit}><IconEdit size={12} /></button>
-          <button className="btn btn-sm btn-danger" onClick={onDelete}><IconTrash size={12} /></button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ContactModal({ contact, subcontractorId, onClose, onSaved }) {
-  const editing = !!contact
   const [form, setForm] = useState({
-    full_name: contact?.full_name || '',
-    job_title: contact?.job_title || '',
-    email: contact?.email || '',
-    phone: contact?.phone || '',
-    mobile: contact?.mobile || '',
-    is_primary: contact?.is_primary || false,
-    notes: contact?.notes || '',
+    company_name: sub?.company_name || '',
+    contact_name: sub?.contact_name || '',
+    contact_role: sub?.contact_role || '',
+    trade: sub?.trade || TRADES[0],
+    email: sub?.email || '',
+    phone: sub?.phone || '',
+    address: sub?.address || '',
+    city: sub?.city || '',
+    postcode: sub?.postcode || '',
+    website: sub?.website || '',
+    status: sub?.status || 'active',
+    vat_number: sub?.vat_number || '',
+    cis_number: sub?.cis_number || '',
+    cis_verified: sub?.cis_verified || false,
+    notes: sub?.notes || '',
   })
+  const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
 
-  function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })) }
+
+  function validate() {
+    const e = {}
+    if (!form.company_name.trim()) e.company_name = 'Company name is required'
+    if (!form.contact_name.trim()) e.contact_name = 'Contact name is required'
+    if (!form.trade) e.trade = 'Trade is required'
+    if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Invalid email address'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
 
   async function save() {
-    if (!form.full_name.trim()) { setError('Full name is required'); return }
+    if (!validate()) return
     setSaving(true)
-    const payload = { ...form, subcontractor_id: subcontractorId }
-
-    // If setting as primary, remove primary from others first
-    if (form.is_primary) {
-      await supabase.from('subcontractor_contacts')
-        .update({ is_primary: false })
-        .eq('subcontractor_id', subcontractorId)
-    }
-
+    const payload = { ...form }
     let result
     if (editing) {
-      result = await supabase.from('subcontractor_contacts').update(payload).eq('id', contact.id)
+      result = await supabase.from('subcontractors').update(payload).eq('id', sub.id)
     } else {
-      result = await supabase.from('subcontractor_contacts').insert(payload)
+      payload.created_by = profile?.id
+      result = await supabase.from('subcontractors').insert(payload)
     }
     setSaving(false)
-    if (result.error) { setError(result.error.message); return }
+    if (result.error) { setErrors({ _global: result.error.message }); return }
     onSaved()
   }
 
@@ -191,53 +60,94 @@ function ContactModal({ contact, subcontractorId, onClose, onSaved }) {
     <Modal
       open
       onClose={onClose}
-      title={editing ? `Edit: ${contact.full_name}` : 'Add Contact'}
-      size="sm"
+      title={editing ? `Edit: ${sub.company_name}` : 'Add New Subcontractor'}
+      size="lg"
       footer={
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Contact'}
+            {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Subcontractor'}
           </button>
         </>
       }
     >
-      {error && (
+      {errors._global && (
         <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
-          {error}
+          {errors._global}
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="Full Name *">
-          <input value={form.full_name} onChange={e => set('full_name', e.target.value)} placeholder="e.g. John Smith" autoFocus />
+      <div className="form-grid">
+        <div className="form-section">Company Details</div>
+        <div className="full">
+          <Field label="Company Name *" error={errors.company_name}>
+            <input value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="e.g. Smith Electrical Ltd" autoFocus />
+          </Field>
+        </div>
+        <Field label="Contact Name *" error={errors.contact_name}>
+          <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} placeholder="Primary contact" />
         </Field>
-        <Field label="Job Title / Role">
-          <select value={form.job_title} onChange={e => set('job_title', e.target.value)}>
+        <Field label="Contact Role / Job Title">
+          <select value={form.contact_role} onChange={e => set('contact_role', e.target.value)}>
             <option value="">— Select role —</option>
-            {JOB_TITLES.map(t => <option key={t} value={t}>{t}</option>)}
+            {['Director','Managing Director','Contracts Manager','Site Manager','Project Manager','Quantity Surveyor','Estimator','Foreman','H&S Manager','Office Manager','Accounts','Engineer','Supervisor','Other'].map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </Field>
-        <Field label="Phone (office)">
-          <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+44 ..." />
+        <Field label="Trade / Specialty *" error={errors.trade}>
+          <select value={form.trade} onChange={e => set('trade', e.target.value)}>
+            {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
         </Field>
-        <Field label="Mobile">
-          <input value={form.mobile} onChange={e => set('mobile', e.target.value)} placeholder="+44 7..." />
+        <Field label="Email Address" error={errors.email}>
+          <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="contact@company.com" />
         </Field>
-        <Field label="Email">
-          <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="john@company.com" />
+        <Field label="Phone Number">
+          <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+44 7700 900000" />
         </Field>
-        <Field label="Notes">
-          <input value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="e.g. Best to call mornings" />
+        <Field label="Status">
+          <select value={form.status} onChange={e => set('status', e.target.value)}>
+            {Object.entries(SUB_STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
         </Field>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 400 }}>
-          <input
-            type="checkbox"
-            checked={form.is_primary}
-            onChange={e => set('is_primary', e.target.checked)}
-            style={{ width: 16, height: 16, flexShrink: 0 }}
-          />
-          <span>Set as primary contact for this company</span>
-        </label>
+        <Field label="Website">
+          <input value={form.website} onChange={e => set('website', e.target.value)} placeholder="https://www.company.com" />
+        </Field>
+        <div className="form-section">Address</div>
+        <div className="full">
+          <Field label="Street Address">
+            <input value={form.address} onChange={e => set('address', e.target.value)} placeholder="123 High Street" />
+          </Field>
+        </div>
+        <Field label="City / Town">
+          <input value={form.city} onChange={e => set('city', e.target.value)} placeholder="London" />
+        </Field>
+        <Field label="Postcode">
+          <input value={form.postcode} onChange={e => set('postcode', e.target.value)} placeholder="SW1A 1AA" />
+        </Field>
+        <div className="form-section">Compliance Numbers</div>
+        <Field label="VAT Number">
+          <input value={form.vat_number} onChange={e => set('vat_number', e.target.value)} placeholder="e.g. GB123456789" />
+        </Field>
+        <Field label="CIS Number">
+          <input value={form.cis_number} onChange={e => set('cis_number', e.target.value)} placeholder="e.g. 1234567890" />
+        </Field>
+        <div className="full">
+          <div onClick={() => set('cis_verified', !form.cis_verified)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 'var(--radius)', border: `1.5px solid ${form.cis_verified ? 'var(--green)' : 'var(--border)'}`, background: form.cis_verified ? 'var(--green-bg)' : 'var(--surface2)' }}>
+            <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${form.cis_verified ? 'var(--green)' : 'var(--border2)'}`, background: form.cis_verified ? 'var(--green)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {form.cis_verified && <svg width="11" height="11" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: form.cis_verified ? 'var(--green)' : 'var(--text)' }}>✓ CIS verified with HMRC</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Tick when HMRC verification has been completed</div>
+            </div>
+          </div>
+        </div>
+        <div className="form-section">Notes</div>
+        <div className="full">
+          <Field label="Internal Notes">
+            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any internal notes about this subcontractor…" style={{ minHeight: 80 }} />
+          </Field>
+        </div>
       </div>
     </Modal>
   )
