@@ -307,14 +307,14 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
               <>
                 <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                  style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: 100 }} />
-                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid #448a40', borderRadius: 4, background: 'transparent', color: '#448a40', cursor: 'pointer' }}>{savingSub ? '...' : 'Add'}</button>
-                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 10, padding: '2px 4px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>✕</button>
+                  style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 110 }} />
+                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', color: '#448a40', cursor: 'pointer' }}>{savingSub ? '...' : 'Add'}</button>
+                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>✕</button>
               </>
             ) : (
-              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>+ Sub</button>
+              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>+ Sub</button>
             )}
-            <label style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', flexShrink: 0 }}>
+            <label style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', flexShrink: 0 }}>
               {uploading ? '...' : 'Upload'}
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
