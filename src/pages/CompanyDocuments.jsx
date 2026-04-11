@@ -183,6 +183,9 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
           onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
           onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
           onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) { moveFile(docId); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
+        onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
+          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
+          onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) { moveFile(docId); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
           style={{ marginLeft: 14, paddingLeft: 12, borderLeft: `1.5px solid ${color}30`, paddingTop: 8, paddingBottom: 8 }}>
           {files.length === 0 ? (
             <div style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 0', textAlign: 'center' }}>
@@ -401,6 +404,9 @@ function CategoryFolder({ cat, canManage, onPreview }) {
       {open && (
         <div
           onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
+          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
+          onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) return; const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
+        onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
           onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
           onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) return; const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${cat.color}30`, paddingTop: 8, paddingBottom: 8 }}>
