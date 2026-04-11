@@ -23,13 +23,16 @@ export default function Sidebar({ expCount, open, onClose }) {
   }
 
   const allNavItems = [
-    { to: '/',               key: 'dashboard',       label: 'Dashboard',       icon: <IconDashboard /> },
-    { to: '/subcontractors', key: 'subcontractors',  label: 'Subcontractors',  icon: <IconUsers />, badge: expCount > 0 ? expCount : null },
-    { to: '/documents',      key: 'documents',       label: 'Documents',       icon: <IconDoc /> },
-    { to: '/projects',       key: 'projects',        label: 'Projects',        icon: <IconProject /> },
-    { to: '/suppliers',      key: 'suppliers',       label: 'Suppliers',       icon: <IconBuilding /> },
-    { to: '/company-documents', key: 'company',         label: 'Company Docs',    icon: <IconDoc /> },
-    { to: '/google-drive',      key: 'gdrive',          label: 'Google Drive',    icon: <IconProject /> },
+    { to: '/',               key: 'dashboard',      label: 'Dashboard',      icon: <IconDashboard /> },
+    { to: '/subcontractors', key: 'subcontractors', label: 'Subcontractors', icon: <IconUsers />, badge: expCount > 0 ? expCount : null,
+      children: [
+        { to: '/subcontractors/compliance', key: 'documents', label: 'Compliance', icon: <IconDoc /> },
+      ]
+    },
+    { to: '/projects',          key: 'projects', label: 'Projects',     icon: <IconProject /> },
+    { to: '/suppliers',         key: 'suppliers', label: 'Suppliers',    icon: <IconBuilding /> },
+    { to: '/company-documents', key: 'company',  label: 'Company Docs', icon: <IconDoc /> },
+    { to: '/google-drive',      key: 'gdrive',   label: 'Google Drive', icon: <IconProject /> },
   ]
 
   const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))
@@ -51,17 +54,33 @@ export default function Sidebar({ expCount, open, onClose }) {
         <nav style={{ flex: 1, padding: '8px 0' }}>
           <div className="nav-section">Navigation</div>
           {visibleItems.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-              onClick={handleNav}
-            >
-              {item.icon}
-              {item.label}
-              {item.badge && <span className="nav-badge">{item.badge}</span>}
-            </NavLink>
+            <div key={item.to}>
+              <NavLink
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                onClick={handleNav}
+              >
+                {item.icon}
+                {item.label}
+                {item.badge && <span className="nav-badge">{item.badge}</span>}
+              </NavLink>
+              {item.children && item.children
+                .filter(child => perms.nav.includes(child.key))
+                .map(child => (
+                  <NavLink
+                    key={child.to}
+                    to={child.to}
+                    className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`}
+                    onClick={handleNav}
+                  >
+                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>└</span>
+                    {child.icon}
+                    {child.label}
+                  </NavLink>
+                ))
+              }
+            </div>
           ))}
 
           <div className="nav-section" style={{ marginTop: 8 }}>Account</div>
