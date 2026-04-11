@@ -36,6 +36,7 @@ export default function Sidebar({ expCount, open, onClose }) {
       ]
     },
     { to: '/projects',          key: 'projects', label: 'Projects',     icon: <IconProject /> },
+    { to: '/clients',           key: 'clients',  label: 'Clients',      icon: <IconUsers /> },
     { to: '/suppliers',         key: 'suppliers', label: 'Suppliers',    icon: <IconBuilding /> },
     { to: '/company-documents', key: 'company',  label: 'Company Docs', icon: <IconDoc /> },
     { to: '/google-drive',      key: 'gdrive',   label: 'Google Drive', icon: <IconProject /> },
