@@ -61,7 +61,7 @@ function ProtectedLayout() {
   const pageTitles = {
     '/': 'Dashboard',
     '/subcontractors': 'Subcontractors',
-    '/documents': 'Documents',
+    '/subcontractors/compliance': 'Compliance',
     '/projects': 'Projects',
     '/suppliers': 'Suppliers',
     '/settings': 'Settings',
@@ -87,7 +87,7 @@ function ProtectedLayout() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/subcontractors" element={<Subcontractors />} />
             <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
-            <Route path="/documents" element={<Documents />} />
+            <Route path="/subcontractors/compliance" element={<Documents />} />
             <Route path="/projects" element={<Projects />} />
           <Route path="/projects/calendar" element={<ProjectCalendar />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
