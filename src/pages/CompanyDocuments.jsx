@@ -435,7 +435,6 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
           ) : null}
         </div>
       )}
-    )
   )
 }
 
