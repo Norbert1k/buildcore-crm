@@ -48,39 +48,69 @@ function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
     setTimeout(() => document.body.removeChild(ghost), 0)
   }
 
+  async function handleDownload() {
+    if (!url) return
+    try {
+      const res = await fetch(url)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = doc.file_name
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    } catch {
+      window.open(url, '_blank')
+    }
+  }
+
   return (
-    <div draggable={true} onDragStart={handleDragStart}
-      style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: 'grab' }}>
-      <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
-        onClick={() => onPreview(doc)}>
-        {isImage && url
-          ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : isPdf && url
-          ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={doc.file_name} />
-          : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-            </svg>
-        }
-        <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>
-          {fileExt(doc.file_name)}
+    <>
+      <div draggable={true} onDragStart={handleDragStart}
+        style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: 'grab' }}>
+        <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
+          onClick={() => onPreview(doc)}>
+          {isImage && url
+            ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : isPdf && url
+            ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={doc.file_name} />
+            : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+          }
+          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>
+            {fileExt(doc.file_name)}
+          </div>
+        </div>
+        <div style={{ padding: '7px 9px' }}>
+          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>
+            {doc.file_name}
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>
+            {fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {url && <button onClick={() => onPreview(doc)} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+            <button onClick={handleDownload} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
+            {canDelete && <button onClick={() => setConfirmDel(true)} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+          </div>
         </div>
       </div>
-      <div style={{ padding: '7px 9px' }}>
-        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>
-          {doc.file_name}
+      {confirmDel && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setConfirmDel(false)}>
+          <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Delete file?</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>{doc.file_name}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setConfirmDel(false)} style={{ padding: '8px 16px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 13, color: 'var(--text)' }}>Cancel</button>
+              <button onClick={() => { setConfirmDel(false); onDelete() }} style={{ padding: '8px 16px', border: 'none', borderRadius: 6, background: 'var(--red)', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600 }}>Delete</button>
+            </div>
+          </div>
         </div>
-        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>
-          {fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}
-        </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {url && <button onClick={() => onPreview(doc)} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-          <button onClick={async () => { if (url) { const a = document.createElement('a'); a.href = url; a.download = doc.file_name; a.click() } else { onDownload() } }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
-          {canDelete && <button onClick={() => setConfirmDel(true)} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
-        </div>
-      </div>
-      {confirmDel && <ConfirmDialog message={`Delete "${doc.file_name}"?`} onConfirm={() => { setConfirmDel(false); onDelete() }} onCancel={() => setConfirmDel(false)} />}
-    </div>
+      )}
+    </>
   )
 }
 
