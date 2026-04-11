@@ -245,7 +245,7 @@ function BulkBar({ selected, onZip, onMove, onClear, allSubfolders }) {
 }
 
 // ── Subfolder Section (recursive) ─────────────────────────────────────────────
-function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload, depth = 0 }) {
+function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload, depth = 0, viewMode = 'grid' }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -397,7 +397,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
           <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => setSelected(new Set())} allSubfolders={{}} />
           {childFolders.map(cf => (
             <SubfolderSection key={cf.folder_key} subfolder={{ key: cf.folder_key, label: cf.label }}
-              categoryKey={categoryKey} color={color} canManage={canManage} onPreview={onPreview}
+              categoryKey={categoryKey} color={color} canManage={canManage} onPreview={onPreview} viewMode={viewMode}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
               depth={depth + 1} />
           ))}
@@ -409,20 +409,28 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
                 <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
               </label>
             : files.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginTop: childFolders.length > 0 ? 8 : 0 }}>
-                {files.map(f => (
-                  <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
-                    selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
-                ))}
-                {canManage && (
-                  <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
-                    style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 10 }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Add files
-                    <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
-                  </label>
-                )}
-              </div>
+              {viewMode === 'list'
+              ? <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: childFolders.length > 0 ? 8 : 0 }}>
+                  {files.map(f => (
+                    <FileListRow key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
+                      selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
+                  ))}
+                </div>
+              : <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(140px, 1fr))', gap: viewMode === 'compact' ? 6 : 8, marginTop: childFolders.length > 0 ? 8 : 0 }}>
+                  {files.map(f => (
+                    <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
+                      selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
+                  ))}
+                  {canManage && (
+                    <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
+                      style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 10 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Add files
+                      <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
+                    </label>
+                  )}
+                </div>
+            }
             )
           }
         </div>
