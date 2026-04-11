@@ -89,16 +89,15 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, sel
   return (
     <>
       <div
-        draggable={!selectionMode}
+        draggable={!selected}
         onDragStart={handleDragStart}
-        onClick={() => selectionMode ? onSelect(doc.id) : onPreview(doc)}
-        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: selected ? 'var(--accent-light)' : 'var(--surface)', cursor: selectionMode ? 'pointer' : 'grab', position: 'relative' }}
+        onClick={() => onPreview(doc)}
+        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: selected ? 'var(--accent-light)' : 'var(--surface)', cursor: 'grab', position: 'relative' }}
       >
-        {selectionMode && (
-          <div style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid var(--accent)', background: selected ? 'var(--accent)' : 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-          </div>
-        )}
+        <div onClick={e => { e.stopPropagation(); onSelect(doc.id) }}
+          style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.5)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+        </div>
         <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           {isImage && url
             ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -117,13 +116,11 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, sel
           <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>
             {fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}
           </div>
-          {!selectionMode && (
-            <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
               {url && <button onClick={e => { e.stopPropagation(); onPreview(doc) }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
               {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, doc.file_name) }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
               {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
-            </div>
-          )}
+          </div>
         </div>
       </div>
       {confirmDel && <Confirm message={'Delete "' + doc.file_name + '"?'} onOk={() => { setConfirmDel(false); onDelete(doc) }} onCancel={() => setConfirmDel(false)} />}
@@ -252,11 +249,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
         <div style={{ width: 28, height: 28, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>📁</div>
         <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
         <span style={{ fontSize: 10, color: 'var(--text3)', marginRight: 4 }}>{files.length > 0 && open ? files.length + ' files' : ''}</span>
-        {canManage && open && (
-          <button onClick={e => { e.stopPropagation(); setSelectionMode(v => !v); setSelected(new Set()) }} style={{ fontSize: 10, padding: '2px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: selectionMode ? 'var(--accent)' : 'transparent', color: selectionMode ? '#fff' : 'var(--text3)', cursor: 'pointer', marginRight: 4 }}>
-            Select
-          </button>
-        )}
+
         {canManage && (
           <label onClick={e => e.stopPropagation()} style={{ fontSize: 10, padding: '2px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', flexShrink: 0 }}>
             {uploading ? '...' : '+ Upload'}
@@ -283,7 +276,6 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
               {files.map(f => (
                 <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage}
                   onDelete={deleteDoc} selected={selected.has(f.id)}
-                  selectionMode={selectionMode}
                   onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
               ))}
               {canManage && !selectionMode && (
@@ -437,13 +429,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDropBody}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: '1.5px solid ' + cat.color + '30', paddingTop: 8, paddingBottom: 8 }}>
-          {canManage && files.length > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
-              <button onClick={() => { setSelectionMode(v => !v); setSelected(new Set()) }} style={{ fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 5, background: selectionMode ? 'var(--accent)' : 'transparent', color: selectionMode ? '#fff' : 'var(--text3)', cursor: 'pointer' }}>
-                {selectionMode ? 'Cancel select' : 'Select files'}
-              </button>
-            </div>
-          )}
+
           <BulkBar selected={selected} files={files} subfolders={subfolders} onZip={bulkZip} onMove={bulkMove} onClear={() => { setSelected(new Set()); setSelectionMode(false) }} />
           {subfolders.map(sf => (
             <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
@@ -457,7 +443,6 @@ function CategoryFolder({ cat, canManage, onPreview }) {
                 {files.map(f => (
                   <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage}
                     onDelete={deleteDoc} selected={selected.has(f.id)}
-                    selectionMode={selectionMode}
                     onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
                 ))}
               </div>
