@@ -341,7 +341,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     setSavingSub(true)
     const key = subfolder.key + '-sub-' + Date.now()
     await supabase.from('company_doc_subfolders').insert({ category_key: categoryKey, folder_key: key, label: newSubName.trim(), parent_folder_key: subfolder.key })
-    setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadChildFolders()
+    setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadChildFolders(); if (onReload) onReload('__folder_renamed__')
   }
   async function renameFolder() {
     if (!renameVal.trim()) return
@@ -531,7 +531,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     setSavingSub(true)
     const key = cat.key + '-sub-' + Date.now()
     await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label: newSubName.trim() })
-    setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadSubfolders()
+    setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadSubfolders(); loadAllSubfolders()
   }
   async function zipFolder() {
     setZipping(true)
