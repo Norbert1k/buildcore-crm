@@ -31,6 +31,21 @@ export default function ProjectModal({ project, onClose, onSaved }) {
   useEffect(() => {
     supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'project_manager']).order('full_name').then(({ data }) => setManagers(data || []))
     supabase.from('clients').select('id, name').order('name').then(({ data }) => setClients(data || []))
+    // Auto-generate project ref only on new projects
+    if (!project) {
+      const year = new Date().getFullYear()
+      supabase.from('projects').select('project_ref').like('project_ref', `${year}-%`).order('project_ref', { ascending: false }).limit(1).single()
+        .then(({ data }) => {
+          let nextNum = 1
+          if (data?.project_ref) {
+            const parts = data.project_ref.split('-')
+            const last = parseInt(parts[parts.length - 1])
+            if (!isNaN(last)) nextNum = last + 1
+          }
+          const ref = `${year}-${String(nextNum).padStart(3, '0')}`
+          set('project_ref', ref)
+        })
+    }
   }, [])
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })) }
@@ -66,7 +81,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     if (result.error) {
       const msg = result.error.message
       if (msg.includes('projects_project_ref_key') || msg.includes('unique constraint')) {
-        setErrors({ _global: 'This Project Reference is already in use — please use a different ref number.' })
+        setErrors({ _global: 'This Project Reference is already in use â please use a different ref number.' })
       } else {
         setErrors({ _global: msg })
       }
@@ -85,7 +100,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Project'}
+            {saving ? 'Savingâ¦' : editing ? 'Save Changes' : 'Create Project'}
           </button>
         </>
       }
@@ -99,15 +114,23 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <div className="form-section">Project Details</div>
         <div className="full">
           <Field label="Project Name *" error={errors.project_name}>
-            <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments — Phase 2" autoFocus />
+            <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments â Phase 2" autoFocus />
           </Field>
         </div>
         <Field label="Project Reference">
-          <input value={form.project_ref} onChange={e => set('project_ref', e.target.value)} placeholder="e.g. PRJ-2025-042" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14 }}>
+            <span style={{ flex: 1, color: form.project_ref ? 'var(--text)' : 'var(--text3)' }}>
+              {form.project_ref || 'Generating...'}
+            </span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
         </Field>
         <Field label="Client">
           <select value={form.client_id} onChange={e => set('client_id', e.target.value)}>
-            <option value="">— Select client —</option>
+            <option value="">â Select client â</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
@@ -118,11 +141,11 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         </Field>
         <Field label="Project Manager">
           <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
-            <option value="">— Unassigned —</option>
+            <option value="">â Unassigned â</option>
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select>
         </Field>
-        <Field label="Contract Value (£)">
+        <Field label="Contract Value (Â£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
         <div className="form-section">Dates</div>
@@ -147,7 +170,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <div className="form-section">Additional Info</div>
         <div className="full">
           <Field label="Description / Notes">
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional details…" />
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional detailsâ¦" />
           </Field>
         </div>
       </div>
