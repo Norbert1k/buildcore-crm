@@ -478,6 +478,15 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
 export default function ProjectDocumentation({ projectId, projectName }) {
   const { can, profile } = useAuth()
+  useEffect(() => {
+    const prevent = e => e.preventDefault()
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', prevent)
+    }
+  }, [])
   const [fileCounts, setFileCounts] = useState({})
   const [zippingAll, setZippingAll] = useState(false)
   const [customTopFolders, setCustomTopFolders] = useState([])
