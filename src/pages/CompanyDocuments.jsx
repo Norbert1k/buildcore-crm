@@ -164,6 +164,8 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   return (
     <div style={{ marginBottom: 3 }}>
       <div onClick={() => setOpen(o => !o)}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/plain'); if (id) { moveFile(id); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'all .1s', outline: 'none' }}
         onMouseEnter={e => { if (!open) 
         onMouseLeave={e => { 
@@ -375,6 +377,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
         onClick={() => setOpen(o => !o)}
         onDragOver={e => e.preventDefault()}
         onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
         style={{
           display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
           borderRadius: 8, cursor: 'pointer',
@@ -423,6 +427,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
       {/* Open content */}
       {open && (
         <div
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${cat.color}30`, paddingTop: 8, paddingBottom: 8 }}>
 
           {/* Sub-folders */}
