@@ -235,6 +235,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     if (!renameVal.trim()) return
     await supabase.from('company_doc_subfolders').update({ label: renameVal.trim() }).eq('folder_key', subfolder.key)
     setSubLabel(renameVal.trim()); setRenaming(false)
+    if (onReload) onReload('__folder_renamed__')
   }
   async function deleteFolder() {
     await supabase.from('company_documents').update({ subfolder_key: null }).eq('subfolder_key', subfolder.key)
@@ -524,7 +525,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           {subfolders.map(sf => (
             <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
               categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview}
-              onReload={id => { if (id === '__folder_deleted__') loadSubfolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }} />
+              onReload={id => { if (id === '__folder_deleted__') { loadSubfolders(); loadAllSubfolders() } else if (id === '__folder_renamed__') { loadAllSubfolders() } else setFiles(prev => prev.filter(f => f.id !== id)) }} />
           ))}
           {files.length > 0 && (
             <div style={{ marginTop: subfolders.length > 0 ? 10 : 0 }}>
