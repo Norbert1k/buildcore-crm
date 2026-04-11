@@ -351,73 +351,6 @@ function findSection(nodes, key) {
   return null
 }
 
-
-// ── Upgrade utilities ────────────────────────────────────────────────────────
-async function triggerDownload(signedUrl, fileName) {
-  try {
-    const res = await fetch(signedUrl); const blob = await res.blob()
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-  } catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click() }
-}
-function _fti(name) {
-  const n = name||''
-  return {
-    isImage:/\.(jpg|jpeg|png|gif|webp)$/i.test(n), isPdf:/\.pdf$/i.test(n),
-    isWord:/\.docx?$/i.test(n), isExcel:/\.xlsx?$/i.test(n), isPpt:/\.pptx?$/i.test(n),
-  }
-}
-function _naturalSort(arr) {
-  return [...arr].sort((a,b) => (a.file_name||'').localeCompare(b.file_name||'',undefined,{numeric:true,sensitivity:'base'}))
-}
-function _FTBadge({ name, size=34 }) {
-  const {isWord,isExcel,isPpt} = _fti(name)
-  const color = isWord?'#1B5EAE':isExcel?'#1D7B45':isPpt?'#C55A25':null
-  const letter = isWord?'W':isExcel?'X':isPpt?'P':null
-  if (!color) return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-  return <div style={{width:size,height:size+8,background:color,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{color:'#fff',fontSize:size*0.5,fontWeight:700,fontFamily:'Arial'}}>{letter}</span></div>
-}
-function _ConfirmHS({ message, onOk, onCancel }) {
-  return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={onCancel}>
-      <div style={{background:'var(--surface)',borderRadius:10,padding:24,maxWidth:360,width:'90%'}} onClick={e=>e.stopPropagation()}>
-        <div style={{fontSize:14,marginBottom:20,color:'var(--text)'}}>{message}</div>
-        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
-          <button onClick={onCancel} style={{fontSize:11,lineHeight:'24px',padding:'0 9px',border:'0.5px solid var(--border)',borderRadius:5,background:'transparent',cursor:'pointer',color:'var(--text2)'}}>Cancel</button>
-          <button onClick={onOk} style={{fontSize:11,lineHeight:'24px',padding:'0 9px',border:'0.5px solid var(--red-border)',borderRadius:5,background:'transparent',cursor:'pointer',color:'var(--red)'}}>Delete</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-function _ViewToggle({ viewMode, setView }) {
-  const views = [
-    {mode:'grid',title:'Grid',icon:<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>},
-    {mode:'compact',title:'Compact',icon:<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="4" height="4"/><rect x="10" y="2" width="4" height="4"/><rect x="18" y="2" width="4" height="4"/><rect x="2" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="18" y="10" width="4" height="4"/><rect x="2" y="18" width="4" height="4"/><rect x="10" y="18" width="4" height="4"/><rect x="18" y="18" width="4" height="4"/></svg>},
-    {mode:'list',title:'List',icon:<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>},
-  ]
-  return (
-    <div style={{display:'flex',gap:2}} onClick={e=>e.stopPropagation()}>
-      {views.map(({mode,title,icon}) => (
-        <button key={mode} onClick={()=>setView(mode)} title={title}
-          style={{width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',border:'0.5px solid '+(viewMode===mode?'var(--accent)':'var(--border)'),borderRadius:4,background:viewMode===mode?'var(--accent)':'transparent',cursor:'pointer',color:viewMode===mode?'#fff':'var(--text3)',padding:0,flexShrink:0}}>
-          {icon}
-        </button>
-      ))}
-    </div>
-  )
-}
-function _BulkBar({ selected, onZip, onClear }) {
-  if (!selected.size) return null
-  return (
-    <div style={{position:'fixed',bottom:20,left:'50%',transform:'translateX(-50%)',zIndex:500,background:'var(--accent)',color:'#fff',borderRadius:12,padding:'10px 16px',display:'flex',alignItems:'center',gap:10,boxShadow:'0 4px 24px rgba(0,0,0,0.3)',whiteSpace:'nowrap'}}>
-      <span style={{fontSize:13,fontWeight:600}}>{selected.size} selected</span>
-      <button onClick={onZip} style={{fontSize:12,lineHeight:'26px',padding:'0 12px',borderRadius:6,border:'1px solid rgba(255,255,255,0.4)',background:'transparent',color:'#fff',cursor:'pointer'}}>↓ Download ZIP</button>
-      <button onClick={onClear} style={{fontSize:12,lineHeight:'26px',padding:'0 10px',borderRadius:6,border:'1px solid rgba(255,255,255,0.4)',background:'transparent',color:'#fff',cursor:'pointer'}}>✕ Clear</button>
-    </div>
-  )
-}
 function fmtSize(b) {
   if (!b) return ''
   if (b < 1024) return b + 'B'
@@ -525,11 +458,8 @@ function getColor(node, depth) {
 }
 
 // ── File Card ─────────────────────────────────────────────────
-function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }) {
+function HSFileCard({ file, onDelete, canDelete }) {
   const [url, setUrl] = useState(null)
-  const [renaming, setRenaming] = useState(false)
-  const [renameVal, setRenameVal] = useState('')
-  const [confirmDel, setConfirmDel] = useState(false)
   const isPdf = file.file_name?.toLowerCase().endsWith('.pdf')
   const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(file.file_name || '')
   const ext = file.file_name?.split('.').pop()?.toUpperCase().slice(0, 4) || '?'
@@ -539,118 +469,43 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }
       .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
   }, [file.storage_path])
 
-  async function renameFile() {
-    if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('hs_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
-    file.file_name = renameVal.trim(); setRenaming(false)
+  async function download() {
+    const { data } = await supabase.storage.from('hs-handover').createSignedUrl(file.storage_path, 60)
+    if (data?.signedUrl) { const a = document.createElement('a'); a.href = data.signedUrl; a.download = file.file_name; a.click() }
   }
 
   return (
-    <>
-      <div draggable={!renaming} style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', position: 'relative', transition: 'border .1s' }}>
-        <div onClick={e => { e.stopPropagation(); onSelect && onSelect(file.id) }}
-          style={{ position:'absolute', top:6, left:6, zIndex:1, width:18, height:18, borderRadius:4, border:'2px solid '+(selected?'var(--accent)':'rgba(255,255,255,0.4)'), background:selected?'var(--accent)':'rgba(0,0,0,0.3)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer' }}>
-          {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-        </div>
-        <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }}
-          onClick={() => onPreview ? onPreview(file, url) : null}>
-          {isImg && url ? <img src={url} alt={file.file_name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-            : isPdf && url ? <iframe src={url+'#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width:'100%', height:'100%', border:'none', pointerEvents:'none' }} title={file.file_name} />
-            : <_FTBadge name={file.file_name} size={34} />}
-          <div style={{ position:'absolute', top:5, right:5, background:'rgba(0,0,0,0.55)', color:'white', fontSize:9, fontWeight:700, padding:'2px 5px', borderRadius:3 }}>{ext}</div>
-        </div>
-        <div style={{ padding: '7px 9px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:4, marginBottom:2 }}>
-            {renaming
-              ? <input value={renameVal} autoFocus onChange={e=>setRenameVal(e.target.value)}
-                  onKeyDown={e=>{if(e.key==='Enter')renameFile();if(e.key==='Escape')setRenaming(false)}}
-                  onFocus={e=>e.target.select()} onClick={e=>e.stopPropagation()}
-                  style={{flex:1,fontSize:11,padding:'1px 5px',border:'1px solid var(--accent)',borderRadius:4,background:'var(--surface2)',color:'var(--text)',minWidth:0}} />
-              : <>
-                  <div style={{flex:1,fontSize:11,fontWeight:500,color:'var(--text)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={file.file_name}>{file.file_name}</div>
-                  {canDelete && <button onClick={e=>{e.stopPropagation();setRenameVal(file.file_name);setRenaming(true)}} title="Rename"
-                    style={{flexShrink:0,cursor:'pointer',background:'var(--surface2)',border:'0.5px solid var(--border)',borderRadius:4,padding:'2px 4px',display:'inline-flex',alignItems:'center'}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>}
-                </>
-            }
-          </div>
-          <div style={{ fontSize:10, color:'var(--text3)', marginBottom:4 }}>{fmtSize(file.file_size)}</div>
-          <div style={{ display:'flex', gap:4 }}>
-            {url && <button onClick={e=>{e.stopPropagation();onPreview?onPreview(file,url):null}} style={{flex:1,fontSize:10,lineHeight:'22px',padding:'0',border:'0.5px solid var(--border)',borderRadius:4,background:'transparent',cursor:'pointer',color:'var(--text2)'}}>View</button>}
-            {url && <button onClick={e=>{e.stopPropagation();triggerDownload(url,file.file_name)}} style={{flex:1,fontSize:10,lineHeight:'22px',padding:'0',border:'0.5px solid var(--border)',borderRadius:4,background:'transparent',cursor:'pointer',color:'var(--text2)'}}>↓</button>}
-            {canDelete && <button onClick={e=>{e.stopPropagation();setConfirmDel(true)}} style={{fontSize:10,lineHeight:'22px',padding:'0 6px',border:'0.5px solid var(--red-border)',borderRadius:4,background:'transparent',cursor:'pointer',color:'var(--red)'}}>✕</button>}
-          </div>
+    <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', fontSize: 12 }}>
+      <div style={{ height: 120, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        {isImg && url
+          ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : isPdf && url
+          ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
+          : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        }
+        <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{ext}</div>
+      </div>
+      <div style={{ padding: '7px 9px' }}>
+        <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', marginBottom: 2 }} title={file.file_name}>{file.file_name}</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(file.file_size)}{file.file_size ? ' · ' : ''}{new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {url && <button onClick={() => window.open(url, '_blank')} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          <button onClick={download} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
+          {canDelete && <button onClick={onDelete} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
         </div>
       </div>
-      {confirmDel && <_ConfirmHS message={'Delete "'+file.file_name+'"?'} onOk={()=>{setConfirmDel(false);onDelete(file)}} onCancel={()=>setConfirmDel(false)} />}
-    </>
+    </div>
   )
 }
 
-// ── HS File List Row ──────────────────────────────────────────────────────────
-function HSFileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
-  const [url, setUrl] = useState(null)
-  const [confirmDel, setConfirmDel] = useState(false)
-  const [renaming, setRenaming] = useState(false)
-  const [renameVal, setRenameVal] = useState('')
-  const {isWord,isExcel,isPpt,isPdf,isImage} = _fti(file.file_name)
-  const iconColor = isPdf?'#E24B4A':isWord?'#1B5EAE':isExcel?'#1D7B45':isPpt?'#C55A25':isImage?'#448a40':'#888'
-  const iconLetter = isPdf?'PDF':isWord?'W':isExcel?'X':isPpt?'P':null
-  useEffect(() => {
-    supabase.storage.from('hs-handover').createSignedUrl(file.storage_path, 3600)
-      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
-  }, [file.storage_path])
-  async function renameFile() {
-    if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('hs_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
-    file.file_name = renameVal.trim(); setRenaming(false)
-  }
-  return (
-    <>
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 10px',borderRadius:6,border:selected?'1.5px solid var(--accent)':'0.5px solid var(--border)',background:'var(--surface)',transition:'border .1s'}}>
-        <div onClick={e=>{e.stopPropagation();onSelect&&onSelect(file.id)}} style={{width:16,height:16,borderRadius:3,border:'2px solid '+(selected?'var(--accent)':'rgba(255,255,255,0.3)'),background:selected?'var(--accent)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}>
-          {selected&&<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-        </div>
-        <div style={{width:32,height:32,borderRadius:5,background:iconColor+'20',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-          {iconLetter?<span style={{fontSize:10,fontWeight:700,color:iconColor}}>{iconLetter}</span>:<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
-        </div>
-        <div style={{flex:1,minWidth:0}}>
-          {renaming
-            ? <input value={renameVal} autoFocus onChange={e=>setRenameVal(e.target.value)}
-                onKeyDown={e=>{if(e.key==='Enter')renameFile();if(e.key==='Escape')setRenaming(false)}}
-                onFocus={e=>e.target.select()} onClick={e=>e.stopPropagation()}
-                style={{width:'100%',fontSize:12,padding:'2px 6px',border:'1px solid var(--accent)',borderRadius:4,background:'var(--surface2)',color:'var(--text)'}} />
-            : <div onClick={()=>onPreview?onPreview(file,url):null} style={{cursor:'pointer'}}>
-                <div style={{display:'flex',alignItems:'center',gap:4}}>
-                  <div style={{fontSize:12,fontWeight:500,color:'var(--text)',wordBreak:'break-word',lineHeight:'1.3',flex:1}}>{file.file_name}</div>
-                  {canDelete&&<button onClick={e=>{e.stopPropagation();setRenameVal(file.file_name);setRenaming(true)}} title="Rename" style={{flexShrink:0,cursor:'pointer',background:'var(--surface2)',border:'0.5px solid var(--border)',borderRadius:4,padding:'2px 4px',display:'inline-flex',alignItems:'center'}}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>}
-                </div>
-                <div style={{fontSize:10,color:'var(--text3)',marginTop:2}}>{fmtSize(file.file_size)}</div>
-              </div>
-          }
-        </div>
-        <div style={{display:'flex',gap:4,flexShrink:0}}>
-          {url&&<button onClick={e=>{e.stopPropagation();onPreview?onPreview(file,url):null}} style={{fontSize:10,lineHeight:'22px',padding:'0 7px',border:'0.5px solid var(--border)',borderRadius:4,background:'transparent',cursor:'pointer',color:'var(--text2)'}}>View</button>}
-          {url&&<button onClick={e=>{e.stopPropagation();triggerDownload(url,file.file_name)}} style={{fontSize:10,lineHeight:'22px',padding:'0 7px',border:'0.5px solid var(--border)',borderRadius:4,background:'transparent',cursor:'pointer',color:'var(--text2)'}}>↓</button>}
-          {canDelete&&<button onClick={e=>{e.stopPropagation();setConfirmDel(true)}} style={{fontSize:10,lineHeight:'22px',padding:'0 7px',border:'0.5px solid var(--red-border)',borderRadius:4,background:'transparent',cursor:'pointer',color:'var(--red)'}}>✕</button>}
-        </div>
-      </div>
-      {confirmDel&&<_ConfirmHS message={'Delete "'+file.file_name+'"?'} onOk={()=>{setConfirmDel(false);onDelete(file)}} onCancel={()=>setConfirmDel(false)} />}
-    </>
-  )
-}
-
-function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor, viewMode = 'grid', setViewMode, onPreview }) {
+// ── Folder Node (recursive, handles all depths) ───────────────
+function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [showAddFolder, setShowAddFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [selected, setSelected] = useState(new Set())
 
   const color = node.color || sectionColor || '#888780'
   const bg = node.bg || '#F1EFE8'
@@ -668,7 +523,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   async function loadFiles() {
     const { data } = await supabase.from('hs_files').select('*')
       .eq('project_id', projectId).eq('folder_key', node.key).order('created_at', { ascending: false })
-    setFiles(_naturalSort(data || []))
+    setFiles(data || [])
   }
 
   async function upload(fileList) {
@@ -723,23 +578,6 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
   const hasChildren = (node.children?.length > 0) || myCustomFolders.length > 0
   const totalCount = fileCount + (node.children || []).reduce((s, c) => s + (fileCounts?.[c.key] || 0), 0)
-
-  async function bulkZip() {
-    const chosen = files.filter(f => selected.has(f.id))
-    if (!chosen.length) return
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-    s.onload = async () => {
-      const zip = new window.JSZip()
-      for (const f of chosen) {
-        const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 120)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
-      }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = node.label + '-selected.zip'; a.click()
-    }
-    document.head.appendChild(s)
-  }
-  function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
   return (
     <div style={{ marginLeft: indent > 0 ? 0 : 0 }}>
@@ -896,11 +734,6 @@ export default function HSHandover({ projectId, projectName }) {
   const [customFolders, setCustomFolders] = useState([])
   const [compilingFull, setCompilingFull] = useState(false)
   const [compilingOm, setCompilingOm] = useState(false)
-  const [previewFile, setPreviewFile] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('hsView_' + projectId) || 'grid' } catch { return 'grid' } })
-  function setView(mode) { setViewMode(mode); try { localStorage.setItem('hsView_' + projectId, mode) } catch {} }
-  function openPreview(file, url) { setPreviewFile(file); setPreviewUrl(url||null); if (!url) supabase.storage.from('hs-handover').createSignedUrl(file.storage_path, 3600).then(({data}) => { if (data?.signedUrl) setPreviewUrl(data.signedUrl) }) }
 
   const canManage = can('manage_projects')
   const canAddFolders = can('manage_projects')
@@ -1070,24 +903,6 @@ export default function HSHandover({ projectId, projectName }) {
       <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8, fontSize: 11, color: 'var(--text3)' }}>
         Template structure fixed — add sub-folders within sections as needed per project. Only PDFs are embedded in compiled exports; other file types appear in the appendix index.
       </div>
-
-      {previewFile && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }} onClick={() => setPreviewFile(null)}>
-          <div style={{ position:'absolute', top:16, right:16, display:'flex', gap:8 }}>
-            {previewUrl && <button onClick={e=>{e.stopPropagation();triggerDownload(previewUrl,previewFile.file_name)}} style={{fontSize:12,padding:'6px 12px',background:'rgba(255,255,255,0.15)',color:'#fff',borderRadius:6,border:'0.5px solid rgba(255,255,255,0.3)',cursor:'pointer'}}>↓ Download</button>}
-            <button onClick={() => setPreviewFile(null)} style={{fontSize:12,padding:'6px 12px',background:'rgba(255,255,255,0.15)',color:'#fff',borderRadius:6,border:'0.5px solid rgba(255,255,255,0.3)',cursor:'pointer'}}>✕ Close</button>
-          </div>
-          <div style={{ color:'rgba(255,255,255,0.7)', fontSize:12, marginBottom:12 }}>{previewFile.file_name}</div>
-          {previewUrl
-            ? _fti(previewFile.file_name).isImage
-              ? <img src={previewUrl} alt={previewFile.file_name} style={{maxWidth:'90vw',maxHeight:'80vh',objectFit:'contain',borderRadius:8}} onClick={e=>e.stopPropagation()} />
-              : _fti(previewFile.file_name).isPdf
-              ? <iframe src={previewUrl} style={{width:'95vw',height:'92vh',border:'none',borderRadius:8}} title={previewFile.file_name} onClick={e=>e.stopPropagation()} />
-              : <iframe src={'https://docs.google.com/gview?url='+encodeURIComponent(previewUrl)+'&embedded=true'} style={{width:'95vw',height:'92vh',border:'none',borderRadius:8,background:'#fff'}} title={previewFile.file_name} onClick={e=>e.stopPropagation()} />
-            : <div style={{color:'rgba(255,255,255,0.5)',fontSize:13}}>Loading preview...</div>
-          }
-        </div>
-      )}
     </div>
   )
 }
