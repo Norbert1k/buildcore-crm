@@ -366,7 +366,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
             ) : (
               <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Sub</button>
             )}
-            <label style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            <label style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
               {uploading ? '...' : '+ Upload'}
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
