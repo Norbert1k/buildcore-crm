@@ -125,7 +125,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         </Field>
         <Field label="Client">
           <select value={form.client_id} onChange={e => set('client_id', e.target.value)}>
-            <option value="">Ã¢ÂÂ Select client Ã¢ÂÂ</option>
+            <option value="">— Select client —</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
@@ -136,7 +136,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         </Field>
         <Field label="Project Manager">
           <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
-            <option value="">Ã¢ÂÂ Unassigned Ã¢ÂÂ</option>
+            <option value="">— Unassigned —</option>
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select>
         </Field>
