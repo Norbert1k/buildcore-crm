@@ -72,7 +72,7 @@ export default function Documents() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Documents & Compliance</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Compliance</h2>
           <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>Track all subcontractor paperwork and expiry dates</p>
         </div>
         <button className="btn btn-sm" onClick={doExport}>↓ Export CSV</button>
