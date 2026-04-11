@@ -94,7 +94,7 @@ function FileCard({ doc, onPreview, onDownload, onDelete, canDelete }) {
 }
 
 // ── Sub-folder section ────────────────────────────────────────
-function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview }) {
+function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -116,6 +116,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview 
   async function moveFile(docId) {
     await supabase.from('company_documents').update({ subfolder_key: subfolder.key }).eq('id', docId)
     loadFiles()
+    if (onReload) onReload(docId)
   }
 
   async function upload(fileList) {
@@ -396,7 +397,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           {/* Sub-folders */}
           {subfolders.map(sf => (
             <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
-              categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview} />
+              categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview}
+              onReload={(docId) => { setFiles(prev => prev.filter(f => f.id !== docId)) }} />
           ))}
 
           {/* Direct files in this folder (no subfolder) */}
