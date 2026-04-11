@@ -164,15 +164,9 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   return (
     <div style={{ marginBottom: 3 }}>
       <div onClick={() => setOpen(o => !o)}
-        onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = 'rgba(68,138,64,0.2)'; e.currentTarget.style.outline = '2px dashed #448a40' }}
-        onDragLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.outline = '' }}
-        onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = ''; e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) { moveFile(docId); return } const f = Array.from(e.dataTransfer.files); if (f.length) { upload(f); if (!open) setOpen(true) } }}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'all .1s', outline: 'none' }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent'; e.currentTarget.style.outline = 'none' }}
-        onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = 'rgba(68,138,64,0.15)'; e.currentTarget.style.outline = '2px dashed #448a40' }}
-        onDragLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent'; e.currentTarget.style.outline = 'none' }}
-        onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent'; e.currentTarget.style.outline = 'none'; const docId = e.dataTransfer.getData('text/plain'); if (docId) moveFile(docId) }}>
+        onMouseEnter={e => { if (!open) 
+        onMouseLeave={e => { 
         <div style={{ width: 28, height: 28, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
           📁
         </div>
@@ -192,22 +186,14 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 
       {open && (
         <div
-          onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
-          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
-          onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) { moveFile(docId); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
-        onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
-          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
-          onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) { moveFile(docId); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
           style={{ marginLeft: 14, paddingLeft: 12, borderLeft: `1.5px solid ${color}30`, paddingTop: 8, paddingBottom: 8 }}>
           {files.length === 0 ? (
             <div style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 0', textAlign: 'center' }}>
               Empty — {canManage ? 'click + Upload above to add files' : 'no files yet'}
             </div>
           ) : (
-            <div onDragOver={e => { e.preventDefault(); e.currentTarget.style.background = 'rgba(68,138,64,0.1)'; e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
-              onDragLeave={e => { e.currentTarget.style.background = ''; e.currentTarget.style.outline = '' }}
-              onDrop={e => {
-                e.preventDefault(); e.currentTarget.style.background = ''; e.currentTarget.style.outline = ''
+            <div}
+                e.preventDefault(); 
                 const docId = e.dataTransfer.getData('text/plain')
                 if (docId) { moveFile(docId); return }
                 const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
@@ -230,9 +216,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
                   onSelect={canManage ? toggleSelect : null} />
               ))}
               {canManage && (
-                <label onDragOver={e => { e.preventDefault(); e.currentTarget.style.background='rgba(68,138,64,0.1)'; e.currentTarget.style.borderColor='#448a40' }}
-                  onDragLeave={e => { e.currentTarget.style.background=''; e.currentTarget.style.borderColor='' }}
-                  onDrop={e => { e.preventDefault(); e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; const f=Array.from(e.dataTransfer.files); if(f.length) upload(f) }}
+                <label}
                   style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11, transition: 'all .15s' }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   Drop or click to add
@@ -389,6 +373,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
       {/* Folder row */}
       <div
         onClick={() => setOpen(o => !o)}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
         style={{
           display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
           borderRadius: 8, cursor: 'pointer',
@@ -397,8 +383,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           borderLeft: `3px solid ${cat.color}`,
           transition: 'background .1s',
         }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = open ? 'var(--surface2)' : 'var(--surface)' }}
+        onMouseEnter={e => { if (!open) 
+        onMouseLeave={e => { if (!open) 
       >
         {/* Icon in coloured circle */}
         <div style={{ width: 36, height: 36, borderRadius: 8, background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>
@@ -437,12 +423,6 @@ function CategoryFolder({ cat, canManage, onPreview }) {
       {/* Open content */}
       {open && (
         <div
-          onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
-          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
-          onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) return; const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
-        onDragOver={e => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed #448a40'; e.currentTarget.style.borderRadius = '6px' }}
-          onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.style.outline = '' }}
-          onDrop={e => { e.preventDefault(); e.currentTarget.style.outline = ''; const docId = e.dataTransfer.getData('text/plain'); if (docId) return; const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${cat.color}30`, paddingTop: 8, paddingBottom: 8 }}>
 
           {/* Sub-folders */}
@@ -488,9 +468,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
 
           {/* Upload drop area when empty and no subfolders */}
           {files.length === 0 && subfolders.length === 0 && canManage && (
-            <label onDragOver={e => { e.preventDefault(); e.currentTarget.style.background='rgba(68,138,64,0.1)'; e.currentTarget.style.borderColor='#448a40'; e.currentTarget.style.color='#448a40' }}
-              onDragLeave={e => { e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; e.currentTarget.style.color='' }}
-              onDrop={e => { e.preventDefault(); e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; e.currentTarget.style.color=''; const f=Array.from(e.dataTransfer.files); if(f.length) upload(f) }}
+            <label}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11, marginTop: 4, transition: 'all .15s' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
