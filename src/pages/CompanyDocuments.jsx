@@ -615,7 +615,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => setSelected(new Set())} allSubfolders={allSubfolders} />
           {subfolders.map(sf => (
             <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
-              categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview}
+              categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview} viewMode={viewMode}
               onReload={id => { if (id === '__folder_deleted__') { loadSubfolders(); loadAllSubfolders() } else if (id === '__folder_renamed__') { loadAllSubfolders() } else setFiles(prev => prev.filter(f => f.id !== id)) }} />
           ))}
           {files.length > 0 && (
