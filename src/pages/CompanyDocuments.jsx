@@ -428,8 +428,18 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
   }
+  async function moveSubfolder(key) {
+    // Move subfolder into this subfolder (set parent_folder_key to this subfolder's key)
+    if (key === subfolder.key) return // can't move into itself
+    await supabase.from('company_doc_subfolders').update({ parent_folder_key: subfolder.key }).eq('folder_key', key)
+    loadChildFolders()
+    if (onReload) onReload('__folder_deleted__') // trigger parent to refresh its list
+  }
+
   function onDrop(e) {
     e.preventDefault(); e.stopPropagation()
+    const subKey = e.dataTransfer.getData('subfolder')
+    if (subKey) { moveSubfolder(subKey); return }
     const id = e.dataTransfer.getData('text/plain')
     if (id) { moveFile(id); return }
     const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
@@ -440,7 +450,10 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 
   return (
     <div style={{ marginBottom: 2 }}>
-      <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
+      <div
+        draggable={true}
+        onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.setData('subfolder_label', subLabel); e.dataTransfer.effectAllowed = 'move' }}
+        onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
@@ -623,8 +636,25 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
   }
-  function onDropFolder(e) { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }
-  function onDropBody(e) { e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/plain'); if (id) { moveToRoot(id); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }
+  function onDropFolder(e) {
+    e.preventDefault(); e.stopPropagation()
+    const subKey = e.dataTransfer.getData('subfolder')
+    if (subKey) { moveSubfolderToRoot(subKey); return }
+    const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
+  }
+  async function moveSubfolderToRoot(key) {
+    await supabase.from('company_doc_subfolders').update({ parent_folder_key: null }).eq('folder_key', key)
+    loadSubfolders()
+  }
+
+  function onDropBody(e) {
+    e.preventDefault(); e.stopPropagation()
+    const subKey = e.dataTransfer.getData('subfolder')
+    if (subKey) { moveSubfolderToRoot(subKey); return }
+    const id = e.dataTransfer.getData('text/plain')
+    if (id) { moveToRoot(id); return }
+    const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
+  }
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
   return (
