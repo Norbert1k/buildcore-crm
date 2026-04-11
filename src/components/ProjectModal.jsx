@@ -140,7 +140,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select>
         </Field>
-        <Field label="Contract Value (ÃÂ£)">
+        <Field label="Contract Value (Ã£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
         <div className="form-section">Dates</div>
