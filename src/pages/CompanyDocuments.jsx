@@ -192,21 +192,42 @@ function BulkBar({ selected, onZip, onMove, onClear, allSubfolders, currentCateg
   )
 }
 
-// ── Sub-folder section ────────────────────────────────────────────────────────
-function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload }) {
+// ── Sub-folder section (recursive — supports nested subfolders) ──────────────
+function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload, depth = 0 }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
+  const [childFolders, setChildFolders] = useState([])
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState(new Set())
-  const [selectionMode, setSelectionMode] = useState(false)
+  const [showAddSub, setShowAddSub] = useState(false)
+  const [newSubName, setNewSubName] = useState('')
+  const [savingSub, setSavingSub] = useState(false)
 
-  useEffect(() => { if (open) loadFiles() }, [open])
+  useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
 
   async function loadFiles() {
     const { data } = await supabase.from('company_documents')
       .select('*, profiles(full_name)').eq('category', categoryKey).eq('subfolder_key', subfolder.key)
       .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
     setFiles(data || [])
+  }
+
+  async function loadChildFolders() {
+    const { data } = await supabase.from('company_doc_subfolders')
+      .select('*').eq('parent_folder_key', subfolder.key).order('label')
+    setChildFolders(data || [])
+  }
+
+  async function addChildFolder() {
+    if (!newSubName.trim()) return
+    setSavingSub(true)
+    const key = subfolder.key + '-sub-' + Date.now()
+    await supabase.from('company_doc_subfolders').insert({
+      category_key: categoryKey, folder_key: key,
+      label: newSubName.trim(), parent_folder_key: subfolder.key
+    })
+    setNewSubName(''); setShowAddSub(false); setSavingSub(false)
+    loadChildFolders()
   }
 
   async function moveFile(docId) {
@@ -221,10 +242,12 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     for (const file of fileList) {
       const path = 'company/' + categoryKey + '/' + subfolder.key + '/' + Date.now() + '-' + file.name
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
-      if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: subfolder.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
+      if (!error) await supabase.from('company_documents').insert({
+        category: categoryKey, subfolder_key: subfolder.key,
+        file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
+      })
     }
-    setUploading(false)
-    loadFiles()
+    setUploading(false); loadFiles()
   }
 
   async function deleteDoc(doc) {
@@ -249,12 +272,11 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     document.head.appendChild(s)
   }
 
-  async function bulkMove(targetSubfolder) {
-    for (const id of selected) {
-      await supabase.from('company_documents').update({ subfolder_key: targetSubfolder }).eq('id', id)
-    }
-    setSelected(new Set()); setSelectionMode(false); loadFiles()
-    if (onReload) selected.forEach(id => onReload(id))
+  async function bulkMove(targetSubfolder, targetCategory) {
+    const updateData = { subfolder_key: targetSubfolder }
+    if (targetCategory && targetCategory !== categoryKey) updateData.category = targetCategory
+    for (const id of selected) await supabase.from('company_documents').update(updateData).eq('id', id)
+    setSelected(new Set()); loadFiles()
   }
 
   function onDrop(e) {
@@ -264,53 +286,77 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
   }
 
+  const indent = depth * 12
+
   return (
-    <div style={{ marginBottom: 3 }}>
+    <div style={{ marginBottom: 2 }}>
       <div
         onClick={() => setOpen(o => !o)}
         onDragOver={e => e.preventDefault()}
         onDrop={onDrop}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + indent, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}
       >
-        <div style={{ width: 28, height: 28, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>📁</div>
+        <div style={{ width: 24, height: 24, borderRadius: 5, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13 }}>📁</div>
         <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
-        <span style={{ fontSize: 10, color: 'var(--text3)', marginRight: 4 }}>{files.length > 0 && open ? files.length + ' files' : ''}</span>
-
+        <span style={{ fontSize: 10, color: 'var(--text3)', marginRight: 4 }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
         {canManage && (
-          <label onClick={e => e.stopPropagation()} style={{ fontSize: 10, padding: '2px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', flexShrink: 0 }}>
-            {uploading ? '...' : '+ Upload'}
-            <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
-          </label>
+          <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
+            {showAddSub ? (
+              <>
+                <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
+                  style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: 100 }} />
+                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid #448a40', borderRadius: 4, background: 'transparent', color: '#448a40', cursor: 'pointer' }}>{savingSub ? '...' : 'Add'}</button>
+                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 10, padding: '2px 4px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>✕</button>
+              </>
+            ) : (
+              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text3)' }}>+ Sub</button>
+            )}
+            <label style={{ fontSize: 10, padding: '2px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', flexShrink: 0 }}>
+              {uploading ? '...' : 'Upload'}
+              <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
+            </label>
+          </div>
         )}
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', flexShrink: 0, marginLeft: 2 }}>
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </div>
+
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
-          style={{ marginLeft: 14, paddingLeft: 12, borderLeft: '1.5px solid ' + color + '30', paddingTop: 8, paddingBottom: 8 }}>
-          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => { setSelected(new Set()); setSelectionMode(false) }} allSubfolders={{}} currentCategoryKey={categoryKey} />
-          {files.length === 0 ? (
+          style={{ marginLeft: 14 + indent, paddingLeft: 10, borderLeft: '1.5px solid ' + color + '30', paddingTop: 6, paddingBottom: 6 }}>
+          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => setSelected(new Set())} allSubfolders={{}} currentCategoryKey={categoryKey} />
+          {/* Nested subfolders */}
+          {childFolders.map(cf => (
+            <SubfolderSection key={cf.folder_key} subfolder={{ key: cf.folder_key, label: cf.label }}
+              categoryKey={categoryKey} color={color} canManage={canManage} onPreview={onPreview}
+              onReload={docId => setFiles(prev => prev.filter(f => f.id !== docId))}
+              depth={depth + 1} />
+          ))}
+          {/* Files */}
+          {files.length === 0 && childFolders.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Drop files here or click to upload
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+          ) : files.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginTop: childFolders.length > 0 ? 8 : 0 }}>
               {files.map(f => (
                 <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage}
                   onDelete={deleteDoc} selected={selected.has(f.id)}
                   onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
               ))}
-              {canManage && !selectionMode && (
+              {canManage && (
                 <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
-                  style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  Drop or click to add
+                  style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 10 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add files
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
                 </label>
               )}
@@ -360,7 +406,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     setFiles(data || [])
   }
   async function loadSubfolders() {
-    const { data } = await supabase.from('company_doc_subfolders').select('*').eq('category_key', cat.key).order('label')
+    const { data } = await supabase.from('company_doc_subfolders').select('*').eq('category_key', cat.key).is('parent_folder_key', null).order('label')
     setSubfolders(data || [])
   }
   async function moveToRoot(docId) {
