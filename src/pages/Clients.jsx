@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
@@ -7,6 +7,29 @@ import { Avatar } from '../components/ui'
 function initials(name) {
   if (!name) return '?'
   return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 3)
+}
+
+function getDomain(website) {
+  if (!website) return null
+  try {
+    const url = website.startsWith('http') ? website : 'https://' + website
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch { return null }
+}
+
+function ClientAvatar({ name, website, color, size = 40 }) {
+  const [imgError, setImgError] = React.useState(false)
+  const domain = getDomain(website)
+  const logoUrl = domain && !imgError ? `https://logo.clearbit.com/${domain}` : null
+  return (
+    <div style={{ width: size, height: size, borderRadius: 10, background: color.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.3, fontWeight: 700, color: color.color, flexShrink: 0, overflow: 'hidden' }}>
+      {logoUrl
+        ? <img src={logoUrl} alt={name} onError={() => setImgError(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 6, background: '#fff' }} />
+        : initials(name)
+      }
+    </div>
+  )
 }
 
 const AVATAR_COLORS = [
@@ -67,10 +90,10 @@ export default function Clients() {
   const activeClients = clients.filter(c => c.activeCount > 0).length
 
   function fmt(n) {
-    if (!n) return '—'
-    if (n >= 1000000) return `£${(n / 1000000).toFixed(1)}m`
-    if (n >= 1000) return `£${(n / 1000).toFixed(0)}k`
-    return `£${n.toLocaleString()}`
+    if (!n) return 'â'
+    if (n >= 1000000) return `Â£${(n / 1000000).toFixed(1)}m`
+    if (n >= 1000) return `Â£${(n / 1000).toFixed(0)}k`
+    return `Â£${n.toLocaleString()}`
   }
 
   return (
@@ -79,7 +102,7 @@ export default function Clients() {
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Clients</h2>
           <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>
-            {clients.length} client{clients.length !== 1 ? 's' : ''} · {activeClients} active
+            {clients.length} client{clients.length !== 1 ? 's' : ''} Â· {activeClients} active
           </p>
         </div>
         {isAdmin && (
@@ -120,15 +143,13 @@ export default function Clients() {
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'var(--surface)'}>
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: col.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: col.color, flexShrink: 0 }}>
-                  {initials(c.name)}
-                </div>
+                <ClientAvatar name={c.name} website={c.website} color={col} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{c.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                    {c.ea ? `EA: ${c.ea} · ` : 'No EA · '}
+                    {c.ea ? `EA: ${c.ea} Â· ` : 'No EA Â· '}
                     {c.projects.length} project{c.projects.length !== 1 ? 's' : ''}
-                    {c.website ? ` · ${c.website.replace(/https?:\/\/(www\.)?/, '')}` : ''}
+                    {c.website ? ` Â· ${c.website.replace(/https?:\/\/(www\.)?/, '')}` : ''}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
