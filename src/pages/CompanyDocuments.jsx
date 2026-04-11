@@ -144,6 +144,7 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
               ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
                   onBlur={renameFile}
+                  onFocus={e => e.target.select()}
                   style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
               : <>
                   <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={doc.file_name}>{doc.file_name}</div>
@@ -216,6 +217,7 @@ function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }
             <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
               onBlur={renameFile}
+              onFocus={e => e.target.select()}
               onClick={e => e.stopPropagation()}
               style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', marginBottom: 2 }} />
           )}
