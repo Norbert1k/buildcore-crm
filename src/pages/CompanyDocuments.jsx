@@ -147,7 +147,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview 
         <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{files.length > 0 ? `${files.length} file${files.length !== 1 ? 's' : ''}` : open ? '0 files' : ''}</span>
         {open && canManage && (
-          <label onClick={e => e.stopPropagation()} style={{ fontSize: 10, padding: '2px 7px', border: `0.5px solid ${color}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', color, flexShrink: 0 }}>
+          <label onClick={e => e.stopPropagation()} style={{ fontSize: 10, padding: '2px 7px', border: '0.5px solid #448a40', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: '#448a40', flexShrink: 0 }}>
             {uploading ? '...' : '+ Upload'}
             <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
           </label>
@@ -344,7 +344,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             {zipping ? '...' : 'Zip'}
           </button>
           {canManage && (
-            <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '4px 10px', border: `0.5px solid ${cat.color}`, borderRadius: 6, background: 'transparent', cursor: 'pointer', color: cat.color }}>
+            <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid #448a40', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: '#448a40' }}>
               {uploading ? '...' : '+ Upload'}
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
             </label>
@@ -410,7 +410,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
                     placeholder="Sub-folder name..."
                     style={{ flex: 1, fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)' }} />
                   <button onClick={addSubfolder} disabled={savingSub || !newSubName.trim()}
-                    style={{ fontSize: 11, padding: '5px 10px', background: cat.color, color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                    style={{ fontSize: 11, padding: '5px 10px', background: '#448a40', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
                     {savingSub ? '...' : 'Add'}
                   </button>
                   <button onClick={() => setShowAddSub(false)}
