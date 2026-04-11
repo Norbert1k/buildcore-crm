@@ -376,9 +376,11 @@ const HS_ICONS = {
   ),
   s3: ({ color, size }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9"/>
-      <line x1="3" y1="12" x2="21" y2="12"/>
-      <path d="M12 3a15 15 0 0 1 4 9 15 15 0 0 1-4 9 15 15 0 0 1-4-9 15 15 0 0 1 4-9z"/>
+      <polyline points="3 8 3 3 21 3 21 8"/>
+      <line x1="12" y1="3" x2="12" y2="21"/>
+      <polyline points="5 21 3 17 3 13 5 11 7 13 7 17"/>
+      <polyline points="19 21 21 17 21 13 19 11 17 13 17 17"/>
+      <line x1="5" y1="21" x2="19" y2="21"/>
     </svg>
   ),
   s4: ({ color, size }) => (
