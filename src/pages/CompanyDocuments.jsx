@@ -22,27 +22,24 @@ function fmtSize(b) {
   if (b < 1048576) return (b / 1024).toFixed(0) + 'KB'
   return (b / 1048576).toFixed(1) + 'MB'
 }
+function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0,4) || 'FILE' }
 
-function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE' }
-
-// ── Confirm Dialog ───────────────────────────────────────────────────────────
+// ── Confirm ──────────────────────────────────────────────────────────────────
 function Confirm({ message, onOk, onCancel }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-      onClick={onCancel}>
-      <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%' }}
-        onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
+      <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>{message}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>Cancel</button>
-          <button onClick={onOk} style={{ padding: '8px 16px', borderRadius: 6, background: 'var(--red)', border: 'none', cursor: 'pointer', fontSize: 13, color: '#fff', fontWeight: 600 }}>Delete</button>
+          <button onClick={onOk} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>Delete</button>
         </div>
       </div>
     </div>
   )
 }
 
-// ── Download helper ──────────────────────────────────────────────────────────
+// ── Download helper ───────────────────────────────────────────────────────────
 async function triggerDownload(signedUrl, fileName) {
   try {
     const res = await fetch(signedUrl)
@@ -50,20 +47,13 @@ async function triggerDownload(signedUrl, fileName) {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = fileName
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    document.body.appendChild(a); a.click(); document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-  } catch {
-    const a = document.createElement('a')
-    a.href = signedUrl
-    a.download = fileName
-    a.click()
-  }
+  } catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click() }
 }
 
-// ── File Card ────────────────────────────────────────────────────────────────
-function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, selectionMode }) {
+// ── File Card ─────────────────────────────────────────────────────────────────
+function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const isImage = doc.file_type?.includes('image')
@@ -75,7 +65,6 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, sel
   }, [doc.storage_path])
 
   function handleDragStart(e) {
-    if (selectionMode) { e.preventDefault(); return }
     e.dataTransfer.setData('text/plain', doc.id)
     e.dataTransfer.effectAllowed = 'move'
     const ghost = document.createElement('div')
@@ -88,38 +77,26 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, sel
 
   return (
     <>
-      <div
-        draggable={!selected}
-        onDragStart={handleDragStart}
-        onClick={() => onPreview(doc)}
-        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: 'grab', position: 'relative', transition: 'border .1s' }}
-      >
+      <div draggable={true} onDragStart={handleDragStart}
+        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: 'grab', position: 'relative', transition: 'border .1s' }}>
         <div onClick={e => { e.stopPropagation(); onSelect(doc.id) }}
-          style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.5)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
-        <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          {isImage && url
-            ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : isPdf && url
-            ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={doc.file_name} />
+        <div style={{ height: 130, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onPreview(doc)}>
+          {isImage && url ? <img src={url} alt={doc.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : isPdf && url ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={doc.file_name} />
             : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           }
-          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>
-            {fileExt(doc.file_name)}
-          </div>
+          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(doc.file_name)}</div>
         </div>
         <div style={{ padding: '7px 9px' }}>
-          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>
-            {doc.file_name}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>
-            {fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}
-          </div>
+          <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }} title={doc.file_name}>{doc.file_name}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}</div>
           <div style={{ display: 'flex', gap: 4 }}>
-              {url && <button onClick={e => { e.stopPropagation(); onPreview(doc) }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-              {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, doc.file_name) }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-              {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+            {url && <button onClick={e => { e.stopPropagation(); onPreview(doc) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: '0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+            {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, doc.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: '0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
+            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
           </div>
         </div>
       </div>
@@ -128,61 +105,41 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect, sel
   )
 }
 
-// ── Bulk Action Bar ───────────────────────────────────────────────────────────
-function BulkBar({ selected, onZip, onMove, onClear, allSubfolders, currentCategoryKey }) {
+// ── Bulk Bar ──────────────────────────────────────────────────────────────────
+function BulkBar({ selected, onZip, onMove, onClear, allSubfolders }) {
   const [showMove, setShowMove] = useState(false)
-  const [movePos, setMovePos] = useState({ top: 0, left: 0 })
-  const btnRef = typeof document !== 'undefined' ? { current: null } : { current: null }
-
+  const [movePos, setMovePos] = useState({ bottom: 80, left: 400 })
   if (!selected.size) return null
-
   function openMove(e) {
     const rect = e.currentTarget.getBoundingClientRect()
     setMovePos({ bottom: window.innerHeight - rect.top + 8, left: rect.left })
     setShowMove(v => !v)
   }
-
   return (
     <>
       <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-        <button onClick={onZip} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
-          ↓ Download ZIP
-        </button>
-        <button onClick={openMove} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>
-          Move to ▾
-        </button>
-        <button onClick={onClear} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
-          ✕ Clear
-        </button>
+        <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
+        <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>
+        <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
       </div>
       {showMove && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 600 }} onClick={() => setShowMove(false)} />
           <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
             <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
-            <div onClick={() => { onMove(null, null); setShowMove(false) }}
-              style={{ padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
-              onMouseLeave={e => e.currentTarget.style.background = ''}>
-              <span style={{ fontSize: 16 }}>📂</span> General files (same folder)
+            <div onClick={() => { onMove(null, null); setShowMove(false) }} style={{ padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }} onMouseEnter={e => e.currentTarget.style.background='var(--surface2)'} onMouseLeave={e => e.currentTarget.style.background=''}>
+              📂 General files (same folder)
             </div>
             {CATEGORIES.map(cat => (
               <div key={cat.key}>
-                <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 600, color: cat.color, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span>{cat.icon}</span> {cat.label}
-                </div>
+                <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 600, color: cat.color }}>{cat.icon} {cat.label}</div>
                 {(allSubfolders[cat.key] || []).map(sf => (
-                  <div key={sf.folder_key} onClick={() => { onMove(sf.folder_key, cat.key); setShowMove(false) }}
-                    style={{ padding: '8px 14px 8px 28px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 8 }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
-                    onMouseLeave={e => e.currentTarget.style.background = ''}>
+                  <div key={sf.folder_key} onClick={() => { onMove(sf.folder_key, cat.key); setShowMove(false) }} style={{ padding: '8px 14px 8px 28px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }} onMouseEnter={e => e.currentTarget.style.background='var(--surface2)'} onMouseLeave={e => e.currentTarget.style.background=''}>
                     📁 {sf.label}
                   </div>
                 ))}
-                {!(allSubfolders[cat.key] || []).length && (
-                  <div style={{ padding: '4px 14px 8px 28px', fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>No subfolders</div>
-                )}
+                {!(allSubfolders[cat.key] || []).length && <div style={{ padding: '4px 14px 8px 28px', fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>No subfolders</div>}
               </div>
             ))}
           </div>
@@ -192,7 +149,7 @@ function BulkBar({ selected, onZip, onMove, onClear, allSubfolders, currentCateg
   )
 }
 
-// ── Sub-folder section (recursive — supports nested subfolders) ──────────────
+// ── Subfolder Section ─────────────────────────────────────────────────────────
 function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload, depth = 0 }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
@@ -205,6 +162,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState('')
   const [confirmDelFolder, setConfirmDelFolder] = useState(false)
+  const [subLabel, setSubLabel] = useState(subfolder.label)
 
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
 
@@ -214,71 +172,50 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
       .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
     setFiles(data || [])
   }
-
   async function loadChildFolders() {
-    const { data } = await supabase.from('company_doc_subfolders')
-      .select('*').eq('parent_folder_key', subfolder.key).order('label')
+    const { data } = await supabase.from('company_doc_subfolders').select('*').eq('parent_folder_key', subfolder.key).order('label')
     setChildFolders(data || [])
   }
-
-  async function addChildFolder() {
-    if (!newSubName.trim()) return
-    setSavingSub(true)
-    const key = subfolder.key + '-sub-' + Date.now()
-    await supabase.from('company_doc_subfolders').insert({
-      category_key: categoryKey, folder_key: key,
-      label: newSubName.trim(), parent_folder_key: subfolder.key
-    })
-    setNewSubName(''); setShowAddSub(false); setSavingSub(false)
-    loadChildFolders()
-  }
-
-  async function renameFolder() {
-    if (!renameVal.trim()) return
-    await supabase.from('company_doc_subfolders').update({ label: renameVal.trim() }).eq('folder_key', subfolder.key)
-    subfolder.label = renameVal.trim()
-    setRenaming(false)
-    setRenameVal('')
-  }
-
-  async function deleteFolder() {
-    // Move all files in this folder to root first
-    await supabase.from('company_documents').update({ subfolder_key: null }).eq('subfolder_key', subfolder.key)
-    await supabase.from('company_doc_subfolders').delete().eq('folder_key', subfolder.key)
-    setConfirmDelFolder(false)
-    if (onReload) onReload('__folder_deleted__')
-  }
-
   async function moveFile(docId) {
     await supabase.from('company_documents').update({ subfolder_key: subfolder.key }).eq('id', docId)
-    loadFiles()
-    if (onReload) onReload(docId)
+    loadFiles(); if (onReload) onReload(docId)
   }
-
   async function upload(fileList) {
     if (!fileList.length) return
     setUploading(true)
     for (const file of fileList) {
       const path = 'company/' + categoryKey + '/' + subfolder.key + '/' + Date.now() + '-' + file.name
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
-      if (!error) await supabase.from('company_documents').insert({
-        category: categoryKey, subfolder_key: subfolder.key,
-        file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
-      })
+      if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: subfolder.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
     }
     setUploading(false); loadFiles()
   }
-
   async function deleteDoc(doc) {
     await supabase.storage.from('company-docs').remove([doc.storage_path])
     await supabase.from('company_documents').delete().eq('id', doc.id)
     setFiles(prev => prev.filter(f => f.id !== doc.id))
   }
-
+  async function addChildFolder() {
+    if (!newSubName.trim()) return
+    setSavingSub(true)
+    const key = subfolder.key + '-sub-' + Date.now()
+    await supabase.from('company_doc_subfolders').insert({ category_key: categoryKey, folder_key: key, label: newSubName.trim(), parent_folder_key: subfolder.key })
+    setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadChildFolders()
+  }
+  async function renameFolder() {
+    if (!renameVal.trim()) return
+    await supabase.from('company_doc_subfolders').update({ label: renameVal.trim() }).eq('folder_key', subfolder.key)
+    setSubLabel(renameVal.trim()); setRenaming(false)
+  }
+  async function deleteFolder() {
+    await supabase.from('company_documents').update({ subfolder_key: null }).eq('subfolder_key', subfolder.key)
+    await supabase.from('company_doc_subfolders').delete().eq('folder_key', subfolder.key)
+    setConfirmDelFolder(false)
+    if (onReload) onReload('__folder_deleted__')
+  }
   async function bulkZip() {
     const chosen = files.filter(f => selected.has(f.id))
-    const s = document.createElement('script')
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
       for (const f of chosen) {
@@ -286,18 +223,16 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
         if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
       }
       const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = subfolder.label + '.zip'; a.click()
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = subLabel + '.zip'; a.click()
     }
     document.head.appendChild(s)
   }
-
   async function bulkMove(targetSubfolder, targetCategory) {
-    const updateData = { subfolder_key: targetSubfolder }
-    if (targetCategory && targetCategory !== categoryKey) updateData.category = targetCategory
-    for (const id of selected) await supabase.from('company_documents').update(updateData).eq('id', id)
+    const upd = { subfolder_key: targetSubfolder }
+    if (targetCategory && targetCategory !== categoryKey) upd.category = targetCategory
+    for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
   }
-
   function onDrop(e) {
     e.preventDefault(); e.stopPropagation()
     const id = e.dataTransfer.getData('text/plain')
@@ -305,67 +240,43 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
   }
 
-  const indent = depth * 12
-
   return (
     <div style={{ marginBottom: 2 }}>
-      <div
-        onClick={() => setOpen(o => !o)}
-        onDragOver={e => e.preventDefault()}
-        onDrop={onDrop}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + indent, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
+      <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}
-      >
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
         <div style={{ width: 24, height: 24, borderRadius: 5, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13 }}>📁</div>
-        {renaming ? (
-          <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') renameFolder(); if (e.key === 'Escape') setRenaming(false) }}
-            onClick={e => e.stopPropagation()}
-            style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
-        ) : (
-          <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
-        )}
-        <span style={{ fontSize: 10, color: 'var(--text3)', marginRight: 4 }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
-        {canManage && !renaming && (
+        {renaming
+          ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') renameFolder(); if (e.key === 'Escape') setRenaming(false) }}
+              onClick={e => e.stopPropagation()}
+              style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+          : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subLabel}</span>
+        }
+        <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
+        {canManage && (
           <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-            <button onClick={() => { setRenameVal(subfolder.label); setRenaming(true) }}
-              style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', display: 'inline-block', verticalAlign: 'middle' }}
-              title="Rename"><svg width="12" height="12" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/>
-                <rect x="10" y="7" width="4" height="4" fill="#FDD835"/>
-                <polygon points="10,18 14,18 12,23" fill="#fff"/>
-                <rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/>
-              </svg></button>
-            {confirmDelFolder ? (
-              <>
-                <button onClick={deleteFolder}
-                  style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', verticalAlign: 'middle' }}>
-                  Confirm
-                </button>
-                <button onClick={() => setConfirmDelFolder(false)}
-                  style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', display: 'inline-block', verticalAlign: 'middle' }}>
-                  ✕
-                </button>
-              </>
-            ) : (
-              <button onClick={() => setConfirmDelFolder(true)}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', verticalAlign: 'middle' }}
-                title="Delete"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-              </svg></button>
-            )}
-            {showAddSub ? (
-              <>
-                <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                  style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 110 }} />
-                <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>{savingSub ? '...' : 'Add'}</button>
-                <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>✕</button>
-              </>
-            ) : (
-              <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Sub</button>
-            )}
+            {!renaming && <>
+              <button onClick={() => { setRenameVal(subLabel); setRenaming(true) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }} title="Rename"><svg width="11" height="11" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/><rect x="10" y="7" width="4" height="4" fill="#FDD835"/><polygon points="10,18 14,18 12,23" fill="#fff"/><rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/></svg></button>
+              {confirmDelFolder
+                ? <>
+                    <button onClick={deleteFolder} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>Confirm</button>
+                    <button onClick={() => setConfirmDelFolder(false)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>✕</button>
+                  </>
+                : <button onClick={() => setConfirmDelFolder(true)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }} title="Delete"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+              }
+            </>}
+            {showAddSub
+              ? <>
+                  <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
+                    style={{ fontSize: 11, lineHeight: '24px', padding: '0 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 90 }} />
+                  <button onClick={addChildFolder} disabled={savingSub} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>{savingSub ? '...' : 'Add'}</button>
+                  <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>✕</button>
+                </>
+              : <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Sub</button>
+            }
             <label style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>
               {uploading ? '...' : '+ Upload'}
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
@@ -377,19 +288,16 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </div>
-
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
-          style={{ marginLeft: 14 + indent, paddingLeft: 10, borderLeft: '1.5px solid ' + color + '30', paddingTop: 6, paddingBottom: 6 }}>
-          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => setSelected(new Set())} allSubfolders={{}} currentCategoryKey={categoryKey} />
-          {/* Nested subfolders */}
+          style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + color + '30', paddingTop: 6, paddingBottom: 6 }}>
+          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => setSelected(new Set())} allSubfolders={{}} />
           {childFolders.map(cf => (
             <SubfolderSection key={cf.folder_key} subfolder={{ key: cf.folder_key, label: cf.label }}
               categoryKey={categoryKey} color={color} canManage={canManage} onPreview={onPreview}
-              onReload={docId => setFiles(prev => prev.filter(f => f.id !== docId))}
+              onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
               depth={depth + 1} />
           ))}
-          {/* Files */}
           {files.length === 0 && childFolders.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
@@ -400,9 +308,8 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
           ) : files.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginTop: childFolders.length > 0 ? 8 : 0 }}>
               {files.map(f => (
-                <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage}
-                  onDelete={deleteDoc} selected={selected.has(f.id)}
-                  onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
+                <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
+                  selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
               ))}
               {canManage && (
                 <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
@@ -432,20 +339,9 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   const [zipping, setZipping] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
   const [selected, setSelected] = useState(new Set())
-  const [selectionMode, setSelectionMode] = useState(false)
   const [allSubfolders, setAllSubfolders] = useState({})
 
   useEffect(() => { if (open) { loadFiles(); loadSubfolders(); loadAllSubfolders() } }, [open])
-
-  async function loadAllSubfolders() {
-    const { data } = await supabase.from('company_doc_subfolders').select('*').order('label')
-    const grouped = {}
-    ;(data || []).forEach(sf => {
-      if (!grouped[sf.category_key]) grouped[sf.category_key] = []
-      grouped[sf.category_key].push(sf)
-    })
-    setAllSubfolders(grouped)
-  }
   useEffect(() => {
     supabase.from('company_documents').select('id', { count: 'exact' }).eq('category', cat.key)
       .then(({ count }) => setTotalCount(count || 0))
@@ -460,6 +356,12 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   async function loadSubfolders() {
     const { data } = await supabase.from('company_doc_subfolders').select('*').eq('category_key', cat.key).is('parent_folder_key', null).order('label')
     setSubfolders(data || [])
+  }
+  async function loadAllSubfolders() {
+    const { data } = await supabase.from('company_doc_subfolders').select('*').order('label')
+    const grouped = {}
+    ;(data || []).forEach(sf => { if (!grouped[sf.category_key]) grouped[sf.category_key] = []; grouped[sf.category_key].push(sf) })
+    setAllSubfolders(grouped)
   }
   async function moveToRoot(docId) {
     await supabase.from('company_documents').update({ subfolder_key: null }).eq('id', docId)
@@ -492,8 +394,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     setZipping(true)
     const { data: allFiles } = await supabase.from('company_documents').select('*').eq('category', cat.key)
     if (!allFiles?.length) { alert('No files in this folder.'); setZipping(false); return }
-    const s = document.createElement('script')
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
       for (const f of allFiles) {
@@ -508,8 +409,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   }
   async function bulkZip() {
     const chosen = files.filter(f => selected.has(f.id))
-    const s = document.createElement('script')
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
       for (const f of chosen) {
@@ -522,24 +422,21 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     document.head.appendChild(s)
   }
   async function bulkMove(targetSubfolder, targetCategory) {
-    const updateData = { subfolder_key: targetSubfolder }
-    if (targetCategory && targetCategory !== cat.key) updateData.category = targetCategory
-    for (const id of selected) await supabase.from('company_documents').update(updateData).eq('id', id)
-    setSelected(new Set()); setSelectionMode(false); loadFiles()
+    const upd = { subfolder_key: targetSubfolder }
+    if (targetCategory && targetCategory !== cat.key) upd.category = targetCategory
+    for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
+    setSelected(new Set()); loadFiles()
   }
   function onDropFolder(e) { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }
   function onDropBody(e) { e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/plain'); if (id) { moveToRoot(id); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }
 
   return (
     <div style={{ marginBottom: 6 }}>
-      <div
-        onClick={() => setOpen(o => !o)}
-        onDragOver={e => e.preventDefault()}
-        onDrop={onDropFolder}
+      {/* Folder header */}
+      <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 8, cursor: 'pointer', background: open ? 'var(--surface2)' : 'var(--surface)', border: '0.5px solid var(--border)', borderLeft: '3px solid ' + cat.color, transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'var(--surface)' }}
-      >
+        onMouseLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'var(--surface)' }}>
         <div style={{ width: 36, height: 36, borderRadius: 8, background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>{cat.icon}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{cat.label}</div>
@@ -548,40 +445,25 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             {subfolders.length > 0 ? ' · ' + subfolders.length + ' sub-folder' + (subfolders.length !== 1 ? 's' : '') : ''}
           </div>
         </div>
+        {/* Action buttons — all same style, no double upload */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-          <button onClick={zipFolder} disabled={zipping} style={{ fontSize: 11, height: 26, padding: '0 10px', boxSizing: 'border-box', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <button onClick={zipFolder} disabled={zipping} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle', flexShrink: 0 }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
             {zipping ? '...' : 'Zip'}
           </button>
-          {canManage && (
-            <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '0 10px', height: 26, lineHeight: '26px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {uploading ? '...' : '+ Upload'}
-              <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
-            </label>
-          )}
-          {canManage && !showAddSub && (
-            <button onClick={e => { e.stopPropagation(); setShowAddSub(true) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Subfolder</button>
-          )}
-          {canManage && (
+          {showAddSub ? (
             <>
-              <input id={'upload-cat-' + cat.key} type="file" multiple style={{ display: 'none' }} onChange={e => { upload(Array.from(e.target.files)); e.target.value = '' }} />
-              <button onClick={e => { e.stopPropagation(); document.getElementById('upload-cat-' + cat.key).click() }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>{uploading ? '...' : '+ Upload'}</button>
-            </>
-          )}
-          {canManage && showAddSub && (
-            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
               <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addSubfolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 120 }} />
-              <button onClick={e => { e.stopPropagation(); addSubfolder() }} disabled={savingSub}
-                style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', color: '#448a40', cursor: 'pointer' }}>
-                {savingSub ? '...' : 'Add'}
-              </button>
-              <button onClick={e => { e.stopPropagation(); setShowAddSub(false); setNewSubName('') }}
-                style={{ fontSize: 11, padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>
-                ✕
-              </button>
-            </div>
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 120 }} />
+              <button onClick={addSubfolder} disabled={savingSub} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>{savingSub ? '...' : 'Add'}</button>
+              <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>✕</button>
+            </>
+          ) : (
+            <>
+              {canManage && <label style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>{uploading ? '...' : '+ Upload'}<input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} /></label>}
+              {canManage && <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>+ Subfolder</button>}
+            </>
           )}
         </div>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
@@ -589,24 +471,24 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </div>
+
+      {/* Open body */}
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDropBody}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: '1.5px solid ' + cat.color + '30', paddingTop: 8, paddingBottom: 8 }}>
-
-          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => { setSelected(new Set()); setSelectionMode(false) }} allSubfolders={allSubfolders} currentCategoryKey={cat.key} />
+          <BulkBar selected={selected} onZip={bulkZip} onMove={bulkMove} onClear={() => setSelected(new Set())} allSubfolders={allSubfolders} />
           {subfolders.map(sf => (
             <SubfolderSection key={sf.folder_key} subfolder={{ key: sf.folder_key, label: sf.label }}
               categoryKey={cat.key} color={cat.color} canManage={canManage} onPreview={onPreview}
-              onReload={docId => setFiles(prev => prev.filter(f => f.id !== docId))} />
+              onReload={id => { if (id === '__folder_deleted__') loadSubfolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }} />
           ))}
           {files.length > 0 && (
             <div style={{ marginTop: subfolders.length > 0 ? 10 : 0 }}>
               {subfolders.length > 0 && <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
                 {files.map(f => (
-                  <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage}
-                    onDelete={deleteDoc} selected={selected.has(f.id)}
-                    onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
+                  <FileCard key={f.id} doc={f} onPreview={onPreview} canDelete={canManage} onDelete={deleteDoc}
+                    selected={selected.has(f.id)} onSelect={id => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })} />
                 ))}
               </div>
             </div>
@@ -619,7 +501,6 @@ function CategoryFolder({ cat, canManage, onPreview }) {
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
           )}
-
         </div>
       )}
     </div>
@@ -658,16 +539,10 @@ export default function CompanyDocuments() {
         {CATEGORIES.map(cat => <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} />)}
       </div>
       {previewDoc && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-          onClick={() => setPreviewDoc(null)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewDoc(null)}>
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
-            {previewUrl && (
-              <button onClick={e => { e.stopPropagation(); triggerDownload(previewUrl, previewDoc.file_name) }}
-                style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
-                ↓ Download
-              </button>
-            )}
-            <button onClick={() => setPreviewDoc(null)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', verticalAlign: 'middle', flexShrink: 0 }}>✕ Close</button>
+            {previewUrl && <button onClick={e => { e.stopPropagation(); triggerDownload(previewUrl, previewDoc.file_name) }} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
+            <button onClick={() => setPreviewDoc(null)} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
           </div>
           <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 12 }}>{previewDoc.file_name}</div>
           {previewLoading ? <Spinner /> : previewUrl
