@@ -154,9 +154,12 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview 
   return (
     <div style={{ marginBottom: 3 }}>
       <div onClick={() => setOpen(o => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'all .1s', outline: 'none' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
+        onMouseLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent'; e.currentTarget.style.outline = 'none' }}
+        onDragOver={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = 'rgba(68,138,64,0.15)'; e.currentTarget.style.outline = '2px dashed #448a40' }}
+        onDragLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent'; e.currentTarget.style.outline = 'none' }}
+        onDrop={e => { e.preventDefault(); e.stopPropagation(); e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent'; e.currentTarget.style.outline = 'none'; const docId = e.dataTransfer.getData('text/plain'); if (docId) moveFile(docId) }}>
         <div style={{ width: 28, height: 28, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
           📁
         </div>
