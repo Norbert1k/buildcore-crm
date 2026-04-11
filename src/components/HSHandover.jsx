@@ -358,6 +358,99 @@ function fmtSize(b) {
   return (b / 1048576).toFixed(1) + 'MB'
 }
 
+// ── Section icons ─────────────────────────────────────────────
+const HS_ICONS = {
+  s1: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <polyline points="9 12 11 14 15 10"/>
+    </svg>
+  ),
+  s2: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  ),
+  s3: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <path d="M12 3a15 15 0 0 1 4 9 15 15 0 0 1-4 9 15 15 0 0 1-4-9 15 15 0 0 1 4-9z"/>
+    </svg>
+  ),
+  s4: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+  ),
+  s5: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17" strokeWidth="2.5"/>
+    </svg>
+  ),
+  s6: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 19 22 19"/>
+      <line x1="12" y1="8" x2="12" y2="19"/>
+      <line x1="7" y1="19" x2="17" y2="19"/>
+      <line x1="5" y1="15" x2="9" y2="15"/>
+      <line x1="15" y1="15" x2="19" y2="15"/>
+    </svg>
+  ),
+  s7: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="6" height="6" rx="1"/>
+      <rect x="16" y="3" width="6" height="6" rx="1"/>
+      <rect x="2" y="15" width="6" height="6" rx="1"/>
+      <rect x="16" y="15" width="6" height="6" rx="1"/>
+      <line x1="8" y1="6" x2="16" y2="6"/>
+      <line x1="8" y1="18" x2="16" y2="18"/>
+      <line x1="5" y1="9" x2="5" y2="15"/>
+      <line x1="19" y1="9" x2="19" y2="15"/>
+      <line x1="12" y1="6" x2="12" y2="18"/>
+    </svg>
+  ),
+  s8: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+      <line x1="9" y1="8" x2="6" y2="8"/>
+      <line x1="9" y1="11" x2="6" y2="11"/>
+      <line x1="15" y1="8" x2="18" y2="8"/>
+      <line x1="15" y1="11" x2="18" y2="11"/>
+    </svg>
+  ),
+  s9: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  ),
+  s10: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <path d="M9 15l2 2 4-4"/>
+    </svg>
+  ),
+  s11: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="6"/>
+      <path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12"/>
+      <line x1="12" y1="5" x2="12" y2="8"/>
+      <line x1="12" y1="8" x2="14" y2="10"/>
+    </svg>
+  ),
+}
+
+
 function getColor(node, depth) {
   if (node.color) return node.color
   return '#888780'
@@ -504,11 +597,20 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         onMouseLeave={e => { if (!isSection && !open) e.currentTarget.style.background = 'transparent' }}
       >
         {/* Folder icon */}
-        <div style={{ width: isSection ? 32 : 24, height: isSection ? 32 : 24, borderRadius: 5, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width={isSection ? 16 : 13} height={isSection ? 16 : 13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-        </div>
+        {(() => {
+          const IconSvg = isSection ? HS_ICONS[node.key] : null
+          const sz = isSection ? 16 : 13
+          return (
+            <div style={{ width: isSection ? 32 : 24, height: isSection ? 32 : 24, borderRadius: 5, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {IconSvg
+                ? <IconSvg color={color} size={sz} />
+                : <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+              }
+            </div>
+          )
+        })()}
 
         {/* Label */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -522,7 +624,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             <>
               <button onClick={zipFolder} style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Zip</button>
               {canManage && (
-                <label style={{ fontSize: 10, padding: '3px 8px', border: `0.5px solid ${color}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', color }}>
+                <label style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: '#448a40' }}>
                   {uploading ? '...' : '+ Upload'}
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
                 </label>
