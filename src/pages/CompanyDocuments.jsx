@@ -201,7 +201,10 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
                   canDelete={canManage} />
               ))}
               {canManage && (
-                <label style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+                <label onDragOver={e => { e.preventDefault(); e.currentTarget.style.background='rgba(68,138,64,0.1)'; e.currentTarget.style.borderColor='#448a40' }}
+                  onDragLeave={e => { e.currentTarget.style.background=''; e.currentTarget.style.borderColor='' }}
+                  onDrop={e => { e.preventDefault(); e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; const f=Array.from(e.dataTransfer.files); if(f.length) upload(f) }}
+                  style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', color: 'var(--text3)', fontSize: 11, transition: 'all .15s' }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                   Drop or click to add
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
@@ -427,7 +430,10 @@ function CategoryFolder({ cat, canManage, onPreview }) {
 
           {/* Upload drop area when empty and no subfolders */}
           {files.length === 0 && subfolders.length === 0 && canManage && (
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11, marginTop: 4 }}>
+            <label onDragOver={e => { e.preventDefault(); e.currentTarget.style.background='rgba(68,138,64,0.1)'; e.currentTarget.style.borderColor='#448a40'; e.currentTarget.style.color='#448a40' }}
+              onDragLeave={e => { e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; e.currentTarget.style.color='' }}
+              onDrop={e => { e.preventDefault(); e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; e.currentTarget.style.color=''; const f=Array.from(e.dataTransfer.files); if(f.length) upload(f) }}
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11, marginTop: 4, transition: 'all .15s' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
