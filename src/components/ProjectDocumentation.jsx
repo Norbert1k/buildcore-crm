@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import { formatDate } from '../lib/utils'
 
-// ── Fixed template folders ────────────────────────────────────────────────────
+// ── Fixed template folders — auto-created on every new project ────────────────
 const TEMPLATE_FOLDERS = [
   {
     key: '00-project-information',
@@ -20,74 +21,16 @@ const TEMPLATE_FOLDERS = [
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
   { key: '02-payment-application',  label: '02. Payment Application',     color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
   { key: '03-payment-notice',       label: '03. Payment Notice (Client)', color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
-  { key: '04-project-programme',    label: '04. Project Programme',       color: '#888780', bg: '#F1EFE8', subfolders: [] },
+  { key: '04-project-programme',    label: '04. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
+  { key: '05-site-records',         label: '05. Site Records',            color: '#0F6E56', bg: '#E1F5EE', subfolders: [] },
+  { key: '06-subcontractors',       label: '06. Subcontractors',          color: '#993C1D', bg: '#FAECE7', subfolders: [] },
+  { key: '07-correspondence',       label: '07. Correspondence',          color: '#888780', bg: '#F1EFE8', subfolders: [] },
+  { key: '08-variations',           label: '08. Variations',              color: '#E53935', bg: '#FDECEA', subfolders: [] },
+  { key: '09-finance',              label: '09. Finance',                 color: '#1D7B45', bg: '#E8F5E9', subfolders: [] },
+  { key: '10-handover',             label: '10. Handover',                color: '#448a40', bg: '#e8f5e7', subfolders: [] },
 ]
 
-const FOLDER_ICONS = {
-  '00-project-information': ({ color, size }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-      <rect x="9" y="3" width="6" height="4" rx="1"/>
-      <circle cx="12" cy="13" r="1" fill={color}/>
-      <line x1="12" y1="15" x2="12" y2="17"/>
-      <line x1="9" y1="10" x2="15" y2="10"/>
-    </svg>
-  ),
-  '01-project-order': ({ color, size }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="16" rx="2"/>
-      <line x1="7" y1="9" x2="17" y2="9"/>
-      <line x1="7" y1="13" x2="13" y2="13"/>
-      <polyline points="15 16 17 18 21 14"/>
-    </svg>
-  ),
-  '02-payment-application': ({ color, size }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="6" width="20" height="13" rx="2"/>
-      <circle cx="12" cy="12.5" r="3"/>
-      <circle cx="12" cy="12.5" r="1" fill={color}/>
-      <line x1="2" y1="10" x2="5" y2="10"/>
-      <line x1="19" y1="10" x2="22" y2="10"/>
-      <line x1="2" y1="15" x2="5" y2="15"/>
-      <line x1="19" y1="15" x2="22" y2="15"/>
-    </svg>
-  ),
-  '03-payment-notice': ({ color, size }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="9" y1="13" x2="15" y2="13"/>
-      <line x1="9" y1="17" x2="12" y2="17"/>
-      <polyline points="14 15 16 17 20 13"/>
-    </svg>
-  ),
-  '04-project-programme': ({ color, size }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="16" rx="2"/>
-      <line x1="3" y1="9" x2="21" y2="9"/>
-      <line x1="7" y1="4" x2="7" y2="9"/>
-      <line x1="12" y1="4" x2="12" y2="9"/>
-      <line x1="17" y1="4" x2="17" y2="9"/>
-      <rect x="6" y="12" width="2.5" height="4.5" rx="1" fill={color}/>
-      <rect x="10.5" y="13.5" width="2.5" height="3" rx="1" fill={color}/>
-      <rect x="15" y="11" width="2.5" height="5.5" rx="1" fill={color}/>
-    </svg>
-  ),
-}
-
-function FolderIcon({ folderKey, color, bg, size = 20 }) {
-  const IconSvg = FOLDER_ICONS[folderKey]
-  return (
-    <div style={{ width: size + 12, height: size + 12, borderRadius: 6, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      {IconSvg ? <IconSvg color={color} size={size} /> : (
-        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-        </svg>
-      )}
-    </div>
-  )
-}
-
+// ── Shared utilities ──────────────────────────────────────────────────────────
 function fmtSize(b) {
   if (!b) return ''
   if (b < 1024) return b + 'B'
@@ -98,6 +41,7 @@ function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4
 function naturalSort(arr) {
   return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' }))
 }
+
 async function triggerDownload(signedUrl, fileName) {
   try {
     const res = await fetch(signedUrl)
@@ -107,8 +51,25 @@ async function triggerDownload(signedUrl, fileName) {
     a.download = fileName
     document.body.appendChild(a); a.click(); document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-  } catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click() }
+  } catch {
+    const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click()
+  }
 }
+
+function Confirm({ message, onOk, onCancel }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
+      <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>{message}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Cancel</button>
+          <button onClick={onOk} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function fileTypeInfo(name, type) {
   const t = type || ''; const n = name || ''
   return {
@@ -119,35 +80,34 @@ function fileTypeInfo(name, type) {
     isPpt: t.includes('presentation') || t.includes('powerpoint') || /\.pptx?$/i.test(n),
   }
 }
-function FileTypeBadge({ name, type, size = 34 }) {
+
+function FileTypeBadge({ name, type, size = 36 }) {
   const { isWord, isExcel, isPpt } = fileTypeInfo(name, type)
   const color = isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : null
   const letter = isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
-  if (!color) return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-  return <div style={{ width: size, height: size + 8, background: color, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ color: '#fff', fontSize: size * 0.5, fontWeight: 700, fontFamily: 'Arial' }}>{letter}</span></div>
-}
-function Confirm({ message, onOk, onCancel }) {
+  if (!color) return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+    </svg>
+  )
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
-      <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>{message}</div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={B}>Cancel</button>
-          <button onClick={onOk} style={BR}>Delete</button>
-        </div>
-      </div>
+    <div style={{ width: size, height: size + 8, background: color, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ color: '#fff', fontSize: size * 0.55, fontWeight: 700, fontFamily: 'Arial' }}>{letter}</span>
     </div>
   )
 }
+
 const B  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 const BG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 const BR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 
+// ── View Toggle ───────────────────────────────────────────────────────────────
 function ViewToggle({ viewMode, setView }) {
   const views = [
-    { mode: 'grid', title: 'Grid', icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> },
+    { mode: 'grid',    title: 'Grid',    icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> },
     { mode: 'compact', title: 'Compact', icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="4" height="4"/><rect x="10" y="2" width="4" height="4"/><rect x="18" y="2" width="4" height="4"/><rect x="2" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><rect x="18" y="10" width="4" height="4"/><rect x="2" y="18" width="4" height="4"/><rect x="10" y="18" width="4" height="4"/><rect x="18" y="18" width="4" height="4"/></svg> },
-    { mode: 'list', title: 'List', icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg> },
+    { mode: 'list',    title: 'List',    icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg> },
   ]
   return (
     <div style={{ display: 'flex', gap: 2 }}>
@@ -160,6 +120,8 @@ function ViewToggle({ viewMode, setView }) {
     </div>
   )
 }
+
+// ── Bulk Bar ──────────────────────────────────────────────────────────────────
 function BulkBar({ selected, onZip, onClear }) {
   if (!selected.size) return null
   return (
@@ -171,32 +133,41 @@ function BulkBar({ selected, onZip, onClear }) {
   )
 }
 
+// ── File Card (grid/compact) ──────────────────────────────────────────────────
 function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState('')
   const { isImage, isPdf } = fileTypeInfo(file.file_name, file.file_type)
+
   useEffect(() => {
     supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
       .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
   }, [file.storage_path])
+
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
     await supabase.from('project_doc_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
-    file.file_name = renameVal.trim(); setRenaming(false)
+    file.file_name = renameVal.trim()
+    setRenaming(false)
   }
+
   return (
     <>
-      <div draggable={!renaming} style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', position: 'relative', transition: 'border .1s' }}>
+      <div draggable={!renaming}
+        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: renaming ? 'default' : 'default', position: 'relative', transition: 'border .1s' }}>
         <div onClick={e => { e.stopPropagation(); onSelect(file.id) }}
           style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
         <div style={{ height: 120, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onPreview(file, url)}>
-          {isImage && url ? <img src={url} alt={file.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : isPdf && url ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
-            : <FileTypeBadge name={file.file_name} type={file.file_type} size={34} />}
+          {isImage && url
+            ? <img src={url} alt={file.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : isPdf && url
+            ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
+            : <FileTypeBadge name={file.file_name} type={file.file_type} size={34} />
+          }
           <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(file.file_name)}</div>
         </div>
         <div style={{ padding: '6px 8px' }}>
@@ -208,7 +179,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
                   style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
               : <>
                   <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
-                  {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename" style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
+                  {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename" style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>}
                 </>
@@ -227,6 +198,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
   )
 }
 
+// ── File List Row (list view) ─────────────────────────────────────────────────
 function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -235,15 +207,19 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
   const { isWord, isExcel, isPpt, isPdf, isImage } = fileTypeInfo(file.file_name, file.file_type)
   const iconColor = isPdf ? '#E24B4A' : isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : isImage ? '#448a40' : '#888'
   const iconLetter = isPdf ? 'PDF' : isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
+
   useEffect(() => {
     supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
       .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
   }, [file.storage_path])
+
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
     await supabase.from('project_doc_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
-    file.file_name = renameVal.trim(); setRenaming(false)
+    file.file_name = renameVal.trim()
+    setRenaming(false)
   }
+
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', transition: 'border .1s' }}>
@@ -264,7 +240,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
             : <div onClick={() => onPreview(file, url)} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
-                  {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename" style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
+                  {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename" style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>}
                 </div>
@@ -283,13 +259,16 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
   )
 }
 
+// ── Files Grid (shared renderer) ──────────────────────────────────────────────
 function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, onSelect, onDrop, onUpload }) {
   if (!files.length) return null
-  if (viewMode === 'list') return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {files.map(f => <FileListRow key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete} selected={selected.has(f.id)} onSelect={onSelect} />)}
-    </div>
-  )
+  if (viewMode === 'list') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {files.map(f => <FileListRow key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete} selected={selected.has(f.id)} onSelect={onSelect} />)}
+      </div>
+    )
+  }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8 }}>
       {files.map(f => <FileCard key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete} selected={selected.has(f.id)} onSelect={onSelect} />)}
@@ -305,6 +284,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
   )
 }
 
+// ── Subfolder Section ─────────────────────────────────────────────────────────
 function SubfolderSection({ projectId, folder, subfolder, canManage, onPreview, viewMode }) {
   const [files, setFiles] = useState([])
   const [open, setOpen] = useState(false)
@@ -318,21 +298,27 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, onPreview, 
       .eq('project_id', projectId).eq('folder_key', folder.key).eq('subfolder_key', subfolder.key)
     setFiles(naturalSort(data || []))
   }
+
   async function upload(fileList) {
     if (!fileList.length) return
     setUploading(true)
     for (const file of fileList) {
       const path = `projects/${projectId}/${folder.key}/${subfolder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
+      if (!error) await supabase.from('project_doc_files').insert({
+        project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
+        file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
+      })
     }
     setUploading(false); loadFiles()
   }
+
   async function deleteFile(file) {
     await supabase.storage.from('project-docs').remove([file.storage_path])
     await supabase.from('project_doc_files').delete().eq('id', file.id)
     setFiles(prev => prev.filter(f => f.id !== file.id))
   }
+
   async function bulkZip() {
     const chosen = files.filter(f => selected.has(f.id))
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
@@ -347,7 +333,12 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, onPreview, 
     }
     document.head.appendChild(s)
   }
-  function onDrop(e) { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }
+
+  function onDrop(e) {
+    e.preventDefault(); e.stopPropagation()
+    const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
+  }
+
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
   return (
@@ -356,7 +347,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, onPreview, 
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: folder.color, flexShrink: 0 }} />
+        <div style={{ width: 22, height: 22, borderRadius: 4, background: folder.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 12 }}>📁</div>
         <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && files.length > 0 ? files.length + ' files' : ''}</span>
         {canManage && (
@@ -381,7 +372,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, onPreview, 
                 Drop files or click to upload
                 <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
               </label>
-            : <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage} onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={upload} />
+            : <FilesGrid files={files} viewMode={viewMode} onPreview={() => {}} canManage={canManage} onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={upload} />
           }
         </div>
       )}
@@ -389,6 +380,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, onPreview, 
   )
 }
 
+// ── Prime Folder Section ──────────────────────────────────────────────────────
 function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts, onPreview, viewMode, setViewMode }) {
   const [open, setOpen] = useState(false)
   const [subfolders, setSubfolders] = useState(folder.subfolders || [])
@@ -400,19 +392,27 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   const [zipping, setZipping] = useState(false)
   const [selected, setSelected] = useState(new Set())
   const [selectedSubs, setSelectedSubs] = useState(new Set())
+
   const fileCount = allFileCounts?.[folder.key] || 0
 
   useEffect(() => { loadCustomSubfolders() }, [])
   useEffect(() => { if (open) loadFiles() }, [open])
 
   async function loadCustomSubfolders() {
-    const { data } = await supabase.from('project_doc_folders').select('*').eq('project_id', projectId).eq('parent_key', folder.key).order('created_at')
-    if (data?.length) setSubfolders([...(folder.subfolders || []), ...data.map(d => ({ key: d.folder_key, label: d.label, custom: true }))])
+    const { data } = await supabase.from('project_doc_folders').select('*')
+      .eq('project_id', projectId).eq('parent_key', folder.key).order('created_at')
+    if (data?.length) {
+      const custom = data.map(d => ({ key: d.folder_key, label: d.label, custom: true }))
+      setSubfolders([...(folder.subfolders || []), ...custom])
+    }
   }
+
   async function loadFiles() {
-    const { data } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId).eq('folder_key', folder.key).is('subfolder_key', null)
+    const { data } = await supabase.from('project_doc_files').select('*')
+      .eq('project_id', projectId).eq('folder_key', folder.key).is('subfolder_key', null)
     setFiles(naturalSort(data || []))
   }
+
   async function addCustomSubfolder() {
     if (!newFolderName.trim()) return
     setSavingFolder(true)
@@ -421,25 +421,31 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
     setSubfolders(prev => [...prev, { key, label: newFolderName.trim(), custom: true }])
     setNewFolderName(''); setShowAddFolder(false); setSavingFolder(false)
   }
+
   async function upload(fileList) {
     if (!fileList.length) return
     setUploading(true)
     for (const file of fileList) {
       const path = `projects/${projectId}/${folder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
+      if (!error) await supabase.from('project_doc_files').insert({
+        project_id: projectId, folder_key: folder.key,
+        file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
+      })
     }
     setUploading(false); loadFiles()
   }
+
   async function deleteFile(file) {
     await supabase.storage.from('project-docs').remove([file.storage_path])
     await supabase.from('project_doc_files').delete().eq('id', file.id)
     setFiles(prev => prev.filter(f => f.id !== file.id))
   }
+
   async function zipAll() {
     setZipping(true)
     const { data: allFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId).eq('folder_key', folder.key)
-    if (!allFiles?.length) { alert('No files.'); setZipping(false); return }
+    if (!allFiles?.length) { alert('No files in this folder.'); setZipping(false); return }
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
@@ -453,6 +459,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
     }
     document.head.appendChild(s)
   }
+
   async function bulkZip() {
     const chosen = files.filter(f => selected.has(f.id))
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
@@ -467,35 +474,42 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
     }
     document.head.appendChild(s)
   }
+
   async function zipSelectedSubs() {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
       for (const sfKey of selectedSubs) {
         const sf = subfolders.find(s => s.key === sfKey)
+        const folderName = sf ? sf.label : sfKey
         const { data: sfFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId).eq('subfolder_key', sfKey)
         for (const f of (sfFiles || [])) {
           const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-          if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file((sf?.label || sfKey) + '/' + f.file_name, await res.blob()) }
+          if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
         }
       }
       const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '-folders.zip'; a.click()
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '-selected-folders.zip'; a.click()
       setSelectedSubs(new Set())
     }
     document.head.appendChild(s)
   }
-  function onDrop(e) { e.preventDefault(); e.stopPropagation(); const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }
+
+  function onDrop(e) {
+    e.preventDefault(); e.stopPropagation()
+    const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
+  }
+
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   function toggleSub(key) { setSelectedSubs(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n }) }
 
   return (
     <div style={{ marginBottom: 6 }}>
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', background: open ? 'var(--surface2)' : 'var(--surface)', border: '0.5px solid var(--border)', borderLeft: '3px solid ' + folder.color, transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { e.currentTarget.style.background = open ? 'var(--surface2)' : 'var(--surface)' }}>
-        <FolderIcon folderKey={folder.key} color={folder.color} bg={folder.bg} />
+        <div style={{ width: 34, height: 34, borderRadius: 8, background: folder.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}>📁</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
           <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{fileCount > 0 ? fileCount + ' file' + (fileCount !== 1 ? 's' : '') : 'Empty'}</div>
@@ -572,10 +586,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   )
 }
 
+// ── Add Top Folder Button ─────────────────────────────────────────────────────
 function AddTopFolderButton({ projectId, onAdded }) {
   const [show, setShow] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+
   async function save() {
     if (!name.trim()) return
     setSaving(true)
@@ -584,7 +600,13 @@ function AddTopFolderButton({ projectId, onAdded }) {
     onAdded({ key, label: name.trim(), color: '#888780', bg: '#F1EFE8', subfolders: [], custom: true })
     setName(''); setShow(false); setSaving(false)
   }
-  if (!show) return <button onClick={() => setShow(true)} style={{ ...B, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', marginTop: 8, fontSize: 12 }}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add folder</button>
+
+  if (!show) return (
+    <button onClick={() => setShow(true)} style={{ ...B, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', marginTop: 8, fontSize: 12 }}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add folder
+    </button>
+  )
   return (
     <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Folder name" autoFocus
@@ -596,6 +618,7 @@ function AddTopFolderButton({ projectId, onAdded }) {
   )
 }
 
+// ── Main Export ───────────────────────────────────────────────────────────────
 export default function ProjectDocumentation({ projectId, projectName }) {
   const { can } = useAuth()
   const [fileCounts, setFileCounts] = useState({})
@@ -605,41 +628,63 @@ export default function ProjectDocumentation({ projectId, projectName }) {
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('pdView_' + projectId) || 'grid' } catch { return 'grid' }
   })
-  function setView(mode) { setViewMode(mode); try { localStorage.setItem('pdView_' + projectId, mode) } catch {} }
+
+  function setView(mode) {
+    setViewMode(mode)
+    try { localStorage.setItem('pdView_' + projectId, mode) } catch {}
+  }
 
   const canManage = can('manage_projects')
   const canAddFolders = can('manage_projects')
 
   useEffect(() => {
     const prevent = e => e.preventDefault()
-    window.addEventListener('dragover', prevent); window.addEventListener('drop', prevent)
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
     return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', prevent) }
   }, [])
+
   useEffect(() => { loadFileCounts(); loadCustomTopFolders() }, [projectId])
 
   async function loadFileCounts() {
     const { data } = await supabase.from('project_doc_files').select('folder_key').eq('project_id', projectId)
-    if (data) { const c = {}; data.forEach(f => { c[f.folder_key] = (c[f.folder_key] || 0) + 1 }); setFileCounts(c) }
+    if (data) {
+      const counts = {}
+      data.forEach(f => { counts[f.folder_key] = (counts[f.folder_key] || 0) + 1 })
+      setFileCounts(counts)
+    }
   }
+
   async function loadCustomTopFolders() {
-    const { data } = await supabase.from('project_doc_folders').select('*').eq('project_id', projectId).is('parent_key', null).order('created_at')
-    if (data?.length) setCustomTopFolders(data.map(d => ({ key: d.folder_key, label: d.label, color: '#888780', bg: '#F1EFE8', subfolders: [], custom: true })))
+    const { data } = await supabase.from('project_doc_folders').select('*')
+      .eq('project_id', projectId).is('parent_key', null).order('created_at')
+    if (data?.length) {
+      setCustomTopFolders(data.map(d => ({ key: d.folder_key, label: d.label, color: '#888780', bg: '#F1EFE8', subfolders: [], custom: true })))
+    }
   }
+
   function openPreview(file, url) {
-    setPreviewFile(file); setPreviewUrl(url || null)
-    if (!url) supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600).then(({ data }) => { if (data?.signedUrl) setPreviewUrl(data.signedUrl) })
+    setPreviewFile(file)
+    setPreviewUrl(url || null)
+    if (!url) {
+      supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
+        .then(({ data }) => { if (data?.signedUrl) setPreviewUrl(data.signedUrl) })
+    }
   }
+
+  const allFolders = [...TEMPLATE_FOLDERS, ...customTopFolders]
 
   return (
     <div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {[...TEMPLATE_FOLDERS, ...customTopFolders].map(folder => (
+        {allFolders.map(folder => (
           <PrimeFolderSection key={folder.key} projectId={projectId} folder={folder}
             canManage={canManage} canAddFolders={canAddFolders} allFileCounts={fileCounts}
             onPreview={openPreview} viewMode={viewMode} setViewMode={setView} />
         ))}
       </div>
       {canAddFolders && <AddTopFolderButton projectId={projectId} onAdded={f => setCustomTopFolders(prev => [...prev, f])} />}
+
       {previewFile && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewFile(null)}>
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
