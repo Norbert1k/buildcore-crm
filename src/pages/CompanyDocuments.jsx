@@ -167,8 +167,8 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
         onDragOver={e => e.preventDefault()}
         onDrop={e => { e.preventDefault(); e.stopPropagation(); const id = e.dataTransfer.getData('text/plain'); if (id) { moveFile(id); return } const f = Array.from(e.dataTransfer.files); if (f.length) upload(f) }}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'all .1s', outline: 'none' }}
-        onMouseEnter={e => { if (!open) 
-        onMouseLeave={e => { 
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}
         <div style={{ width: 28, height: 28, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
           📁
         </div>
@@ -387,8 +387,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
           borderLeft: `3px solid ${cat.color}`,
           transition: 'background .1s',
         }}
-        onMouseEnter={e => { if (!open) 
-        onMouseLeave={e => { if (!open) 
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = open ? 'var(--surface2)' : 'var(--surface)' }}
       >
         {/* Icon in coloured circle */}
         <div style={{ width: 36, height: 36, borderRadius: 8, background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}>
