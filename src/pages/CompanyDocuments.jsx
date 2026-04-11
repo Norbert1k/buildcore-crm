@@ -700,8 +700,8 @@ export default function CompanyDocuments() {
             ? fileTypeInfo(previewDoc).isImage
               ? <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
               : fileTypeInfo(previewDoc).isPdf
-              ? <iframe src={previewUrl} style={{ width: '85vw', height: '80vh', border: 'none', borderRadius: 8 }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
-              : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '85vw', height: '80vh', border: 'none', borderRadius: 8, background: '#fff' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
+              ? <iframe src={previewUrl} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8 }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
+              : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8, background: '#fff' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
             : <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Unable to preview this file</div>
           }
         </div>
