@@ -8,10 +8,12 @@ export default function ProjectModal({ project, onClose, onSaved }) {
   const { profile } = useAuth()
   const editing = !!project
   const [managers, setManagers] = useState([])
+  const [clients, setClients] = useState([])
 
   const [form, setForm] = useState({
     project_name: project?.project_name || '',
     project_ref: project?.project_ref || '',
+    client_id: project?.client_id || '',
     client_name: project?.client_name || '',
     site_address: project?.site_address || '',
     city: project?.city || '',
@@ -27,12 +29,8 @@ export default function ProjectModal({ project, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('id, full_name, role')
-      .in('role', ['admin', 'project_manager'])
-      .order('full_name')
-      .then(({ data }) => setManagers(data || []))
+    supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'project_manager']).order('full_name').then(({ data }) => setManagers(data || []))
+    supabase.from('clients').select('id, name').order('name').then(({ data }) => setClients(data || []))
   }, [])
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })) }
@@ -107,8 +105,11 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <Field label="Project Reference">
           <input value={form.project_ref} onChange={e => set('project_ref', e.target.value)} placeholder="e.g. PRJ-2025-042" />
         </Field>
-        <Field label="Client Name">
-          <input value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Client company or individual" />
+        <Field label="Client">
+          <select value={form.client_id} onChange={e => set('client_id', e.target.value)}>
+            <option value="">— Select client —</option>
+            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
         </Field>
         <Field label="Status">
           <select value={form.status} onChange={e => set('status', e.target.value)}>
