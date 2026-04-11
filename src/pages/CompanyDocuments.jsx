@@ -461,6 +461,24 @@ function CategoryFolder({ cat, canManage, onPreview }) {
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
           )}
+          {canManage && !showAddSub && (
+            <button onClick={e => { e.stopPropagation(); setShowAddSub(true) }} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text3)', whiteSpace: 'nowrap' }}>+ Subfolder</button>
+          )}
+          {canManage && showAddSub && (
+            <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') addSubfolder(); if (e.key === 'Escape') setShowAddSub(false) }}
+                style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 120 }} />
+              <button onClick={e => { e.stopPropagation(); addSubfolder() }} disabled={savingSub}
+                style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', color: '#448a40', cursor: 'pointer' }}>
+                {savingSub ? '...' : 'Add'}
+              </button>
+              <button onClick={e => { e.stopPropagation(); setShowAddSub(false); setNewSubName('') }}
+                style={{ fontSize: 11, padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>
+                ✕
+              </button>
+            </div>
+          )}
         </div>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
           style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', marginLeft: 4, flexShrink: 0 }}>
@@ -497,21 +515,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
             </label>
           )}
-          {canManage && (
-            <div style={{ marginTop: 10 }}>
-              {showAddSub ? (
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
-                    onKeyDown={e => { if (e.key === 'Enter') addSubfolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                    style={{ flex: 1, fontSize: 12, padding: '5px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)' }} />
-                  <button onClick={addSubfolder} disabled={savingSub} style={{ fontSize: 11, padding: '5px 10px', border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', color: '#448a40', cursor: 'pointer' }}>{savingSub ? '...' : 'Add'}</button>
-                  <button onClick={() => setShowAddSub(false)} style={{ fontSize: 11, padding: '5px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>Cancel</button>
-                </div>
-              ) : (
-                <button onClick={() => setShowAddSub(true)} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px dashed var(--border)', borderRadius: 5, background: 'transparent', color: 'var(--text3)', cursor: 'pointer' }}>+ Add sub-folder</button>
-              )}
-            </div>
-          )}
+
         </div>
       )}
     </div>
