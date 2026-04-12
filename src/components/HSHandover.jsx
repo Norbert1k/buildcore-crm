@@ -486,14 +486,40 @@ function ViewToggle({ viewMode, setView }) {
     </div>
   )
 }
-function BulkBar({ selected, onZip, onClear }) {
+function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
+  const [showMove, setShowMove] = useState(false)
+  const [movePos, setMovePos] = useState({ bottom: 80, left: 400 })
   if (!selected.size) return null
+  function openMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMovePos({ bottom: window.innerHeight - rect.top + 8, left: rect.left })
+    setShowMove(v => !v)
+  }
   return (
-    <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
-      <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-      <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
-      <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
-    </div>
+    <>
+      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
+        <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
+        {onMove && <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
+        <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
+      </div>
+      {showMove && moveTargets && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 600 }} onClick={() => setShowMove(false)} />
+          <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
+            {moveTargets.map(t => (
+              <div key={t.key} onClick={() => { onMove(t.key); setShowMove(false) }}
+                style={{ padding: '8px 14px 8px 20px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}>
+                📁 {t.label}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
   )
 }
 
@@ -1040,7 +1066,15 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
           ))}
 
           {/* Files grid */}
-          <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
+          <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
+            onMove={async (targetKey) => {
+              for (const id of selected) await supabase.from('hs_files').update({ folder_key: targetKey }).eq('id', id)
+              setSelected(new Set()); loadFiles()
+            }}
+            moveTargets={[
+              ...(node.children || []).map(c => ({ key: c.key, label: c.label })),
+              ...myCustomFolders.map(cf => ({ key: cf.folder_key, label: cf.label }))
+            ]} />
           {files.length > 0 && (
             viewMode === 'list'
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, marginBottom: 8 }}>
