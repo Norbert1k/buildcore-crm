@@ -118,6 +118,33 @@ async function triggerDownload(signedUrl, fileName) {
   }
 }
 
+async function readDropEntries(e) {
+  const items = e.dataTransfer?.items
+  if (!items) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  const entries = []
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry?.()
+    if (entry) entries.push(entry)
+  }
+  if (!entries.length) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  const result = { files: [], folders: new Set() }
+  async function walk(entry, path) {
+    if (entry.isFile) {
+      const file = await new Promise(r => entry.file(r))
+      result.files.push({ file, path })
+      if (path) result.folders.add(path)
+    } else if (entry.isDirectory) {
+      const dirPath = path ? path + '/' + entry.name : entry.name
+      result.folders.add(dirPath)
+      const reader = entry.createReader()
+      const children = await new Promise(r => reader.readEntries(r))
+      for (const child of children) await walk(child, dirPath)
+    }
+  }
+  for (const entry of entries) await walk(entry, '')
+  return { files: result.files, folders: [...result.folders] }
+}
+
 function Confirm({ message, onOk, onCancel }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
@@ -516,13 +543,35 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     if (onReload) onReload('__folder_deleted__') // trigger parent to refresh its list
   }
 
-  function onDrop(e) {
+  async function onDrop(e) {
     e.preventDefault(); e.stopPropagation()
     const subKey = e.dataTransfer.getData('subfolder')
     if (subKey) { moveSubfolder(subKey); return }
     const id = e.dataTransfer.getData('text/plain')
     if (id) { moveFile(id); return }
-    const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
+    const drop = await readDropEntries(e)
+    if (drop.folders.length > 0) {
+      const keyMap = {}
+      for (const fp of drop.folders.sort()) {
+        const parts = fp.split('/')
+        const label = parts[parts.length - 1]
+        const parentPath = parts.slice(0, -1).join('/')
+        const parentKey = parentPath ? keyMap[parentPath] : subfolder.key
+        const key = (parentKey || subfolder.key) + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+        keyMap[fp] = key
+        await supabase.from('company_doc_subfolders').insert({ category_key: categoryKey, folder_key: key, label, parent_folder_key: parentKey || subfolder.key })
+      }
+      for (const { file, path } of drop.files) {
+        const sfKey = path ? keyMap[path] : subfolder.key
+        const storagePath = 'company/' + categoryKey + '/' + sfKey + '/' + Date.now() + '-' + file.name
+        const { error } = await supabase.storage.from('company-docs').upload(storagePath, file)
+        if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath })
+      }
+      loadChildFolders(); loadFiles(); if (onReload) onReload('__folder_renamed__')
+    } else {
+      const f = drop.files.map(x => x.file)
+      if (f.length) upload(f)
+    }
   }
   function toggleSelect(id) {
     setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -738,24 +787,68 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     document.head.appendChild(s)
   }
 
-  function onDropFolder(e) {
+  async function onDropFolder(e) {
     e.preventDefault(); e.stopPropagation()
     const subKey = e.dataTransfer.getData('subfolder')
     if (subKey) { moveSubfolderToRoot(subKey); return }
-    const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
+    const drop = await readDropEntries(e)
+    if (drop.folders.length > 0) {
+      const keyMap = {}
+      for (const fp of drop.folders.sort()) {
+        const parts = fp.split('/')
+        const label = parts[parts.length - 1]
+        const parentPath = parts.slice(0, -1).join('/')
+        const parentKey = parentPath ? keyMap[parentPath] : null
+        const key = cat.key + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+        keyMap[fp] = key
+        await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label, parent_folder_key: parentKey || null })
+      }
+      for (const { file, path } of drop.files) {
+        const sfKey = path ? keyMap[path] : null
+        const storagePath = 'company/' + cat.key + '/' + (sfKey || 'root') + '/' + Date.now() + '-' + file.name
+        const { error } = await supabase.storage.from('company-docs').upload(storagePath, file)
+        if (!error) await supabase.from('company_documents').insert({ category: cat.key, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath })
+      }
+      loadSubfolders(); loadFiles(); loadAllSubfolders()
+    } else {
+      const f = drop.files.map(x => x.file)
+      if (f.length) upload(f)
+    }
   }
   async function moveSubfolderToRoot(key) {
     await supabase.from('company_doc_subfolders').update({ parent_folder_key: null }).eq('folder_key', key)
     loadSubfolders()
   }
 
-  function onDropBody(e) {
+  async function onDropBody(e) {
     e.preventDefault(); e.stopPropagation()
     const subKey = e.dataTransfer.getData('subfolder')
     if (subKey) { moveSubfolderToRoot(subKey); return }
     const id = e.dataTransfer.getData('text/plain')
     if (id) { moveToRoot(id); return }
-    const f = Array.from(e.dataTransfer.files); if (f.length) upload(f)
+    const drop = await readDropEntries(e)
+    if (drop.folders.length > 0) {
+      const keyMap = {}
+      for (const fp of drop.folders.sort()) {
+        const parts = fp.split('/')
+        const label = parts[parts.length - 1]
+        const parentPath = parts.slice(0, -1).join('/')
+        const parentKey = parentPath ? keyMap[parentPath] : null
+        const key = cat.key + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+        keyMap[fp] = key
+        await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label, parent_folder_key: parentKey || null })
+      }
+      for (const { file, path } of drop.files) {
+        const sfKey = path ? keyMap[path] : null
+        const storagePath = 'company/' + cat.key + '/' + (sfKey || 'root') + '/' + Date.now() + '-' + file.name
+        const { error } = await supabase.storage.from('company-docs').upload(storagePath, file)
+        if (!error) await supabase.from('company_documents').insert({ category: cat.key, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath })
+      }
+      loadSubfolders(); loadFiles(); loadAllSubfolders()
+    } else {
+      const f = drop.files.map(x => x.file)
+      if (f.length) upload(f)
+    }
   }
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
   function toggleSub(key) { setSelectedSubs(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n }) }
