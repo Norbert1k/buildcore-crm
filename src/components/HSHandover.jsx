@@ -364,6 +364,9 @@ async function triggerDownload(signedUrl, fileName) {
 function naturalSort(arr) {
   return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' }))
 }
+const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)',     borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 function ViewToggle({ viewMode, setView }) {
   const views = [
     { mode: 'grid', title: 'Grid', icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> },
@@ -590,6 +593,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   const [uploading, setUploading] = useState(false)
   const [showAddFolder, setShowAddFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const [savingFolder, setSavingFolder] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [selected, setSelected] = useState(new Set())
   const [renamingNode, setRenamingNode] = useState(false)
@@ -638,11 +642,11 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
   async function addCustomFolder() {
     if (!newFolderName.trim()) return
-    const key = `custom-${node.key}-${Date.now()}`
+    setSavingFolder(true)
+    const key = 'custom-' + node.key + '-' + Date.now()
     await supabase.from('hs_folders').insert({ project_id: projectId, parent_key: node.key, folder_key: key, label: newFolderName.trim() })
-    setNewFolderName('')
-    setShowAddFolder(false)
-    onCustomFolderAdded()
+    onCustomFolderAdded?.({ project_id: projectId, parent_key: node.key, folder_key: key, label: newFolderName.trim() })
+    setNewFolderName(''); setShowAddFolder(false); setSavingFolder(false)
   }
 
   async function zipFolder() {
@@ -729,27 +733,47 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-          {open && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          {showAddFolder ? (
             <>
-              <button onClick={zipFolder} style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Zip</button>
-              {canManage && (
-                <label style={{ fontSize: 10, padding: '3px 8px', border: `0.5px solid ${color}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', color }}>
-                  {uploading ? '...' : '+ Upload'}
-                  <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
-                </label>
-              )}
-              {open && depth === 0 && setViewMode && <ViewToggle viewMode={viewMode} setView={setViewMode} />}
+              <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') addCustomFolder(); if (e.key === 'Escape') { setShowAddFolder(false); setNewFolderName('') } }}
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
+              <button onClick={addCustomFolder} disabled={!newFolderName.trim()} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
+              <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
+            </>
+          ) : (
+            <>
               {node.key.startsWith('custom-') && canManage && (
                 <>
-                  <button onClick={e => { e.stopPropagation(); setRenameNodeVal(node.label); setRenamingNode(true) }} title="Rename"
-                    style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid #448a40', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  <button onClick={e => { e.stopPropagation(); setRenameNodeVal(node.label); setRenamingNode(true) }} title="Rename folder"
+                    style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Rename
                   </button>
-                  <button onClick={e => { e.stopPropagation(); setConfirmDelNode(true) }} title="Delete"
-                    style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                  <button onClick={e => { e.stopPropagation(); setConfirmDelNode(true) }} title="Delete folder"
+                    style={{ ...BtnR, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    Delete
                   </button>
+                </>
+              )}
+              {open && (
+                <>
+                  <button onClick={zipFolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+                    Zip all
+                  </button>
+                  {canAddFolders && (
+                    <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>
+                  )}
+                  {canManage && (
+                    <label style={BtnG}>
+                      {uploading ? '...' : '+ Upload'}
+                      <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
+                    </label>
+                  )}
+                  {depth === 0 && setViewMode && <ViewToggle viewMode={viewMode} setView={setViewMode} />}
                 </>
               )}
             </>
@@ -808,23 +832,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             <div style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 0', fontStyle: 'italic' }}>Empty folder</div>
           )}
 
-          {/* Add custom folder button */}
-          {canAddFolders && (
-            showAddFolder ? (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '6px 0' }}>
-                <input autoFocus value={newFolderName} onChange={e => setNewFolderName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') addCustomFolder(); if (e.key === 'Escape') setShowAddFolder(false) }}
-                  placeholder="Folder name..." style={{ flex: 1, fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface)', color: 'var(--text)' }} />
-                <button onClick={addCustomFolder} disabled={!newFolderName.trim()} style={{ fontSize: 11, padding: '4px 8px', background: color, color: 'white', border: 'none', borderRadius: 5, cursor: 'pointer' }}>Add</button>
-                <button onClick={() => setShowAddFolder(false)} style={{ fontSize: 11, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>✕</button>
-              </div>
-            ) : (
-              <button onClick={() => setShowAddFolder(true)} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '4px 8px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text3)', marginTop: 2 }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add sub-folder
-              </button>
-            )
-          )}
+
         </div>
       )}
 
