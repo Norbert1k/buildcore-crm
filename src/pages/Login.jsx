@@ -70,6 +70,10 @@ export default function Login() {
       const { error: ve } = await supabase.auth.mfa.verify({ factorId, challengeId: cd.id, code })
       setLoading(false)
       if (ve) { setError('Incorrect code — please try again'); return }
+
+      // Refresh session so AuthProvider detects AAL2 and sets user
+      await supabase.auth.refreshSession()
+
       // Check forced password change after 2FA
       try {
         const { data: { user } } = await supabase.auth.getUser()

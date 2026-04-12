@@ -15,24 +15,45 @@ export function AuthProvider({ children }) {
   const [projectAccess, setProjectAccess] = useState([])
   const [loading, setLoading] = useState(true)
 
+  async function checkAndSetUser(sessionUser) {
+    if (!sessionUser) {
+      setUser(null)
+      setProfile(null)
+      setProjectAccess([])
+      setLoading(false)
+      return
+    }
+    // Check if 2FA is required but not yet completed
+    try {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+        // User has 2FA enabled but hasn't verified yet — don't set user so app stays on login
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+    } catch (e) {}
+    setUser(sessionUser)
+    fetchProfile(sessionUser.id)
+  }
+
   useEffect(() => {
     // Apply theme from localStorage immediately on mount
     const saved = localStorage.getItem('theme') || 'light'
     applyTheme(saved)
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
+      if (session?.user) checkAndSetUser(session.user)
+      else { setUser(null); setLoading(false) }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
+      if (session?.user) checkAndSetUser(session.user)
       else {
+        setUser(null)
         setProfile(null)
         setProjectAccess([])
-        // Keep theme from localStorage when signed out
         const saved = localStorage.getItem('theme') || 'light'
         applyTheme(saved)
         setLoading(false)
