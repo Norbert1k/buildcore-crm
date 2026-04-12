@@ -48,22 +48,30 @@ export default function Settings() {
     if (!addForm.email || !addForm.full_name) { setAddError('Name and email are required'); return }
     setSaving(true)
     setAddError('')
-    // Generate a random temporary password (user will set their own via email link)
     const tempPass = crypto.randomUUID().slice(0, 16) + 'A1!'
-    const { data, error } = await supabase.auth.signUp({
-      email: addForm.email,
-      password: tempPass,
-      options: {
-        data: { full_name: addForm.full_name, role: addForm.role },
-        emailRedirectTo: window.location.origin + '/login'
-      }
-    })
-    if (error) { setAddError(error.message); setSaving(false); return }
-    if (data?.user) {
-      await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, must_change_password: true })
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({
+          email: addForm.email,
+          fullName: addForm.full_name,
+          role: addForm.role,
+          tempPassword: tempPass,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) { setAddError(result.error || 'Failed to create user'); setSaving(false); return }
+    } catch (e) {
+      setAddError(e.message); setSaving(false); return
     }
     setSaving(false)
-    setAddSuccess(`Invite sent to ${addForm.email}. They will receive an email to confirm their account and can then log in at crm.cltd.co.uk to set their password.`)
+    setAddSuccess(`Account created for ${addForm.full_name}. A welcome email with login details has been sent to ${addForm.email}.`)
     setAddForm({ email: '', full_name: '', role: 'viewer' })
     loadUsers()
   }
