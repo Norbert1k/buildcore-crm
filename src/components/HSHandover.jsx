@@ -1032,16 +1032,17 @@ export default function HSHandover({ projectId, projectName }) {
 
     // ── Fetch all files and place into correct folder paths ───────────────
     const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
-    for (const f of (allFiles || [])) {
-      const folderPath = keyToPath[f.folder_key] || f.folder_key
-      const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
-      if (data?.signedUrl) {
-        try {
-          const res = await fetch(data.signedUrl)
-          zip.folder(folderPath).file(f.file_name, await res.blob())
-        } catch { /* skip unreadable files */ }
-      }
-    }
+const filePromises = (allFiles || []).map(async f => {
+  const folderPath = keyToPath[f.folder_key] || f.folder_key
+  const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
+  if (data?.signedUrl) {
+    try {
+      const res = await fetch(data.signedUrl)
+      zip.folder(folderPath).file(f.file_name, await res.blob())
+    } catch {}
+  }
+})
+await Promise.all(filePromises)
 
     const blob = await zip.generateAsync({ type: 'blob' })
     const a = document.createElement('a')
