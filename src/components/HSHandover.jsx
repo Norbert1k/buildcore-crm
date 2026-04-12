@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 
-// ── Full H&S folder template ─────────────────────────────────
+// ââ Full H&S folder template âââââââââââââââââââââââââââââââââ
 const HS_STRUCTURE = [
   { key: 's1', label: 'Section 1 | H&S File', color: '#448a40', bg: '#e8f5e7', children: [] },
   { key: 's2', label: 'Section 2 | Project Directory', color: '#448a40', bg: '#e8f5e7', children: [] },
@@ -326,7 +326,7 @@ const HS_STRUCTURE = [
   ]},
 ]
 
-// ── Helpers ───────────────────────────────────────────────────
+// ââ Helpers âââââââââââââââââââââââââââââââââââââââââââââââââââ
 function getAllKeys(nodes, acc = []) {
   nodes.forEach(n => { acc.push(n.key); if (n.children?.length) getAllKeys(n.children, acc) })
   return acc
@@ -352,7 +352,7 @@ function findSection(nodes, key) {
 }
 
 
-// ── Upgrade utilities ─────────────────────────────────────────────────────────
+// ââ Upgrade utilities âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 async function triggerDownload(signedUrl, fileName) {
   try {
     const res = await fetch(signedUrl); const blob = await res.blob()
@@ -389,8 +389,8 @@ function BulkBar({ selected, onZip, onClear }) {
   return (
     <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
       <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-      <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
-      <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
+      <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>â Download ZIP</button>
+      <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>â Clear</button>
     </div>
   )
 }
@@ -498,7 +498,7 @@ function getColor(node, depth) {
   return '#888780'
 }
 
-// ── File Card ─────────────────────────────────────────────────
+// ââ File Card âââââââââââââââââââââââââââââââââââââââââââââââââ
 function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -569,11 +569,11 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }
                 </>
             }
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(file.file_size)}{file.file_size ? ' · ' : ''}{new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(file.file_size)}{file.file_size ? ' Â· ' : ''}{new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-            <button onClick={e => { e.stopPropagation(); download() }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
-            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+            <button onClick={e => { e.stopPropagation(); download() }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>â</button>
+            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>â</button>}
           </div>
         </div>
       </div>
@@ -592,7 +592,7 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }
   )
 }
 
-// ── HS File List Row ──────────────────────────────────────────────────────────
+// ââ HS File List Row ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
 function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPreview }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -658,8 +658,8 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
           {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-          {url && <button onClick={e => { e.stopPropagation(); download() }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+          {url && <button onClick={e => { e.stopPropagation(); download() }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>â</button>}
+          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>â</button>}
         </div>
       </div>
       {confirmDel && (
@@ -849,7 +849,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
                 onKeyDown={e => { if (e.key === 'Enter') addCustomFolder(); if (e.key === 'Escape') { setShowAddFolder(false); setNewFolderName('') } }}
                 style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
               <button onClick={addCustomFolder} disabled={!newFolderName.trim()} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
-              <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
+              <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>â</button>
             </>
           ) : (
             <>
@@ -966,7 +966,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   )
 }
 
-// ── Main HSHandover component ─────────────────────────────────
+// ââ Main HSHandover component âââââââââââââââââââââââââââââââââ
 export default function HSHandover({ projectId, projectName }) {
   const { can } = useAuth()
   const [fileCounts, setFileCounts] = useState({})
@@ -1027,7 +1027,7 @@ export default function HSHandover({ projectId, projectName }) {
     const boldFont = await merged.embedFont(StandardFonts.HelveticaBold)
     const regFont = await merged.embedFont(StandardFonts.Helvetica)
 
-    // ── Cover page ────────────────────────────────────────────
+    // ââ Cover page ââââââââââââââââââââââââââââââââââââââââââââ
     const cover = merged.addPage(PageSizes.A4)
     const { width, height } = cover.getSize()
 
@@ -1043,9 +1043,9 @@ export default function HSHandover({ projectId, projectName }) {
 
     // Footer
     cover.drawRectangle({ x: 0, y: 0, width, height: 40, color: rgb(0.267, 0.541, 0.251) })
-    cover.drawText('Confidential — City Construction Ltd', { x: 40, y: 14, size: 10, font: regFont, color: rgb(1, 1, 1) })
+    cover.drawText('Confidential â City Construction Ltd', { x: 40, y: 14, size: 10, font: regFont, color: rgb(1, 1, 1) })
 
-    // ── Collect all PDF files ─────────────────────────────────
+    // ââ Collect all PDF files âââââââââââââââââââââââââââââââââ
     const query = sectionKeys ? supabase.from('hs_files').select('*').eq('project_id', projectId).in('folder_key', sectionKeys) : supabase.from('hs_files').select('*').eq('project_id', projectId)
     const { data: allFiles } = await query.order('folder_key').order('file_name')
 
@@ -1078,16 +1078,16 @@ export default function HSHandover({ projectId, projectName }) {
       } catch (e) { console.warn('Could not embed:', file.file_name) }
     }
 
-    // ── Appendix: non-PDF file index ─────────────────────────
+    // ââ Appendix: non-PDF file index âââââââââââââââââââââââââ
     if (otherFiles.length > 0) {
       const appendix = merged.addPage(PageSizes.A4)
       appendix.drawRectangle({ x: 0, y: height - 8, width, height: 8, color: rgb(0.267, 0.541, 0.251) })
-      appendix.drawText('Appendix — Additional Files', { x: 40, y: height - 60, size: 18, font: boldFont, color: rgb(0.1, 0.1, 0.1) })
+      appendix.drawText('Appendix â Additional Files', { x: 40, y: height - 60, size: 18, font: boldFont, color: rgb(0.1, 0.1, 0.1) })
       appendix.drawText('The following files are included in the project but cannot be embedded in PDF format:', { x: 40, y: height - 90, size: 11, font: regFont, color: rgb(0.4, 0.4, 0.4) })
       let y = height - 130
       for (const f of otherFiles) {
         if (y < 60) break
-        appendix.drawText(`• ${f.file_name}`, { x: 50, y, size: 10, font: regFont, color: rgb(0.2, 0.2, 0.2) })
+        appendix.drawText(`â¢ ${f.file_name}`, { x: 50, y, size: 10, font: regFont, color: rgb(0.2, 0.2, 0.2) })
         y -= 18
       }
     }
@@ -1100,7 +1100,7 @@ export default function HSHandover({ projectId, projectName }) {
   async function compileFullHandover() {
     setCompilingFull(true)
     try {
-      await compileHandover(null, `${projectName || 'Project'} — H&S Handover File.pdf`)
+      await compileHandover(null, `${projectName || 'Project'} â H&S Handover File.pdf`)
     } catch (e) { alert('Error compiling PDF: ' + e.message) }
     setCompilingFull(false)
   }
@@ -1111,7 +1111,7 @@ export default function HSHandover({ projectId, projectName }) {
       // Get all keys under Section 8
       const s8 = HS_STRUCTURE.find(s => s.key === 's8')
       const s8Keys = getAllKeys([s8])
-      await compileHandover(s8Keys, `${projectName || 'Project'} — Section 8 O&M Manuals.pdf`)
+      await compileHandover(s8Keys, `${projectName || 'Project'} â Section 8 O&M Manuals.pdf`)
     } catch (e) { alert('Error compiling PDF: ' + e.message) }
     setCompilingOm(false)
   }
@@ -1134,7 +1134,7 @@ export default function HSHandover({ projectId, projectName }) {
           keyToPath[cf.folder_key] = (keyToPath[cf.parent_key] || cf.parent_key) + '/' + cf.label
       }
 
-      // Create every folder as a directory entry in the ZIP
+      // Create every folder with a _folder placeholder file so Windows shows empty dirs
       for (const path of Object.values(keyToPath)) {
         zip.file(path + '/_folder', path)
       }
@@ -1169,7 +1169,7 @@ export default function HSHandover({ projectId, projectName }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>H&S Handover File</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{totalFiles} file{totalFiles !== 1 ? 's' : ''} · Sections 1–11</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{totalFiles} file{totalFiles !== 1 ? 's' : ''} Â· Sections 1â11</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button onClick={zipAll} disabled={zippingAll} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1218,15 +1218,15 @@ export default function HSHandover({ projectId, projectName }) {
 
       {/* Note */}
       <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8, fontSize: 11, color: 'var(--text3)' }}>
-        Template structure fixed — add sub-folders within sections as needed per project. Only PDFs are embedded in compiled exports; other file types appear in the appendix index.
+        Template structure fixed â add sub-folders within sections as needed per project. Only PDFs are embedded in compiled exports; other file types appear in the appendix index.
       </div>
 
       {/* Preview modal */}
       {previewFile && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewFile(null)}>
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
-            {previewUrl && <button onClick={e => { e.stopPropagation(); triggerDownload(previewUrl, previewFile.file_name) }} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
-            <button onClick={() => setPreviewFile(null)} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
+            {previewUrl && <button onClick={e => { e.stopPropagation(); triggerDownload(previewUrl, previewFile.file_name) }} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>â Download</button>}
+            <button onClick={() => setPreviewFile(null)} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>â Close</button>
           </div>
           <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 12 }}>{previewFile.file_name}</div>
           {previewUrl ? (
