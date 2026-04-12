@@ -71,9 +71,11 @@ export default function Settings() {
   async function deactivateUser(userId) {
     setSaving(true)
     // Remove project access
-    await supabase.from('user_project_access').delete().eq('user_id', userId)
+    const { error: accessError } = await supabase.from('user_project_access').delete().eq('user_id', userId)
+    if (accessError) console.error('Access delete error:', accessError)
     // Set role to disabled
-    await supabase.from('profiles').update({ role: 'disabled' }).eq('id', userId)
+    const { error: profileError } = await supabase.from('profiles').update({ role: 'disabled' }).eq('id', userId)
+    if (profileError) { console.error('Profile update error:', profileError); alert('Error: ' + profileError.message) }
     setSaving(false)
     setConfirmDeleteUser(null)
     setShowEditUser(null)
