@@ -25,6 +25,19 @@ export default function Login() {
     setLoading(false)
     if (error) { setError(error.message); return }
 
+    // Check if account is disabled
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+        if (profileData?.role === 'disabled') {
+          await supabase.auth.signOut()
+          setError('Your account has been deactivated. Contact your administrator.')
+          return
+        }
+      }
+    } catch (e) {}
+
     // Check 2FA using Supabase recommended approach
     try {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()

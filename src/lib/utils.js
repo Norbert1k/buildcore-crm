@@ -50,6 +50,7 @@ export const ROLES = {
   site_manager:         { label: 'Site Manager',        cls: 'pill-amber',  desc: 'Access assigned projects & compliance docs only' },
   document_controller:  { label: 'Document Controller', cls: 'pill-green',  desc: 'Add & edit compliance documents' },
   viewer:               { label: 'Viewer',              cls: 'pill-gray',   desc: 'Read-only access to all areas' },
+  disabled:             { label: 'Disabled',            cls: 'pill-gray',   desc: 'Account deactivated — cannot log in' },
 }
 
 export const ROLE_PERMISSIONS = {
@@ -59,6 +60,7 @@ export const ROLE_PERMISSIONS = {
   site_manager:        { nav: ['dashboard','subcontractors','projects','suppliers','company','settings'], financials: false, performance: true },
   document_controller: { nav: ['dashboard','subcontractors','documents','projects','clients','company'], financials: false, performance: false },
   viewer:              { nav: ['dashboard','subcontractors','documents','projects','clients','company'], financials: false, performance: false },
+  disabled:            { nav: [], financials: false, performance: false },
 }
 
 export const NOTE_TYPES = {

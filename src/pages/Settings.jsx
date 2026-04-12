@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ROLES, ROLE_PERMISSIONS } from '../lib/utils'
-import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit } from '../components/ui'
+import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
 export default function Settings() {
@@ -14,11 +14,12 @@ export default function Settings() {
   const [showEditUser, setShowEditUser] = useState(null)
   const [show2FA, setShow2FA] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
-  const [addForm, setAddForm] = useState({ email: '', full_name: '', password: '', role: 'viewer' })
+  const [addForm, setAddForm] = useState({ email: '', full_name: '', role: 'viewer' })
   const [editForm, setEditForm] = useState({ full_name: '', role: 'viewer', projectIds: [] })
   const [saving, setSaving] = useState(false)
   const [addError, setAddError] = useState('')
   const [addSuccess, setAddSuccess] = useState('')
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState(null)
 
   useEffect(() => {
     if (can('manage_users')) { loadUsers(); loadProjects() }
@@ -44,22 +45,38 @@ export default function Settings() {
   }
 
   async function createUser() {
-    if (!addForm.email || !addForm.full_name || !addForm.password) { setAddError('All fields are required'); return }
-    if (addForm.password.length < 6) { setAddError('Password must be at least 6 characters'); return }
+    if (!addForm.email || !addForm.full_name) { setAddError('Name and email are required'); return }
     setSaving(true)
     setAddError('')
+    // Generate a random temporary password (user will set their own via email link)
+    const tempPass = crypto.randomUUID().slice(0, 16) + 'A1!'
     const { data, error } = await supabase.auth.signUp({
       email: addForm.email,
-      password: addForm.password,
-      options: { data: { full_name: addForm.full_name, role: addForm.role } }
+      password: tempPass,
+      options: {
+        data: { full_name: addForm.full_name, role: addForm.role },
+        emailRedirectTo: window.location.origin + '/login'
+      }
     })
     if (error) { setAddError(error.message); setSaving(false); return }
     if (data?.user) {
       await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, must_change_password: true })
     }
     setSaving(false)
-    setAddSuccess(`Account created for ${addForm.full_name}. They can log in at crm.cltd.co.uk`)
-    setAddForm({ email: '', full_name: '', password: '', role: 'viewer' })
+    setAddSuccess(`Invite sent to ${addForm.email}. They will receive an email to confirm their account and can then log in at crm.cltd.co.uk to set their password.`)
+    setAddForm({ email: '', full_name: '', role: 'viewer' })
+    loadUsers()
+  }
+
+  async function deactivateUser(userId) {
+    setSaving(true)
+    // Remove project access
+    await supabase.from('user_project_access').delete().eq('user_id', userId)
+    // Set role to disabled
+    await supabase.from('profiles').update({ role: 'disabled' }).eq('id', userId)
+    setSaving(false)
+    setConfirmDeleteUser(null)
+    setShowEditUser(null)
     loadUsers()
   }
 
@@ -175,9 +192,14 @@ export default function Settings() {
                         <td className="td-muted">{new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                         <td>
                           {u.id !== profile?.id && (
-                            <button className="btn btn-sm" onClick={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}>
-                              <IconEdit size={13} /> Edit
-                            </button>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              <button className="btn btn-sm" onClick={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}>
+                                <IconEdit size={13} /> Edit
+                              </button>
+                              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteUser(u)} title="Deactivate user">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -231,7 +253,6 @@ export default function Settings() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Full Name *"><input value={addForm.full_name} onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Jane Smith" autoFocus /></Field>
               <Field label="Email Address *"><input type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@cltd.co.uk" /></Field>
-              <Field label="Temporary Password *"><input type="password" value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 characters" /></Field>
               <Field label="Role">
                 <select value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))}>
                   {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -247,7 +268,7 @@ export default function Settings() {
               </div>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text3)', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '8px 10px' }}>
-              User logs in at <strong>crm.cltd.co.uk</strong> with their email and this password.
+              📧 An email will be sent to the user to confirm their account. On first login at <strong>crm.cltd.co.uk</strong> they will be asked to set their own password.
             </div>
           </div>
         )}
@@ -301,6 +322,16 @@ export default function Settings() {
           )}
         </div>
       </Modal>
+
+      {/* Confirm Deactivate User */}
+      <ConfirmDialog
+        open={!!confirmDeleteUser}
+        onClose={() => setConfirmDeleteUser(null)}
+        onConfirm={() => deactivateUser(confirmDeleteUser.id)}
+        title="Deactivate user"
+        message={`Are you sure you want to deactivate ${confirmDeleteUser?.full_name}? They will no longer be able to log in. This can be reversed by changing their role back.`}
+        danger
+      />
     </div>
   )
 }
