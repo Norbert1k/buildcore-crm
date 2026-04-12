@@ -70,12 +70,24 @@ export default function Settings() {
 
   async function deactivateUser(userId) {
     setSaving(true)
-    // Remove project access
-    const { error: accessError } = await supabase.from('user_project_access').delete().eq('user_id', userId)
-    if (accessError) console.error('Access delete error:', accessError)
-    // Set role to disabled
-    const { error: profileError } = await supabase.from('profiles').update({ role: 'disabled' }).eq('id', userId)
-    if (profileError) { console.error('Profile update error:', profileError); alert('Error: ' + profileError.message) }
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ userId }),
+      })
+      const result = await res.json()
+      if (!res.ok) { alert('Error: ' + (result.error || 'Failed to delete user')); setSaving(false); return }
+    } catch (e) {
+      alert('Error: ' + e.message)
+      setSaving(false)
+      return
+    }
     setSaving(false)
     setConfirmDeleteUser(null)
     setShowEditUser(null)
@@ -330,8 +342,8 @@ export default function Settings() {
         open={!!confirmDeleteUser}
         onClose={() => setConfirmDeleteUser(null)}
         onConfirm={() => deactivateUser(confirmDeleteUser.id)}
-        title="Deactivate user"
-        message={`Are you sure you want to deactivate ${confirmDeleteUser?.full_name}? They will no longer be able to log in. This can be reversed by changing their role back.`}
+        title="Delete user"
+        message={`Are you sure you want to permanently delete ${confirmDeleteUser?.full_name}? This will remove their account, profile, and all access. This cannot be undone.`}
         danger
       />
     </div>
