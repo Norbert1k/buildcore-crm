@@ -277,14 +277,43 @@ function ViewToggle({ viewMode, setView }) {
 }
 
 // ── Bulk Bar ──────────────────────────────────────────────────────────────────
-function BulkBar({ selected, onZip, onClear }) {
+function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
+  const [showMove, setShowMove] = useState(false)
+  const [movePos, setMovePos] = useState({ bottom: 80, left: 400 })
   if (!selected.size) return null
+  function openMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setMovePos({ bottom: window.innerHeight - rect.top + 8, left: rect.left })
+    setShowMove(v => !v)
+  }
   return (
-    <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
-      <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-      <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
-      <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
-    </div>
+    <>
+      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
+        <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
+        {onMove && <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
+        <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
+      </div>
+      {showMove && moveTargets && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 600 }} onClick={() => setShowMove(false)} />
+          <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
+            <div onClick={() => { onMove(null); setShowMove(false) }} style={{ padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+              📂 Root (no subfolder)
+            </div>
+            {moveTargets.map(t => (
+              <div key={t.key} onClick={() => { onMove(t.key); setShowMove(false) }}
+                style={{ padding: '8px 14px 8px 20px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+                onMouseLeave={e => e.currentTarget.style.background = ''}>
+                📁 {t.label}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
   )
 }
 
@@ -634,7 +663,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   return (
     <div style={{ marginBottom: 2 }}>
       <div
-        draggable={isCustom}
+        draggable={isCustom && !renaming}
         onDragStart={e => { if (!isCustom) return; e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.effectAllowed = 'move' }}
         onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
@@ -703,7 +732,12 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
           style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
-          <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
+          <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
+            onMove={async (targetKey) => {
+              for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey || subfolder.key }).eq('id', id)
+              setSelected(new Set()); loadFiles()
+            }}
+            moveTargets={childFolders.map(cf => ({ key: cf.folder_key, label: cf.label }))} />
           {childFolders.map(cf => (
             <SubfolderSection key={cf.folder_key} projectId={projectId} folder={folder}
               subfolder={{ key: cf.folder_key, label: cf.label, custom: true }}
@@ -1028,7 +1062,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDropBody}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
-          <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
+          <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
+            onMove={async (targetKey) => {
+              for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey }).eq('id', id)
+              setSelected(new Set()); loadRootFiles()
+            }}
+            moveTargets={subfolders.map(sf => ({ key: sf.key, label: sf.label }))} />
 
           {/* Subfolders with checkboxes */}
           {subfolders.map(sf => (
