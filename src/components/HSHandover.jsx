@@ -1148,13 +1148,18 @@ export default function HSHandover({ projectId, projectName }) {
         }
       }
 
-      // Create every folder with a .gitkeep so extractors preserve empty folders
-      for (const path of Object.values(keyToPath)) {
-        zip.file(path + '/.gitkeep', '')
+      // Add real uploaded files into their correct folders
+      const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
+      const foldersWithFiles = new Set((allFiles || []).map(f => f.folder_key))
+
+      // Create .gitkeep only in folders that have no uploaded files
+      for (const [key, path] of Object.entries(keyToPath)) {
+        if (!foldersWithFiles.has(key)) {
+          zip.file(path + '/.gitkeep', '')
+        }
       }
 
       // Add real uploaded files into their correct folders
-      const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
       for (const f of (allFiles || [])) {
         const folderPath = keyToPath[f.folder_key] || f.folder_key
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
