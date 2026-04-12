@@ -12,6 +12,7 @@ const TEMPLATE_FOLDERS = [
     subfolders: [
       { key: 'drawings', label: 'Drawings' },
       { key: 'csa',      label: 'CSA' },
+      { key: 'cff',      label: 'CFF (Cashflow Forecast)' },
       { key: 'f10',      label: 'F10' },
       { key: 'pci',      label: 'PCI — Pre-Construction Information' },
       { key: 'cpp',      label: 'CPP — Construction Phase Plan' },
