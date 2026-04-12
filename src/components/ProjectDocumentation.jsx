@@ -589,10 +589,13 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
-        <div style={{ width: 22, height: 22, borderRadius: 4, background: folder.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth="2">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
+        <div style={{ width: 24, height: 24, borderRadius: 5, background: isCustom ? '#F1EFE8' : folder.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          {isCustom
+            ? <span style={{ fontSize: 13 }}>📁</span>
+            : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth="1.5">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+          }
         </div>
         {renaming
           ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
@@ -714,10 +717,8 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   async function loadCustomSubfolders() {
     const { data } = await supabase.from('project_doc_folders').select('*')
       .eq('project_id', projectId).eq('parent_key', folder.key).order('created_at')
-    if (data?.length) {
-      const custom = data.map(d => ({ key: d.folder_key, label: d.label, custom: true }))
-      setSubfolders([...(folder.subfolders || []), ...custom])
-    }
+    const custom = (data || []).map(d => ({ key: d.folder_key, label: d.label, custom: true }))
+    setSubfolders([...(folder.subfolders || []), ...custom])
   }
 
   async function loadRootFiles() {
