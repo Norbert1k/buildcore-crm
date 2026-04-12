@@ -363,6 +363,97 @@ function getColor(node, depth) {
   return '#888780'
 }
 
+const HS_ICONS = {
+  s1: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      <polyline points="9 12 11 14 15 10"/>
+    </svg>
+  ),
+  s2: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  ),
+  s3: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <path d="M12 3a15 15 0 0 1 4 9 15 15 0 0 1-4 9 15 15 0 0 1-4-9 15 15 0 0 1 4-9z"/>
+    </svg>
+  ),
+  s4: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </svg>
+  ),
+  s5: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/>
+      <line x1="12" y1="17" x2="12.01" y2="17" strokeWidth="2.5"/>
+    </svg>
+  ),
+  s6: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 19 22 19"/>
+      <line x1="12" y1="8" x2="12" y2="19"/>
+      <line x1="7" y1="19" x2="17" y2="19"/>
+      <line x1="5" y1="15" x2="9" y2="15"/>
+      <line x1="15" y1="15" x2="19" y2="15"/>
+    </svg>
+  ),
+  s7: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="6" height="6" rx="1"/>
+      <rect x="16" y="3" width="6" height="6" rx="1"/>
+      <rect x="2" y="15" width="6" height="6" rx="1"/>
+      <rect x="16" y="15" width="6" height="6" rx="1"/>
+      <line x1="8" y1="6" x2="16" y2="6"/>
+      <line x1="8" y1="18" x2="16" y2="18"/>
+      <line x1="5" y1="9" x2="5" y2="15"/>
+      <line x1="19" y1="9" x2="19" y2="15"/>
+      <line x1="12" y1="6" x2="12" y2="18"/>
+    </svg>
+  ),
+  s8: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+      <line x1="9" y1="8" x2="6" y2="8"/>
+      <line x1="9" y1="11" x2="6" y2="11"/>
+      <line x1="15" y1="8" x2="18" y2="8"/>
+      <line x1="15" y1="11" x2="18" y2="11"/>
+    </svg>
+  ),
+  s9: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"/>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg>
+  ),
+  s10: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <path d="M9 15l2 2 4-4"/>
+    </svg>
+  ),
+  s11: ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="6"/>
+      <path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12"/>
+      <line x1="12" y1="5" x2="12" y2="8"/>
+      <line x1="12" y1="8" x2="14" y2="10"/>
+    </svg>
+  ),
+}
+
 // ── File Card ─────────────────────────────────────────────────
 function HSFileCard({ file, onDelete, canDelete }) {
   const [url, setUrl] = useState(null)
@@ -446,12 +537,6 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     loadFiles()
   }
 
-  function onDrop(e) {
-    e.preventDefault(); e.stopPropagation()
-    const files = Array.from(e.dataTransfer?.files || [])
-    if (files.length) upload(files)
-  }
-
   async function deleteFile(f) {
     await supabase.storage.from('hs-handover').remove([f.storage_path])
     await supabase.from('hs_files').delete().eq('id', f.id)
@@ -475,16 +560,15 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     script.onload = async () => {
       const zip = new window.JSZip()
-      const folder = zip.folder(node.label)
       for (const f of allFiles) {
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
         if (data?.signedUrl) {
           const resp = await fetch(data.signedUrl)
-          folder.file(f.file_name, await resp.blob())
+          zip.file(f.file_name, await resp.blob())
         }
       }
       const content = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = node.label + '.zip'; a.click()
+      const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = `${node.label}.zip`; a.click()
     }
     document.head.appendChild(script)
   }
@@ -497,8 +581,6 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       {/* Folder row */}
       <div
         onClick={() => setOpen(o => !o)}
-        onDragOver={e => e.preventDefault()}
-        onDrop={onDrop}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, padding: isSection ? '11px 14px' : '8px 12px',
           borderRadius: isSection ? 8 : 6,
@@ -513,11 +595,20 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         onMouseLeave={e => { if (!isSection && !open) e.currentTarget.style.background = 'transparent' }}
       >
         {/* Folder icon */}
-        <div style={{ width: isSection ? 32 : 24, height: isSection ? 32 : 24, borderRadius: 5, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width={isSection ? 16 : 13} height={isSection ? 16 : 13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
-        </div>
+        {(() => {
+          const IconSvg = isSection ? HS_ICONS[node.key] : null
+          const sz = isSection ? 16 : 13
+          return (
+            <div style={{ width: isSection ? 32 : 24, height: isSection ? 32 : 24, borderRadius: 5, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              {IconSvg
+                ? <IconSvg color={color} size={sz} />
+                : <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                  </svg>
+              }
+            </div>
+          )
+        })()}
 
         {/* Label */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -529,9 +620,9 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           {open && (
             <>
-              <button onClick={zipFolder} style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Zip</button>
+              <button onClick={zipFolder} style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Zip</button>
               {canManage && (
-                <label style={{ fontSize: 10, padding: '3px 8px', border: `0.5px solid ${color}`, borderRadius: 4, background: 'transparent', cursor: 'pointer', color }}>
+                <label onClick={e => e.stopPropagation()} style={{ fontSize: 11, padding: '4px 10px', border: `0.5px solid ${color}`, borderRadius: 6, background: 'transparent', cursor: 'pointer', color }}>
                   {uploading ? '...' : '+ Upload'}
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
                 </label>
@@ -631,19 +722,9 @@ export default function HSHandover({ projectId, projectName }) {
   const [customFolders, setCustomFolders] = useState([])
   const [compilingFull, setCompilingFull] = useState(false)
   const [compilingOm, setCompilingOm] = useState(false)
-  const [showZipModal, setShowZipModal] = useState(false)
-  const [selectedSections, setSelectedSections] = useState([])
-  const [zippingAll, setZippingAll] = useState(false)
 
   const canManage = can('manage_projects')
   const canAddFolders = can('manage_projects')
-
-  useEffect(() => {
-    const prevent = e => e.preventDefault()
-    window.addEventListener('dragover', prevent)
-    window.addEventListener('drop', prevent)
-    return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', prevent) }
-  }, [])
 
   useEffect(() => {
     loadFileCounts()
@@ -665,55 +746,6 @@ export default function HSHandover({ projectId, projectName }) {
   }
 
   const totalFiles = Object.values(fileCounts).reduce((a, b) => a + b, 0)
-
-  async function zipSelected() {
-    if (!selectedSections.length) return
-    setZippingAll(true)
-    setShowZipModal(false)
-    try {
-      const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-      document.head.appendChild(script)
-      await new Promise(r => script.onload = r)
-      const zip = new window.JSZip()
-      function buildPaths(nodes, parentPath, acc) {
-        for (const n of nodes) {
-          const path = parentPath ? parentPath + '/' + n.label : n.label
-          acc[n.key] = path
-          if (n.children?.length) buildPaths(n.children, path, acc)
-        }
-        return acc
-      }
-      const keyToPath = buildPaths(HS_STRUCTURE, '', {})
-      for (const cf of customFolders) {
-        keyToPath[cf.folder_key] = (keyToPath[cf.parent_key] || cf.parent_key) + '/' + cf.label
-      }
-      const addAllKeys = (n, acc) => { acc.add(n.key); if (n.children?.length) n.children.forEach(c => addAllKeys(c, acc)) }
-      const selectedKeys = new Set()
-      for (const sKey of selectedSections) {
-        const section = HS_STRUCTURE.find(s => s.key === sKey)
-        if (section) addAllKeys(section, selectedKeys)
-      }
-      for (const [key, path] of Object.entries(keyToPath)) {
-        if (selectedKeys.has(key)) zip.folder(path)
-      }
-      const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
-      for (const f of (allFiles || [])) {
-        if (!selectedKeys.has(f.folder_key)) continue
-        const folderPath = keyToPath[f.folder_key] || f.folder_key
-        const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
-        if (data?.signedUrl) {
-          try { zip.folder(folderPath).file(f.file_name, await (await fetch(data.signedUrl)).blob()) } catch {}
-        }
-      }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = (projectName || 'project') + '-hs-handover.zip'
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    } catch (e) { alert('Zip failed: ' + e.message) }
-    setZippingAll(false)
-  }
 
   async function compileHandover(sectionKeys, filename) {
     // Load pdf-lib
@@ -826,11 +858,6 @@ export default function HSHandover({ projectId, projectName }) {
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{totalFiles} file{totalFiles !== 1 ? 's' : ''} · Sections 1–11</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => { setSelectedSections(HS_STRUCTURE.map(s => s.key)); setShowZipModal(true) }}
-            style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            {zippingAll ? 'Zipping...' : 'Zip all files'}
-          </button>
           <button onClick={compileOmManuals} disabled={compilingOm} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid #534AB7', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: '#534AB7', display: 'flex', alignItems: 'center', gap: 5 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             {compilingOm ? 'Compiling...' : 'Export Section 8 O&M PDF'}
@@ -859,44 +886,6 @@ export default function HSHandover({ projectId, projectName }) {
           />
         ))}
       </div>
-
-      {/* Zip sections modal */}
-      {showZipModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setShowZipModal(false)}>
-          <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 24, maxWidth: 440, width: '92%', maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Zip H&S Sections</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>Select which sections to include. All sub-folders and files within will be included automatically.</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-              {HS_STRUCTURE.map(s => (
-                <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 6, border: '0.5px solid var(--border)', cursor: 'pointer', background: selectedSections.includes(s.key) ? (s.bg || 'var(--surface2)') : 'transparent' }}>
-                  <input type="checkbox" checked={selectedSections.includes(s.key)}
-                    onChange={e => setSelectedSections(prev => e.target.checked ? [...prev, s.key] : prev.filter(k => k !== s.key))}
-                    style={{ width: 14, height: 14, accentColor: s.color || '#448a40', flexShrink: 0 }} />
-                  <div style={{ width: 18, height: 18, borderRadius: 3, background: s.bg || '#F1EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={s.color || '#888780'} strokeWidth="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flex: 1 }}>{s.label}</span>
-                  {(fileCounts[s.key] || 0) > 0 && <span style={{ fontSize: 10, color: 'var(--text3)' }}>{fileCounts[s.key]} file{fileCounts[s.key] !== 1 ? 's' : ''}</span>}
-                </label>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
-              <button onClick={() => setSelectedSections(selectedSections.length === HS_STRUCTURE.length ? [] : HS_STRUCTURE.map(s => s.key))}
-                style={{ fontSize: 11, padding: '4px 10px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
-                {selectedSections.length === HS_STRUCTURE.length ? 'Deselect all' : 'Select all'}
-              </button>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setShowZipModal(false)} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Cancel</button>
-                <button onClick={zipSelected} disabled={!selectedSections.length}
-                  style={{ fontSize: 12, padding: '7px 16px', border: 'none', borderRadius: 6, background: selectedSections.length ? '#448a40' : 'var(--surface2)', color: selectedSections.length ? 'white' : 'var(--text3)', cursor: selectedSections.length ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  Download ZIP ({selectedSections.length} section{selectedSections.length !== 1 ? 's' : ''})
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Note */}
       <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8, fontSize: 11, color: 'var(--text3)' }}>
