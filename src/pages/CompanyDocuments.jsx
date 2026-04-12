@@ -580,7 +580,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   return (
     <div style={{ marginBottom: 2 }}>
       <div
-        draggable={true}
+        draggable={!renaming}
         onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.setData('subfolder_label', subLabel); e.dataTransfer.effectAllowed = 'move' }}
         onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
