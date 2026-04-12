@@ -1126,17 +1126,12 @@ export default function HSHandover({ projectId, projectName }) {
       const zip = new window.JSZip()
 
       // Build full folder path map from HS_STRUCTURE
-      function buildPaths(nodes, parentPath, acc) {
-        for (const n of nodes) {
-          const path = parentPath ? parentPath + '/' + n.label : n.label
-          acc[n.key] = path
-          if (n.children?.length) buildPaths(n.children, path, acc)
-        }
-        return acc
-      }
-      const keyToPath = buildPaths(HS_STRUCTURE, '', {})
+     const { data: pathRows } = await supabase.from('hs_folder_paths').select('folder_key, full_path')
+      const keyToPath = {}
+      for (const r of (pathRows || [])) keyToPath[r.folder_key] = r.full_path
       for (const cf of customFolders) {
-        keyToPath[cf.folder_key] = (keyToPath[cf.parent_key] || cf.parent_key) + '/' + cf.label
+        if (!keyToPath[cf.folder_key])
+          keyToPath[cf.folder_key] = (keyToPath[cf.parent_key] || cf.parent_key) + '/' + cf.label
       }
 
       // Create every folder as a directory entry in the ZIP
