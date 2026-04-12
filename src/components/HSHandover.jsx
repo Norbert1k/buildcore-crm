@@ -885,11 +885,14 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         {/* Folder icon */}
         {(() => {
           const IconSvg = isSection ? HS_ICONS[node.key] : null
+          const isCustom = node.key.startsWith('custom-')
           const sz = isSection ? 16 : 13
           return (
-            <div style={{ width: isSection ? 32 : 24, height: isSection ? 32 : 24, borderRadius: 5, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <div style={{ width: isSection ? 32 : 24, height: isSection ? 32 : 24, borderRadius: 5, background: isCustom ? '#F1EFE8' : bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               {IconSvg
                 ? <IconSvg color={color} size={sz} />
+                : isCustom
+                ? <span style={{ fontSize: 13 }}>📁</span>
                 : <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                   </svg>
