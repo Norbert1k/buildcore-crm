@@ -346,7 +346,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 }
 
 // ── Subfolder Section ─────────────────────────────────────────────────────────
-function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, onPreview }) {
+function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, onPreview, renamingOverride, renameVal, setRenameVal, onRenameCommit, onRenameCancel }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -438,7 +438,13 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
           </svg>
         </div>
-        <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
+        {renamingOverride
+          ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onRenameCommit(); if (e.key === 'Escape') onRenameCancel() }}
+              onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
+              style={{ flex: 1, fontSize: 12, padding: '1px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
+          : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
+        }
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && files.length > 0 ? files.length + ' file' + (files.length !== 1 ? 's' : '') : ''}</span>
         {canManage && (
           <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
@@ -474,8 +480,53 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   )
 }
 
+// ── Subfolder Row (wraps SubfolderSection with rename/delete for custom) ──────
+function SubfolderRow({ sf, folder, projectId, canManage, viewMode, onPreview, selectedSubs, toggleSub, onRename, onDelete }) {
+  const [renaming, setRenaming] = useState(false)
+  const [renameVal, setRenameVal] = useState('')
+  const [confirmDel, setConfirmDel] = useState(false)
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+        <div onClick={() => toggleSub(sf.key)}
+          style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <SubfolderSection projectId={projectId} folder={folder} subfolder={sf}
+            canManage={canManage} viewMode={viewMode} onPreview={onPreview}
+            renamingOverride={renaming} renameVal={renameVal} setRenameVal={setRenameVal}
+            onRenameCommit={async () => {
+              if (renameVal.trim() && renameVal.trim() !== sf.label) await onRename(sf.key, renameVal.trim())
+              setRenaming(false)
+            }}
+            onRenameCancel={() => setRenaming(false)} />
+        </div>
+        {sf.custom && canManage && (
+          <div style={{ display: 'flex', gap: 3, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+            <button onClick={() => { setRenameVal(sf.label); setRenaming(true) }} title="Rename"
+              style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', padding: 0 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
+            <button onClick={() => setConfirmDel(true)} title="Delete"
+              style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', padding: 0 }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            </button>
+          </div>
+        )}
+      </div>
+      {confirmDel && (
+        <ConfirmDlg message={'Delete subfolder "' + sf.label + '" and all its files?'}
+          onOk={async () => { setConfirmDel(false); await onDelete(sf.key) }}
+          onCancel={() => setConfirmDel(false)} />
+      )}
+    </>
+  )
+}
+
 // ── Prime Folder Section ──────────────────────────────────────────────────────
-function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts }) {
+function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts, onDeleteFolder, onRenameFolder }) {
   const [open, setOpen] = useState(false)
   const [subfolders, setSubfolders] = useState(folder.subfolders || [])
   const [showAddFolder, setShowAddFolder] = useState(false)
@@ -487,6 +538,8 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   const [selectedSubs, setSelectedSubs] = useState(new Set())
   const [previewFile, setPreviewFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [renamingFolder, setRenamingFolder] = useState(false)
+  const [renameFolderVal, setRenameFolderVal] = useState('')
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('pdView_' + folder.key) || 'grid' } catch { return 'grid' }
   })
@@ -632,8 +685,20 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
         <FolderIcon folderKey={folder.key} color={folder.color} bg={folder.bg} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
+        <div style={{ flex: 1, minWidth: 0 }} onClick={e => { if (renamingFolder) e.stopPropagation() }}>
+          {renamingFolder
+            ? <input value={renameFolderVal} autoFocus onChange={e => setRenameFolderVal(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter') {
+                    if (renameFolderVal.trim() && renameFolderVal.trim() !== folder.label) await onRenameFolder(folder.key, renameFolderVal.trim())
+                    setRenamingFolder(false)
+                  }
+                  if (e.key === 'Escape') setRenamingFolder(false)
+                }}
+                onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
+                style={{ fontSize: 13, fontWeight: 600, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
+            : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
+          }
           <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
             {subfolders.length > 0 ? `${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}
             {fileCount > 0 ? `${subfolders.length > 0 ? ' · ' : ''}${fileCount} file${fileCount !== 1 ? 's' : ''}` : ''}
@@ -651,6 +716,20 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
             </>
           ) : (
             <>
+              {folder.custom && canManage && (
+                <>
+                  <button onClick={e => { e.stopPropagation(); setRenameFolderVal(folder.label); setRenamingFolder(true) }} title="Rename folder"
+                    style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    Rename
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); onDeleteFolder(folder.key) }} title="Delete folder"
+                    style={{ ...BtnR, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    Delete
+                  </button>
+                </>
+              )}
               <button onClick={onZipFolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
                 Zip all
@@ -686,16 +765,18 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
           {/* Subfolders with checkboxes */}
           {subfolders.map(sf => (
-            <div key={sf.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-              <div onClick={() => toggleSub(sf.key)}
-                style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <SubfolderSection projectId={projectId} folder={folder} subfolder={sf}
-                  canManage={canManage} viewMode={viewMode} onPreview={openPreview} />
-              </div>
-            </div>
+            <SubfolderRow key={sf.key} sf={sf} folder={folder} projectId={projectId}
+              canManage={canManage} viewMode={viewMode} onPreview={openPreview}
+              selectedSubs={selectedSubs} toggleSub={toggleSub}
+              onRename={async (key, label) => {
+                await supabase.from('project_doc_folders').update({ label }).eq('folder_key', key).eq('project_id', projectId)
+                setSubfolders(prev => prev.map(s => s.key === key ? { ...s, label } : s))
+              }}
+              onDelete={async (key) => {
+                await supabase.from('project_doc_files').delete().eq('project_id', projectId).eq('subfolder_key', key)
+                await supabase.from('project_doc_folders').delete().eq('folder_key', key).eq('project_id', projectId)
+                setSubfolders(prev => prev.filter(s => s.key !== key))
+              }} />
           ))}
 
           {/* Root-level files */}
@@ -859,7 +940,17 @@ export default function ProjectDocumentation({ projectId, projectName }) {
       <div>
         {allFolders.map(folder => (
           <PrimeFolderSection key={folder.key} projectId={projectId} folder={folder}
-            canManage={canManage} canAddFolders={canAddFolders} allFileCounts={fileCounts} />
+            canManage={canManage} canAddFolders={canAddFolders} allFileCounts={fileCounts}
+            onDeleteFolder={async (key) => {
+              if (!window.confirm('Delete this folder and ALL its files? This cannot be undone.')) return
+              await supabase.from('project_doc_files').delete().eq('project_id', projectId).eq('folder_key', key)
+              await supabase.from('project_doc_folders').delete().eq('folder_key', key).eq('project_id', projectId)
+              setCustomTopFolders(prev => prev.filter(f => f.key !== key))
+            }}
+            onRenameFolder={async (key, label) => {
+              await supabase.from('project_doc_folders').update({ label }).eq('folder_key', key).eq('project_id', projectId)
+              setCustomTopFolders(prev => prev.map(f => f.key === key ? { ...f, label } : f))
+            }} />
         ))}
       </div>
       {canAddFolders && <AddTopFolderButton onAdd={addTopFolder} />}
