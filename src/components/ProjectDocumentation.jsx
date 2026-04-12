@@ -12,7 +12,7 @@ const TEMPLATE_FOLDERS = [
     subfolders: [
       { key: 'drawings', label: 'Drawings' },
       { key: 'csa',      label: 'CSA' },
-      { key: 'cff',      label: 'CFF (Cashflow Forecast)' },
+      { key: 'cff',      label: 'CFF - Cashflow Forecast' },
       { key: 'f10',      label: 'F10' },
       { key: 'pci',      label: 'PCI — Pre-Construction Information' },
       { key: 'cpp',      label: 'CPP — Construction Phase Plan' },
@@ -404,10 +404,12 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     for (const file of fileList) {
       const path = `projects/${projectId}/${folder.key}/${subfolder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_doc_files').insert({
+      if (error) { console.error('Upload failed:', error.message); continue }
+      const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
         file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
       })
+      if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
     setUploading(false); loadFiles()
   }
@@ -660,10 +662,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
     for (const file of fileList) {
       const path = `projects/${projectId}/${folder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_doc_files').insert({
+      if (error) { console.error('Upload failed:', error.message); continue }
+      const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key,
         file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
       })
+      if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
     setUploading(false); loadRootFiles()
   }
@@ -847,7 +851,8 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
           {/* Subfolders with checkboxes */}
           {subfolders.map(sf => (
-            <div key={sf.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <div key={sf.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}
+              onDragOver={e => e.preventDefault()}>
               <div onClick={() => toggleSub(sf.key)}
                 style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                 {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
