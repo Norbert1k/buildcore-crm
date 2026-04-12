@@ -156,6 +156,78 @@ const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, bo
 const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 
+// ── Count Badge (pill showing file count on subfolder rows) ───────────────────
+function CountBadge({ count }) {
+  if (!count) return null
+  return (
+    <div style={{ background: 'var(--surface2)', color: 'var(--text3)', fontSize: 10, fontWeight: 500, padding: '1px 7px', borderRadius: 10, flexShrink: 0 }}>{count}</div>
+  )
+}
+
+// ── Excel Preview ─────────────────────────────────────────────────────────────
+function ExcelPreview({ url, fileName, onClose, onDownload }) {
+  const [html, setHtml] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [sheets, setSheets] = useState([])
+  const [activeSheet, setActiveSheet] = useState(0)
+
+  useEffect(() => {
+    if (!url) return
+    let cancelled = false
+    async function load() {
+      try {
+        const script = document.createElement('script')
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+        document.head.appendChild(script)
+        await new Promise((r, j) => { script.onload = r; script.onerror = j })
+        const res = await fetch(url)
+        const buf = await res.arrayBuffer()
+        const wb = window.XLSX.read(buf, { type: 'array' })
+        if (cancelled) return
+        const allSheets = wb.SheetNames.map(name => ({
+          name,
+          html: window.XLSX.utils.sheet_to_html(wb.Sheets[name], { editable: false })
+        }))
+        setSheets(allSheets)
+        setHtml(allSheets[0]?.html || '<p>Empty spreadsheet</p>')
+        setLoading(false)
+      } catch (e) { if (!cancelled) { setError(e.message); setLoading(false) } }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [url])
+
+  function switchSheet(i) {
+    setActiveSheet(i)
+    setHtml(sheets[i]?.html || '')
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 20 }} onClick={onClose}>
+      <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }}>
+        {onDownload && <button onClick={e => { e.stopPropagation(); onDownload() }} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
+        <button onClick={onClose} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
+      </div>
+      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 8, marginTop: 8 }}>{fileName}</div>
+      {sheets.length > 1 && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 8 }} onClick={e => e.stopPropagation()}>
+          {sheets.map((s, i) => (
+            <button key={i} onClick={() => switchSheet(i)}
+              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '0.5px solid rgba(255,255,255,0.3)', background: i === activeSheet ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>{s.name}</button>
+          ))}
+        </div>
+      )}
+      <div onClick={e => e.stopPropagation()} style={{ flex: 1, width: '95vw', maxHeight: '85vh', overflow: 'auto', background: '#fff', borderRadius: 8, padding: 0 }}>
+        {loading ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading spreadsheet...</div>
+          : error ? <div style={{ padding: 40, textAlign: 'center', color: '#e24b4a' }}>Failed to load: {error}</div>
+          : <div style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:4px 8px;font-size:12px;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}th{background:#f5f5f5;font-weight:600;position:sticky;top:0}tr:nth-child(even){background:#fafafa}tr:hover{background:#f0f0f0}</style>${html}` }} />
+        }
+      </div>
+    </div>
+  )
+}
+
 // ── View Toggle ───────────────────────────────────────────────────────────────
 function ViewToggle({ viewMode, setView }) {
   const views = [
@@ -379,14 +451,23 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   const [renameVal, setRenameVal] = useState('')
   const [confirmDelFolder, setConfirmDelFolder] = useState(false)
   const [subLabel, setSubLabel] = useState(subfolder.label)
+  const [fileCount, setFileCount] = useState(0)
 
+  useEffect(() => { loadFileCount() }, [])
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
+
+  async function loadFileCount() {
+    const { count } = await supabase.from('project_doc_files').select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId).eq('subfolder_key', subfolder.key)
+    setFileCount(count || 0)
+  }
 
   async function loadFiles() {
     const { data } = await supabase.from('project_doc_files').select('*')
       .eq('project_id', projectId).eq('folder_key', folder.key).eq('subfolder_key', subfolder.key)
       .order('created_at', { ascending: false })
     setFiles(naturalSort(data || []))
+    setFileCount((data || []).length)
   }
 
   async function loadChildFolders() {
@@ -521,6 +602,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
           : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subLabel}</span>
         }
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
+        {!open && <CountBadge count={fileCount} />}
         {canManage && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
             {!renaming && (
@@ -897,16 +979,20 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
       {/* Preview modal */}
       {previewFile && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewFile(null)}>
+        fileTypeInfo(previewFile.file_name).isExcel
+          ? <ExcelPreview url={previewUrl} fileName={previewFile.file_name}
+              onClose={() => setPreviewFile(null)}
+              onDownload={previewUrl ? () => triggerDownload(previewUrl, previewFile.file_name) : null} />
+          : <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewFile(null)}>
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
             {previewUrl && <button onClick={e => { e.stopPropagation(); triggerDownload(previewUrl, previewFile.file_name) }} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
             <button onClick={() => setPreviewFile(null)} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
           </div>
           <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 12 }}>{previewFile.file_name}</div>
           {previewUrl ? (
-            fileTypeInfo(previewFile.file_name, previewFile.file_type).isImage
+            fileTypeInfo(previewFile.file_name).isImage
               ? <img src={previewUrl} alt={previewFile.file_name} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
-              : fileTypeInfo(previewFile.file_name, previewFile.file_type).isPdf
+              : fileTypeInfo(previewFile.file_name).isPdf
               ? <iframe src={previewUrl} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8 }} title={previewFile.file_name} onClick={e => e.stopPropagation()} />
               : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8, background: '#fff' }} title={previewFile.file_name} onClick={e => e.stopPropagation()} />
           ) : (
