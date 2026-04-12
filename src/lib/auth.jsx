@@ -76,8 +76,8 @@ export function AuthProvider({ children }) {
     if (!profile) return false
     if (role === 'admin') return true
     const permissions = {
-      manage_subcontractors: ['project_manager', 'site_manager', 'accountant'],
-      manage_documents:      ['project_manager', 'document_controller'],
+      manage_subcontractors: ['project_manager', 'accountant'],
+      manage_documents:      ['project_manager', 'document_controller', 'site_manager'],
       manage_projects:       ['project_manager'],
       manage_suppliers:      ['project_manager', 'accountant'],
       manage_users:          [],
