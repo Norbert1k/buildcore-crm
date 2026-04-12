@@ -1029,6 +1029,7 @@ export default function HSHandover({ projectId, projectName }) {
     for (const path of Object.values(keyToPath)) {
       zip.folder(path)
     }
+    zip.file('README.txt', 'H&S Handover — ' + (projectName || 'Project') + '\nGenerated: ' + new Date().toLocaleDateString('en-GB'))
 
     // ── Fetch all files and place into correct folder paths ───────────────
     const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
