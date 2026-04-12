@@ -1027,9 +1027,8 @@ export default function HSHandover({ projectId, projectName }) {
     // ── Create every folder using JSZip folder() API ──────────────────────
     // Using folder() ensures the directory entry exists even if empty
     for (const path of Object.values(keyToPath)) {
-      zip.folder(path)
+      zip.folder(path).file('.keep', '')
     }
-    zip.file('README.txt', 'H&S Handover — ' + (projectName || 'Project') + '\nGenerated: ' + new Date().toLocaleDateString('en-GB'))
 
     // ── Fetch all files and place into correct folder paths ───────────────
     const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
