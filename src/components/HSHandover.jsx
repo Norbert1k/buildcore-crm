@@ -863,6 +863,7 @@ export default function HSHandover({ projectId, projectName }) {
   const [customFolders, setCustomFolders] = useState([])
   const [compilingFull, setCompilingFull] = useState(false)
   const [compilingOm, setCompilingOm] = useState(false)
+  const [zippingAll, setZippingAll] = useState(false)
   const [previewFile, setPreviewFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('hsView_' + projectId) || 'grid' } catch { return 'grid' } })
@@ -998,6 +999,27 @@ export default function HSHandover({ projectId, projectName }) {
     setCompilingOm(false)
   }
 
+  async function zipAll() {
+    setZippingAll(true)
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+    document.head.appendChild(script)
+    await new Promise(r => script.onload = r)
+    const zip = new window.JSZip()
+    const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
+    if (!allFiles?.length) { alert('No files in this project.'); setZippingAll(false); return }
+    for (const f of allFiles) {
+      const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
+      if (data?.signedUrl) {
+        const res = await fetch(data.signedUrl)
+        zip.file(f.folder_key + '/' + f.file_name, await res.blob())
+      }
+    }
+    const blob = await zip.generateAsync({ type: 'blob' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (projectName || 'project') + '-hs-all-files.zip'; a.click()
+    setZippingAll(false)
+  }
+
   return (
     <div>
       {/* Header */}
@@ -1007,6 +1029,10 @@ export default function HSHandover({ projectId, projectName }) {
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{totalFiles} file{totalFiles !== 1 ? 's' : ''} · Sections 1–11</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button onClick={zipAll} disabled={zippingAll} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+            {zippingAll ? 'Zipping...' : 'Zip all files'}
+          </button>
           <button onClick={compileOmManuals} disabled={compilingOm} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid #534AB7', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: '#534AB7', display: 'flex', alignItems: 'center', gap: 5 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             {compilingOm ? 'Compiling...' : 'Export Section 8 O&M PDF'}
