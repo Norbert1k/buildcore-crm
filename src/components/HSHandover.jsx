@@ -1041,9 +1041,8 @@ export default function HSHandover({ projectId, projectName }) {
 
       // Create folder structure — each folder gets a visible text file
       const allPaths = Object.values(keyToPath)
-      const structureLines = ['H&S Handover Folder Structure', '=' .repeat(40), '', ...allPaths.map(p => p.replace(/\//g, ' > '))]
-      zip.file('FOLDER-STRUCTURE.txt', structureLines.join('
-'))
+      const structureLines = ['H&S Handover Folder Structure', '='.repeat(40), '', ...allPaths.map(p => p.replace(/\//g, ' > '))]
+      zip.file('FOLDER-STRUCTURE.txt', structureLines.join('\n'))
       for (const path of allPaths) {
         zip.folder(path)
       }
