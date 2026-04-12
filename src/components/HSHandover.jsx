@@ -584,7 +584,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
 }
 
 
-function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor, viewMode = 'grid', setViewMode, onPreview }) {
+function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor, viewMode = 'grid', setViewMode, onPreview, onDeleteNode, onRenameNode }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -592,6 +592,9 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   const [newFolderName, setNewFolderName] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [selected, setSelected] = useState(new Set())
+  const [renamingNode, setRenamingNode] = useState(false)
+  const [renameNodeVal, setRenameNodeVal] = useState('')
+  const [confirmDelNode, setConfirmDelNode] = useState(false)
 
   const color = node.color || sectionColor || '#888780'
   const bg = node.bg || '#F1EFE8'
@@ -708,8 +711,20 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         </div>
 
         {/* Label */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: isSection ? 13 : 12, fontWeight: isSection ? 600 : 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.label}</div>
+        <div style={{ flex: 1, minWidth: 0 }} onClick={e => { if (renamingNode) e.stopPropagation() }}>
+          {renamingNode
+            ? <input value={renameNodeVal} autoFocus onChange={e => setRenameNodeVal(e.target.value)}
+                onKeyDown={async e => {
+                  if (e.key === 'Enter') {
+                    if (renameNodeVal.trim() && renameNodeVal.trim() !== node.label) await onRenameNode?.(node.key, renameNodeVal.trim())
+                    setRenamingNode(false)
+                  }
+                  if (e.key === 'Escape') setRenamingNode(false)
+                }}
+                onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
+                style={{ fontSize: isSection ? 13 : 12, fontWeight: isSection ? 600 : 500, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
+            : <div style={{ fontSize: isSection ? 13 : 12, fontWeight: isSection ? 600 : 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.label}</div>
+          }
           {totalCount > 0 && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{totalCount} file{totalCount !== 1 ? 's' : ''}</div>}
         </div>
 
@@ -725,6 +740,18 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
                 </label>
               )}
               {open && depth === 0 && setViewMode && <ViewToggle viewMode={viewMode} setView={setViewMode} />}
+              {node.key.startsWith('custom-') && canManage && (
+                <>
+                  <button onClick={e => { e.stopPropagation(); setRenameNodeVal(node.label); setRenamingNode(true) }} title="Rename"
+                    style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid #448a40', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); setConfirmDelNode(true) }} title="Delete"
+                    style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                  </button>
+                </>
+              )}
             </>
           )}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
@@ -741,20 +768,22 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             <FolderNode key={child.key} node={child} projectId={projectId} depth={depth + 1}
               fileCounts={fileCounts} canManage={canManage} canAddFolders={canAddFolders}
               customFolders={customFolders} onCustomFolderAdded={onCustomFolderAdded}
-              sectionColor={color} viewMode={viewMode} setViewMode={setViewMode} onPreview={onPreview} />
+              sectionColor={color} viewMode={viewMode} setViewMode={setViewMode} onPreview={onPreview}
+              onDeleteNode={onDeleteNode} onRenameNode={onRenameNode} />
           ))}
 
-          {/* Custom sub-folders */}
+          {/* Custom sub-folders */
           {myCustomFolders.map(cf => (
             <FolderNode key={cf.folder_key}
               node={{ key: cf.folder_key, label: cf.label, children: [] }}
               projectId={projectId} depth={depth + 1}
               fileCounts={fileCounts} canManage={canManage} canAddFolders={canAddFolders}
               customFolders={customFolders} onCustomFolderAdded={onCustomFolderAdded}
-              sectionColor={color} viewMode={viewMode} setViewMode={setViewMode} onPreview={onPreview} />
+              sectionColor={color} viewMode={viewMode} setViewMode={setViewMode} onPreview={onPreview}
+              onDeleteNode={onDeleteNode} onRenameNode={onRenameNode} />
           ))}
 
-          {/* Files grid */}
+          {/* Files grid */
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
           {files.length > 0 && (
             viewMode === 'list'
@@ -799,7 +828,14 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         </div>
       )}
 
-      {/* Delete confirm */}
+      {/* Delete this custom node */}
+      {confirmDelNode && (
+        <ConfirmDlg message={'Delete "' + node.label + '" and all its files? This cannot be undone.'}
+          onOk={async () => { setConfirmDelNode(false); await onDeleteNode?.(node.key) }}
+          onCancel={() => setConfirmDelNode(false)} />
+      )}
+
+      {/* Delete confirm (file) */}
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDelete(null)}>
           <div style={{ background: 'var(--surface)', borderRadius: 12, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
@@ -993,6 +1029,16 @@ export default function HSHandover({ projectId, projectName }) {
             onCustomFolderAdded={() => { loadCustomFolders(); loadFileCounts() }}
             sectionColor={section.color}
             viewMode={viewMode} setViewMode={setView} onPreview={openPreview}
+            onDeleteNode={async (key) => {
+              if (!window.confirm('Delete this folder and ALL its files?')) return
+              await supabase.from('hs_files').delete().eq('project_id', projectId).eq('folder_key', key)
+              await supabase.from('hs_folders').delete().eq('folder_key', key).eq('project_id', projectId)
+              setCustomFolders(prev => prev.filter(f => f.folder_key !== key))
+            }}
+            onRenameNode={async (key, label) => {
+              await supabase.from('hs_folders').update({ label }).eq('folder_key', key).eq('project_id', projectId)
+              setCustomFolders(prev => prev.map(f => f.folder_key === key ? { ...f, label } : f))
+            }}
           />
         ))}
       </div>
