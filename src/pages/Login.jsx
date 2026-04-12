@@ -110,7 +110,7 @@ export default function Login() {
       <div style={{ width: '100%', maxWidth: 400 }}>
 
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <img src="/logo.png" alt="City Construction" style={{ height: 90, display: 'block', margin: '0 auto', objectFit: 'contain', filter: isDark ? 'none' : 'brightness(0)' }} />
+          <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 90, display: 'block', margin: '0 auto', objectFit: 'contain', filter: isDark ? 'none' : 'brightness(0)' }} />
         </div>
 
         <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e2e0d8)', borderRadius: 12, padding: 28, borderTop: '3px solid #448a40' }}>
