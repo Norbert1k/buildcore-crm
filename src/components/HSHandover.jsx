@@ -1024,12 +1024,13 @@ export default function HSHandover({ projectId, projectName }) {
       keyToPath[cf.folder_key] = parentPath + '/' + cf.label
     }
 
-    // ── Create every folder (even empty ones) with a placeholder ─────────
+    // ── Create every folder using JSZip folder() API ──────────────────────
+    // Using folder() ensures the directory entry exists even if empty
     for (const path of Object.values(keyToPath)) {
-      zip.file(path + '/.gitkeep', '')
+      zip.folder(path)
     }
 
-    // ── Fetch all files and place them into correct paths ─────────────────
+    // ── Fetch all files and place into correct folder paths ───────────────
     const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
     for (const f of (allFiles || [])) {
       const folderPath = keyToPath[f.folder_key] || f.folder_key
@@ -1037,7 +1038,7 @@ export default function HSHandover({ projectId, projectName }) {
       if (data?.signedUrl) {
         try {
           const res = await fetch(data.signedUrl)
-          zip.file(folderPath + '/' + f.file_name, await res.blob())
+          zip.folder(folderPath).file(f.file_name, await res.blob())
         } catch { /* skip unreadable files */ }
       }
     }
