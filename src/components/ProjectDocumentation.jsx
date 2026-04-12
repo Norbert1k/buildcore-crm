@@ -108,12 +108,15 @@ async function triggerDownload(signedUrl, fileName) {
 }
 function fileTypeInfo(fileName, fileType) {
   const t = fileType || ''; const n = fileName || ''
+  const isExcel = t.includes('spreadsheet') || t.includes('excel') || /\.xlsx?$/i.test(n)
+  const isPpt   = t.includes('presentation') || t.includes('powerpoint') || /\.pptx?$/i.test(n)
+  const isWord  = !isExcel && !isPpt && (t.includes('word') || t.includes('wordprocessing') || /\.docx?$/i.test(n))
   return {
     isImage: t.includes('image') || /\.(jpg|jpeg|png|gif|webp)$/i.test(n),
     isPdf:   t.includes('pdf')   || /\.pdf$/i.test(n),
-    isWord:  t.includes('word')  || t.includes('document') || /\.docx?$/i.test(n),
-    isExcel: t.includes('spreadsheet') || t.includes('excel') || /\.xlsx?$/i.test(n),
-    isPpt:   t.includes('presentation') || t.includes('powerpoint') || /\.pptx?$/i.test(n),
+    isWord,
+    isExcel,
+    isPpt,
   }
 }
 function FileTypeBadge({ fileName, fileType, size = 34 }) {
@@ -407,7 +410,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
       if (error) { console.error('Upload failed:', error.message); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
-        file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
+        file_name: file.name, file_size: file.size, storage_path: path,
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
@@ -665,7 +668,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
       if (error) { console.error('Upload failed:', error.message); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key,
-        file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path,
+        file_name: file.name, file_size: file.size, storage_path: path,
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
