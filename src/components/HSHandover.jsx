@@ -772,7 +772,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
               onDeleteNode={onDeleteNode} onRenameNode={onRenameNode} />
           ))}
 
-          {/* Custom sub-folders */
+          {/* Custom sub-folders */}
           {myCustomFolders.map(cf => (
             <FolderNode key={cf.folder_key}
               node={{ key: cf.folder_key, label: cf.label, children: [] }}
@@ -783,7 +783,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
               onDeleteNode={onDeleteNode} onRenameNode={onRenameNode} />
           ))}
 
-          {/* Files grid */
+          {/* Files grid */}
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
           {files.length > 0 && (
             viewMode === 'list'
