@@ -436,7 +436,7 @@ function ExcelPreview({ url, fileName, onClose, onDownload }) {
       <div onClick={e => e.stopPropagation()} style={{ flex: 1, width: '95vw', maxHeight: '85vh', overflow: 'auto', background: '#fff', borderRadius: 8, padding: 0 }}>
         {loading ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading spreadsheet...</div>
           : error ? <div style={{ padding: 40, textAlign: 'center', color: '#e24b4a' }}>Failed to load: {error}</div>
-          : <div style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:4px 8px;font-size:12px;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}th{background:#f5f5f5;font-weight:600;position:sticky;top:0}tr:nth-child(even){background:#fafafa}tr:hover{background:#f0f0f0}</style>${html}` }} />
+          : <div style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>table{border-collapse:collapse;width:100%}td,th{border:1px solid #d0d0d0;padding:6px 10px;font-size:13px;color:#1a1a1a;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}th{background:#e8e8e8;font-weight:600;color:#111;position:sticky;top:0}tr:nth-child(even){background:#f5f5f5}tr:hover{background:#e6f1fb}</style>${html}` }} />
         }
       </div>
     </div>
