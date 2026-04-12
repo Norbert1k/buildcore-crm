@@ -1162,10 +1162,8 @@ export default function HSHandover({ projectId, projectName }) {
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = (projectName || 'project') + '-hs-handover.zip'
-      a.style.display = 'none'
-      document.body.appendChild(a)
-      a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
-      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href) }, 3000)
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
     } catch (e) { alert('Zip failed: ' + e.message) }
     setZippingAll(false)
   }
