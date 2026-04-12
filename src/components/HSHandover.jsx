@@ -633,6 +633,12 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     loadFiles()
   }
 
+  function onDrop(e) {
+    e.preventDefault(); e.stopPropagation()
+    const fileList = Array.from(e.dataTransfer?.files || [])
+    if (fileList.length) upload(fileList)
+  }
+
   async function deleteFile(f) {
     await supabase.storage.from('hs-handover').remove([f.storage_path])
     await supabase.from('hs_files').delete().eq('id', f.id)
@@ -656,11 +662,12 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     script.onload = async () => {
       const zip = new window.JSZip()
+      const folder = zip.folder(node.label)
       for (const f of allFiles) {
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
         if (data?.signedUrl) {
           const resp = await fetch(data.signedUrl)
-          zip.file(f.file_name, await resp.blob())
+          folder.file(f.file_name, await resp.blob())
         }
       }
       const content = await zip.generateAsync({ type: 'blob' })
@@ -693,6 +700,8 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     <div style={{ marginLeft: indent > 0 ? 0 : 0 }}>
       {/* Folder row */}
       <div
+        onDragOver={e => e.preventDefault()}
+        onDrop={onDrop}
         onClick={() => setOpen(o => !o)}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, padding: isSection ? '11px 14px' : '8px 12px',
@@ -782,7 +791,8 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
       {/* Open content */}
       {open && (
-        <div style={{ marginLeft: isSection ? 16 : 12, paddingLeft: 10, borderLeft: `1.5px solid ${color}30`, marginBottom: isSection ? 8 : 4, paddingTop: 4, paddingBottom: 4 }}>
+        <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
+          style={{ marginLeft: isSection ? 16 : 12, paddingLeft: 10, borderLeft: `1.5px solid ${color}30`, marginBottom: isSection ? 8 : 4, paddingTop: 4, paddingBottom: 4 }}>
           {/* Sub-folders */}
           {node.children?.map(child => (
             <FolderNode key={child.key} node={child} projectId={projectId} depth={depth + 1}
@@ -875,6 +885,13 @@ export default function HSHandover({ projectId, projectName }) {
 
   const canManage = can('manage_projects')
   const canAddFolders = can('manage_projects')
+
+  useEffect(() => {
+    const prevent = e => e.preventDefault()
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => { window.removeEventListener('dragover', prevent); window.removeEventListener('drop', prevent) }
+  }, [])
 
   useEffect(() => {
     loadFileCounts()
@@ -1001,54 +1018,57 @@ export default function HSHandover({ projectId, projectName }) {
 
   async function zipAll() {
     setZippingAll(true)
-    const script = document.createElement('script')
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-    document.head.appendChild(script)
-    await new Promise(r => script.onload = r)
-    const zip = new window.JSZip()
-
-    // ── Build full folder path map from HS_STRUCTURE ──────────────────────
-    function buildPaths(nodes, parentPath, acc) {
-      for (const n of nodes) {
-        const path = parentPath ? parentPath + '/' + n.label : n.label
-        acc[n.key] = path
-        if (n.children?.length) buildPaths(n.children, path, acc)
-      }
-      return acc
-    }
-    const keyToPath = buildPaths(HS_STRUCTURE, '', {})
-
-    // Add custom folders to path map
-    for (const cf of customFolders) {
-      const parentPath = keyToPath[cf.parent_key] || cf.parent_key
-      keyToPath[cf.folder_key] = parentPath + '/' + cf.label
-    }
-
-    // ── Create every folder using JSZip folder() API ──────────────────────
-    // Using folder() ensures the directory entry exists even if empty
-    for (const [key, path] of Object.entries(keyToPath)) {
-      zip.file(path + '/__folder__', path)
-    }
-
-    // ── Fetch all files and place into correct folder paths ───────────────
-    const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
-const filePromises = (allFiles || []).map(async f => {
-  const folderPath = keyToPath[f.folder_key] || f.folder_key
-  const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
-  if (data?.signedUrl) {
     try {
-      const res = await fetch(data.signedUrl)
-      zip.folder(folderPath).file(f.file_name, await res.blob())
-    } catch {}
-  }
-})
-await Promise.all(filePromises)
+      const script = document.createElement('script')
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+      document.head.appendChild(script)
+      await new Promise(r => script.onload = r)
+      const zip = new window.JSZip()
 
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = (projectName || 'project') + '-hs-handover.zip'
-    a.click()
+      // Build path map from HS_STRUCTURE
+      function buildPaths(nodes, parentPath, acc) {
+        for (const n of nodes) {
+          const path = parentPath ? parentPath + '/' + n.label : n.label
+          acc[n.key] = path
+          if (n.children?.length) buildPaths(n.children, path, acc)
+        }
+        return acc
+      }
+      const keyToPath = buildPaths(HS_STRUCTURE, '', {})
+      for (const cf of customFolders) {
+        keyToPath[cf.folder_key] = (keyToPath[cf.parent_key] || cf.parent_key) + '/' + cf.label
+      }
+
+      // Create folder structure — each folder gets a visible text file
+      const allPaths = Object.values(keyToPath)
+      const structureLines = ['H&S Handover Folder Structure', '=' .repeat(40), '', ...allPaths.map(p => p.replace(/\//g, ' > '))]
+      zip.file('FOLDER-STRUCTURE.txt', structureLines.join('
+'))
+      for (const path of allPaths) {
+        zip.folder(path)
+      }
+
+      // Fetch and add all real files
+      const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
+      for (const f of (allFiles || [])) {
+        const folderPath = keyToPath[f.folder_key] || f.folder_key
+        const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
+        if (data?.signedUrl) {
+          try {
+            const res = await fetch(data.signedUrl)
+            const blob = await res.blob()
+            zip.folder(folderPath).file(f.file_name, blob)
+          } catch {}
+        }
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = (projectName || 'project') + '-hs-handover.zip'
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    } catch (e) { alert('Zip failed: ' + e.message) }
     setZippingAll(false)
   }
 
