@@ -77,7 +77,7 @@ export function AuthProvider({ children }) {
     if (role === 'admin') return true
     const permissions = {
       manage_subcontractors: ['project_manager', 'site_manager', 'accountant'],
-      manage_documents:      ['project_manager', 'site_manager', 'document_controller'],
+      manage_documents:      ['project_manager', 'document_controller'],
       manage_projects:       ['project_manager'],
       manage_suppliers:      ['project_manager', 'accountant'],
       manage_users:          [],
@@ -85,10 +85,23 @@ export function AuthProvider({ children }) {
       view_financials:       ['project_manager', 'accountant'],
       view_subcontractors:   ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
       view_projects:         ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
-      view_suppliers:        ['project_manager', 'accountant'],
+      view_suppliers:        ['project_manager', 'site_manager', 'accountant'],
+      view_supplier_detail:  ['project_manager', 'accountant'],
       view_performance:      ['project_manager', 'site_manager'],
       issue_ratings:         ['project_manager', 'site_manager'],
       view_all:              ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
+      view_hs_handover:      ['project_manager', 'document_controller', 'accountant', 'viewer'],
+      view_photos:           ['project_manager', 'document_controller', 'accountant', 'viewer'],
+      view_case_study:       ['project_manager', 'document_controller', 'accountant', 'viewer'],
+      view_clients:          ['project_manager', 'accountant', 'document_controller', 'viewer'],
+      view_project_value:    ['project_manager', 'accountant'],
+      view_csa:              ['project_manager', 'accountant', 'document_controller'],
+      view_cff:              ['project_manager', 'accountant', 'document_controller'],
+      view_payments:         ['project_manager', 'accountant'],
+      view_company_vat:      ['project_manager', 'accountant'],
+      view_company_bank:     ['project_manager', 'accountant'],
+      view_company_other:    ['project_manager', 'accountant', 'document_controller'],
+      manage_settings:       ['project_manager'],
     }
     return permissions[action]?.includes(role) ?? false
   }

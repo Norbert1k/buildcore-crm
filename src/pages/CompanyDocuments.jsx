@@ -949,6 +949,11 @@ function CategoryFolder({ cat, canManage, onPreview }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function CompanyDocuments() {
   const { can } = useAuth()
+  const hiddenCats = []
+  if (!can('view_company_vat')) hiddenCats.push('vat')
+  if (!can('view_company_bank')) hiddenCats.push('bank')
+  if (!can('view_company_other')) hiddenCats.push('other')
+  const visibleCategories = CATEGORIES.filter(c => !hiddenCats.includes(c.key))
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -975,7 +980,7 @@ export default function CompanyDocuments() {
         <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>Upload and manage company-wide documents — accessible to all staff</p>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {CATEGORIES.map(cat => <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} />)}
+        {visibleCategories.map(cat => <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} />)}
       </div>
       {previewDoc && (
         fileTypeInfo(previewDoc).isExcel

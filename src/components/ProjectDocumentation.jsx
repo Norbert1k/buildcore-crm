@@ -1240,7 +1240,15 @@ export default function ProjectDocumentation({ projectId, projectName }) {
     setZippingAll(false)
   }
 
+  const hiddenFolders = []
+  const hiddenSubfolders = []
+  if (!can('view_payments')) { hiddenFolders.push('02-payment-application', '03-payment-notice') }
+  if (!can('view_csa')) { hiddenSubfolders.push('csa') }
+  if (!can('view_cff')) { hiddenSubfolders.push('cff') }
+
   const allFolders = [...TEMPLATE_FOLDERS, ...customTopFolders]
+    .filter(f => !hiddenFolders.includes(f.key))
+    .map(f => f.subfolders ? { ...f, subfolders: f.subfolders.filter(sf => !hiddenSubfolders.includes(sf.key)) } : f)
 
   return (
     <div>

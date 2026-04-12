@@ -67,9 +67,9 @@ export default function Suppliers() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: can('view_supplier_detail') ? 'repeat(3,1fr)' : 'repeat(2,1fr)', gap: 14, marginBottom: 24 }}>
         <div className="stat-card"><div className="stat-label">Total Suppliers</div><div className="stat-value">{suppliers.length}</div><div className="stat-sub">{active} active</div></div>
-        <div className="stat-card"><div className="stat-label">Total Credit Available</div><div className="stat-value" style={{ fontSize: 18 }}>{formatCurrency(totalCredit)}</div><div className="stat-sub">Combined credit limits</div></div>
+        {can('view_supplier_detail') && <div className="stat-card"><div className="stat-label">Total Credit Available</div><div className="stat-value" style={{ fontSize: 18 }}>{formatCurrency(totalCredit)}</div><div className="stat-sub">Combined credit limits</div></div>}
         <div className="stat-card"><div className="stat-label">Categories</div><div className="stat-value">{new Set(suppliers.map(s => s.category)).size}</div><div className="stat-sub">Different supply types</div></div>
       </div>
 
@@ -106,16 +106,16 @@ export default function Suppliers() {
                 <th>Supplier</th>
                 <th>Category</th>
                 <th>Contact</th>
-                <th>Account No.</th>
+                {can('view_supplier_detail') && <><th>Account No.</th>
                 <th>Credit Limit</th>
-                <th>Payment Terms</th>
+                <th>Payment Terms</th></>}
                 <th>Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {list.map(s => (
-                <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => setViewing(s)}>
+                <tr key={s.id} style={{ cursor: can('view_supplier_detail') ? 'pointer' : 'default' }} onClick={() => can('view_supplier_detail') && setViewing(s)}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <Avatar name={s.company_name} />
@@ -130,6 +130,7 @@ export default function Suppliers() {
                     <div>{s.contact_name || '—'}</div>
                     <div className="td-muted">{s.phone || ''}</div>
                   </td>
+                  {can('view_supplier_detail') && <>
                   <td>
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 12, background: 'var(--surface2)', padding: '2px 8px', borderRadius: 4, display: 'inline-block' }}>
                       {s.account_number || '—'}
@@ -139,6 +140,7 @@ export default function Suppliers() {
                     {s.credit_limit ? formatCurrency(s.credit_limit) : '—'}
                   </td>
                   <td className="td-muted">{s.payment_terms || '—'}</td>
+                  </>}
                   <td><Pill cls={s.status === 'active' ? 'pill-green' : 'pill-gray'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill></td>
                   <td onClick={e => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 4 }}>
