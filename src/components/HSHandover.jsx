@@ -351,6 +351,18 @@ function findSection(nodes, key) {
   return null
 }
 
+function buildPaths(nodes, parentPath, map) {
+  for (const node of nodes) {
+    const safeName = node.label.replace(/\|/g, '-')
+    const path = parentPath ? parentPath + '/' + safeName : safeName
+    map[node.key] = path
+    if (node.children && node.children.length > 0) {
+      buildPaths(node.children, path, map)
+    }
+  }
+  return map
+}
+
 
 // ── Upgrade utilities ─────────────────────────────────────────────────────────
 async function triggerDownload(signedUrl, fileName) {
@@ -1125,18 +1137,20 @@ export default function HSHandover({ projectId, projectName }) {
       await new Promise(r => script.onload = r)
       const zip = new window.JSZip()
 
-      // Build full folder path map from HS_STRUCTURE
-      const { data: pathRows } = await supabase.from('hs_folder_paths').select('folder_key, full_path')
-      const keyToPath = {}
-      for (const r of (pathRows || [])) keyToPath[r.folder_key] = r.full_path
+      // Build folder paths from HS_STRUCTURE in memory (no DB dependency)
+      const keyToPath = buildPaths(HS_STRUCTURE, '', {})
+
+      // Merge in custom user-created folders
       for (const cf of customFolders) {
-        if (!keyToPath[cf.folder_key])
-          keyToPath[cf.folder_key] = (keyToPath[cf.parent_key] || cf.parent_key) + '/' + cf.label
+        if (!keyToPath[cf.folder_key]) {
+          const parentPath = keyToPath[cf.parent_key] || cf.parent_key
+          keyToPath[cf.folder_key] = parentPath + '/' + cf.label
+        }
       }
 
-      // Create every folder as a directory entry in the ZIP
+      // Create every folder with a .gitkeep so extractors preserve empty folders
       for (const path of Object.values(keyToPath)) {
-        zip.file(path + '/_folder', path)
+        zip.file(path + '/.gitkeep', '')
       }
 
       // Add real uploaded files into their correct folders
