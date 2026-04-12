@@ -11,6 +11,7 @@ const TEMPLATE_FOLDERS = [
     bg: '#e8f5e7',
     subfolders: [
       { key: 'drawings', label: 'Drawings' },
+      { key: 'reports',  label: 'Reports' },
       { key: 'csa',      label: 'CSA' },
       { key: 'cff',      label: 'CFF - Cashflow Forecast' },
       { key: 'f10',      label: 'F10' },
