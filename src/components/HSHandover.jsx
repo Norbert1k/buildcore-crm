@@ -373,6 +373,33 @@ async function triggerDownload(signedUrl, fileName) {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
   } catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click() }
 }
+
+async function readDropEntries(e) {
+  const items = e.dataTransfer?.items
+  if (!items) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  const entries = []
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i].webkitGetAsEntry?.()
+    if (entry) entries.push(entry)
+  }
+  if (!entries.length) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  const result = { files: [], folders: new Set() }
+  async function walk(entry, path) {
+    if (entry.isFile) {
+      const file = await new Promise(r => entry.file(r))
+      result.files.push({ file, path })
+      if (path) result.folders.add(path)
+    } else if (entry.isDirectory) {
+      const dirPath = path ? path + '/' + entry.name : entry.name
+      result.folders.add(dirPath)
+      const reader = entry.createReader()
+      const children = await new Promise(r => reader.readEntries(r))
+      for (const child of children) await walk(child, dirPath)
+    }
+  }
+  for (const entry of entries) await walk(entry, '')
+  return { files: result.files, folders: [...result.folders] }
+}
 function naturalSort(arr) {
   return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' }))
 }
@@ -799,10 +826,31 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     loadFiles()
   }
 
-  function onDrop(e) {
+  async function onDrop(e) {
     e.preventDefault(); e.stopPropagation()
-    const fileList = Array.from(e.dataTransfer?.files || [])
-    if (fileList.length) upload(fileList)
+    const drop = await readDropEntries(e)
+    if (drop.folders.length > 0) {
+      const keyMap = {}
+      for (const fp of drop.folders.sort()) {
+        const parts = fp.split('/')
+        const label = parts[parts.length - 1]
+        const parentPath = parts.slice(0, -1).join('/')
+        const parentKey = parentPath ? keyMap[parentPath] : node.key
+        const key = 'custom-' + (parentKey || node.key) + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+        keyMap[fp] = key
+        await supabase.from('hs_folders').insert({ project_id: projectId, parent_key: parentKey || node.key, folder_key: key, label })
+      }
+      for (const { file, path } of drop.files) {
+        const fKey = path ? keyMap[path] : node.key
+        const storagePath = `projects/${projectId}/hs/${fKey}/${Date.now()}-${file.name}`
+        const { error } = await supabase.storage.from('hs-handover').upload(storagePath, file)
+        if (!error) await supabase.from('hs_files').insert({ project_id: projectId, folder_key: fKey, storage_path: storagePath, file_name: file.name, file_size: file.size })
+      }
+      onCustomFolderAdded?.(); loadFiles()
+    } else {
+      const f = drop.files.map(x => x.file)
+      if (f.length) upload(f)
+    }
   }
 
   async function deleteFile(f) {
