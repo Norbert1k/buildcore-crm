@@ -1126,7 +1126,7 @@ export default function HSHandover({ projectId, projectName }) {
       const zip = new window.JSZip()
 
       // Build full folder path map from HS_STRUCTURE
-     const { data: pathRows } = await supabase.from('hs_folder_paths').select('folder_key, full_path')
+      const { data: pathRows } = await supabase.from('hs_folder_paths').select('folder_key, full_path')
       const keyToPath = {}
       for (const r of (pathRows || [])) keyToPath[r.folder_key] = r.full_path
       for (const cf of customFolders) {
@@ -1136,7 +1136,7 @@ export default function HSHandover({ projectId, projectName }) {
 
       // Create every folder as a directory entry in the ZIP
       for (const path of Object.values(keyToPath)) {
-        zip.folder(path)
+        zip.file(path + '/_folder', path)
       }
 
       // Add real uploaded files into their correct folders
