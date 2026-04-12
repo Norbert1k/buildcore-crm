@@ -65,11 +65,11 @@ function Confirm({ message, onOk, onCancel }) {
 function fileTypeInfo(doc) {
   const t = doc.file_type || ''
   const n = doc.file_name || ''
-  const isImage = t.includes('image')
-  const isPdf = t.includes('pdf')
-  const isWord = t.includes('word') || t.includes('document') || /\.docx?$/i.test(n)
+  const isImage = t.includes('image') || /\.(jpg|jpeg|png|gif|webp)$/i.test(n)
+  const isPdf = t.includes('pdf') || /\.pdf$/i.test(n)
   const isExcel = t.includes('spreadsheet') || t.includes('excel') || /\.xlsx?$/i.test(n)
   const isPpt = t.includes('presentation') || t.includes('powerpoint') || /\.pptx?$/i.test(n)
+  const isWord = !isExcel && !isPpt && (t.includes('word') || t.includes('wordprocessing') || /\.docx?$/i.test(n))
   return { isImage, isPdf, isWord, isExcel, isPpt }
 }
 
