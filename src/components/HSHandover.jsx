@@ -758,24 +758,20 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
                   </button>
                 </>
               )}
-              {open && (
-                <>
-                  <button onClick={zipFolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-                    Zip all
-                  </button>
-                  {canAddFolders && (
-                    <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>
-                  )}
-                  {canManage && (
-                    <label style={BtnG}>
-                      {uploading ? '...' : '+ Upload'}
-                      <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
-                    </label>
-                  )}
-                  {depth === 0 && setViewMode && <ViewToggle viewMode={viewMode} setView={setViewMode} />}
-                </>
+              <button onClick={zipFolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+                Zip all
+              </button>
+              {canAddFolders && (
+                <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>
               )}
+              {canManage && (
+                <label style={BtnG}>
+                  {uploading ? '...' : '+ Upload'}
+                  <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
+                </label>
+              )}
+              {open && depth === 0 && setViewMode && <ViewToggle viewMode={viewMode} setView={setViewMode} />}
             </>
           )}
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
