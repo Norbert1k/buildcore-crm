@@ -1025,7 +1025,7 @@ export default function HSHandover({ projectId, projectName }) {
       await new Promise(r => script.onload = r)
       const zip = new window.JSZip()
 
-      // Build path map from HS_STRUCTURE
+      // Build full folder path map from HS_STRUCTURE
       function buildPaths(nodes, parentPath, acc) {
         for (const n of nodes) {
           const path = parentPath ? parentPath + '/' + n.label : n.label
@@ -1039,15 +1039,12 @@ export default function HSHandover({ projectId, projectName }) {
         keyToPath[cf.folder_key] = (keyToPath[cf.parent_key] || cf.parent_key) + '/' + cf.label
       }
 
-      // Create folder structure — each folder gets a visible text file
-      const allPaths = Object.values(keyToPath)
-      const structureLines = ['H&S Handover Folder Structure', '='.repeat(40), '', ...allPaths.map(p => p.replace(/\//g, ' > '))]
-      zip.file('FOLDER-STRUCTURE.txt', structureLines.join('\n'))
-      for (const path of allPaths) {
+      // Create every folder as a directory entry in the ZIP
+      for (const path of Object.values(keyToPath)) {
         zip.folder(path)
       }
 
-      // Fetch and add all real files
+      // Add real uploaded files into their correct folders
       const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
       for (const f of (allFiles || [])) {
         const folderPath = keyToPath[f.folder_key] || f.folder_key
@@ -1055,8 +1052,7 @@ export default function HSHandover({ projectId, projectName }) {
         if (data?.signedUrl) {
           try {
             const res = await fetch(data.signedUrl)
-            const blob = await res.blob()
-            zip.folder(folderPath).file(f.file_name, blob)
+            zip.folder(folderPath).file(f.file_name, await res.blob())
           } catch {}
         }
       }
