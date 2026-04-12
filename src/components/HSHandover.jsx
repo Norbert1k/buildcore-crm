@@ -1006,19 +1006,50 @@ export default function HSHandover({ projectId, projectName }) {
     document.head.appendChild(script)
     await new Promise(r => script.onload = r)
     const zip = new window.JSZip()
+
+    // ── Build full folder path map from HS_STRUCTURE ──────────────────────
+    function buildPaths(nodes, parentPath, acc) {
+      for (const n of nodes) {
+        const path = parentPath ? parentPath + '/' + n.label : n.label
+        acc[n.key] = path
+        if (n.children?.length) buildPaths(n.children, path, acc)
+      }
+      return acc
+    }
+    const keyToPath = buildPaths(HS_STRUCTURE, '', {})
+
+    // Add custom folders to path map
+    for (const cf of customFolders) {
+      const parentPath = keyToPath[cf.parent_key] || cf.parent_key
+      keyToPath[cf.folder_key] = parentPath + '/' + cf.label
+    }
+
+    // ── Create every folder (even empty ones) with a placeholder ─────────
+    for (const path of Object.values(keyToPath)) {
+      zip.file(path + '/.gitkeep', '')
+    }
+
+    // ── Fetch all files and place them into correct paths ─────────────────
     const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
-    if (!allFiles?.length) { alert('No files in this project.'); setZippingAll(false); return }
-    for (const f of allFiles) {
+    for (const f of (allFiles || [])) {
+      const folderPath = keyToPath[f.folder_key] || f.folder_key
       const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
       if (data?.signedUrl) {
-        const res = await fetch(data.signedUrl)
-        zip.file(f.folder_key + '/' + f.file_name, await res.blob())
+        try {
+          const res = await fetch(data.signedUrl)
+          zip.file(folderPath + '/' + f.file_name, await res.blob())
+        } catch { /* skip unreadable files */ }
       }
     }
+
     const blob = await zip.generateAsync({ type: 'blob' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (projectName || 'project') + '-hs-all-files.zip'; a.click()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = (projectName || 'project') + '-hs-handover.zip'
+    a.click()
     setZippingAll(false)
   }
+
 
   return (
     <div>
