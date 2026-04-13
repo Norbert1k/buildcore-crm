@@ -79,41 +79,42 @@ export default function Sidebar({ expCount, open, onClose }) {
           <div className="nav-section">Navigation</div>
           {visibleItems.map(item => (
             <div key={item.to}>
-              <NavLink
-                to={item.to}
-                end={item.to === '/'}
-                className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
-                onClick={(e) => {
-                  if (item.children) {
-                    setExpandedKey(k => k === item.key ? null : item.key)
-                  }
-                  handleNav()
-                }}
-              >
-                {item.icon}
-                {item.label}
-                {item.badge && <span className="nav-badge">{item.badge}</span>}
-                {item.children && (
+              {item.children ? (
+                <div
+                  className={`nav-item${location.pathname.startsWith(item.to) ? ' active' : ''}`}
+                  onClick={() => setExpandedKey(k => k === item.key ? null : item.key)}
+                  style={{ userSelect: 'none' }}
+                >
+                  {item.icon}
+                  {item.label}
+                  {item.badge && <span className="nav-badge">{item.badge}</span>}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform .2s', transform: expandedKey === item.key ? 'rotate(180deg)' : 'none' }}>
                     <polyline points="6 9 12 15 18 9"/>
                   </svg>
-                )}
-              </NavLink>
-              {item.children && expandedKey === item.key && item.children
-                .filter(child => perms.nav.includes(child.key))
-                .map(child => (
-                  <NavLink
-                    key={child.to}
-                    to={child.to}
-                    className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`}
-                    onClick={handleNav}
-                  >
-                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>›</span>
-                    {child.icon}
-                    {child.label}
+                </div>
+              ) : (
+                <NavLink to={item.to} end={item.to === '/'} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={handleNav}>
+                  {item.icon}
+                  {item.label}
+                  {item.badge && <span className="nav-badge">{item.badge}</span>}
+                </NavLink>
+              )}
+              {item.children && expandedKey === item.key && (
+                <>
+                  <NavLink to={item.to} end className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
+                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
+                    {item.icon}
+                    All {item.label}
                   </NavLink>
-                ))
-              }
+                  {item.children.filter(child => perms.nav.includes(child.key)).map(child => (
+                    <NavLink key={child.to} to={child.to} className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
+                      <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
+                      {child.icon}
+                      {child.label}
+                    </NavLink>
+                  ))}
+                </>
+              )}
             </div>
           ))}
 
