@@ -355,7 +355,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
       </div>
     )
   }
-  const cols = viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))'
+  const cols = viewMode === 'compact' ? 'repeat(auto-fill, minmax(90px, 1fr))' : 'repeat(auto-fill, minmax(130px, 1fr))'
   const gap = viewMode === 'compact' ? 6 : 8
   return (
     <div style={{ display: 'grid', gridTemplateColumns: cols, gap }}>
@@ -406,7 +406,7 @@ function BulkBar({ selected, onZip, onMove, onClear, allSubfolders }) {
   }
   return (
     <>
-      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
+      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', flexWrap: 'wrap', justifyContent: 'center', maxWidth: 'calc(100vw - 32px)' }}>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
         <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
         <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>
@@ -867,7 +867,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             {subfolders.length > 0 ? ' · ' + subfolders.length + ' sub-folder' + (subfolders.length !== 1 ? 's' : '') : ''}
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
           {showAddSub ? (
             <>
               <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
