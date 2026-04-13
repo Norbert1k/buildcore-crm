@@ -10,6 +10,17 @@ export const TRADES = [
   'Structural Engineers','Warranty Providers','Other'
 ]
 
+// Trades that default to Design Team when assigning to a project
+export const DESIGN_TEAM_TRADES = [
+  'Architects', 'Building Control', 'Civil Engineers', 'Fire Consultants',
+  'Principle Designers', 'SFS Engineers', 'Structural Engineers', 'Warranty Providers',
+]
+
+export const SUBCONTRACTOR_CATEGORIES = {
+  design_team: { label: 'Design Team', color: 'var(--blue, #0c447c)', bg: 'var(--blue-bg, #e6f1fb)' },
+  contractual_work: { label: 'Contractual Work', color: 'var(--amber, #ba7517)', bg: 'var(--amber-bg, #faeeda)' },
+}
+
 export const DOCUMENT_TYPES = {
   public_liability: 'Public Liability Insurance',
   employers_liability: "Employer's Liability Insurance",
