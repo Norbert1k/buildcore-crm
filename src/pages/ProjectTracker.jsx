@@ -105,6 +105,41 @@ export default function ProjectTracker() {
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map)
       mapInstanceRef.current = map
       setMapReady(true)
+
+      // Show user's live location as blue dot
+      if (navigator.geolocation) {
+        const userMarkerRef = { current: null }
+        navigator.geolocation.watchPosition(
+          (pos) => {
+            const lat = pos.coords.latitude
+            const lng = pos.coords.longitude
+            const userIcon = L.divIcon({
+              className: 'custom-marker',
+              html: `
+                <div style="position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;">
+                  <div style="position:absolute;width:36px;height:36px;border-radius:50%;background:#378ADD;opacity:0.15;animation:mapPulse 2.5s ease-in-out infinite;"></div>
+                  <div style="position:absolute;width:20px;height:20px;border-radius:50%;background:rgba(55,138,221,0.2);"></div>
+                  <div style="width:10px;height:10px;border-radius:50%;background:#378ADD;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(55,138,221,0.6);position:relative;z-index:2;"></div>
+                </div>
+              `,
+              iconSize: [36, 36],
+              iconAnchor: [18, 18],
+            })
+            if (userMarkerRef.current) {
+              userMarkerRef.current.setLatLng([lat, lng])
+            } else {
+              userMarkerRef.current = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map)
+              userMarkerRef.current.bindPopup(`
+                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:4px;text-align:center;">
+                  <div style="font-size:13px;font-weight:600;color:#378ADD;">Your Location</div>
+                </div>
+              `)
+            }
+          },
+          () => {},
+          { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 }
+        )
+      }
     }
     document.head.appendChild(script)
     return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null } }
