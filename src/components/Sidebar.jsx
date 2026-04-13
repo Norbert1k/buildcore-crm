@@ -108,7 +108,7 @@ export default function Sidebar({ expCount, open, onClose }) {
                     className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`}
                     onClick={handleNav}
                   >
-                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>â</span>
+                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>›</span>
                     {child.icon}
                     {child.label}
                   </NavLink>
