@@ -68,7 +68,7 @@ export const ROLES = {
 export const ROLE_PERMISSIONS = {
   admin:               { nav: ['dashboard','subcontractors','documents','projects','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   project_manager:     { nav: ['dashboard','subcontractors','documents','projects','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
-  accountant:          { nav: ['dashboard','subcontractors','suppliers','company','gdrive'], financials: true, performance: false },
+  accountant:          { nav: ['dashboard','subcontractors','documents','projects','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   site_manager:        { nav: ['dashboard','subcontractors','projects','suppliers','company','settings'], financials: false, performance: true },
   document_controller: { nav: ['dashboard','subcontractors','documents','projects','clients','company'], financials: false, performance: false },
   viewer:              { nav: ['dashboard','subcontractors','documents','projects','clients','company'], financials: false, performance: false },
