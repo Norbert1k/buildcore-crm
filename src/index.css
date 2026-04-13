@@ -189,6 +189,7 @@ tbody tr:hover td { background: var(--surface2); }
   .sidebar-overlay { display: none !important; }
 }
 
+/* ── Mobile (phones) ── */
 @media (max-width: 767px) {
   .topbar-menu-btn { display: flex !important; align-items: center; justify-content: center; }
   .sidebar {
@@ -198,10 +199,65 @@ tbody tr:hover td { background: var(--surface2); }
   }
   .sidebar.open { transform: translateX(0); }
   .sidebar-overlay.open { display: block; }
+  .page-content { padding: 14px; }
+  .topbar { padding: 0 12px; gap: 8px; }
+  table { min-width: 500px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 10px 12px; }
+  .stat-value { font-size: 18px; }
+  .section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .section-header .btn { width: 100%; justify-content: center; }
+  .filter-tabs { gap: 0; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .filter-tabs::-webkit-scrollbar { display: none; }
+  .filter-tab { padding: 8px 12px; font-size: 12px; }
+  h2 { font-size: 16px !important; }
+  .card-pad { padding: 14px; }
+  .btn { padding: 8px 12px; font-size: 12px; }
+  .btn-sm { padding: 5px 10px; font-size: 11px; }
+  .modal-body { padding: 14px 16px; }
+  .modal-header { padding: 14px 16px; }
+  .modal-footer { padding: 10px 16px; }
+  .form-grid { gap: 10px; }
+  input, select, textarea { padding: 9px 10px; font-size: 16px; }
+  .alert-item { padding: 8px 10px; gap: 8px; font-size: 12px; }
+  .avatar { width: 30px; height: 30px; font-size: 11px; }
+  .avatar-sm { width: 24px; height: 24px; font-size: 9px; }
+}
+
+/* ── Small phones (< 400px) ── */
+@media (max-width: 399px) {
+  .page-content { padding: 10px; }
+  .topbar { height: 48px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-card { padding: 8px 10px; border-left-width: 2px; }
+  .stat-value { font-size: 16px; }
+  .stat-label { font-size: 9px; }
+  .filter-tab { padding: 6px 10px; font-size: 11px; }
+  .btn { padding: 7px 10px; font-size: 11px; }
+  .card-pad { padding: 12px; }
+  .modal-body { padding: 12px; }
+}
+
+/* ── Tablets / iPad (768px - 1024px) ── */
+@media (min-width: 768px) and (max-width: 1024px) {
+  :root { --sidebar-width: 200px; }
   .page-content { padding: 16px; }
-  .topbar { padding: 0 14px; }
-  table { min-width: 600px; }
-  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .nav-item { padding: 9px 10px; font-size: 12px; }
+  .nav-item-child { padding-left: 20px; font-size: 11px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  table { min-width: 500px; }
+  .filter-tab { padding: 8px 12px; font-size: 12px; }
+}
+
+/* ── Touch-friendly improvements ── */
+@media (hover: none) and (pointer: coarse) {
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 34px; }
+  .nav-item { padding: 12px 12px; min-height: 44px; }
+  input, select, textarea { min-height: 42px; }
+  td { padding: 14px; }
+  .filter-tab { padding: 10px 14px; }
+  .alert-item { padding: 12px; min-height: 48px; }
 }
 
 [data-theme="dark"] {
