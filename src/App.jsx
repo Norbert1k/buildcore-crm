@@ -1,257 +1,188 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { AuthProvider, useAuth } from './lib/auth'
-import { supabase } from './lib/supabase'
-import Sidebar from './components/Sidebar'
-import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Subcontractors from './pages/Subcontractors'
-import SubcontractorDetail from './pages/SubcontractorDetail'
-import Documents from './pages/Documents'
-import Projects from './pages/Projects'
-import ProjectCalendar from './pages/ProjectCalendar'
-import ProjectDetail from './pages/ProjectDetail'
-import Suppliers from './pages/Suppliers'
-import GlobalSearch from './components/GlobalSearch'
-import Settings from './pages/Settings'
-import CompanyDocuments from './pages/CompanyDocuments'
-import GoogleDrive from './pages/GoogleDrive'
-import Clients from './pages/Clients'
-import ClientDetail from './pages/ClientDetail'
-import { Spinner } from './components/ui'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
+import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
+import { RatingBadge } from '../components/PerformanceTab'
+import { useAuth } from '../lib/auth'
+import SubcontractorModal from '../components/SubcontractorModal'
 
-function HamburgerIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
-      <rect y="2" width="18" height="2" rx="1"/>
-      <rect y="8" width="18" height="2" rx="1"/>
-      <rect y="14" width="18" height="2" rx="1"/>
-    </svg>
-  )
-}
+export default function Subcontractors() {
+  const [subs, setSubs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [editing, setEditing] = useState(null)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { can } = useAuth()
 
-function NotificationBell() {
-  const [notifications, setNotifications] = useState([])
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [open, setOpen] = useState(false)
-  const { user } = useAuth()
+  useEffect(() => { load() }, [location.key])
 
-  useEffect(() => {
-    if (!user) return
-    loadNotifications()
-    // Poll every 60 seconds
-    const interval = setInterval(loadNotifications, 60000)
-    return () => clearInterval(interval)
-  }, [user])
+  async function deleteSub(id) {
+    await supabase.from('subcontractors').delete().eq('id', id)
+    setConfirmDelete(null)
+    load()
+  }
 
-  async function loadNotifications() {
-    const { data, error } = await supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(20)
-    if (!error && data) {
-      setNotifications(data)
-      setUnreadCount(data.filter(n => !n.read).length)
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('subcontractors')
+      .select('*, documents_with_status(id, expiry_date, status), performance_ratings(id, rating_type)')
+      .order('company_name')
+    setSubs(data || [])
+    setLoading(false)
+  }
+
+  function filtered() {
+    let list = subs
+    if (filter !== 'all') list = list.filter(s => s.status === filter)
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(s =>
+        s.company_name.toLowerCase().includes(q) ||
+        s.contact_name.toLowerCase().includes(q) ||
+        s.trade.toLowerCase().includes(q) ||
+        s.city?.toLowerCase().includes(q)
+      )
     }
+    return list
   }
 
-  async function markAllRead() {
-    const unreadIds = notifications.filter(n => !n.read).map(n => n.id)
-    if (unreadIds.length === 0) return
-    await supabase.from('notifications').update({ read: true }).in('id', unreadIds)
-    setNotifications(ns => ns.map(n => ({ ...n, read: true })))
-    setUnreadCount(0)
+  const counts = {
+    all: subs.length,
+    active: subs.filter(s => s.status === 'active').length,
+    approved: subs.filter(s => s.status === 'approved').length,
+    on_hold: subs.filter(s => s.status === 'on_hold').length,
+    inactive: subs.filter(s => s.status === 'inactive').length,
   }
 
-  async function markOneRead(id) {
-    await supabase.from('notifications').update({ read: true }).eq('id', id)
-    setNotifications(ns => ns.map(n => n.id === id ? { ...n, read: true } : n))
-    setUnreadCount(c => Math.max(0, c - 1))
-  }
-
-  const typeColors = {
-    danger: { bg: 'var(--red-bg, #fcebeb)', color: 'var(--red, #a32d2d)', icon: '🔴' },
-    warning: { bg: 'var(--amber-bg, #faeeda)', color: 'var(--amber, #ba7517)', icon: '⚠️' },
-    success: { bg: 'var(--green-bg, #eaf3de)', color: 'var(--green, #448a40)', icon: '✅' },
-    info: { bg: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #0c447c)', icon: 'ℹ️' },
-  }
+  const list = filtered()
 
   return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        title="Notifications"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-        </svg>
-        {unreadCount > 0 && (
-          <span style={{
-            position: 'absolute', top: 2, right: 2,
-            background: 'var(--red, #a32d2d)', color: 'white',
-            fontSize: 10, fontWeight: 700, borderRadius: '50%',
-            width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            lineHeight: 1
-          }}>{unreadCount > 9 ? '9+' : unreadCount}</span>
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Subcontractors</h2>
+          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{subs.length} registered contractors</p>
+        </div>
+        {can('manage_subcontractors') && (
+          <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
+            <IconPlus size={14} /> Add Subcontractor
+          </button>
         )}
-      </button>
+      </div>
 
-      {open && (
-        <>
-          <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setOpen(false)} />
-          <div style={{
-            position: 'absolute', top: '100%', right: 0, marginTop: 8,
-            width: 380, maxHeight: 460, overflow: 'hidden',
-            background: 'var(--surface)', border: '1px solid var(--border)',
-            borderRadius: 'var(--radius-lg, 12px)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-            zIndex: 999, display: 'flex', flexDirection: 'column'
-          }}>
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>Notifications</div>
-              {unreadCount > 0 && (
-                <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 10px' }} onClick={markAllRead}>Mark all read</button>
-              )}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div className="search-wrap" style={{ position: 'relative' }}>
+          <span className="search-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><IconSearch size={13} /></span>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, trade, city…" style={{ paddingLeft: 32, width: 260 }} />
+        </div>
+        <div className="filter-tabs" style={{ marginBottom: 0 }}>
+          {Object.entries({ all: 'All', active: 'Active', approved: 'Approved', on_hold: 'On Hold', inactive: 'Inactive' }).map(([k, v]) => (
+            <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
+              {k === 'all'
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                : <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: k === 'active' ? '#448a40' : k === 'approved' ? '#378ADD' : k === 'on_hold' ? '#BA7517' : '#888780', display: 'inline-block' }} />
+              }
+              {v}<span className="tab-badge">{k === 'all' ? subs.length : counts[k] || 0}</span>
             </div>
-            <div style={{ overflowY: 'auto', flex: 1 }}>
-              {notifications.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
-                  No notifications yet
-                </div>
-              ) : notifications.map(n => {
-                const tc = typeColors[n.type] || typeColors.info
+          ))}
+        </div>
+      </div>
+
+      {loading ? <Spinner /> : list.length === 0 ? (
+        <EmptyState icon="👷" title="No subcontractors found" message={search ? 'Try adjusting your search.' : 'Add your first subcontractor to get started.'} action={can('manage_subcontractors') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> Add Subcontractor</button>} />
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Trade</th>
+                <th>Contact</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Documents</th>
+                <th>Rating</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map(s => {
+                const { expired, expiring, valid, total } = subDocSummary(s.documents_with_status)
+                const docPill = expired > 0
+                  ? <Pill cls="pill-red">{expired} expired</Pill>
+                  : expiring > 0
+                  ? <Pill cls="pill-amber">{expiring} expiring</Pill>
+                  : total > 0
+                  ? <Pill cls="pill-green">All valid</Pill>
+                  : <Pill cls="pill-gray">No docs</Pill>
                 return (
-                  <div
-                    key={n.id}
-                    style={{
-                      padding: '12px 16px', borderBottom: '1px solid var(--border)',
-                      background: n.read ? 'transparent' : 'var(--surface2)',
-                      cursor: n.link ? 'pointer' : 'default',
-                      transition: 'background .15s'
-                    }}
-                    onClick={() => {
-                      if (!n.read) markOneRead(n.id)
-                      if (n.link) { setOpen(false); window.location.href = n.link }
-                    }}
-                  >
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                      <div style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{tc.icon}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ fontSize: 13, fontWeight: n.read ? 500 : 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{n.title}</div>
-                          {!n.read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green, #448a40)', flexShrink: 0 }} />}
-                        </div>
-                        {n.message && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{n.message}</div>}
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                          {new Date(n.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${s.id}`)}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Avatar name={s.company_name} />
+                        <div>
+                          <div style={{ fontWeight: 500 }}>{s.company_name}</div>
+                          <div className="td-muted">{s.email}</div>
                         </div>
                       </div>
-                    </div>
-                  </div>
+                    </td>
+                    <td><Pill cls="pill-blue">{s.trade}</Pill></td>
+                    <td>
+                      <div>{s.contact_name}</div>
+                      <div className="td-muted">{s.phone}</div>
+                    </td>
+                    <td>{s.city || '—'}</td>
+                    <td>
+                      <Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill>
+                      <div style={{ marginTop: 4 }}>
+                        {s.approved ? (
+                          <span style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 10, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Approved for Payment</span>
+                        ) : (
+                          <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber-border)', borderRadius: 10, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>⏳ Pending Approval</span>
+                        )}
+                      </div>
+                    </td>
+                    <td>{docPill}</td>
+                    <td><RatingBadge ratings={s.performance_ratings} /></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }} onClick={e => e.stopPropagation()}>
+{can('manage_subcontractors') && (
+                          <button className="btn btn-sm" onClick={() => { setEditing(s); setShowModal(true) }}><IconEdit size={13} /></button>
+                        )}
+                        {can('delete') && (
+                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(s)}><IconTrash size={13} /></button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
                 )
               })}
-            </div>
-          </div>
-        </>
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => deleteSub(confirmDelete?.id)}
+        title="Delete subcontractor"
+        message={`Are you sure you want to permanently delete ${confirmDelete?.company_name}? All their documents, contacts and ratings will also be deleted. This cannot be undone.`}
+        danger
+      />
+      {showModal && (
+        <SubcontractorModal
+          sub={editing}
+          onClose={() => setShowModal(false)}
+          onSaved={() => { setShowModal(false); load() }}
+        />
       )}
     </div>
   )
 }
-
-function ProtectedLayout() {
-  const { user, loading } = useAuth()
-  const [expCount, setExpCount] = useState(0)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const location = useLocation()
-
-  useEffect(() => {
-    if (user) fetchExpCount()
-    // Close sidebar on route change (mobile)
-    setSidebarOpen(false)
-  }, [user, location.pathname])
-
-  async function fetchExpCount() {
-    const { count } = await supabase
-      .from('documents_with_status')
-      .select('id', { count: 'exact', head: true })
-      .in('status', ['expired', 'expiring_soon'])
-    setExpCount(count || 0)
-  }
-
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-        <Spinner size={32} />
-      </div>
-    )
-  }
-
-  if (!user) return <Navigate to="/login" replace />
-
-  const pageTitles = {
-    '/': 'Dashboard',
-    '/subcontractors': 'Subcontractors',
-    '/subcontractors/compliance': 'Compliance',
-    '/clients': 'Clients',
-    '/projects': 'Projects',
-    '/suppliers': 'Suppliers',
-    '/settings': 'Settings',
-  }
-  const title = pageTitles[location.pathname] || 'BuildCore CRM'
-
-  return (
-    <div className="app-layout">
-      <Sidebar expCount={expCount} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="main-area">
-        <div className="topbar">
-          <button className="topbar-menu-btn" onClick={() => setSidebarOpen(o => !o)}>
-            <HamburgerIcon />
-          </button>
-          <div style={{ fontWeight: 600, fontSize: 15, flexShrink: 0 }}>{title}</div>
-          <GlobalSearch />
-          <NotificationBell />
-          <div style={{ fontSize: 12, color: 'var(--text3)', display: 'none' }} className="topbar-date">
-            {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </div>
-        </div>
-        <div className="page-content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/subcontractors" element={<Subcontractors />} />
-            <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
-            <Route path="/subcontractors/compliance" element={<Documents />} />
-            <Route path="/projects" element={<Projects />} />
-          <Route path="/projects/calendar" element={<ProjectCalendar />} />
-            <Route path="/projects/:id" element={<ProjectDetail />} />
-            <Route path="/suppliers" element={<Suppliers />} />
-            <Route path="/settings" element={<Settings />} />
-          <Route path="/company-documents" element={<CompanyDocuments />} />
-          <Route path="/google-drive" element={<GoogleDrive />} />
-          <Route path="/clients" element={<Clients />} />
-          <Route path="/clients/:id" element={<ClientDetail />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function AppRoutes() {
-  const { user, loading } = useAuth()
-  if (loading) return null
-  return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/*" element={<ProtectedLayout />} />
-    </Routes>
-  )
-}
-
-export default function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
-  )
-}
-// NOTE: imports added inline via patch below
