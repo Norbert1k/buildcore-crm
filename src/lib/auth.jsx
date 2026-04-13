@@ -15,45 +15,24 @@ export function AuthProvider({ children }) {
   const [projectAccess, setProjectAccess] = useState([])
   const [loading, setLoading] = useState(true)
 
-  async function checkAndSetUser(sessionUser) {
-    if (!sessionUser) {
-      setUser(null)
-      setProfile(null)
-      setProjectAccess([])
-      setLoading(false)
-      return
-    }
-    // Check if 2FA is required but not yet completed
-    try {
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-      if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
-        // User has 2FA enabled but hasn't verified yet — don't set user so app stays on login
-        setUser(null)
-        setProfile(null)
-        setLoading(false)
-        return
-      }
-    } catch (e) {}
-    setUser(sessionUser)
-    fetchProfile(sessionUser.id)
-  }
-
   useEffect(() => {
     // Apply theme from localStorage immediately on mount
     const saved = localStorage.getItem('theme') || 'light'
     applyTheme(saved)
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) checkAndSetUser(session.user)
-      else { setUser(null); setLoading(false) }
+      setUser(session?.user ?? null)
+      if (session?.user) fetchProfile(session.user.id)
+      else setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) checkAndSetUser(session.user)
+      setUser(session?.user ?? null)
+      if (session?.user) fetchProfile(session.user.id)
       else {
-        setUser(null)
         setProfile(null)
         setProjectAccess([])
+        // Keep theme from localStorage when signed out
         const saved = localStorage.getItem('theme') || 'light'
         applyTheme(saved)
         setLoading(false)
@@ -97,31 +76,31 @@ export function AuthProvider({ children }) {
     if (!profile) return false
     if (role === 'admin') return true
     const permissions = {
-      manage_subcontractors: ['project_manager', 'accountant'],
-      manage_documents:      ['project_manager', 'document_controller', 'site_manager'],
+      manage_subcontractors: ['project_manager', 'site_manager', 'accountant'],
+      manage_documents:      ['project_manager', 'document_controller'],
       manage_projects:       ['project_manager'],
       manage_suppliers:      ['project_manager', 'accountant'],
       manage_users:          [],
       delete:                [],
-      view_financials:       ['project_manager', 'accountant', 'director_viewer'],
-      view_subcontractors:   ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer', 'director_viewer'],
-      view_projects:         ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer', 'director_viewer'],
-      view_suppliers:        ['project_manager', 'site_manager', 'accountant', 'director_viewer'],
-      view_supplier_detail:  ['project_manager', 'accountant', 'director_viewer'],
-      view_performance:      ['project_manager', 'site_manager', 'director_viewer'],
+      view_financials:       ['project_manager', 'accountant'],
+      view_subcontractors:   ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
+      view_projects:         ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
+      view_suppliers:        ['project_manager', 'site_manager', 'accountant'],
+      view_supplier_detail:  ['project_manager', 'accountant'],
+      view_performance:      ['project_manager', 'site_manager'],
       issue_ratings:         ['project_manager', 'site_manager'],
-      view_all:              ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer', 'director_viewer'],
-      view_hs_handover:      ['project_manager', 'document_controller', 'accountant', 'viewer', 'director_viewer'],
-      view_photos:           ['project_manager', 'document_controller', 'accountant', 'viewer', 'director_viewer'],
-      view_case_study:       ['project_manager', 'document_controller', 'accountant', 'viewer', 'director_viewer'],
-      view_clients:          ['project_manager', 'accountant', 'document_controller', 'viewer', 'director_viewer'],
-      view_project_value:    ['project_manager', 'accountant', 'director_viewer'],
-      view_csa:              ['project_manager', 'accountant', 'document_controller', 'director_viewer'],
-      view_cff:              ['project_manager', 'accountant', 'document_controller', 'director_viewer'],
-      view_payments:         ['project_manager', 'accountant', 'director_viewer'],
-      view_company_vat:      ['project_manager', 'accountant', 'director_viewer'],
-      view_company_bank:     ['project_manager', 'accountant', 'director_viewer'],
-      view_company_other:    ['project_manager', 'accountant', 'document_controller', 'director_viewer'],
+      view_all:              ['project_manager', 'site_manager', 'document_controller', 'accountant', 'viewer'],
+      view_hs_handover:      ['project_manager', 'document_controller', 'accountant', 'viewer'],
+      view_photos:           ['project_manager', 'document_controller', 'accountant', 'viewer'],
+      view_case_study:       ['project_manager', 'document_controller', 'accountant', 'viewer'],
+      view_clients:          ['project_manager', 'accountant', 'document_controller', 'viewer'],
+      view_project_value:    ['project_manager', 'accountant'],
+      view_csa:              ['project_manager', 'accountant', 'document_controller'],
+      view_cff:              ['project_manager', 'accountant', 'document_controller'],
+      view_payments:         ['project_manager', 'accountant'],
+      view_company_vat:      ['project_manager', 'accountant'],
+      view_company_bank:     ['project_manager', 'accountant'],
+      view_company_other:    ['project_manager', 'accountant', 'document_controller'],
       manage_settings:       ['project_manager'],
     }
     return permissions[action]?.includes(role) ?? false
@@ -129,7 +108,7 @@ export function AuthProvider({ children }) {
 
   const canAccessProject = (projectId) => {
     if (!profile) return false
-    if (['admin', 'project_manager', 'accountant', 'document_controller', 'viewer', 'director_viewer'].includes(role)) return true
+    if (['admin', 'project_manager', 'accountant', 'document_controller', 'viewer'].includes(role)) return true
     if (role === 'site_manager') return projectAccess.includes(projectId)
     return false
   }

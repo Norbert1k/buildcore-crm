@@ -25,19 +25,6 @@ export default function Login() {
     setLoading(false)
     if (error) { setError(error.message); return }
 
-    // Check if account is disabled
-    try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: profileData } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-        if (profileData?.role === 'disabled') {
-          await supabase.auth.signOut()
-          setError('Your account has been deactivated. Contact your administrator.')
-          return
-        }
-      }
-    } catch (e) {}
-
     // Check 2FA using Supabase recommended approach
     try {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
@@ -70,10 +57,6 @@ export default function Login() {
       const { error: ve } = await supabase.auth.mfa.verify({ factorId, challengeId: cd.id, code })
       setLoading(false)
       if (ve) { setError('Incorrect code — please try again'); return }
-
-      // Refresh session so AuthProvider detects AAL2 and sets user
-      await supabase.auth.refreshSession()
-
       // Check forced password change after 2FA
       try {
         const { data: { user } } = await supabase.auth.getUser()
@@ -110,7 +93,7 @@ export default function Login() {
       <div style={{ width: '100%', maxWidth: 400 }}>
 
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 90, display: 'block', margin: '0 auto', objectFit: 'contain', filter: isDark ? 'none' : 'brightness(0)' }} />
+          <img src="/logo.png" alt="City Construction" style={{ height: 90, display: 'block', margin: '0 auto', objectFit: 'contain', filter: isDark ? 'none' : 'brightness(0)' }} />
         </div>
 
         <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e2e0d8)', borderRadius: 12, padding: 28, borderTop: '3px solid #448a40' }}>

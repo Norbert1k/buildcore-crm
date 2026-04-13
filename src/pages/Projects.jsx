@@ -70,11 +70,11 @@ export default function Projects() {
         <div className="stat-card"><div className="stat-label">Tender</div><div className="stat-value">{counts.tender}</div></div>
         <div className="stat-card"><div className="stat-label">On Hold</div><div className="stat-value amber">{counts.on_hold}</div></div>
         <div className="stat-card"><div className="stat-label">Completed</div><div className="stat-value">{counts.completed}</div></div>
-        {can('view_project_value') && <div className="stat-card" style={{ borderTop: '3px solid var(--green)', gridColumn: 'span 2' }}>
+        <div className="stat-card" style={{ borderTop: '3px solid var(--green)', gridColumn: 'span 2' }}>
           <div className="stat-label">Active Projects Value</div>
           <div className="stat-value green" style={{ fontSize: 22 }}>{activeValue > 0 ? formatCurrency(activeValue) : '—'}</div>
           {tenderValue > 0 && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>+ {formatCurrency(tenderValue)} in tender</div>}
-        </div>}
+        </div>
       </div>
 
       <div className="filter-tabs">
@@ -104,7 +104,7 @@ export default function Projects() {
                 <th>End</th>
                 <th>Duration</th>
                 <th>Subcontractors</th>
-                {can('view_project_value') && <th>Value</th>}
+                <th>Value</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -122,7 +122,7 @@ export default function Projects() {
                   <td className="td-muted">{formatDate(p.end_date)}</td>
                   <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
                   <td><Pill cls="pill-blue">{p.project_subcontractors?.length || 0} assigned</Pill></td>
-                  {can('view_project_value') && <td>{formatCurrency(p.value)}</td>}
+                  <td>{formatCurrency(p.value)}</td>
                   <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill></td>
                   <td onClick={e => e.stopPropagation()}>
                     {can('manage_projects') && (

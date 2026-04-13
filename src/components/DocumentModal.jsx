@@ -35,9 +35,13 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
     setForm(f => ({ ...f, document_name: v, _nameManuallySet: true }))
   }
 
+  const INSURANCE_TYPES = ['public_liability', 'employers_liability', 'professional_indemnity']
+  const isInsurance = INSURANCE_TYPES.includes(form.document_type)
+
   function validate() {
     const e = {}
     if (!form.document_name.trim()) e.document_name = 'Document name is required'
+    if (isInsurance && !form.expiry_date) e.expiry_date = 'Expiry date is required for insurance documents'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -122,7 +126,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
         <Field label="Issue Date">
           <input type="date" value={form.issue_date} onChange={e => set('issue_date', e.target.value)} />
         </Field>
-        <Field label="Expiry Date">
+        <Field label={isInsurance ? 'Expiry Date *' : 'Expiry Date'} error={errors.expiry_date}>
           <input type="date" value={form.expiry_date} onChange={e => set('expiry_date', e.target.value)} />
         </Field>
         {days !== null && days < 0 && (

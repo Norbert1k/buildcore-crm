@@ -95,7 +95,7 @@ export default function PerformanceTab({ subcontractorId, subName, subEmail, rat
             </button>
           ))}
         </div>
-        {can('issue_ratings') && (
+        {can('manage_projects') && (
           <button className="btn btn-primary btn-sm" onClick={() => setShowModal(true)}>
             <IconPlus size={13} /> Issue Rating
           </button>

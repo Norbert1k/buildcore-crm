@@ -1243,7 +1243,6 @@ export default function ProjectDocumentation({ projectId, projectName }) {
   const hiddenFolders = []
   const hiddenSubfolders = []
   if (!can('view_payments')) { hiddenFolders.push('02-payment-application', '03-payment-notice') }
-  if (!can('view_financials')) { hiddenFolders.push('01-project-order') }
   if (!can('view_csa')) { hiddenSubfolders.push('csa') }
   if (!can('view_cff')) { hiddenSubfolders.push('cff') }
 

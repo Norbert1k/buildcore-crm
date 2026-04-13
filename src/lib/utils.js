@@ -1,11 +1,13 @@
 import { differenceInDays, format, parseISO } from 'date-fns'
 
 export const TRADES = [
-  'Electrical','Plumbing','HVAC','Scaffolding','Groundworks','Brickwork',
-  'Carpentry','Roofing','Steel Erection','Painting & Decorating','Plastering',
-  'Glazing','Demolition','Drainage','Landscaping','Fire Protection',
-  'Lift Installation','Flooring','Insulation',
-  'Core Drilling & Sawing','Setting Out Engineer','Consultant','Sprinkler System','Other'
+  'Architects','Brickwork','Building Control','Carpentry','Civil Engineers',
+  'Consultant','Core Drilling & Sawing','Demolition','Drainage','Electrical',
+  'Fire Consultants','Fire Protection','Flooring','Glazing','Groundworks',
+  'HVAC','Insulation','Landscaping','Lift Installation','Painting & Decorating',
+  'Plastering','Plumbing','Principle Designers','Roofing','Scaffolding',
+  'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
+  'Structural Engineers','Warranty Providers','Other'
 ]
 
 export const DOCUMENT_TYPES = {
@@ -46,23 +48,19 @@ export const SUB_STATUSES = {
 export const ROLES = {
   admin:                { label: 'Admin',               cls: 'pill-red',    desc: 'Full access including user management' },
   project_manager:      { label: 'Project Manager',     cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
-  director_viewer:      { label: 'Director Viewer',     cls: 'pill-purple', desc: 'Full visibility across all areas — read-only, no editing' },
   accountant:           { label: 'Accountant',          cls: 'pill-purple', desc: 'Manage suppliers, add/edit subcontractor VAT & CIS, view financials' },
   site_manager:         { label: 'Site Manager',        cls: 'pill-amber',  desc: 'Access assigned projects & compliance docs only' },
   document_controller:  { label: 'Document Controller', cls: 'pill-green',  desc: 'Add & edit compliance documents' },
   viewer:               { label: 'Viewer',              cls: 'pill-gray',   desc: 'Read-only access to all areas' },
-  disabled:             { label: 'Disabled',            cls: 'pill-gray',   desc: 'Account deactivated — cannot log in' },
 }
 
 export const ROLE_PERMISSIONS = {
   admin:               { nav: ['dashboard','subcontractors','documents','projects','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   project_manager:     { nav: ['dashboard','subcontractors','documents','projects','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
-  director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   accountant:          { nav: ['dashboard','subcontractors','suppliers','company','gdrive'], financials: true, performance: false },
   site_manager:        { nav: ['dashboard','subcontractors','projects','suppliers','company','settings'], financials: false, performance: true },
   document_controller: { nav: ['dashboard','subcontractors','documents','projects','clients','company'], financials: false, performance: false },
   viewer:              { nav: ['dashboard','subcontractors','documents','projects','clients','company'], financials: false, performance: false },
-  disabled:            { nav: [], financials: false, performance: false },
 }
 
 export const NOTE_TYPES = {
