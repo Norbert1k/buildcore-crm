@@ -117,9 +117,9 @@ export default function ProjectTracker() {
               className: 'custom-marker',
               html: `
                 <div style="position:relative;width:36px;height:36px;display:flex;align-items:center;justify-content:center;">
-                  <div style="position:absolute;width:36px;height:36px;border-radius:50%;background:#00D4AA;opacity:0.15;animation:mapPulse 2.5s ease-in-out infinite;"></div>
-                  <div style="position:absolute;width:20px;height:20px;border-radius:50%;background:rgba(0,212,170,0.2);"></div>
-                  <div style="width:10px;height:10px;border-radius:50%;background:#00D4AA;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(0,212,170,0.6);position:relative;z-index:2;"></div>
+                  <div style="position:absolute;width:36px;height:36px;border-radius:50%;background:#FFD700;opacity:0.15;animation:mapPulse 2.5s ease-in-out infinite;"></div>
+                  <div style="position:absolute;width:20px;height:20px;border-radius:50%;background:rgba(255,215,0,0.2);"></div>
+                  <div style="width:10px;height:10px;border-radius:50%;background:#FFD700;border:2.5px solid #fff;box-shadow:0 1px 6px rgba(255,215,0,0.6);position:relative;z-index:2;"></div>
                 </div>
               `,
               iconSize: [36, 36],
@@ -131,7 +131,7 @@ export default function ProjectTracker() {
               userMarkerRef.current = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map)
               userMarkerRef.current.bindPopup(`
                 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:4px;text-align:center;">
-                  <div style="font-size:13px;font-weight:600;color:#00D4AA;">Your Location</div>
+                  <div style="font-size:13px;font-weight:600;color:#DAA520;">Your Location</div>
                 </div>
               `)
             }
