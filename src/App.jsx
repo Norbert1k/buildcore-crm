@@ -99,8 +99,8 @@ function NotificationBell() {
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setOpen(false)} />
           <div style={{
-            position: 'absolute', top: '100%', right: 0, marginTop: 8,
-            width: 380, maxHeight: 460, overflow: 'hidden',
+            position: 'absolute', top: '100%', right: -60, marginTop: 8,
+            width: 'min(380px, calc(100vw - 24px))', maxHeight: 460, overflow: 'hidden',
             background: 'var(--surface)', border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg, 12px)', boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
             zIndex: 999, display: 'flex', flexDirection: 'column'
