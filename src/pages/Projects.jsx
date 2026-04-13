@@ -32,7 +32,7 @@ export default function Projects() {
     setLoading(true)
     const { data } = await supabase
       .from('projects')
-      .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
+      .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id), clients(id, name)')
       .order('created_at', { ascending: false })
     setProjects(data || [])
     setLoading(false)
@@ -116,7 +116,11 @@ export default function Projects() {
                     <div style={{ fontWeight: 500 }}>{p.project_name}</div>
                     {p.project_ref && <div className="td-muted">{p.project_ref}</div>}
                   </td>
-                  <td>{p.client_name || '—'}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    {p.client_id ? (
+                      <span style={{ color: 'var(--green)', cursor: 'pointer', fontWeight: 500 }} onClick={() => navigate(`/clients/${p.client_id}`)}>{p.client_name || p.clients?.name || '—'}</span>
+                    ) : (p.client_name || '—')}
+                  </td>
                   <td>{p.profiles?.full_name || '—'}</td>
                   <td className="td-muted">{formatDate(p.start_date)}</td>
                   <td className="td-muted">{formatDate(p.end_date)}</td>
