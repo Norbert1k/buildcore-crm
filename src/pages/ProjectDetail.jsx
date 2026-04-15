@@ -20,98 +20,6 @@ function calcDuration(start, end) {
   return yrs + ' year' + (yrs !== 1 ? 's' : '')
 }
 
-// ── Project File Search ───────────────────────────────────────────────────────
-function ProjectFileSearch({ projectId }) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const wrapRef = useState(null)[0]
-
-  useEffect(() => {
-    if (!query.trim()) { setResults(null); return }
-    const timer = setTimeout(() => doSearch(query.trim()), 300)
-    return () => clearTimeout(timer)
-  }, [query])
-
-  async function doSearch(q) {
-    setLoading(true)
-    const term = `%${q}%`
-    const [docRes, hsRes] = await Promise.all([
-      supabase.from('project_doc_files').select('id, file_name, file_size, folder_key, subfolder_key, storage_path')
-        .eq('project_id', projectId).ilike('file_name', term).limit(10),
-      supabase.from('hs_files').select('id, file_name, file_size, folder_key, storage_path')
-        .eq('project_id', projectId).ilike('file_name', term).limit(10),
-    ])
-    setResults({
-      docs: (docRes.data || []).map(f => ({ ...f, section: 'Documents' })),
-      hs: (hsRes.data || []).map(f => ({ ...f, section: 'H&S Handover' })),
-    })
-    setLoading(false)
-  }
-
-  async function downloadFile(file) {
-    const bucket = file.section === 'H&S Handover' ? 'hs-handover' : 'project-docs'
-    const { data } = await supabase.storage.from(bucket).createSignedUrl(file.storage_path, 120)
-    if (data?.signedUrl) {
-      try {
-        const res = await fetch(data.signedUrl)
-        const blob = await res.blob()
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.file_name
-        document.body.appendChild(a); a.click(); document.body.removeChild(a)
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-      } catch { window.open(data.signedUrl, '_blank') }
-    }
-  }
-
-  const hasResults = results && (results.docs.length + results.hs.length) > 0
-  const allResults = results ? [...results.docs, ...results.hs] : []
-
-  return (
-    <div style={{ position: 'relative', marginBottom: 12 }}>
-      <div style={{ position: 'relative' }}>
-        <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398l3.85 3.85a1 1 0 001.415-1.414l-3.868-3.834zm-5.24 1.4a5 5 0 110-10 5 5 0 010 10z"/>
-        </svg>
-        <input
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          placeholder="Search files across Documents & H&S Handover..."
-          style={{ paddingLeft: 32, paddingRight: 32, fontSize: 13, height: 36, width: '100%' }}
-        />
-        {query && (
-          <button onClick={() => { setQuery(''); setResults(null) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
-        )}
-      </div>
-      {query && results && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', zIndex: 200, overflow: 'hidden', maxHeight: 360, overflowY: 'auto' }}>
-          {loading && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>Searching...</div>}
-          {!loading && !hasResults && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No files found for "{query}"</div>}
-          {!loading && hasResults && allResults.map(f => (
-            <div key={f.id} onClick={() => downloadFile(f)}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', transition: 'background .1s' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <div style={{ width: 28, height: 28, borderRadius: 5, background: f.section === 'H&S Handover' ? '#e8f5e7' : '#E6F1FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {f.section === 'H&S Handover'
-                  ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                  : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#378ADD" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                }
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{f.file_name}</div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
-                  {f.section}{f.folder_key ? ' · ' + f.folder_key : ''}{f.subfolder_key ? ' / ' + f.subfolder_key : ''}
-                </div>
-              </div>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -301,15 +209,18 @@ export default function ProjectDetail() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px', fontSize: 13 }}>
               {[
-                ['Client', project.client_name],
+                ['Client', project.client_name, project.client_id ? `/clients/${project.client_id}` : null],
                 ['Project Manager', project.profiles?.full_name],
                 ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', formatDate(project.start_date)],
                 ['End Date', formatDate(project.end_date)],
                 ['Duration', calcDuration(project.start_date, project.end_date)],
                 ['Contract Value', formatCurrency(project.value)],
-              ].filter(([, v]) => v && v !== '—').map(([k, v]) => (
-                <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span>{v}</span></div>
+              ].filter(([, v]) => v && v !== '—').map(([k, v, link]) => (
+                <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span>{link
+                  ? <span style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }} onClick={() => navigate(link)}>{v}</span>
+                  : <span>{v}</span>
+                }</div>
               ))}
             </div>
 
@@ -324,8 +235,6 @@ export default function ProjectDetail() {
           <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{project.description}</div>
         </div>
       )}
-
-      <ProjectFileSearch projectId={id} />
 
       <div className="filter-tabs">
         <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => { setActiveTab('documents'); localStorage.setItem(_tabKey, 'documents') }}>
