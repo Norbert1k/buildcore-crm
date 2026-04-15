@@ -32,7 +32,7 @@ export default function Projects() {
     setLoading(true)
     const { data } = await supabase
       .from('projects')
-      .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id), clients(id, name)')
+      .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
       .order('created_at', { ascending: false })
     setProjects(data || [])
     setLoading(false)
@@ -53,12 +53,6 @@ export default function Projects() {
           <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{projects.length} projects total</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {can('view_tracker') && (
-            <button className="btn btn-sm" onClick={() => navigate('/projects/tracker')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-              Map View
-            </button>
-          )}
           <button className="btn btn-sm" onClick={() => navigate('/projects/calendar')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             Calendar View
@@ -122,10 +116,11 @@ export default function Projects() {
                     <div style={{ fontWeight: 500 }}>{p.project_name}</div>
                     {p.project_ref && <div className="td-muted">{p.project_ref}</div>}
                   </td>
-                  <td onClick={e => e.stopPropagation()}>
-                    {p.client_id ? (
-                      <span style={{ color: 'var(--green)', cursor: 'pointer', fontWeight: 500 }} onClick={() => navigate(`/clients/${p.client_id}`)}>{p.client_name || p.clients?.name || '—'}</span>
-                    ) : (p.client_name || '—')}
+                  <td onClick={e => { if (p.client_id) { e.stopPropagation(); navigate(`/clients/${p.client_id}`) } }}>
+                    {p.client_id
+                      ? <span style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}>{p.client_name || '—'}</span>
+                      : (p.client_name || '—')
+                    }
                   </td>
                   <td>{p.profiles?.full_name || '—'}</td>
                   <td className="td-muted">{formatDate(p.start_date)}</td>
