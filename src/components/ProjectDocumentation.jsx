@@ -102,6 +102,56 @@ function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4
 function naturalSort(arr) {
   return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' }))
 }
+
+// ── Upload with real byte-level progress via XHR ──────────────────────────────
+async function uploadWithProgress(bucket, path, file, onProgress) {
+  const session = (await supabase.auth.getSession()).data.session
+  const token = session?.access_token
+  const url = `${supabase.supabaseUrl}/storage/v1/object/${bucket}/${path}`
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', url)
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.setRequestHeader('apikey', supabase.supabaseKey)
+    xhr.setRequestHeader('x-upsert', 'false')
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve({ error: null })
+      else resolve({ error: { message: `Upload failed: ${xhr.status}` } })
+    }
+    xhr.onerror = () => resolve({ error: { message: 'Network error during upload' } })
+    xhr.send(file)
+  })
+}
+
+// ── Upload Progress Ring ──────────────────────────────────────────────────────
+function UploadRing({ progress }) {
+  const r = 10, cx = 12, cy = 12, circ = 2 * Math.PI * r
+  const offset = circ - (circ * (progress.percent || 0) / 100)
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--text2)', whiteSpace: 'nowrap' }}>
+      <svg width="24" height="24" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--border)" strokeWidth="2.5" />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#448a40" strokeWidth="2.5"
+          strokeDasharray={circ} strokeDashoffset={offset}
+          strokeLinecap="round" transform="rotate(-90 12 12)"
+          style={{ transition: 'stroke-dashoffset 0.2s ease' }} />
+        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
+          style={{ fontSize: 7, fontWeight: 600, fill: 'var(--text)' }}>
+          {progress.percent || 0}
+        </text>
+      </svg>
+      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>
+        {progress.total > 1
+          ? <span>{progress.current}/{progress.total} files</span>
+          : <span>{progress.fileName || 'Uploading...'}</span>
+        }
+      </div>
+    </div>
+  )
+}
 async function triggerDownload(signedUrl, fileName) {
   try {
     const res = await fetch(signedUrl)
@@ -517,7 +567,8 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
-  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null)
+  const uploading = !!uploadProgress
   const [selected, setSelected] = useState(new Set())
   const [showAddSub, setShowAddSub] = useState(false)
   const [newSubName, setNewSubName] = useState('')
@@ -559,10 +610,16 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 
   async function uploadFiles(fileList) {
     if (!fileList.length) return
-    setUploading(true)
-    for (const file of fileList) {
+    const total = fileList.length
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i]
+      setUploadProgress({ current: i + 1, total, percent: 0, fileName: file.name })
       const path = `projects/${projectId}/${folder.key}/${subfolder.key}/${Date.now()}-${file.name}`
-      const { error } = await supabase.storage.from('project-docs').upload(path, file)
+      const { error } = await uploadWithProgress('project-docs', path, file, (pct) => {
+        const fileProgress = pct / total
+        const previousFiles = (i / total) * 100
+        setUploadProgress(p => ({ ...p, percent: Math.round(previousFiles + fileProgress) }))
+      })
       if (error) { console.error('Upload failed:', error.message); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
@@ -570,7 +627,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
-    setUploading(false); loadFiles()
+    setUploadProgress(null); loadFiles()
   }
 
   async function deleteFile(f) {
@@ -737,10 +794,13 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
                 }
               </>
             )}
-            <label style={BtnG}>
-              {uploading ? '...' : '+ Upload'}
-              <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
-            </label>
+            {uploadProgress
+              ? <UploadRing progress={uploadProgress} />
+              : <label style={BtnG}>
+                  + Upload
+                  <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
+                </label>
+            }
           </div>
         )}
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2"
@@ -789,7 +849,8 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   const [showAddFolder, setShowAddFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [savingFolder, setSavingFolder] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(null)
+  const uploading = !!uploadProgress
   const [files, setFiles] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [selectedSubs, setSelectedSubs] = useState(new Set())
@@ -849,10 +910,16 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
   async function uploadToFolder(fileList) {
     if (!fileList.length) return
-    setUploading(true)
-    for (const file of fileList) {
+    const total = fileList.length
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i]
+      setUploadProgress({ current: i + 1, total, percent: 0, fileName: file.name })
       const path = `projects/${projectId}/${folder.key}/${Date.now()}-${file.name}`
-      const { error } = await supabase.storage.from('project-docs').upload(path, file)
+      const { error } = await uploadWithProgress('project-docs', path, file, (pct) => {
+        const fileProgress = pct / total
+        const previousFiles = (i / total) * 100
+        setUploadProgress(p => ({ ...p, percent: Math.round(previousFiles + fileProgress) }))
+      })
       if (error) { console.error('Upload failed:', error.message); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key,
@@ -860,7 +927,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
-    setUploading(false); loadRootFiles()
+    setUploadProgress(null); loadRootFiles()
   }
 
   async function deleteFile(f) {
@@ -1073,10 +1140,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
               )}
               {canAddFolders && <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>}
               {canManage && (
-                <label style={BtnG}>
-                  {uploading ? '...' : '+ Upload'}
-                  <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
-                </label>
+                uploadProgress
+                  ? <UploadRing progress={uploadProgress} />
+                  : <label style={BtnG}>
+                      + Upload
+                      <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
+                    </label>
               )}
               {open && <ViewToggle viewMode={viewMode} setView={setView} />}
             </>
