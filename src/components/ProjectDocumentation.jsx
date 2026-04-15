@@ -22,7 +22,8 @@ const TEMPLATE_FOLDERS = [
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
   { key: '02-payment-application',  label: '02. Payment Application',     color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
   { key: '03-payment-notice',       label: '03. Payment Notice (Client)', color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
-  { key: '04-project-programme',    label: '04. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
+  { key: '04-variations',           label: '04. Variations',              color: '#E24B4A', bg: '#FCEBEB', subfolders: [] },
+  { key: '05-project-programme',    label: '05. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
 ]
 
 // ── Folder icons (per folder key) ─────────────────────────────────────────────
@@ -59,7 +60,14 @@ const FOLDER_ICONS = {
       <line x1="9" y1="17" x2="12" y2="17"/>
     </svg>
   ),
-  '04-project-programme': ({ color, size }) => (
+  '04-variations': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <path d="M8.5 11l3.5 7 3.5-7" strokeWidth="2"/>
+    </svg>
+  ),
+  '05-project-programme': ({ color, size }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2"/>
       <line x1="16" y1="2" x2="16" y2="6"/>
@@ -1264,7 +1272,7 @@ export default function ProjectDocumentation({ projectId, projectName }) {
 
   const hiddenFolders = []
   const hiddenSubfolders = []
-  if (!can('view_payments')) { hiddenFolders.push('02-payment-application', '03-payment-notice') }
+  if (!can('view_payments')) { hiddenFolders.push('02-payment-application', '03-payment-notice', '04-variations') }
   if (!can('view_csa')) { hiddenSubfolders.push('csa') }
   if (!can('view_cff')) { hiddenSubfolders.push('cff') }
 
