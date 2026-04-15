@@ -111,25 +111,34 @@ async function triggerDownload(signedUrl, fileName) {
 // ── Folder drop reader (reads dropped folders recursively via webkitGetAsEntry) ─
 async function readDropEntries(e) {
   const items = e.dataTransfer?.items
-  if (!items) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  if (!items) return { files: Array.from(e.dataTransfer?.files || []).map(f => ({ file: f, path: '' })), folders: [] }
+  // Capture entries synchronously — browser may clear items after event handler returns
   const entries = []
   for (let i = 0; i < items.length; i++) {
     const entry = items[i].webkitGetAsEntry?.()
     if (entry) entries.push(entry)
   }
-  if (!entries.length) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  // Fallback: if webkitGetAsEntry not supported or returned nothing, use e.dataTransfer.files
+  if (!entries.length) {
+    const plainFiles = Array.from(e.dataTransfer?.files || [])
+    return { files: plainFiles.map(f => ({ file: f, path: '' })), folders: [] }
+  }
   const result = { files: [], folders: new Set() }
   async function walk(entry, path) {
     if (entry.isFile) {
-      const file = await new Promise(r => entry.file(r))
-      result.files.push({ file, path })
-      if (path) result.folders.add(path)
+      try {
+        const file = await new Promise((resolve, reject) => entry.file(resolve, reject))
+        result.files.push({ file, path })
+        if (path) result.folders.add(path)
+      } catch (err) { console.warn('Could not read file entry:', err) }
     } else if (entry.isDirectory) {
       const dirPath = path ? path + '/' + entry.name : entry.name
       result.folders.add(dirPath)
-      const reader = entry.createReader()
-      const children = await new Promise(r => reader.readEntries(r))
-      for (const child of children) await walk(child, dirPath)
+      try {
+        const reader = entry.createReader()
+        const children = await new Promise((resolve, reject) => reader.readEntries(resolve, reject))
+        for (const child of children) await walk(child, dirPath)
+      } catch (err) { console.warn('Could not read directory:', err) }
     }
   }
   for (const entry of entries) await walk(entry, '')
@@ -484,12 +493,12 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
           selected={selected.has(f.id)} onSelect={onSelect} />
       ))}
       {canManage && (
-        <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
+        <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
+          onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.onchange = e => onUpload(Array.from(e.target.files)); inp.click() }}
           style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 10 }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add files
-          <input type="file" multiple style={{ display: 'none' }} onChange={e => onUpload(Array.from(e.target.files))} />
-        </label>
+        </div>
       )}
     </div>
   )
@@ -629,6 +638,8 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     if (subKey) { moveSubfolder(subKey); return }
     const id = e.dataTransfer.getData('text/plain')
     if (id) { moveFile(id); return }
+    // Capture files synchronously before any async work
+    const fallbackFiles = Array.from(e.dataTransfer?.files || [])
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
       const keyMap = {}
@@ -649,7 +660,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
       }
       loadChildFolders(); loadFiles()
     } else {
-      const f = drop.files.map(x => x.file)
+      const f = drop.files.length > 0 ? drop.files.map(x => x.file) : fallbackFiles
       if (f.length) uploadFiles(f)
     }
   }
@@ -746,12 +757,12 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
               depth={depth + 1} />
           ))}
           {files.length === 0 && childFolders.length === 0 ? (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
+            <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
+              onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.onchange = e => uploadFiles(Array.from(e.target.files)); inp.click() }}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
-              <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
-            </label>
+            </div>
           ) : (
             <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage}
               onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles} />
@@ -765,6 +776,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 // ── Prime Folder Section ──────────────────────────────────────────────────────
 function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts, onDeleteFolder, onRenameFolder }) {
   const [open, setOpen] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const [subfolders, setSubfolders] = useState(folder.subfolders || [])
   const [showAddFolder, setShowAddFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -916,8 +928,11 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
   async function onDropFolder(e) {
     e.preventDefault(); e.stopPropagation()
+    setDragOver(false)
     const subKey = e.dataTransfer.getData('subfolder')
-    if (subKey) { moveSubfolderToRoot(subKey); return }
+    if (subKey) { moveSubfolderToRoot(subKey); setOpen(true); return }
+    // Capture files synchronously before any async work (browser clears dataTransfer after event)
+    const fallbackFiles = Array.from(e.dataTransfer?.files || [])
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
       const keyMap = {}
@@ -936,19 +951,22 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
         if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
-      loadCustomSubfolders(); loadRootFiles()
+      setOpen(true); loadCustomSubfolders(); loadRootFiles()
     } else {
-      const f = drop.files.map(x => x.file)
-      if (f.length) uploadToFolder(f)
+      const f = drop.files.length > 0 ? drop.files.map(x => x.file) : fallbackFiles
+      if (f.length) { setOpen(true); await uploadToFolder(f) }
     }
   }
 
   async function onDropBody(e) {
     e.preventDefault(); e.stopPropagation()
+    setDragOver(false)
     const subKey = e.dataTransfer.getData('subfolder')
     if (subKey) { moveSubfolderToRoot(subKey); return }
     const id = e.dataTransfer.getData('text/plain')
     if (id) { moveFileToRoot(id); return }
+    // Capture files synchronously before any async work
+    const fallbackFiles = Array.from(e.dataTransfer?.files || [])
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
       const keyMap = {}
@@ -969,7 +987,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
       }
       loadCustomSubfolders(); loadRootFiles()
     } else {
-      const f = drop.files.map(x => x.file)
+      const f = drop.files.length > 0 ? drop.files.map(x => x.file) : fallbackFiles
       if (f.length) uploadToFolder(f)
     }
   }
@@ -985,8 +1003,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   return (
     <div style={{ marginBottom: 12 }}>
       {/* Folder header */}
-      <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
+      <div onClick={() => setOpen(o => !o)}
+        onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+        onDragEnter={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false) }}
+        onDrop={onDropFolder}
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: dragOver ? (folder.color + '18') : open ? 'var(--surface2)' : 'var(--surface)', border: dragOver ? `1.5px dashed ${folder.color}` : '0.5px solid var(--border)', borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.15s, border 0.15s' }}>
         <FolderIcon folderKey={folder.key} color={folder.color} bg={folder.bg} />
         <div style={{ flex: 1, minWidth: 0 }} onClick={e => { if (renamingFolder) e.stopPropagation() }}>
           {renamingFolder
@@ -1060,7 +1082,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
       {/* Folder body */}
       {open && (
-        <div onDragOver={e => e.preventDefault()} onDrop={onDropBody}
+        <div onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }} onDrop={onDropBody}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
             onMove={async (targetKey) => {
@@ -1102,12 +1124,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
           {/* Empty state */}
           {files.length === 0 && subfolders.length === 0 && canManage && (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDropBody}
+            <div onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }} onDrop={onDropBody}
+              onClick={() => { const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true; inp.onchange = e => uploadToFolder(Array.from(e.target.files)); inp.click() }}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 56, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
-              <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
-            </label>
+            </div>
           )}
         </div>
       )}
