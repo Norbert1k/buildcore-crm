@@ -16,16 +16,16 @@ const TEMPLATE_FOLDERS = [
       { key: 'cff',      label: 'CFF - Cashflow Forecast' },
       { key: 'f10',      label: 'F10' },
       { key: 'hs',       label: 'Health & Safety' },
-      { key: 'meetings', label: 'Meetings' },
       { key: 'pci',      label: 'PCI — Pre-Construction Information' },
       { key: 'cpp',      label: 'CPP — Construction Phase Plan' },
       { key: 'utilities', label: 'Utilities' },
+      { key: 'meetings', label: 'Meetings' },
     ]
   },
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
   { key: '02-payment-application',  label: '02. Payment Application',     color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
   { key: '03-payment-notice',       label: '03. Payment Notice (Client)', color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
-  { key: '04-variations',           label: '04. Variations',              color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
+  { key: '04-variations',           label: '04. Variations',              color: '#993C1D', bg: '#FAECE7', subfolders: [] },
   { key: '05-project-programme',    label: '05. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
 ]
 
@@ -64,9 +64,8 @@ const FOLDER_ICONS = {
     </svg>
   ),
   '04-variations': ({ color, size }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="4 20 12 4 20 20"/>
-      <line x1="8" y1="14" x2="16" y2="14"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 4 12 20 20 4"/>
     </svg>
   ),
   '05-project-programme': ({ color, size }) => (
