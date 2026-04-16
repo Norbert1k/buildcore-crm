@@ -442,7 +442,10 @@ export default function ProjectDetail() {
                 { key: 'design_team', label: 'Design Team', color: '#378ADD', bg: '#E6F1FB' },
                 { key: 'work_contractors', label: 'Work Contractors', color: '#448a40', bg: '#e8f5e7' },
               ].map(cat => {
-                const catSubs = subs.filter(ps => (ps.category || 'work_contractors') === cat.key)
+                const catSubs = subs.filter(ps => {
+                  const c = ps.category && ps.category.trim() ? ps.category.trim() : 'work_contractors'
+                  return c === cat.key
+                })
                 if (!catSubs.length) return null
                 return (
                   <div key={cat.key} style={{ marginBottom: 16 }}>
