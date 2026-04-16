@@ -25,7 +25,8 @@ const TEMPLATE_FOLDERS = [
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
   { key: '02-payment-application',  label: '02. Payment Application',     color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
   { key: '03-payment-notice',       label: '03. Payment Notice (Client)', color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
-  { key: '04-project-programme',    label: '04. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
+  { key: '04-variations',           label: '04. Variations',              color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
+  { key: '05-project-programme',    label: '05. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
 ]
 
 // ── Folder icons (per folder key) ─────────────────────────────────────────────
@@ -62,7 +63,13 @@ const FOLDER_ICONS = {
       <line x1="9" y1="17" x2="12" y2="17"/>
     </svg>
   ),
-  '04-project-programme': ({ color, size }) => (
+  '04-variations': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="4 20 12 4 20 20"/>
+      <line x1="8" y1="14" x2="16" y2="14"/>
+    </svg>
+  ),
+  '05-project-programme': ({ color, size }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="4" width="18" height="18" rx="2"/>
       <line x1="16" y1="2" x2="16" y2="6"/>
