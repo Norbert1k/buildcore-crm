@@ -18,6 +18,7 @@ const TEMPLATE_FOLDERS = [
       { key: 'hs',       label: 'Health & Safety' },
       { key: 'pci',      label: 'PCI — Pre-Construction Information' },
       { key: 'cpp',      label: 'CPP — Construction Phase Plan' },
+      { key: 'planning', label: 'Planning' },
       { key: 'utilities', label: 'Utilities' },
       { key: 'meetings', label: 'Meetings' },
     ]
