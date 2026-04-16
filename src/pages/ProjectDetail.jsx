@@ -20,6 +20,98 @@ function calcDuration(start, end) {
   return yrs + ' year' + (yrs !== 1 ? 's' : '')
 }
 
+// ── Project File Search ───────────────────────────────────────────────────────
+function ProjectFileSearch({ projectId }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const wrapRef = useState(null)[0]
+
+  useEffect(() => {
+    if (!query.trim()) { setResults(null); return }
+    const timer = setTimeout(() => doSearch(query.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  async function doSearch(q) {
+    setLoading(true)
+    const term = `%${q}%`
+    const [docRes, hsRes] = await Promise.all([
+      supabase.from('project_doc_files').select('id, file_name, file_size, folder_key, subfolder_key, storage_path')
+        .eq('project_id', projectId).ilike('file_name', term).limit(10),
+      supabase.from('hs_files').select('id, file_name, file_size, folder_key, storage_path')
+        .eq('project_id', projectId).ilike('file_name', term).limit(10),
+    ])
+    setResults({
+      docs: (docRes.data || []).map(f => ({ ...f, section: 'Documents' })),
+      hs: (hsRes.data || []).map(f => ({ ...f, section: 'H&S Handover' })),
+    })
+    setLoading(false)
+  }
+
+  async function downloadFile(file) {
+    const bucket = file.section === 'H&S Handover' ? 'hs-handover' : 'project-docs'
+    const { data } = await supabase.storage.from(bucket).createSignedUrl(file.storage_path, 120)
+    if (data?.signedUrl) {
+      try {
+        const res = await fetch(data.signedUrl)
+        const blob = await res.blob()
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.file_name
+        document.body.appendChild(a); a.click(); document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+      } catch { window.open(data.signedUrl, '_blank') }
+    }
+  }
+
+  const hasResults = results && (results.docs.length + results.hs.length) > 0
+  const allResults = results ? [...results.docs, ...results.hs] : []
+
+  return (
+    <div style={{ position: 'relative', marginBottom: 12 }}>
+      <div style={{ position: 'relative' }}>
+        <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398l3.85 3.85a1 1 0 001.415-1.414l-3.868-3.834zm-5.24 1.4a5 5 0 110-10 5 5 0 010 10z"/>
+        </svg>
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search files across Documents & H&S Handover..."
+          style={{ paddingLeft: 32, paddingRight: 32, fontSize: 13, height: 36, width: '100%' }}
+        />
+        {query && (
+          <button onClick={() => { setQuery(''); setResults(null) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        )}
+      </div>
+      {query && results && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', zIndex: 200, overflow: 'hidden', maxHeight: 360, overflowY: 'auto' }}>
+          {loading && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>Searching...</div>}
+          {!loading && !hasResults && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No files found for "{query}"</div>}
+          {!loading && hasResults && allResults.map(f => (
+            <div key={f.id} onClick={() => downloadFile(f)}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', transition: 'background .1s' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <div style={{ width: 28, height: 28, borderRadius: 5, background: f.section === 'H&S Handover' ? '#e8f5e7' : '#E6F1FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {f.section === 'H&S Handover'
+                  ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#378ADD" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                }
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{f.file_name}</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
+                  {f.section}{f.folder_key ? ' · ' + f.folder_key : ''}{f.subfolder_key ? ' / ' + f.subfolder_key : ''}
+                </div>
+              </div>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -46,7 +138,7 @@ export default function ProjectDetail() {
   const [savingVariation, setSavingVariation] = useState(false)
   const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
-  const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
+  const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'work_contractors', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
   const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
 
   useEffect(() => { load() }, [id])
@@ -173,7 +265,7 @@ export default function ProjectDetail() {
   async function assignSub() {
     await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: assignForm.contract_value || null })
     setShowAssignSub(false)
-    setAssignForm({ subcontractor_id: '', trade_on_project: '', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
+    setAssignForm({ subcontractor_id: '', trade_on_project: '', category: 'work_contractors', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
     load()
   }
 
@@ -209,18 +301,15 @@ export default function ProjectDetail() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px', fontSize: 13 }}>
               {[
-                ['Client', project.client_name, project.client_id ? `/clients/${project.client_id}` : null],
+                ['Client', project.client_name],
                 ['Project Manager', project.profiles?.full_name],
                 ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', formatDate(project.start_date)],
                 ['End Date', formatDate(project.end_date)],
                 ['Duration', calcDuration(project.start_date, project.end_date)],
                 ['Contract Value', formatCurrency(project.value)],
-              ].filter(([, v]) => v && v !== '—').map(([k, v, link]) => (
-                <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span>{link
-                  ? <span style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }} onClick={() => navigate(link)}>{v}</span>
-                  : <span>{v}</span>
-                }</div>
+              ].filter(([, v]) => v && v !== '—').map(([k, v]) => (
+                <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span>{v}</span></div>
               ))}
             </div>
 
@@ -235,6 +324,8 @@ export default function ProjectDetail() {
           <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{project.description}</div>
         </div>
       )}
+
+      <ProjectFileSearch projectId={id} />
 
       <div className="filter-tabs">
         <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => { setActiveTab('documents'); localStorage.setItem(_tabKey, 'documents') }}>
@@ -345,75 +436,89 @@ export default function ProjectDetail() {
           {subs.length === 0 ? (
             <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No subcontractors assigned to this project yet.</div>
           ) : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th><th></th></tr></thead>
-                <tbody>
-                  {subs.map(ps => (
-                    <tr key={ps.id}>
-                      <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${ps.subcontractors?.id}`)}>
-                          <Avatar name={ps.subcontractors?.company_name} size="sm" />
-                          <span style={{ fontWeight: 500 }}>{ps.subcontractors?.company_name}</span>
-                        </div>
-                      </td>
-                      <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
-                      <td className="td-muted">{formatDate(ps.start_date)}</td>
-                      <td className="td-muted">{formatDate(ps.end_date)}</td>
-                      <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                      <td>
-                        {ps.variation_amount > 0 ? (
-                          <div>
-                            <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
-                            {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
-                              <div key={i} style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
-                            ))}
-                          </div>
-                        ) : (
-                          can('manage_projects') && (
-                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
-                              + Add
-                            </button>
-                          )
-                        )}
-                      </td>
-                      <td style={{ fontWeight: 600, color: (parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
-                        {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
-                          ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
-                          : '—'}
-                      </td>
-                      <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
-                      <td>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {can('manage_projects') && ps.variation_amount > 0 && (
-                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
-                              +VAR
-                            </button>
-                          )}
-                          {can('manage_projects') && <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemove(ps.id)}><IconTrash size={12}/></button>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {subs.length > 1 && (() => {
-                  const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
-                  const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
-                  const totalAll = totalOrder + totalVar
-                  return (
-                    <tfoot>
-                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
-                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>Total</td>
-                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{formatCurrency(totalOrder)}</td>
-                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--amber)' }}>{totalVar > 0 ? '+' + formatCurrency(totalVar) : '—'}</td>
-                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--green)' }}>{formatCurrency(totalAll)}</td>
-                        <td colSpan={2}></td>
-                      </tr>
-                    </tfoot>
-                  )
-                })()}
-              </table>
-            </div>
+            <>
+              {[
+                { key: 'employers_agent', label: 'Employers Agent', color: '#534AB7', bg: '#EEEDFE' },
+                { key: 'design_team', label: 'Design Team', color: '#378ADD', bg: '#E6F1FB' },
+                { key: 'work_contractors', label: 'Work Contractors', color: '#448a40', bg: '#e8f5e7' },
+              ].map(cat => {
+                const catSubs = subs.filter(ps => (ps.category || 'work_contractors') === cat.key)
+                if (!catSubs.length) return null
+                return (
+                  <div key={cat.key} style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 12px', background: cat.bg, borderRadius: 6, borderLeft: `3px solid ${cat.color}` }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: cat.color }}>{cat.label}</div>
+                      <div style={{ fontSize: 11, color: cat.color + '99' }}>{catSubs.length} assigned</div>
+                    </div>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th><th></th></tr></thead>
+                        <tbody>
+                          {catSubs.map(ps => (
+                            <tr key={ps.id}>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${ps.subcontractors?.id}`)}>
+                                  <Avatar name={ps.subcontractors?.company_name} size="sm" />
+                                  <span style={{ fontWeight: 500 }}>{ps.subcontractors?.company_name}</span>
+                                </div>
+                              </td>
+                              <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
+                              <td className="td-muted">{formatDate(ps.start_date)}</td>
+                              <td className="td-muted">{formatDate(ps.end_date)}</td>
+                              <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                              <td>
+                                {ps.variation_amount > 0 ? (
+                                  <div>
+                                    <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
+                                    {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
+                                      <div key={i} style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  can('manage_projects') && (
+                                    <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                                      + Add
+                                    </button>
+                                  )
+                                )}
+                              </td>
+                              <td style={{ fontWeight: 600, color: (parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                                {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
+                                  ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
+                                  : '—'}
+                              </td>
+                              <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
+                              <td>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {can('manage_projects') && ps.variation_amount > 0 && (
+                                    <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                                      +VAR
+                                    </button>
+                                  )}
+                                  {can('manage_projects') && <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemove(ps.id)}><IconTrash size={12}/></button>}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })}
+              {subs.length > 1 && (() => {
+                const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
+                const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
+                const totalAll = totalOrder + totalVar
+                return (
+                  <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', padding: '12px 0', borderTop: '2px solid var(--border)', marginTop: 8 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text2)' }}>Total Order: <span style={{ fontWeight: 700, color: 'var(--text)' }}>{formatCurrency(totalOrder)}</span></div>
+                    {totalVar > 0 && <div style={{ fontSize: 12, color: 'var(--amber)' }}>Variations: <span style={{ fontWeight: 700 }}>+{formatCurrency(totalVar)}</span></div>}
+                    <div style={{ fontSize: 12, color: 'var(--green)' }}>Grand Total: <span style={{ fontWeight: 700 }}>{formatCurrency(totalAll)}</span></div>
+                  </div>
+                )
+              })()}
+            </>
           )}
         </div>
       )}
@@ -532,6 +637,11 @@ export default function ProjectDetail() {
             const selected = allSubs.find(s => s.id === e.target.value)
             setAssignForm(f => ({ ...f, subcontractor_id: e.target.value, trade_on_project: selected?.trade || '' }))
           }}><option value="">Select…</option>{allSubs.filter(s => !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
+          <div className="full"><Field label="Category *"><select value={assignForm.category} onChange={e => setAssignForm(f => ({ ...f, category: e.target.value }))}>
+            <option value="employers_agent">Employers Agent</option>
+            <option value="design_team">Design Team</option>
+            <option value="work_contractors">Work Contractors</option>
+          </select></Field></div>
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
           <div className="full"><Field label="Order Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" /></Field></div>
