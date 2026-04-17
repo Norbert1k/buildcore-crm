@@ -157,7 +157,7 @@ function NotificationBell() {
 }
 
 function ProtectedLayout() {
-  const { user, loading } = useAuth()
+  const { user, loading, mfaRequired } = useAuth()
   const [expCount, setExpCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
@@ -184,7 +184,8 @@ function ProtectedLayout() {
     )
   }
 
-  if (!user) return <Navigate to="/login" replace />
+  // Redirect to login if not authenticated OR if MFA verification is pending
+  if (!user || mfaRequired) return <Navigate to="/login" replace />
 
   const pageTitles = {
     '/': 'Dashboard',
@@ -240,11 +241,11 @@ function ProtectedLayout() {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth()
+  const { user, loading, mfaRequired } = useAuth()
   if (loading) return null
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/login" element={(user && !mfaRequired) ? <Navigate to="/" replace /> : <Login />} />
       <Route path="/*" element={<ProtectedLayout />} />
     </Routes>
   )

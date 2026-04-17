@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function Login() {
-  const { signIn } = useAuth()
+  const { signIn, mfaRequired, mfaFactorId, completeMfa } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -18,6 +18,14 @@ export default function Login() {
   const [passError, setPassError] = useState('')
   const [passLoading, setPassLoading] = useState(false)
 
+  // If user has a session but MFA is required (e.g. returning user), go straight to 2FA
+  useEffect(() => {
+    if (mfaRequired && mfaFactorId) {
+      setFactorId(mfaFactorId)
+      setStep('2fa')
+    }
+  }, [mfaRequired, mfaFactorId])
+
   async function handleLogin(e) {
     e.preventDefault()
     setError(''); setLoading(true)
@@ -30,7 +38,7 @@ export default function Login() {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (aal?.nextLevel === 'aal2' && aal?.nextLevel !== aal?.currentLevel) {
         const { data: fd } = await supabase.auth.mfa.listFactors()
-        const totp = fd?.totp?.[0]
+        const totp = fd?.totp?.find(f => f.status === 'verified')
         if (totp) { setFactorId(totp.id); setStep('2fa'); return }
       }
     } catch (e) {}
@@ -44,6 +52,8 @@ export default function Login() {
       }
     } catch (e) {}
 
+    // No MFA needed — trigger auth state refresh so ProtectedLayout picks it up
+    await completeMfa()
     navigate('/')
   }
 
@@ -57,6 +67,10 @@ export default function Login() {
       const { error: ve } = await supabase.auth.mfa.verify({ factorId, challengeId: cd.id, code })
       setLoading(false)
       if (ve) { setError('Incorrect code — please try again'); return }
+
+      // MFA verified — now tell auth context we're good
+      await completeMfa()
+
       // Check forced password change after 2FA
       try {
         const { data: { user } } = await supabase.auth.getUser()

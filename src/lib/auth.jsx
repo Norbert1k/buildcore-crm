@@ -14,25 +14,48 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [projectAccess, setProjectAccess] = useState([])
   const [loading, setLoading] = useState(true)
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [mfaFactorId, setMfaFactorId] = useState(null)
 
   useEffect(() => {
     // Apply theme from localStorage immediately on mount
     const saved = localStorage.getItem('theme') || 'light'
     applyTheme(saved)
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        // Check if MFA is required but not yet verified
+        const mfaOk = await checkMfaAssurance()
+        if (mfaOk) {
+          setUser(session.user)
+          fetchProfile(session.user.id)
+        } else {
+          // User has a session but MFA not verified — don't treat as logged in
+          setUser(null)
+          setLoading(false)
+        }
+      } else {
+        setUser(null)
+        setLoading(false)
+      }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const mfaOk = await checkMfaAssurance()
+        if (mfaOk) {
+          setUser(session.user)
+          fetchProfile(session.user.id)
+        } else {
+          setUser(null)
+          setLoading(false)
+        }
+      } else {
+        setUser(null)
         setProfile(null)
         setProjectAccess([])
-        // Keep theme from localStorage when signed out
+        setMfaRequired(false)
+        setMfaFactorId(null)
         const saved = localStorage.getItem('theme') || 'light'
         applyTheme(saved)
         setLoading(false)
@@ -41,6 +64,38 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  async function checkMfaAssurance() {
+    try {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+        // MFA is enrolled but session is only aal1 — need verification
+        const { data: fd } = await supabase.auth.mfa.listFactors()
+        const totp = fd?.totp?.find(f => f.status === 'verified')
+        if (totp) {
+          setMfaRequired(true)
+          setMfaFactorId(totp.id)
+          return false
+        }
+      }
+      setMfaRequired(false)
+      setMfaFactorId(null)
+      return true
+    } catch {
+      return true
+    }
+  }
+
+  // Called from Login after successful MFA verification
+  async function completeMfa() {
+    setMfaRequired(false)
+    setMfaFactorId(null)
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) {
+      setUser(session.user)
+      await fetchProfile(session.user.id)
+    }
+  }
 
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
@@ -115,7 +170,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, projectAccess, role, setTheme }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, projectAccess, role, setTheme, mfaRequired, mfaFactorId, completeMfa }}>
       {children}
     </AuthContext.Provider>
   )
