@@ -45,6 +45,7 @@ export default function Sidebar({ expCount, open, onClose }) {
     { to: '/',               key: 'dashboard',      label: 'Dashboard',      icon: <IconDashboard /> },
     { to: '/subcontractors', key: 'subcontractors', label: 'Subcontractors', icon: <IconUsers />, badge: expCount > 0 ? expCount : null,
       children: [
+        { to: '/subcontractors/ea', key: 'subcontractors', label: 'Employers Agent', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg> },
         { to: '/subcontractors/compliance', key: 'documents', label: 'Compliance', icon: <IconDoc /> },
       ]
     },
