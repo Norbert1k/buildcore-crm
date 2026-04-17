@@ -138,7 +138,7 @@ export default function ProjectDetail() {
   const [savingVariation, setSavingVariation] = useState(false)
   const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
-  const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'work_contractors', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
+  const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
   const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
 
   useEffect(() => { load() }, [id])
@@ -265,7 +265,7 @@ export default function ProjectDetail() {
   async function assignSub() {
     await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: assignForm.contract_value || null })
     setShowAssignSub(false)
-    setAssignForm({ subcontractor_id: '', trade_on_project: '', category: 'work_contractors', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
+    setAssignForm({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
     load()
   }
 
@@ -440,10 +440,10 @@ export default function ProjectDetail() {
               {[
                 { key: 'employers_agent', label: 'Employers Agent', color: '#534AB7', bg: '#EEEDFE' },
                 { key: 'design_team', label: 'Design Team', color: '#378ADD', bg: '#E6F1FB' },
-                { key: 'work_contractors', label: 'Work Contractors', color: '#448a40', bg: '#e8f5e7' },
+                { key: 'contractual_work', label: 'Contractual Work', color: '#448a40', bg: '#e8f5e7' },
               ].map(cat => {
                 const catSubs = subs.filter(ps => {
-                  const c = ps.category && ps.category.trim() ? ps.category.trim() : 'work_contractors'
+                  const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
                   return c === cat.key
                 })
                 if (!catSubs.length) return null
@@ -643,7 +643,7 @@ export default function ProjectDetail() {
           <div className="full"><Field label="Category *"><select value={assignForm.category} onChange={e => setAssignForm(f => ({ ...f, category: e.target.value }))}>
             <option value="employers_agent">Employers Agent</option>
             <option value="design_team">Design Team</option>
-            <option value="work_contractors">Work Contractors</option>
+            <option value="contractual_work">Contractual Work</option>
           </select></Field></div>
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
