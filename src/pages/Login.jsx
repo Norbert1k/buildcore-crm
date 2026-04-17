@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function Login() {
-  const { signIn, mfaRequired, mfaFactorId, completeMfa } = useAuth()
+  const { signIn, markMfaVerified, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -18,13 +19,14 @@ export default function Login() {
   const [passError, setPassError] = useState('')
   const [passLoading, setPassLoading] = useState(false)
 
-  // If user has a session but MFA is required (e.g. returning user), go straight to 2FA
+  // If redirected here with mfaFactorId from ProtectedLayout, go straight to 2FA
   useEffect(() => {
-    if (mfaRequired && mfaFactorId) {
-      setFactorId(mfaFactorId)
+    const mfaFid = location.state?.mfaFactorId
+    if (mfaFid && user) {
+      setFactorId(mfaFid)
       setStep('2fa')
     }
-  }, [mfaRequired, mfaFactorId])
+  }, [location.state, user])
 
   async function handleLogin(e) {
     e.preventDefault()
@@ -33,7 +35,7 @@ export default function Login() {
     setLoading(false)
     if (error) { setError(error.message); return }
 
-    // Check 2FA using Supabase recommended approach
+    // Check 2FA
     try {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
       if (aal?.nextLevel === 'aal2' && aal?.nextLevel !== aal?.currentLevel) {
@@ -41,19 +43,19 @@ export default function Login() {
         const totp = fd?.totp?.find(f => f.status === 'verified')
         if (totp) { setFactorId(totp.id); setStep('2fa'); return }
       }
-    } catch (e) {}
+    } catch (e) { /* no MFA enrolled */ }
 
-    // Check forced password change
+    // No MFA — mark verified and check password change
+    markMfaVerified()
+
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: profileData } = await supabase.from('profiles').select('must_change_password').eq('id', user.id).single()
+      const { data: { user: u } } = await supabase.auth.getUser()
+      if (u) {
+        const { data: profileData } = await supabase.from('profiles').select('must_change_password').eq('id', u.id).single()
         if (profileData?.must_change_password) { setStep('change_password'); return }
       }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
 
-    // No MFA needed — trigger auth state refresh so ProtectedLayout picks it up
-    await completeMfa()
     navigate('/')
   }
 
@@ -68,17 +70,17 @@ export default function Login() {
       setLoading(false)
       if (ve) { setError('Incorrect code — please try again'); return }
 
-      // MFA verified — now tell auth context we're good
-      await completeMfa()
+      // MFA verified — mark it in auth context
+      markMfaVerified()
 
-      // Check forced password change after 2FA
+      // Check forced password change
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: profileData } = await supabase.from('profiles').select('must_change_password').eq('id', user.id).single()
+        const { data: { user: u } } = await supabase.auth.getUser()
+        if (u) {
+          const { data: profileData } = await supabase.from('profiles').select('must_change_password').eq('id', u.id).single()
           if (profileData?.must_change_password) { setStep('change_password'); return }
         }
-      } catch (e) {}
+      } catch (e) { /* ignore */ }
       navigate('/')
     } catch (e) {
       setError('Verification failed — please try again')
@@ -94,8 +96,8 @@ export default function Login() {
     setPassLoading(true)
     const { error } = await supabase.auth.updateUser({ password: newPass })
     if (error) { setPassError(error.message); setPassLoading(false); return }
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('profiles').update({ must_change_password: false }).eq('id', user.id)
+    const { data: { user: u } } = await supabase.auth.getUser()
+    await supabase.from('profiles').update({ must_change_password: false }).eq('id', u.id)
     setPassLoading(false)
     navigate('/')
   }

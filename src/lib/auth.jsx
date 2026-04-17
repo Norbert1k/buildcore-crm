@@ -14,34 +14,26 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [projectAccess, setProjectAccess] = useState([])
   const [loading, setLoading] = useState(true)
-  const [mfaRequired, setMfaRequired] = useState(false)
-  const [mfaFactorId, setMfaFactorId] = useState(null)
+  // MFA state — ProtectedLayout checks this to gate access
+  const [mfaVerified, setMfaVerified] = useState(false)
 
   useEffect(() => {
-    // Apply theme from localStorage immediately on mount
     const saved = localStorage.getItem('theme') || 'light'
     applyTheme(saved)
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
-      if (session?.user) {
-        fetchProfile(session.user.id)
-        // Check MFA for Login page to know if it should show 2FA step
-        checkMfaAssurance()
-      } else {
-        setLoading(false)
-      }
+      if (session?.user) fetchProfile(session.user.id)
+      else setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (session?.user) {
-        if (!profile) fetchProfile(session.user.id)
-      } else {
+      if (session?.user) fetchProfile(session.user.id)
+      else {
         setProfile(null)
         setProjectAccess([])
-        setMfaRequired(false)
-        setMfaFactorId(null)
+        setMfaVerified(false)
         const saved = localStorage.getItem('theme') || 'light'
         applyTheme(saved)
         setLoading(false)
@@ -51,46 +43,9 @@ export function AuthProvider({ children }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function checkMfaAssurance() {
-    try {
-      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
-        // MFA is enrolled but session is only aal1 — need verification
-        const { data: fd } = await supabase.auth.mfa.listFactors()
-        const totp = fd?.totp?.find(f => f.status === 'verified')
-        if (totp) {
-          setMfaRequired(true)
-          setMfaFactorId(totp.id)
-          return false
-        }
-      }
-      setMfaRequired(false)
-      setMfaFactorId(null)
-      return true
-    } catch (err) {
-      console.error('MFA check error:', err)
-      // If MFA check fails, allow access (don't lock user out)
-      setMfaRequired(false)
-      setMfaFactorId(null)
-      return true
-    }
-  }
-
-  // Called from Login after successful MFA verification
-  async function completeMfa() {
-    setMfaRequired(false)
-    setMfaFactorId(null)
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session?.user) {
-      setUser(session.user)
-      await fetchProfile(session.user.id)
-    }
-  }
-
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     setProfile(data)
-    // Apply theme from profile, save to localStorage
     if (data?.theme) applyTheme(data.theme)
     if (data?.role === 'site_manager') {
       const { data: access } = await supabase.from('user_project_access').select('project_id').eq('user_id', userId)
@@ -111,8 +66,12 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
+    setMfaVerified(false)
     await supabase.auth.signOut()
-    // Theme stays as-is from localStorage — don't reset it
+  }
+
+  function markMfaVerified() {
+    setMfaVerified(true)
   }
 
   const role = profile?.role
@@ -160,7 +119,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, projectAccess, role, setTheme, mfaRequired, mfaFactorId, completeMfa }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, projectAccess, role, setTheme, mfaVerified, markMfaVerified }}>
       {children}
     </AuthContext.Provider>
   )

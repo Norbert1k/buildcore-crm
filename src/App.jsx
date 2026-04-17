@@ -157,33 +157,33 @@ function NotificationBell() {
 }
 
 function ProtectedLayout() {
-  const { user, loading, mfaRequired } = useAuth()
+  const { user, loading, mfaVerified } = useAuth()
   const [expCount, setExpCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [mfaChecked, setMfaChecked] = useState(false)
-  const [needsMfa, setNeedsMfa] = useState(false)
+  const [mfaCheck, setMfaCheck] = useState({ done: false, needed: false, factorId: null })
   const location = useLocation()
 
-  // Check MFA on mount and when user changes
+  // On mount or when user changes, check if MFA is required
   useEffect(() => {
-    if (!user) { setMfaChecked(true); return }
+    if (!user) { setMfaCheck({ done: true, needed: false, factorId: null }); return }
+    if (mfaVerified) { setMfaCheck({ done: true, needed: false, factorId: null }); return }
     let cancelled = false
-    async function check() {
-      try {
-        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-        if (!cancelled && aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
-          setNeedsMfa(true)
-        } else if (!cancelled) {
-          setNeedsMfa(false)
-        }
-      } catch (err) {
-        if (!cancelled) setNeedsMfa(false)
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(({ data: aal }) => {
+      if (cancelled) return
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+        supabase.auth.mfa.listFactors().then(({ data: fd }) => {
+          if (cancelled) return
+          const totp = fd?.totp?.find(f => f.status === 'verified')
+          setMfaCheck({ done: true, needed: !!totp, factorId: totp?.id || null })
+        })
+      } else {
+        setMfaCheck({ done: true, needed: false, factorId: null })
       }
-      if (!cancelled) setMfaChecked(true)
-    }
-    check()
+    }).catch(() => {
+      if (!cancelled) setMfaCheck({ done: true, needed: false, factorId: null })
+    })
     return () => { cancelled = true }
-  }, [user])
+  }, [user, mfaVerified])
 
   useEffect(() => {
     if (user) fetchExpCount()
@@ -198,7 +198,7 @@ function ProtectedLayout() {
     setExpCount(count || 0)
   }
 
-  if (loading || !mfaChecked) {
+  if (loading || !mfaCheck.done) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
         <Spinner size={32} />
@@ -206,8 +206,10 @@ function ProtectedLayout() {
     )
   }
 
-  // Redirect to login if not authenticated or MFA verification is pending
-  if (!user || needsMfa || mfaRequired) return <Navigate to="/login" replace />
+  if (!user) return <Navigate to="/login" replace />
+
+  // User has MFA enrolled but hasn't verified this session — redirect to login for 2FA
+  if (mfaCheck.needed) return <Navigate to="/login" replace state={{ mfaFactorId: mfaCheck.factorId }} />
 
   const pageTitles = {
     '/': 'Dashboard',
@@ -263,13 +265,11 @@ function ProtectedLayout() {
 }
 
 function AppRoutes() {
-  const { user, loading, mfaRequired } = useAuth()
+  const { user, loading } = useAuth()
   if (loading) return null
-  // Show login if: no user, OR user has MFA enrolled but not verified this session
-  const showLogin = !user || mfaRequired
   return (
     <Routes>
-      <Route path="/login" element={showLogin ? <Login /> : <Navigate to="/" replace />} />
+      <Route path="/login" element={!user ? <Login /> : <Login />} />
       <Route path="/*" element={<ProtectedLayout />} />
     </Routes>
   )
