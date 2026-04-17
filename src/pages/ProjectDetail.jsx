@@ -438,9 +438,9 @@ export default function ProjectDetail() {
           ) : (
             <>
               {[
-                { key: 'employers_agent', label: 'Employers Agent', color: '#534AB7', bg: '#EEEDFE' },
-                { key: 'design_team', label: 'Design Team', color: '#378ADD', bg: '#E6F1FB' },
-                { key: 'contractual_work', label: 'Contractual Work', color: '#448a40', bg: '#e8f5e7' },
+                { key: 'employers_agent', label: 'Employers Agent', color: '#AFA9EC', bg: '#26215C' },
+                { key: 'design_team', label: 'Design Team', color: '#85B7EB', bg: '#042C53' },
+                { key: 'contractual_work', label: 'Contractual Work', color: '#97C459', bg: '#173404' },
               ].map(cat => {
                 const catSubs = subs.filter(ps => {
                   const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
