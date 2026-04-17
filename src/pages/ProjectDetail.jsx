@@ -8,6 +8,7 @@ import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
 import ProjectDocumentation from '../components/ProjectDocumentation'
 import HSHandover from '../components/HSHandover'
+import SubcontractorDocs from '../components/SubcontractorDocs'
 
 function calcDuration(start, end) {
   if (!start || !end) return null
@@ -622,6 +623,9 @@ export default function ProjectDetail() {
               })()}
             </>
           )}
+
+          {/* Per-subcontractor document folders */}
+          <SubcontractorDocs projectId={id} subs={subs} />
         </div>
       )}
 
