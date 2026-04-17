@@ -80,7 +80,7 @@ export function AuthProvider({ children }) {
     if (!profile) return false
     if (role === 'admin') return true
     const permissions = {
-      manage_subcontractors: ['project_manager', 'accountant', 'site_manager'],
+      manage_subcontractors: ['project_manager', 'accountant'],
       manage_documents:      ['project_manager', 'accountant', 'document_controller'],
       manage_projects:       ['project_manager', 'accountant'],
       manage_suppliers:      ['project_manager', 'accountant'],
@@ -90,9 +90,10 @@ export function AuthProvider({ children }) {
       view_subcontractors:   ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
       view_projects:         ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
       view_suppliers:        ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
-      view_supplier_detail:  ['project_manager', 'accountant', 'director_viewer'],
+      view_supplier_detail:  ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
+      view_supplier_passwords: ['project_manager', 'accountant', 'director_viewer'],
       view_performance:      ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
-      issue_ratings:         ['project_manager', 'accountant', 'site_manager'],
+      issue_ratings:         ['project_manager', 'accountant'],
       view_all:              ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
       view_hs_handover:      ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'],
       view_photos:           ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'],
@@ -105,6 +106,7 @@ export function AuthProvider({ children }) {
       view_company_vat:      ['project_manager', 'accountant', 'director_viewer'],
       view_company_bank:     ['project_manager', 'accountant', 'director_viewer'],
       view_company_other:    ['project_manager', 'accountant', 'director_viewer', 'document_controller'],
+      view_company_templates:['project_manager', 'accountant', 'director_viewer', 'document_controller'],
       manage_settings:       ['project_manager', 'accountant'],
       view_tracker:          ['project_manager', 'accountant', 'director_viewer', 'viewer'],
     }

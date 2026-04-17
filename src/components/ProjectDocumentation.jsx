@@ -1201,7 +1201,7 @@ function AddTopFolderButton({ onAdd }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function ProjectDocumentation({ projectId, projectName }) {
-  const { can } = useAuth()
+  const { can, role } = useAuth()
   const [fileCounts, setFileCounts] = useState({})
   const [customTopFolders, setCustomTopFolders] = useState([])
   const [zippingAll, setZippingAll] = useState(false)
@@ -1275,8 +1275,11 @@ export default function ProjectDocumentation({ projectId, projectName }) {
   if (!can('view_csa')) { hiddenSubfolders.push('csa') }
   if (!can('view_cff')) { hiddenSubfolders.push('cff') }
 
-  const allFolders = [...TEMPLATE_FOLDERS, ...customTopFolders]
-    .filter(f => !hiddenFolders.includes(f.key))
+  // Site managers can only see Project Information and Project Programme
+  const SITE_MANAGER_FOLDERS = ['00-project-information', '05-project-programme']
+
+  const allFolders = [...TEMPLATE_FOLDERS, ...(role === 'site_manager' ? [] : customTopFolders)]
+    .filter(f => role === 'site_manager' ? SITE_MANAGER_FOLDERS.includes(f.key) : !hiddenFolders.includes(f.key))
     .map(f => f.subfolders ? { ...f, subfolders: f.subfolders.filter(sf => !hiddenSubfolders.includes(sf.key)) } : f)
 
   return (

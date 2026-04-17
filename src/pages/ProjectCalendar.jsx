@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/utils'
 import { Spinner, IconChevron } from '../components/ui'
+import { useAuth } from '../lib/auth'
 
 const STATUS_COLORS = {
   active:    { bar: '#448a40', text: '#fff', label: 'Active' },
@@ -36,6 +37,7 @@ export default function ProjectCalendar() {
   const [hoveredId, setHoveredId] = useState(null)
   const ganttRef = useRef(null)
   const navigate = useNavigate()
+  const { can } = useAuth()
 
   useEffect(() => { load() }, [])
 
@@ -196,7 +198,7 @@ export default function ProjectCalendar() {
             {new Date(tooltip.start).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} –{' '}
             {new Date(tooltip.end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
           </div>
-          {tooltip.value && <div style={{ color: 'var(--green)', fontWeight: 600 }}>{formatCurrency(tooltip.value)}</div>}
+          {tooltip.value && can('view_project_value') && <div style={{ color: 'var(--green)', fontWeight: 600 }}>{formatCurrency(tooltip.value)}</div>}
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text3)' }}>Click to open project →</div>
         </div>
       )}
@@ -366,7 +368,7 @@ function WorkloadChart({ monthlyLoad, maxCount, monthsShown }) {
           const barColor = m.count >= 5 ? '#E24B4A' : m.count >= 3 ? '#BA7517' : '#448a40'
           return (
             <div key={i} style={{ width: colW, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: 60 }}
-              title={`${m.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}: ${m.count} project${m.count !== 1 ? 's' : ''}${m.value ? ' · ' + formatCurrency(m.value) : ''}`}>
+              title={`${m.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}: ${m.count} project${m.count !== 1 ? 's' : ''}${m.value && can('view_project_value') ? ' · ' + formatCurrency(m.value) : ''}`}>
               {m.count > 0 && (
                 <div style={{ fontSize: 9, fontWeight: 700, color: barColor, marginBottom: 2 }}>{m.count}</div>
               )}

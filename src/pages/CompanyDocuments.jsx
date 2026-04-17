@@ -974,6 +974,7 @@ export default function CompanyDocuments() {
   if (!can('view_company_vat')) hiddenCats.push('vat')
   if (!can('view_company_bank')) hiddenCats.push('bank')
   if (!can('view_company_other')) hiddenCats.push('other')
+  if (!can('view_company_templates')) hiddenCats.push('templates')
   const visibleCategories = CATEGORIES.filter(c => !hiddenCats.includes(c.key))
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)

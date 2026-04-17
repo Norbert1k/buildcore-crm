@@ -190,14 +190,14 @@ export default function Suppliers() {
               </div>
 
               {/* Portal / Login */}
-              {(viewing.portal_url || viewing.portal_username || viewing.portal_password) && (
+              {(viewing.portal_url || viewing.portal_username || (viewing.portal_password && can('view_supplier_passwords'))) && (
                 <>
                   <div style={{ height: 1, background: 'var(--border)', margin: '0 0 16px' }} />
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Portal / Login</div>
                   <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px', fontSize: 13 }}>
                     {viewing.portal_url && <div style={{ marginBottom: 6 }}><span style={{ color: 'var(--text3)', marginRight: 6 }}>URL:</span><span style={{ color: 'var(--blue)' }}>{viewing.portal_url}</span></div>}
                     {viewing.portal_username && <div style={{ marginBottom: 6 }}><span style={{ color: 'var(--text3)', marginRight: 6 }}>Username:</span><span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{viewing.portal_username}</span></div>}
-                    {viewing.portal_password && (
+                    {viewing.portal_password && can('view_supplier_passwords') && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ color: 'var(--text3)', marginRight: 6 }}>Password:</span>
                         <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
