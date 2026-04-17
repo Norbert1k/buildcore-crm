@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
 import { Spinner } from '../components/ui'
+import UploadProgress from '../components/UploadProgress'
 
 const CATEGORIES = [
   { key: 'logo',           icon: '🏢', label: 'Logo & Branding',   color: '#448a40', bg: '#e8f5e7' },
@@ -447,6 +448,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
   const [selected, setSelected] = useState(new Set())
   const [showAddSub, setShowAddSub] = useState(false)
   const [newSubName, setNewSubName] = useState('')
@@ -483,13 +485,21 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   }
   async function upload(fileList) {
     if (!fileList.length) return
+    const fileArr = Array.from(fileList)
     setUploading(true)
-    for (const file of fileList) {
+    setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
+    const errors = []
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i]
+      setUploadProgress(prev => ({ ...prev, current: i }))
       const path = 'company/' + categoryKey + '/' + subfolder.key + '/' + Date.now() + '-' + file.name
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
       if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: subfolder.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
+      else errors.push(file.name)
     }
-    setUploading(false); loadFiles()
+    setUploading(false)
+    setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
+    loadFiles()
   }
   async function deleteDoc(doc) {
     await supabase.storage.from('company-docs').remove([doc.storage_path])
@@ -579,6 +589,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 
   return (
     <div style={{ marginBottom: 2 }}>
+      <UploadProgress uploadState={uploadProgress} />
       <div
         draggable={!renaming}
         onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.setData('subfolder_label', subLabel); e.dataTransfer.effectAllowed = 'move' }}
@@ -664,6 +675,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   const [files, setFiles] = useState([])
   const [subfolders, setSubfolders] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
   const [showAddSub, setShowAddSub] = useState(false)
   const [newSubName, setNewSubName] = useState('')
   const [savingSub, setSavingSub] = useState(false)
@@ -709,13 +721,21 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   }
   async function upload(fileList) {
     if (!fileList.length) return
+    const fileArr = Array.from(fileList)
     setUploading(true)
-    for (const file of fileList) {
+    setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
+    const errors = []
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i]
+      setUploadProgress(prev => ({ ...prev, current: i }))
       const path = 'company/' + cat.key + '/' + Date.now() + '-' + file.name
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
       if (!error) await supabase.from('company_documents').insert({ category: cat.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
+      else errors.push(file.name)
     }
-    setUploading(false); loadFiles()
+    setUploading(false)
+    setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
+    loadFiles()
   }
   async function deleteDoc(doc) {
     await supabase.storage.from('company-docs').remove([doc.storage_path])
@@ -855,6 +875,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
 
   return (
     <div style={{ marginBottom: 6 }}>
+      <UploadProgress uploadState={uploadProgress} />
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 8, cursor: 'pointer', background: open ? 'var(--surface2)' : 'var(--surface)', border: '0.5px solid var(--border)', borderLeft: '3px solid ' + cat.color, transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}

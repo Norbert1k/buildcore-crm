@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import UploadProgress from './UploadProgress'
 
 // ── Full H&S folder template ─────────────────────────────────
 const HS_STRUCTURE = [
@@ -810,6 +811,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
   const [showAddFolder, setShowAddFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [savingFolder, setSavingFolder] = useState(false)
@@ -840,15 +842,21 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
   async function upload(fileList) {
     if (!fileList.length) return
+    const fileArr = Array.from(fileList)
     setUploading(true)
-    for (const file of fileList) {
+    setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
+    const errors = []
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i]
+      setUploadProgress(prev => ({ ...prev, current: i }))
       const path = `projects/${projectId}/hs/${node.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('hs-handover').upload(path, file)
       if (!error) {
         await supabase.from('hs_files').insert({ project_id: projectId, folder_key: node.key, storage_path: path, file_name: file.name, file_size: file.size })
-      }
+      } else { errors.push(file.name) }
     }
     setUploading(false)
+    setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
     loadFiles()
   }
 
@@ -938,6 +946,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
   return (
     <div style={{ marginLeft: indent > 0 ? 0 : 0 }}>
+      <UploadProgress uploadState={uploadProgress} />
       {/* Folder row */}
       <div
         onDragOver={e => e.preventDefault()}

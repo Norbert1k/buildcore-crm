@@ -115,7 +115,7 @@ export default function Suppliers() {
             </thead>
             <tbody>
               {list.map(s => (
-                <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => setViewing(s)}>
+                <tr key={s.id} style={{ cursor: can('view_supplier_detail') ? 'pointer' : 'default' }} onClick={() => can('view_supplier_detail') && setViewing(s)}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <Avatar name={s.company_name} />

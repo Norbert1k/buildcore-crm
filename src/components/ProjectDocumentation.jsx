@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import UploadProgress from './UploadProgress'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -511,6 +512,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
   const [selected, setSelected] = useState(new Set())
   const [showAddSub, setShowAddSub] = useState(false)
   const [newSubName, setNewSubName] = useState('')
@@ -552,18 +554,25 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 
   async function uploadFiles(fileList) {
     if (!fileList.length) return
+    const fileArr = Array.from(fileList)
     setUploading(true)
-    for (const file of fileList) {
+    setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
+    const errors = []
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i]
+      setUploadProgress(prev => ({ ...prev, current: i }))
       const path = `projects/${projectId}/${folder.key}/${subfolder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (error) { console.error('Upload failed:', error.message); continue }
+      if (error) { console.error('Upload failed:', error.message); errors.push(file.name); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
-    setUploading(false); loadFiles()
+    setUploading(false)
+    setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
+    loadFiles()
   }
 
   async function deleteFile(f) {
@@ -672,6 +681,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 
   return (
     <div style={{ marginBottom: 2 }}>
+      <UploadProgress uploadState={uploadProgress} />
       <div
         draggable={isCustom && !renaming}
         onDragStart={e => { if (!isCustom) return; e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.effectAllowed = 'move' }}
@@ -780,6 +790,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   const [newFolderName, setNewFolderName] = useState('')
   const [savingFolder, setSavingFolder] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
   const [files, setFiles] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [selectedSubs, setSelectedSubs] = useState(new Set())
@@ -839,18 +850,25 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
   async function uploadToFolder(fileList) {
     if (!fileList.length) return
+    const fileArr = Array.from(fileList)
     setUploading(true)
-    for (const file of fileList) {
+    setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
+    const errors = []
+    for (let i = 0; i < fileArr.length; i++) {
+      const file = fileArr[i]
+      setUploadProgress(prev => ({ ...prev, current: i }))
       const path = `projects/${projectId}/${folder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (error) { console.error('Upload failed:', error.message); continue }
+      if (error) { console.error('Upload failed:', error.message); errors.push(file.name); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
-    setUploading(false); loadRootFiles()
+    setUploading(false)
+    setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
+    loadRootFiles()
   }
 
   async function deleteFile(f) {
@@ -994,6 +1012,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
   return (
     <div style={{ marginBottom: 12 }}>
+      <UploadProgress uploadState={uploadProgress} />
       {/* Folder header */}
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>

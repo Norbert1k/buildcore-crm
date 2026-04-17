@@ -19,8 +19,27 @@ export function Pill({ children, cls = 'pill-gray', style }) {
 // ── Modal ────────────────────────────────────────────────────
 export function Modal({ open, onClose, title, children, size = 'md', footer }) {
   if (!open) return null
+
+  function handleOverlayKeyDown(e) {
+    // Prevent Backspace from propagating beyond the modal (stops browser-back / route-back)
+    if (e.key === 'Backspace') {
+      const tag = e.target.tagName
+      const editable = e.target.isContentEditable
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable
+      if (!isInput) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+    // Allow Escape to close modal
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+    }
+  }
+
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()} onKeyDown={handleOverlayKeyDown}>
       <div className={`modal modal-${size}`}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>

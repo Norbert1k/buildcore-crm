@@ -42,17 +42,12 @@ export default function ClientDetail() {
   const [client, setClient] = useState(null)
   const [projects, setProjects] = useState([])
   const [contacts, setContacts] = useState([])
-  const [eas, setEas] = useState([])
-  const [eaContacts, setEaContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(`tab:/clients/${id}`) || 'projects')
 
   const [showEditClient, setShowEditClient] = useState(false)
   const [showAddContact, setShowAddContact] = useState(false)
-  const [showAddEA, setShowAddEA] = useState(false)
-  const [showAddEAContact, setShowAddEAContact] = useState(null)
   const [confirmDeleteContact, setConfirmDeleteContact] = useState(null)
-  const [confirmDeleteEAContact, setConfirmDeleteEAContact] = useState(null)
 
   function setTab(t) { setActiveTab(t); localStorage.setItem(`tab:/clients/${id}`, t) }
 
@@ -60,18 +55,14 @@ export default function ClientDetail() {
 
   async function load() {
     setLoading(true)
-    const [{ data: c }, { data: p }, { data: co }, { data: cea }, { data: eaco }] = await Promise.all([
+    const [{ data: c }, { data: p }, { data: co }] = await Promise.all([
       supabase.from('clients').select('*').eq('id', id).single(),
       supabase.from('projects').select('id, project_name, project_ref, status, value, start_date, end_date').eq('client_id', id).order('start_date', { ascending: false }),
       supabase.from('client_contacts').select('*').eq('client_id', id).order('is_pm', { ascending: false }),
-      supabase.from('client_employer_agents').select('*, employer_agents(*)').eq('client_id', id),
-      supabase.from('ea_contacts').select('*, client_employer_agents(employer_agent_id)').eq('client_id', id).order('is_pm', { ascending: false }),
     ])
     setClient(c)
     setProjects(p || [])
     setContacts(co || [])
-    setEas(cea || [])
-    setEaContacts(eaco || [])
     setLoading(false)
   }
 
@@ -171,47 +162,6 @@ export default function ClientDetail() {
       {activeTab === 'contacts' && (
         <div>
           {/* EA section */}
-          {eas.length > 0 ? (
-            eas.map(ea => {
-              const thisEAContacts = eaContacts.filter(c => c.client_employer_agents?.employer_agent_id === ea.employer_agent_id || c.ea_id === ea.id)
-              return (
-                <div key={ea.id} style={{ marginBottom: 20 }}>
-                  <div style={{ background: '#BA751715', border: '0.5px solid #BA751730', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 38, height: 38, borderRadius: 9, background: '#BA751730', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#EF9F27', flexShrink: 0 }}>
-                      {initials(ea.employer_agents?.name)}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: 600, fontSize: 14 }}>{ea.employer_agents?.name}</span>
-                        <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, background: '#BA751725', color: '#EF9F27', fontWeight: 600 }}>Employer's Agent</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: '#BA7517', marginTop: 2 }}>Submit all payment valuations to EA contacts below</div>
-                      {ea.employer_agents?.website && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{ea.employer_agents.website}</div>}
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>EA Contacts — submit valuations here</div>
-                  {thisEAContacts.map(c => (
-                    <ContactCard key={c.id} contact={c} accentColor="#EF9F27" accentBg="#BA751725"
-                      badge={c.is_pm ? 'EA Project Manager' : null} badgeColor="#EF9F27" badgeBg="#BA751725"
-                      canDelete={isPMOrAdmin} onDelete={() => setConfirmDeleteEAContact(c)} />
-                  ))}
-                  {isPMOrAdmin && (
-                    <button className="btn btn-sm" style={{ marginTop: 4 }} onClick={() => setShowAddEAContact(ea.id)}>+ Add EA Contact</button>
-                  )}
-                </div>
-              )
-            })
-          ) : (
-            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 16, fontSize: 13, color: 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>No Employer's Agent assigned to this client.</span>
-              {isPMOrAdmin && <button className="btn btn-sm" onClick={() => setShowAddEA(true)}>+ Add EA</button>}
-            </div>
-          )}
-          {eas.length > 0 && isPMOrAdmin && (
-            <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => setShowAddEA(true)}>+ Add another EA</button>
-          )}
-
           {/* Client contacts */}
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Client Contacts</div>
           {contacts.length === 0 ? (
@@ -236,18 +186,9 @@ export default function ClientDetail() {
       {showAddContact && (
         <AddContactModal clientId={id} table="client_contacts" onClose={() => setShowAddContact(false)} onSaved={() => { setShowAddContact(false); load() }} />
       )}
-      {showAddEA && (
-        <AddEAModal clientId={id} onClose={() => setShowAddEA(false)} onSaved={() => { setShowAddEA(false); load() }} />
-      )}
-      {showAddEAContact && (
-        <AddContactModal clientId={id} eaId={showAddEAContact} table="ea_contacts" onClose={() => setShowAddEAContact(null)} onSaved={() => { setShowAddEAContact(null); load() }} />
-      )}
       <ConfirmDialog open={!!confirmDeleteContact} onClose={() => setConfirmDeleteContact(null)}
         onConfirm={async () => { await supabase.from('client_contacts').delete().eq('id', confirmDeleteContact.id); setConfirmDeleteContact(null); load() }}
         title="Delete contact" message={`Remove "${confirmDeleteContact?.name}" from this client?`} danger />
-      <ConfirmDialog open={!!confirmDeleteEAContact} onClose={() => setConfirmDeleteEAContact(null)}
-        onConfirm={async () => { await supabase.from('ea_contacts').delete().eq('id', confirmDeleteEAContact.id); setConfirmDeleteEAContact(null); load() }}
-        title="Delete EA contact" message={`Remove "${confirmDeleteEAContact?.name}" from this EA?`} danger />
     </div>
   )
 }

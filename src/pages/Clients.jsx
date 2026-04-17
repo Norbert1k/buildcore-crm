@@ -71,7 +71,7 @@ export default function Clients() {
     setLoading(true)
     const { data: clientData } = await supabase
       .from('clients')
-      .select('*, client_employer_agents(employer_agent_id, employer_agents(name))')
+      .select('*')
       .order('name')
 
     const { data: projectData } = await supabase
@@ -83,16 +83,14 @@ export default function Clients() {
       const projs = (projectData || []).filter(p => p.client_id === c.id)
       const totalValue = projs.reduce((s, p) => s + (p.value || 0), 0)
       const activeCount = projs.filter(p => ['active', 'tender'].includes(p.status)).length
-      const ea = c.client_employer_agents?.[0]?.employer_agents?.name || null
-      return { ...c, projects: projs, totalValue, activeCount, ea }
+      return { ...c, projects: projs, totalValue, activeCount }
     })
     setClients(enriched)
     setLoading(false)
   }
 
   const filtered = clients.filter(c =>
-    !search || c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.ea?.toLowerCase().includes(search.toLowerCase())
+    !search || c.name?.toLowerCase().includes(search.toLowerCase())
   )
 
   const totalValue = clients.reduce((s, c) => s + c.totalValue, 0)
@@ -133,7 +131,7 @@ export default function Clients() {
       </div>
 
       <input value={search} onChange={e => setSearch(e.target.value)}
-        placeholder="Search clients or employer's agents..."
+        placeholder="Search clients..."
         style={{ width: '100%', marginBottom: 14, padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 13 }} />
 
       {loading ? (
@@ -154,7 +152,6 @@ export default function Clients() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{c.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                    {c.ea ? `EA: ${c.ea} · ` : 'No EA · '}
                     {c.projects.length} project{c.projects.length !== 1 ? 's' : ''}
                     {c.website ? ` · ${c.website.replace(/https?:\/\/(www\.)?/, '')}` : ''}
                   </div>

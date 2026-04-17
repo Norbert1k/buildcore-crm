@@ -140,16 +140,24 @@ export default function ProjectDetail() {
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
   const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
+  // EA state
+  const [projectEAs, setProjectEAs] = useState([])
+  const [allEAs, setAllEAs] = useState([])
+  const [showAssignEA, setShowAssignEA] = useState(false)
+  const [eaAssignForm, setEaAssignForm] = useState({ ea_id: '', submission_email: '' })
+  const [confirmRemoveEA, setConfirmRemoveEA] = useState(null)
 
   useEffect(() => { load() }, [id])
 
   async function load() {
     setLoading(true)
-    const [projRes, subsRes, docsRes, allSubsRes] = await Promise.all([
+    const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
       supabase.from('project_documents').select('*, subcontractors(company_name), profiles!project_documents_uploaded_by_fkey(full_name)').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
+      supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email)').eq('project_id', id),
+      supabase.from('employer_agents').select('id, company_name, payment_submission_email').eq('status', 'active').order('company_name'),
     ])
     setProject(projRes.data)
     setDriveFolderId(projRes.data?.drive_folder_id || null)
@@ -157,6 +165,8 @@ export default function ProjectDetail() {
     setSubs(subsRes.data || [])
     setDocs(docsRes.data || [])
     setAllSubs(allSubsRes.data || [])
+    setProjectEAs(eaRes.data || [])
+    setAllEAs(allEARes.data || [])
     // Load project photos
     const { data: photosData } = await supabase.from('project_photos').select('*').eq('project_id', id).order('created_at', { ascending: false })
     setPhotos(photosData || [])
@@ -282,6 +292,24 @@ export default function ProjectDetail() {
     load()
   }
 
+  async function assignEA() {
+    if (!eaAssignForm.ea_id) return
+    await supabase.from('project_employer_agents').insert({
+      project_id: id,
+      ea_id: eaAssignForm.ea_id,
+      submission_email: eaAssignForm.submission_email || null,
+    })
+    setShowAssignEA(false)
+    setEaAssignForm({ ea_id: '', submission_email: '' })
+    load()
+  }
+
+  async function removeEA(peaId) {
+    await supabase.from('project_employer_agents').delete().eq('id', peaId)
+    setConfirmRemoveEA(null)
+    load()
+  }
+
   if (loading) return <Spinner />
   if (!project) return <div style={{ padding: 40, color: 'var(--text2)' }}>Project not found.</div>
 
@@ -307,8 +335,8 @@ export default function ProjectDetail() {
                 ['Start Date', formatDate(project.start_date)],
                 ['End Date', formatDate(project.end_date)],
                 ['Duration', calcDuration(project.start_date, project.end_date)],
-                ['Contract Value', formatCurrency(project.value)],
-              ].filter(([, v]) => v && v !== '—').map(([k, v]) => (
+                can('view_project_value') ? ['Contract Value', formatCurrency(project.value)] : null,
+              ].filter(x => x && x[1] && x[1] !== '—').map(([k, v]) => (
                 <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span>{v}</span></div>
               ))}
             </div>
@@ -332,23 +360,29 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Documents
         </div>
+        {can('view_hs_handover') && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           H&S Handover
         </div>
+        )}
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => { setActiveTab('subcontractors'); localStorage.setItem(_tabKey, 'subcontractors') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Subcontractors<span className="tab-badge">{subs.length}</span>
         </div>
+        {can('view_photos') && (
         <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => { setActiveTab('photos'); localStorage.setItem(_tabKey, 'photos') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           Photos<span className="tab-badge">{photos.length}</span>
         </div>
+        )}
 
+        {can('view_case_study') && (
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => { setActiveTab('casestudy'); localStorage.setItem(_tabKey, 'casestudy') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Case Study
         </div>
+        )}
 
       </div>
 
@@ -385,7 +419,7 @@ export default function ProjectDetail() {
 
 
 
-      {activeTab === 'photos' && (
+      {activeTab === 'photos' && can('view_photos') && (
         <div>
           <div className="section-header" style={{ marginBottom: 16 }}>
             <div className="section-title">Project Photos</div>
@@ -423,7 +457,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === 'casestudy' && (
+      {activeTab === 'casestudy' && can('view_case_study') && (
         <CaseStudy project={project} subs={subs} docs={docs} photos={photos} />
       )}
 
@@ -431,8 +465,58 @@ export default function ProjectDetail() {
         <div>
           <div className="section-header">
             <div className="section-title">Assigned Subcontractors</div>
-            {(can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-primary btn-sm" onClick={() => setShowAssignSub(true)}><IconPlus size={13} /> Assign Subcontractor</button>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-sm" style={{ borderColor: '#185FA5', color: '#185FA5', background: '#E6F1FB' }} onClick={() => setShowAssignEA(true)}><IconPlus size={13} /> Assign EA</button>}
+              {(can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-primary btn-sm" onClick={() => setShowAssignSub(true)}><IconPlus size={13} /> Assign Subcontractor</button>}
+            </div>
           </div>
+
+          {/* Employers Agent section — above Design Team */}
+          {projectEAs.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 12px', background: '#042C53', borderRadius: 6, borderLeft: '3px solid #5b9bd5' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
+                </svg>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#85B7EB' }}>Employers Agent</div>
+                <div style={{ fontSize: 11, color: '#85B7EB99' }}>{projectEAs.length} assigned</div>
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Submission Email (this project)</th><th></th></tr></thead>
+                  <tbody>
+                    {projectEAs.map(pea => (
+                      <tr key={pea.id}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
+                              {pea.employer_agents?.company_name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?'}
+                            </div>
+                            <span style={{ fontWeight: 500 }}>{pea.employer_agents?.company_name}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div>{pea.employer_agents?.contact_name || '—'}</div>
+                          <div className="td-muted">{pea.employer_agents?.phone || ''}</div>
+                        </td>
+                        <td className="td-muted">{pea.employer_agents?.email || '—'}</td>
+                        <td>
+                          <span style={{ fontWeight: 500, color: 'var(--blue)' }}>
+                            {pea.submission_email || pea.employer_agents?.payment_submission_email || <span style={{ color: 'var(--text3)', fontWeight: 400 }}>—</span>}
+                          </span>
+                        </td>
+                        <td>
+                          {can('manage_projects') && (
+                            <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemoveEA(pea.id)}><IconTrash size={12}/></button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
           {subs.length === 0 ? (
             <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No subcontractors assigned to this project yet.</div>
           ) : (
@@ -454,7 +538,7 @@ export default function ProjectDetail() {
                     </div>
                     <div className="table-wrap">
                       <table>
-                        <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th><th></th></tr></thead>
+                        <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th>{can('view_project_value') && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th><th></th></tr></thead>
                         <tbody>
                           {catSubs.map(ps => (
                             <tr key={ps.id}>
@@ -467,6 +551,8 @@ export default function ProjectDetail() {
                               <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
                               <td className="td-muted">{formatDate(ps.start_date)}</td>
                               <td className="td-muted">{formatDate(ps.end_date)}</td>
+                              {can('view_project_value') && (
+                              <>
                               <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                               <td>
                                 {ps.variation_amount > 0 ? (
@@ -489,6 +575,8 @@ export default function ProjectDetail() {
                                   ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
                                   : '—'}
                               </td>
+                              </>
+                              )}
                               <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
                               <td>
                                 <div style={{ display: 'flex', gap: 4 }}>
@@ -508,7 +596,7 @@ export default function ProjectDetail() {
                   </div>
                 )
               })}
-              {subs.length > 1 && (() => {
+              {can('view_project_value') && subs.length > 1 && (() => {
                 const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
                 const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
                 const totalAll = totalOrder + totalVar
@@ -626,7 +714,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === 'hs' && (
+      {activeTab === 'hs' && can('view_hs_handover') && (
         <HSHandover projectId={id} projectName={project?.project_name} />
       )}
 
@@ -661,6 +749,23 @@ export default function ProjectDetail() {
       </Modal>
 
       <ConfirmDialog open={!!confirmRemove} onClose={() => setConfirmRemove(null)} onConfirm={() => removeSub(confirmRemove)} title="Remove subcontractor" message="Remove this subcontractor from the project? Their profile and documents are not affected." danger />
+
+      {/* Assign EA Modal */}
+      <Modal open={showAssignEA} onClose={() => setShowAssignEA(false)} title="Assign Employers Agent" size="sm"
+        footer={<><button className="btn" onClick={() => setShowAssignEA(false)}>Cancel</button><button className="btn btn-primary" onClick={assignEA} disabled={!eaAssignForm.ea_id}>Assign</button></>}>
+        <div className="form-grid">
+          <div className="full"><Field label="Employers Agent *"><select value={eaAssignForm.ea_id} onChange={e => {
+            const sel = allEAs.find(ea => ea.id === e.target.value)
+            setEaAssignForm(f => ({ ...f, ea_id: e.target.value, submission_email: sel?.payment_submission_email || '' }))
+          }}><option value="">Select EA…</option>{allEAs.filter(ea => !projectEAs.find(p => p.ea_id === ea.id)).map(ea => <option key={ea.id} value={ea.id}>{ea.company_name}</option>)}</select></Field></div>
+          <div className="full"><Field label="Submission Email for this project">
+            <input type="email" value={eaAssignForm.submission_email} onChange={e => setEaAssignForm(f => ({ ...f, submission_email: e.target.value }))} placeholder="Override default submission email (optional)" />
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Leave blank to use the EA's default submission email.</div>
+          </Field></div>
+        </div>
+      </Modal>
+
+      <ConfirmDialog open={!!confirmRemoveEA} onClose={() => setConfirmRemoveEA(null)} onConfirm={() => removeEA(confirmRemoveEA)} title="Remove Employers Agent" message="Remove this EA from the project?" danger />
     </div>
   )
 }
