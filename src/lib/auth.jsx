@@ -22,36 +22,22 @@ export function AuthProvider({ children }) {
     const saved = localStorage.getItem('theme') || 'light'
     applyTheme(saved)
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
       if (session?.user) {
-        // Check if MFA is required but not yet verified
-        const mfaOk = await checkMfaAssurance()
-        if (mfaOk) {
-          setUser(session.user)
-          fetchProfile(session.user.id)
-        } else {
-          // User has a session but MFA not verified — don't treat as logged in
-          setUser(null)
-          setLoading(false)
-        }
+        fetchProfile(session.user.id)
+        // Check MFA for Login page to know if it should show 2FA step
+        checkMfaAssurance()
       } else {
-        setUser(null)
         setLoading(false)
       }
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
       if (session?.user) {
-        const mfaOk = await checkMfaAssurance()
-        if (mfaOk) {
-          setUser(session.user)
-          fetchProfile(session.user.id)
-        } else {
-          setUser(null)
-          setLoading(false)
-        }
+        if (!profile) fetchProfile(session.user.id)
       } else {
-        setUser(null)
         setProfile(null)
         setProjectAccess([])
         setMfaRequired(false)
@@ -68,7 +54,7 @@ export function AuthProvider({ children }) {
   async function checkMfaAssurance() {
     try {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-      if (aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2') {
+      if (aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
         // MFA is enrolled but session is only aal1 — need verification
         const { data: fd } = await supabase.auth.mfa.listFactors()
         const totp = fd?.totp?.find(f => f.status === 'verified')
@@ -81,7 +67,11 @@ export function AuthProvider({ children }) {
       setMfaRequired(false)
       setMfaFactorId(null)
       return true
-    } catch {
+    } catch (err) {
+      console.error('MFA check error:', err)
+      // If MFA check fails, allow access (don't lock user out)
+      setMfaRequired(false)
+      setMfaFactorId(null)
       return true
     }
   }

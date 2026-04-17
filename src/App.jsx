@@ -160,11 +160,33 @@ function ProtectedLayout() {
   const { user, loading, mfaRequired } = useAuth()
   const [expCount, setExpCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [mfaChecked, setMfaChecked] = useState(false)
+  const [needsMfa, setNeedsMfa] = useState(false)
   const location = useLocation()
+
+  // Check MFA on mount and when user changes
+  useEffect(() => {
+    if (!user) { setMfaChecked(true); return }
+    let cancelled = false
+    async function check() {
+      try {
+        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+        if (!cancelled && aal && aal.nextLevel === 'aal2' && aal.currentLevel !== 'aal2') {
+          setNeedsMfa(true)
+        } else if (!cancelled) {
+          setNeedsMfa(false)
+        }
+      } catch (err) {
+        if (!cancelled) setNeedsMfa(false)
+      }
+      if (!cancelled) setMfaChecked(true)
+    }
+    check()
+    return () => { cancelled = true }
+  }, [user])
 
   useEffect(() => {
     if (user) fetchExpCount()
-    // Close sidebar on route change (mobile)
     setSidebarOpen(false)
   }, [user, location.pathname])
 
@@ -176,7 +198,7 @@ function ProtectedLayout() {
     setExpCount(count || 0)
   }
 
-  if (loading) {
+  if (loading || !mfaChecked) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
         <Spinner size={32} />
@@ -184,8 +206,8 @@ function ProtectedLayout() {
     )
   }
 
-  // Redirect to login if not authenticated OR if MFA verification is pending
-  if (!user || mfaRequired) return <Navigate to="/login" replace />
+  // Redirect to login if not authenticated or MFA verification is pending
+  if (!user || needsMfa || mfaRequired) return <Navigate to="/login" replace />
 
   const pageTitles = {
     '/': 'Dashboard',
@@ -243,9 +265,11 @@ function ProtectedLayout() {
 function AppRoutes() {
   const { user, loading, mfaRequired } = useAuth()
   if (loading) return null
+  // Show login if: no user, OR user has MFA enrolled but not verified this session
+  const showLogin = !user || mfaRequired
   return (
     <Routes>
-      <Route path="/login" element={(user && !mfaRequired) ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/login" element={showLogin ? <Login /> : <Navigate to="/" replace />} />
       <Route path="/*" element={<ProtectedLayout />} />
     </Routes>
   )
