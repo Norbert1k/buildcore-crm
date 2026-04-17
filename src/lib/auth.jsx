@@ -82,34 +82,34 @@ export function AuthProvider({ children }) {
       manage_suppliers:      ['project_manager', 'accountant'],
       manage_users:          [],
       delete:                [],
-      view_financials:       ['project_manager', 'accountant'],
-      view_subcontractors:   ['project_manager', 'accountant', 'site_manager', 'document_controller', 'viewer'],
-      view_projects:         ['project_manager', 'accountant', 'site_manager', 'document_controller', 'viewer'],
-      view_suppliers:        ['project_manager', 'accountant', 'site_manager'],
-      view_supplier_detail:  ['project_manager', 'accountant'],
-      view_performance:      ['project_manager', 'accountant', 'site_manager'],
+      view_financials:       ['project_manager', 'accountant', 'director_viewer'],
+      view_subcontractors:   ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
+      view_projects:         ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
+      view_suppliers:        ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
+      view_supplier_detail:  ['project_manager', 'accountant', 'director_viewer'],
+      view_performance:      ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
       issue_ratings:         ['project_manager', 'accountant', 'site_manager'],
-      view_all:              ['project_manager', 'accountant', 'site_manager', 'document_controller', 'viewer'],
-      view_hs_handover:      ['project_manager', 'accountant', 'document_controller', 'viewer'],
-      view_photos:           ['project_manager', 'accountant', 'document_controller', 'viewer'],
-      view_case_study:       ['project_manager', 'accountant', 'document_controller', 'viewer'],
-      view_clients:          ['project_manager', 'accountant', 'document_controller', 'viewer'],
-      view_project_value:    ['project_manager', 'accountant'],
-      view_csa:              ['project_manager', 'accountant', 'document_controller'],
-      view_cff:              ['project_manager', 'accountant', 'document_controller'],
-      view_payments:         ['project_manager', 'accountant'],
-      view_company_vat:      ['project_manager', 'accountant'],
-      view_company_bank:     ['project_manager', 'accountant'],
-      view_company_other:    ['project_manager', 'accountant', 'document_controller'],
+      view_all:              ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
+      view_hs_handover:      ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'],
+      view_photos:           ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'],
+      view_case_study:       ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'],
+      view_clients:          ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'],
+      view_project_value:    ['project_manager', 'accountant', 'director_viewer'],
+      view_csa:              ['project_manager', 'accountant', 'director_viewer', 'document_controller'],
+      view_cff:              ['project_manager', 'accountant', 'director_viewer', 'document_controller'],
+      view_payments:         ['project_manager', 'accountant', 'director_viewer'],
+      view_company_vat:      ['project_manager', 'accountant', 'director_viewer'],
+      view_company_bank:     ['project_manager', 'accountant', 'director_viewer'],
+      view_company_other:    ['project_manager', 'accountant', 'director_viewer', 'document_controller'],
       manage_settings:       ['project_manager', 'accountant'],
-      view_tracker:          ['project_manager', 'accountant', 'viewer'],
+      view_tracker:          ['project_manager', 'accountant', 'director_viewer', 'viewer'],
     }
     return permissions[action]?.includes(role) ?? false
   }
 
   const canAccessProject = (projectId) => {
     if (!profile) return false
-    if (['admin', 'project_manager', 'accountant', 'document_controller', 'viewer'].includes(role)) return true
+    if (['admin', 'project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'].includes(role)) return true
     if (role === 'site_manager') return projectAccess.includes(projectId)
     return false
   }
