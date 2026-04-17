@@ -125,7 +125,7 @@ export default function ClientDetail() {
       <div className="filter-tabs" style={{ marginBottom: 16 }}>
         {[
           { key: 'projects', label: 'Projects', count: projects.length },
-          { key: 'contacts', label: 'Contacts', count: contacts.length + eaContacts.length },
+          { key: 'contacts', label: 'Contacts', count: contacts.length },
         ].map(t => (
           <div key={t.key} className={`filter-tab ${activeTab === t.key ? 'active' : ''}`}
             onClick={() => setTab(t.key)}>
@@ -184,7 +184,7 @@ export default function ClientDetail() {
         <EditClientModal client={client} onClose={() => setShowEditClient(false)} onSaved={() => { setShowEditClient(false); load() }} />
       )}
       {showAddContact && (
-        <AddContactModal clientId={id} table="client_contacts" onClose={() => setShowAddContact(false)} onSaved={() => { setShowAddContact(false); load() }} />
+        <AddContactModal clientId={id} onClose={() => setShowAddContact(false)} onSaved={() => { setShowAddContact(false); load() }} />
       )}
       <ConfirmDialog open={!!confirmDeleteContact} onClose={() => setConfirmDeleteContact(null)}
         onConfirm={async () => { await supabase.from('client_contacts').delete().eq('id', confirmDeleteContact.id); setConfirmDeleteContact(null); load() }}
@@ -283,22 +283,19 @@ function EditClientModal({ client, onClose, onSaved }) {
   )
 }
 
-function AddContactModal({ clientId, eaId, table, onClose, onSaved }) {
+function AddContactModal({ clientId, onClose, onSaved }) {
   const [form, setForm] = useState({ name: '', job_title: '', email: '', phone: '', is_pm: false })
   const [saving, setSaving] = useState(false)
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
   async function save() {
     if (!form.name.trim()) return
     setSaving(true)
-    const payload = { ...form, client_id: clientId }
-    if (eaId) payload.ea_id = eaId
-    await supabase.from(table).insert(payload)
+    await supabase.from('client_contacts').insert({ ...form, client_id: clientId })
     setSaving(false)
     onSaved()
   }
-  const isPM = table === 'ea_contacts' ? 'EA Project Manager' : 'Client PM'
   return (
-    <ModalWrap title={eaId ? 'Add EA Contact' : 'Add Client Contact'} onClose={onClose} onSave={save} saving={saving}>
+    <ModalWrap title="Add Client Contact" onClose={onClose} onSave={save} saving={saving}>
       {[
         { k: 'name', label: 'Full Name *' },
         { k: 'job_title', label: 'Job Title' },
@@ -311,90 +308,9 @@ function AddContactModal({ clientId, eaId, table, onClose, onSaved }) {
       ))}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
         <input type="checkbox" id="is_pm" checked={form.is_pm} onChange={e => set('is_pm', e.target.checked)} />
-        <label htmlFor="is_pm" style={{ fontSize: 13 }}>Mark as {isPM} (valuation contact)</label>
+        <label htmlFor="is_pm" style={{ fontSize: 13 }}>Mark as Client PM (valuation contact)</label>
       </div>
     </ModalWrap>
-  )
-}
-
-function AddEAModal({ clientId, onClose, onSaved }) {
-  const [search, setSearch] = useState('')
-  const [existing, setExisting] = useState([])
-  const [mode, setMode] = useState('search')
-  const [newName, setNewName] = useState('')
-  const [newWebsite, setNewWebsite] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    supabase.from('employer_agents').select('*').order('name')
-      .then(({ data }) => setExisting(data || []))
-  }, [])
-
-  async function linkExisting(eaId) {
-    setSaving(true)
-    await supabase.from('client_employer_agents').insert({ client_id: clientId, employer_agent_id: eaId })
-    setSaving(false)
-    onSaved()
-  }
-
-  async function createAndLink() {
-    if (!newName.trim()) return
-    setSaving(true)
-    const { data } = await supabase.from('employer_agents').insert({ name: newName.trim(), website: newWebsite.trim() }).select().single()
-    if (data) await supabase.from('client_employer_agents').insert({ client_id: clientId, employer_agent_id: data.id })
-    setSaving(false)
-    onSaved()
-  }
-
-  const filtered = existing.filter(e => !search || e.name.toLowerCase().includes(search.toLowerCase()))
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-      onClick={onClose}>
-      <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 460, padding: 24 }}
-        onClick={e => e.stopPropagation()}>
-        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 16 }}>Add Employer's Agent</div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <button className={`btn btn-sm ${mode === 'search' ? 'btn-primary' : ''}`} onClick={() => setMode('search')}>Existing EA</button>
-          <button className={`btn btn-sm ${mode === 'new' ? 'btn-primary' : ''}`} onClick={() => setMode('new')}>New EA</button>
-        </div>
-        {mode === 'search' ? (
-          <div>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search employer's agents..."
-              style={{ width: '100%', padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 13, marginBottom: 10 }} />
-            <div style={{ maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {filtered.map(e => (
-                <div key={e.id} onClick={() => !saving && linkExisting(e.id)}
-                  style={{ padding: '10px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
-                  onMouseEnter={ev => ev.currentTarget.style.background = 'var(--green-bg)'}
-                  onMouseLeave={ev => ev.currentTarget.style.background = 'var(--surface2)'}>
-                  {e.name}
-                  {e.website && <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 8 }}>{e.website.replace(/https?:\/\/(www\.)?/, '')}</span>}
-                </div>
-              ))}
-              {filtered.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)', padding: 8 }}>No matching EAs — create a new one.</div>}
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <ModalField label="EA Company Name *">
-              <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Arcadis LLP" />
-            </ModalField>
-            <ModalField label="Website">
-              <input value={newWebsite} onChange={e => setNewWebsite(e.target.value)} placeholder="https://arcadis.com" />
-            </ModalField>
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          {mode === 'new' && (
-            <button className="btn btn-primary" onClick={createAndLink} disabled={saving || !newName.trim()}>
-              {saving ? 'Saving...' : 'Create & Link'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
   )
 }
 

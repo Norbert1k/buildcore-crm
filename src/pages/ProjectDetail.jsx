@@ -328,8 +328,20 @@ export default function ProjectDetail() {
               <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px', fontSize: 13 }}>
+              {project.client_name && (
+                <div>
+                  <span style={{ color: 'var(--text3)', marginRight: 6 }}>Client:</span>
+                  {project.client_id ? (
+                    <span
+                      onClick={() => navigate(`/clients/${project.client_id}`)}
+                      style={{ fontWeight: 600, color: 'var(--accent)', cursor: 'pointer', borderBottom: '1px dashed var(--accent)', paddingBottom: 1 }}
+                    >{project.client_name}</span>
+                  ) : (
+                    <span>{project.client_name}</span>
+                  )}
+                </div>
+              )}
               {[
-                ['Client', project.client_name],
                 ['Project Manager', project.profiles?.full_name],
                 ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', formatDate(project.start_date)],
