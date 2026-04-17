@@ -438,7 +438,6 @@ export default function ProjectDetail() {
           ) : (
             <>
               {[
-                { key: 'employers_agent', label: 'Employers Agent', color: '#AFA9EC', bg: '#26215C' },
                 { key: 'design_team', label: 'Design Team', color: '#85B7EB', bg: '#042C53' },
                 { key: 'contractual_work', label: 'Contractual Work', color: '#97C459', bg: '#173404' },
               ].map(cat => {
@@ -460,7 +459,7 @@ export default function ProjectDetail() {
                           {catSubs.map(ps => (
                             <tr key={ps.id}>
                               <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${ps.subcontractors?.id}`)}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${ps.subcontractors?.id}`, { state: { from: `/projects/${id}` } })}>
                                   <Avatar name={ps.subcontractors?.company_name} size="sm" />
                                   <span style={{ fontWeight: 500 }}>{ps.subcontractors?.company_name}</span>
                                 </div>
@@ -641,7 +640,6 @@ export default function ProjectDetail() {
             setAssignForm(f => ({ ...f, subcontractor_id: e.target.value, trade_on_project: selected?.trade || '' }))
           }}><option value="">Select…</option>{allSubs.filter(s => !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
           <div className="full"><Field label="Category *"><select value={assignForm.category} onChange={e => setAssignForm(f => ({ ...f, category: e.target.value }))}>
-            <option value="employers_agent">Employers Agent</option>
             <option value="design_team">Design Team</option>
             <option value="contractual_work">Contractual Work</option>
           </select></Field></div>
