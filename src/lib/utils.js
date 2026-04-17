@@ -5,9 +5,9 @@ export const TRADES = [
   'Consultant','Core Drilling & Sawing','Demolition','Drainage','Electrical',
   'Fire Consultants','Fire Protection','Flooring','Glazing','Groundworks',
   'HVAC','Insulation','Landscaping','Lift Installation','Painting & Decorating',
-  'Plastering','Plumbing','Principle Designers','Roofing','Scaffolding',
+  'Plastering','Plumbing','Principle Designers','Roofing','Roofing Trusses','Scaffolding',
   'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
-  'Structural Engineers','Warranty Providers','Other'
+  'Structural Engineers','Wardrobes','Warranty Providers','Other'
 ]
 
 // Trades that default to Design Team when assigning to a project

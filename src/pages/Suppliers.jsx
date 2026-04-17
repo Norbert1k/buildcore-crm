@@ -6,9 +6,9 @@ import { useAuth } from '../lib/auth'
 
 const CATEGORIES = [
   'Builders Merchant', 'Timber & Sheet', 'Electrical Supplies', 'Plumbing & Heating',
-  'Plant & Tool Hire', 'Scaffolding', 'Roofing Supplies', 'Fixings & Fasteners',
+  'Plant & Tool Hire', 'Scaffolding', 'Roofing Supplies', 'Roofing Materials', 'Fixings & Fasteners',
   'Groundworks', 'Aggregates & Concrete', 'Insulation', 'Ironmongery',
-  'Safety & PPE', 'Drainage', 'Landscaping', 'General'
+  'Kitchens', 'Wardrobes', 'Safety & PPE', 'Drainage', 'Landscaping', 'General'
 ]
 
 const PAYMENT_TERMS = ['7 days', '14 days', '30 days', '60 days', '90 days', 'Proforma', 'Credit card', 'Cash on delivery']

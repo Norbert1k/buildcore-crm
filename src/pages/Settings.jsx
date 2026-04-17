@@ -140,7 +140,7 @@ export default function Settings() {
       {can('manage_users') && (
         <div>
           <div className="section-header">
-            <div className="section-title">Team Members ({users.length} / 10)</div>
+            <div className="section-title">Team Members ({users.length} / 100)</div>
             <button className="btn btn-primary btn-sm" onClick={() => { setShowAddUser(true); setAddError(''); setAddSuccess('') }}>
               <IconPlus size={13} /> Add User
             </button>
