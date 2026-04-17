@@ -85,7 +85,7 @@ export function AuthProvider({ children }) {
       manage_projects:       ['project_manager', 'accountant'],
       manage_suppliers:      ['project_manager', 'accountant'],
       manage_users:          [],
-      delete:                [],
+      delete:                ['project_manager', 'accountant'],
       view_financials:       ['project_manager', 'accountant', 'director_viewer'],
       view_subcontractors:   ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
       view_projects:         ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],

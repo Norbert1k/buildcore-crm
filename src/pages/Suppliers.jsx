@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, avatarColor, initials } from '../lib/utils'
-import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, Modal, Field, ConfirmDialog } from '../components/ui'
+import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconTrash, Modal, Field, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
 const CATEGORIES = [
@@ -22,6 +22,7 @@ export default function Suppliers() {
   const [editing, setEditing] = useState(null)
   const [viewing, setViewing] = useState(null)
   const [showPasswords, setShowPasswords] = useState({})
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const { can } = useAuth()
 
   useEffect(() => { load() }, [])
@@ -31,6 +32,12 @@ export default function Suppliers() {
     const { data } = await supabase.from('suppliers').select('*').order('company_name')
     setSuppliers(data || [])
     setLoading(false)
+  }
+
+  async function deleteSupplier(id) {
+    await supabase.from('suppliers').delete().eq('id', id)
+    setConfirmDelete(null)
+    load()
   }
 
   function filtered() {
@@ -145,6 +152,9 @@ export default function Suppliers() {
                       {can('manage_subcontractors') && (
                         <button className="btn btn-sm" onClick={() => { setEditing(s); setShowModal(true) }}><IconEdit size={13}/></button>
                       )}
+                      {can('delete') && (
+                        <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(s)}><IconTrash size={13}/></button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -232,6 +242,15 @@ export default function Suppliers() {
           onSaved={() => { setShowModal(false); load() }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => deleteSupplier(confirmDelete?.id)}
+        title="Delete supplier"
+        message={`Are you sure you want to permanently delete ${confirmDelete?.company_name}? This cannot be undone.`}
+        danger
+      />
     </div>
   )
 }
