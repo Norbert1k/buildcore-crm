@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo, daysUntilExpiry, formatCurrency, complianceScore, NOTE_TYPES, exportToCSV } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
@@ -12,6 +12,8 @@ import PerformanceTab, { RatingBadge, calcRating } from '../components/Performan
 export default function SubcontractorDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const backPath = location.state?.from || '/subcontractors'
   const { can, profile } = useAuth()
   const [sub, setSub] = useState(null)
   const [docs, setDocs] = useState([])
@@ -129,7 +131,7 @@ export default function SubcontractorDetail() {
 
   return (
     <div>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/subcontractors')}>
+      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate(backPath)}>
         <IconChevron size={13} dir="left" /> Back
       </button>
 
