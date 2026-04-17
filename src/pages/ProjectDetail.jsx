@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
@@ -147,6 +147,9 @@ export default function ProjectDetail() {
   const [showAssignEA, setShowAssignEA] = useState(false)
   const [eaAssignForm, setEaAssignForm] = useState({ ea_id: '', submission_email: '' })
   const [confirmRemoveEA, setConfirmRemoveEA] = useState(null)
+  // Inline sub docs state
+  const [expandedSubId, setExpandedSubId] = useState(null)
+  const [subFiles, setSubFiles] = useState([])
 
   useEffect(() => { load() }, [id])
 
@@ -168,6 +171,9 @@ export default function ProjectDetail() {
     setAllSubs(allSubsRes.data || [])
     setProjectEAs(eaRes.data || [])
     setAllEAs(allEARes.data || [])
+    // Load subcontractor files
+    const { data: sfData } = await supabase.from('project_sub_files').select('*').eq('project_id', id).order('created_at', { ascending: false })
+    setSubFiles(sfData || [])
     // Load project photos
     const { data: photosData } = await supabase.from('project_photos').select('*').eq('project_id', id).order('created_at', { ascending: false })
     setPhotos(photosData || [])
@@ -553,12 +559,31 @@ export default function ProjectDetail() {
                       <table>
                         <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th>{can('view_project_value') && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th><th></th></tr></thead>
                         <tbody>
-                          {catSubs.map(ps => (
-                            <tr key={ps.id}>
+                          {catSubs.map(ps => {
+                            const isExpanded = expandedSubId === ps.id
+                            const colCount = 5 + (can('view_project_value') ? 3 : 0)
+                            return (
+                            <React.Fragment key={ps.id}>
+                            <tr style={{ background: isExpanded ? 'var(--surface2)' : undefined }}>
                               <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${ps.subcontractors?.id}`, { state: { from: `/projects/${id}` } })}>
-                                  <Avatar name={ps.subcontractors?.company_name} size="sm" />
-                                  <span style={{ fontWeight: 500 }}>{ps.subcontractors?.company_name}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flex: 1 }} onClick={() => setExpandedSubId(isExpanded ? null : ps.id)}>
+                                    <Avatar name={ps.subcontractors?.company_name} size="sm" />
+                                    <div>
+                                      <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {ps.subcontractors?.company_name}
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9"/></svg>
+                                      </div>
+                                      {subFiles.filter(f => f.project_sub_id === ps.id).length > 0 && (
+                                        <span style={{ fontSize: 9, color: 'var(--blue)', fontWeight: 500 }}>{subFiles.filter(f => f.project_sub_id === ps.id).length} docs</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span
+                                    onClick={e => { e.stopPropagation(); navigate(`/subcontractors/${ps.subcontractors?.id}`, { state: { from: `/projects/${id}` } }) }}
+                                    style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 4, border: '0.5px solid var(--accent)', fontWeight: 500 }}>
+                                    View Profile
+                                  </span>
                                 </div>
                               </td>
                               <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
@@ -602,7 +627,15 @@ export default function ProjectDetail() {
                                 </div>
                               </td>
                             </tr>
-                          ))}
+                            {isExpanded && (
+                              <tr>
+                                <td colSpan={colCount} style={{ padding: 0, background: 'var(--surface2)' }}>
+                                  <SubcontractorDocs projectId={id} projectSubId={ps.id} subFiles={subFiles.filter(f => f.project_sub_id === ps.id)} onReload={load} canManage={can('manage_projects') || can('manage_documents')} />
+                                </td>
+                              </tr>
+                            )}
+                            </React.Fragment>
+                          )})}
                         </tbody>
                       </table>
                     </div>
@@ -623,9 +656,6 @@ export default function ProjectDetail() {
               })()}
             </>
           )}
-
-          {/* Per-subcontractor document folders */}
-          <SubcontractorDocs projectId={id} subs={subs} />
         </div>
       )}
 
