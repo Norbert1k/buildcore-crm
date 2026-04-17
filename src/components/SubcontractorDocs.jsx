@@ -256,7 +256,7 @@ function FileRow({ file, canManage, onDownload, onDelete, onPreview, onRename })
 export default function SubcontractorDocs({ projectId, projectSubId, subFiles, onReload, canManage }) {
   return (
     <div style={{ padding: '10px 16px 14px' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {SUB_DOC_FOLDERS.map(folder => (
           <FolderSection key={folder.key} folder={folder} files={subFiles} projectId={projectId} projectSubId={projectSubId} canManage={canManage} onReload={onReload} />
         ))}
