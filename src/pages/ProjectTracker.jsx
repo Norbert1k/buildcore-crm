@@ -176,7 +176,7 @@ export default function ProjectTracker() {
       const marker = L.marker(p.coords, { icon }).addTo(map)
       const location = [p.site_address, p.city, p.postcode].filter(Boolean).join(', ')
       const statusLabel = PROJECT_STATUSES[p.status]?.label || p.status
-      const value = p.value ? formatCurrency(p.value) : ''
+      const value = can('view_project_value') && p.value ? formatCurrency(p.value) : ''
 
       marker.bindPopup(`
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-width:220px;padding:4px;">
@@ -233,7 +233,7 @@ export default function ProjectTracker() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Project Tracker</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{filtered.length} projects · {formatCurrency(totalValue)} total value</p>
+          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{filtered.length} projects{can('view_project_value') ? ' · ' + formatCurrency(totalValue) + ' total value' : ''}</p>
         </div>
       </div>
 
@@ -260,7 +260,7 @@ export default function ProjectTracker() {
               <th>Project</th>
               <th>Client</th>
               <th>Location</th>
-              <th>Value</th>
+              {can('view_project_value') && <th>Value</th>}
               <th>Status</th>
             </tr>
           </thead>
@@ -272,8 +272,8 @@ export default function ProjectTracker() {
                   {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
                 </td>
                 <td>{p.client_name || '\u2014'}</td>
-                <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
-                <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>
+                <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
+                {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
                 <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
               </tr>
             ))}

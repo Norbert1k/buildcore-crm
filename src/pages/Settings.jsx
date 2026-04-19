@@ -128,9 +128,7 @@ export default function Settings() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-sm" onClick={() => setShowChangePassword(true)}>🔑 Change Password</button>
-            {can('manage_settings') && (
-              <button className="btn btn-primary btn-sm" onClick={() => setShow2FA(true)}>🔐 Two-Factor Authentication</button>
-            )}
+            <button className="btn btn-primary btn-sm" onClick={() => setShow2FA(true)}>🔐 Two-Factor Authentication</button>
             <button className="btn btn-danger btn-sm" onClick={signOut}>Sign out</button>
           </div>
         </div>

@@ -1,146 +1,133 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { DOCUMENT_TYPES } from '../lib/utils'
-import { Modal, Field } from './ui'
-import { useAuth } from '../lib/auth'
 
-export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }) {
-  const { profile } = useAuth()
-  const editing = !!doc
+export default function GlobalSearch() {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState(null)
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const inputRef = useRef(null)
+  const wrapRef = useRef(null)
+  const navigate = useNavigate()
 
-  const [form, setForm] = useState({
-    document_type: doc?.document_type || 'rams',
-    document_name: doc?.document_name || '',
-    reference_number: doc?.reference_number || '',
-    issue_date: doc?.issue_date || '',
-    expiry_date: doc?.expiry_date || '',
-    notes: doc?.notes || '',
-    _nameManuallySet: false,
-  })
-  const [errors, setErrors] = useState({})
-  const [saving, setSaving] = useState(false)
-
-  function set(k, v) {
-    setForm(f => {
-      const next = { ...f, [k]: v }
-      if (k === 'document_type' && !editing && !f._nameManuallySet) {
-        next.document_name = DOCUMENT_TYPES[v] || ''
+  useEffect(() => {
+    function handleClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false)
       }
-      return next
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  useEffect(() => {
+    if (!query.trim()) { setResults(null); return }
+    const timer = setTimeout(() => doSearch(query), 250)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  async function doSearch(q) {
+    setLoading(true)
+    const term = `%${q}%`
+    const [subsRes, projRes, suppRes] = await Promise.all([
+      supabase.from('subcontractors').select('id, company_name, trade, status').ilike('company_name', term).limit(5),
+      supabase.from('projects').select('id, project_name, project_ref, status').or(`project_name.ilike.${term},project_ref.ilike.${term}`).limit(5),
+      supabase.from('suppliers').select('id, company_name, category').ilike('company_name', term).limit(4),
+    ])
+    setResults({
+      subs: subsRes.data || [],
+      projects: projRes.data || [],
+      suppliers: suppRes.data || [],
     })
-    setErrors(e => ({ ...e, [k]: '' }))
+    setLoading(false)
+    setOpen(true)
   }
 
-  function setName(v) {
-    setForm(f => ({ ...f, document_name: v, _nameManuallySet: true }))
+  function go(path) {
+    navigate(path)
+    setQuery('')
+    setOpen(false)
+    setResults(null)
   }
 
-  function validate() {
-    const e = {}
-    if (!form.document_name.trim()) e.document_name = 'Document name is required'
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  async function save() {
-    if (!validate()) return
-    setSaving(true)
-    const payload = {
-      document_type: form.document_type,
-      document_name: form.document_name,
-      reference_number: form.reference_number || null,
-      issue_date: form.issue_date || null,
-      expiry_date: form.expiry_date || null,
-      notes: form.notes || null,
-      subcontractor_id: subcontractorId,
-      uploaded_by: profile?.id,
-    }
-    let result
-    if (editing) {
-      result = await supabase.from('documents').update(payload).eq('id', doc.id)
-    } else {
-      result = await supabase.from('documents').insert(payload)
-    }
-    setSaving(false)
-    if (result.error) { setErrors({ _global: result.error.message }); return }
-    onSaved()
-  }
-
-  const docGroups = {
-    'Insurance': ['public_liability', 'employers_liability', 'professional_indemnity'],
-    'Health & Safety': ['rams', 'method_statement', 'risk_assessment', 'f10_notification'],
-    'Certifications': ['cscs_card', 'gas_safe', 'niceic', 'chas', 'constructionline', 'trade_certificate'],
-    'Quality & Environment': ['iso_9001', 'iso_14001', 'iso_45001'],
-    'Other': ['other'],
-  }
-
-  const days = form.expiry_date
-    ? Math.round((new Date(form.expiry_date) - new Date()) / 86400000)
-    : null
+  const hasResults = results && (results.subs.length + results.projects.length + results.suppliers.length) > 0
 
   return (
-    <Modal
-      open
-      onClose={onClose}
-      title={editing ? 'Edit Document' : 'Add Document'}
-      size="md"
-      footer={
-        <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Document'}
-          </button>
-        </>
-      }
-    >
-      {errors._global && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
-          {errors._global}
+    <div ref={wrapRef} style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+      <div style={{ position: 'relative' }}>
+        <svg style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', pointerEvents: 'none' }} width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M11.742 10.344a6.5 6.5 0 10-1.397 1.398l3.85 3.85a1 1 0 001.415-1.414l-3.868-3.834zm-5.24 1.4a5 5 0 110-10 5 5 0 010 10z"/>
+        </svg>
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onFocus={() => results && setOpen(true)}
+          placeholder="Search everything..."
+          style={{ paddingLeft: 32, paddingRight: 10, fontSize: 13, height: 36 }}
+        />
+        {query && (
+          <button onClick={() => { setQuery(''); setOpen(false); setResults(null) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
+        )}
+      </div>
+
+      {open && query && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', zIndex: 500, overflow: 'hidden', maxHeight: 400, overflowY: 'auto' }}>
+          {loading && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>Searching...</div>}
+          {!loading && !hasResults && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No results for "{query}"</div>}
+          {!loading && hasResults && (
+            <>
+              {results.subs.length > 0 && (
+                <Section title="Subcontractors">
+                  {results.subs.map(s => (
+                    <ResultRow key={s.id} icon="👷" title={s.company_name} sub={s.trade} status={s.status} onClick={() => go(`/subcontractors/${s.id}`)} />
+                  ))}
+                </Section>
+              )}
+              {results.projects.length > 0 && (
+                <Section title="Projects">
+                  {results.projects.map(p => (
+                    <ResultRow key={p.id} icon="🏗️" title={p.project_name} sub={p.project_ref} status={p.status} onClick={() => go(`/projects/${p.id}`)} />
+                  ))}
+                </Section>
+              )}
+              {results.suppliers.length > 0 && (
+                <Section title="Suppliers">
+                  {results.suppliers.map(s => (
+                    <ResultRow key={s.id} icon="🏪" title={s.company_name} sub={s.category} onClick={() => go('/suppliers')} />
+                  ))}
+                </Section>
+              )}
+            </>
+          )}
         </div>
       )}
-      <div className="form-grid">
-        <div className="full">
-          <Field label="Document Type">
-            <select value={form.document_type} onChange={e => set('document_type', e.target.value)}>
-              {Object.entries(docGroups).map(([group, keys]) => (
-                <optgroup key={group} label={group}>
-                  {keys.map(k => <option key={k} value={k}>{DOCUMENT_TYPES[k]}</option>)}
-                </optgroup>
-              ))}
-            </select>
-          </Field>
-        </div>
-        <div className="full">
-          <Field label="Document Name *" error={errors.document_name}>
-            <input value={form.document_name} onChange={e => setName(e.target.value)} placeholder="e.g. Employers Liability Certificate 2025" />
-          </Field>
-        </div>
-        <Field label="Reference / Certificate Number">
-          <input value={form.reference_number} onChange={e => set('reference_number', e.target.value)} placeholder="e.g. EL-2025-00123" />
-        </Field>
-        <div />
-        <Field label="Issue Date">
-          <input type="date" value={form.issue_date} onChange={e => set('issue_date', e.target.value)} />
-        </Field>
-        <Field label="Expiry Date">
-          <input type="date" value={form.expiry_date} onChange={e => set('expiry_date', e.target.value)} />
-        </Field>
-        {days !== null && days < 0 && (
-          <div className="full" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--red)' }}>
-            This date is in the past — document will be marked as expired.
-          </div>
-        )}
-        {days !== null && days >= 0 && days <= 30 && (
-          <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--amber)' }}>
-            This document expires in {days} day{days !== 1 ? 's' : ''} — it will trigger an alert.
-          </div>
-        )}
-        <div className="full">
-          <Field label="Notes">
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="e.g. Covers up to £5m, renewed annually…" style={{ minHeight: 72 }} />
-          </Field>
-        </div>
+    </div>
+  )
+}
+
+function Section({ title, children }) {
+  return (
+    <div>
+      <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.07em', borderTop: '1px solid var(--border)' }}>{title}</div>
+      {children}
+    </div>
+  )
+}
+
+function ResultRow({ icon, title, sub, status, onClick }) {
+  const statusColors = { active: 'var(--green)', approved: 'var(--blue)', on_hold: 'var(--amber)', inactive: 'var(--text3)', tender: 'var(--purple)', completed: 'var(--blue)' }
+  return (
+    <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', transition: 'background .1s' }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+      <span style={{ fontSize: 16 }}>{icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        {sub && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{sub}</div>}
       </div>
-    </Modal>
+      {status && <div style={{ fontSize: 11, color: statusColors[status] || 'var(--text3)', textTransform: 'capitalize', flexShrink: 0 }}>{status.replace('_', ' ')}</div>}
+    </div>
   )
 }
