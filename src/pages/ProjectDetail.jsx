@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
@@ -563,7 +563,7 @@ export default function ProjectDetail() {
                             const isExpanded = expandedSubId === ps.id
                             const colCount = 5 + (can('view_project_value') ? 3 : 0)
                             return (
-                            <React.Fragment key={ps.id}>
+                            <Fragment key={ps.id}>
                             <tr style={{ background: isExpanded ? 'var(--surface2)' : undefined }}>
                               <td>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -634,7 +634,7 @@ export default function ProjectDetail() {
                                 </td>
                               </tr>
                             )}
-                            </React.Fragment>
+                            </Fragment>
                           )})}
                         </tbody>
                       </table>
