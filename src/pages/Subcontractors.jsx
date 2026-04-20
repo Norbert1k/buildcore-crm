@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { SUB_STATUSES, TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
+import { SUB_STATUSES, TRADES, DESIGN_TEAM_TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { RatingBadge } from '../components/PerformanceTab'
 import { useAuth } from '../lib/auth'
@@ -136,7 +136,7 @@ function EmployersAgentTab() {
 }
 
 // ── All Subcontractors List (existing code) ─────────────────
-function AllSubcontractorsTab() {
+function AllSubcontractorsTab({ designTeam }) {
   const [subs, setSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
@@ -161,7 +161,11 @@ function AllSubcontractorsTab() {
       .from('subcontractors')
       .select('*, documents_with_status(id, expiry_date, status), performance_ratings(id, rating_type)')
       .order('company_name')
-    setSubs(data || [])
+    let list = data || []
+    if (designTeam) {
+      list = list.filter(s => DESIGN_TEAM_TRADES.includes(s.trade))
+    }
+    setSubs(list)
     setLoading(false)
   }
 
@@ -193,10 +197,10 @@ function AllSubcontractorsTab() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>{subs.length} registered contractors</p>
+        <p style={{ color: 'var(--text2)', fontSize: 13 }}>{subs.length} registered {designTeam ? 'design team members' : 'contractors'}</p>
         {can('manage_subcontractors') && (
           <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
-            <IconPlus size={14} /> Add Subcontractor
+            <IconPlus size={14} /> {designTeam ? 'Add Design Team' : 'Add Subcontractor'}
           </button>
         )}
       </div>
@@ -220,7 +224,7 @@ function AllSubcontractorsTab() {
       </div>
 
       {loading ? <Spinner /> : list.length === 0 ? (
-        <EmptyState icon="👷" title="No subcontractors found" message={search ? 'Try adjusting your search.' : 'Add your first subcontractor to get started.'} action={can('manage_subcontractors') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> Add Subcontractor</button>} />
+        <EmptyState icon={designTeam ? '🏗️' : '👷'} title={designTeam ? 'No design team found' : 'No subcontractors found'} message={search ? 'Try adjusting your search.' : designTeam ? 'Add your first design team member to get started.' : 'Add your first subcontractor to get started.'} action={can('manage_subcontractors') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> {designTeam ? 'Add Design Team' : 'Add Subcontractor'}</button>} />
       ) : (
         <div className="table-wrap">
           <table>
@@ -364,7 +368,7 @@ export default function Subcontractors() {
       {/* Tab content */}
       {activeTab === 'ea' && <EmployersAgentTab />}
       {activeTab === 'subcontractors' && <AllSubcontractorsTab />}
-      {activeTab === 'design-team' && <AllSubcontractorsTab />}
+      {activeTab === 'design-team' && <AllSubcontractorsTab designTeam />}
       {activeTab === 'compliance' && <Documents />}
     </div>
   )
