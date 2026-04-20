@@ -137,6 +137,9 @@ export default function ProjectDetail() {
   const [showVariation, setShowVariation] = useState(null)
   const [variationForm, setVariationForm] = useState({ amount: '', notes: '' })
   const [savingVariation, setSavingVariation] = useState(false)
+  const [showOrderValue, setShowOrderValue] = useState(null)
+  const [orderValueForm, setOrderValueForm] = useState('')
+  const [savingOrderValue, setSavingOrderValue] = useState(false)
   const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
@@ -276,6 +279,20 @@ export default function ProjectDetail() {
     setSavingVariation(false)
     setShowVariation(null)
     setVariationForm({ amount: '', notes: '' })
+    load()
+  }
+
+  async function saveOrderValue() {
+    if (!orderValueForm) return
+    setSavingOrderValue(true)
+    const ps = showOrderValue
+    const newValue = parseFloat(orderValueForm) || 0
+    await supabase.from('project_subcontractors').update({
+      contract_value: newValue
+    }).eq('id', ps.id)
+    setSavingOrderValue(false)
+    setShowOrderValue(null)
+    setOrderValueForm('')
     load()
   }
 
@@ -566,7 +583,7 @@ export default function ProjectDetail() {
                     <tbody>
                       {catSubs.map(ps => {
                         const isExpanded = expandedSubId === ps.id
-                        const colCount = 5 + (can('view_project_value') ? 3 : 0)
+                        const colCount = 6 + (can('view_project_value') ? 3 : 0)
                         return (
                         <Fragment key={ps.id}>
                         <tr style={{ background: isExpanded ? 'var(--surface2)' : undefined }}>
@@ -596,7 +613,13 @@ export default function ProjectDetail() {
                           <td className="td-muted">{formatDate(ps.end_date)}</td>
                           {can('view_project_value') && (
                           <>
-                          <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                          <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : (
+                            can('manage_projects') ? (
+                              <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowOrderValue(ps); setOrderValueForm('') }}>
+                                + Add
+                              </button>
+                            ) : <span style={{ color: 'var(--text3)' }}>—</span>
+                          )}</td>
                           <td>
                             {ps.variation_amount > 0 ? (
                               <div>
@@ -757,6 +780,30 @@ export default function ProjectDetail() {
               <button className="btn" onClick={() => setShowVariation(null)}>Cancel</button>
               <button className="btn btn-primary" onClick={saveVariation} disabled={savingVariation || !variationForm.amount}>
                 {savingVariation ? 'Saving...' : 'Save Variation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Value Modal */}
+      {showOrderValue && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setShowOrderValue(null)}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Add Order Value</h3>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
+              {showOrderValue.subcontractors?.company_name}
+            </div>
+            <Field label="Order Value (£) *">
+              <input type="number" value={orderValueForm} onChange={e => setOrderValueForm(e.target.value)}
+                placeholder="e.g. 50000" autoFocus />
+            </Field>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button className="btn" onClick={() => setShowOrderValue(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveOrderValue} disabled={savingOrderValue || !orderValueForm}>
+                {savingOrderValue ? 'Saving...' : 'Save Order Value'}
               </button>
             </div>
           </div>
