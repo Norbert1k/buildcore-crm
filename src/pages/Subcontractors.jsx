@@ -157,15 +157,17 @@ function AllSubcontractorsTab({ designTeam }) {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
+    let query = supabase
       .from('subcontractors')
       .select('*, documents_with_status(id, expiry_date, status), performance_ratings(id, rating_type)')
       .order('company_name')
-    let list = data || []
     if (designTeam) {
-      list = list.filter(s => DESIGN_TEAM_TRADES.includes(s.trade))
+      query = query.in('category', ['design_team', 'both'])
+    } else {
+      query = query.in('category', ['subcontractor', 'both'])
     }
-    setSubs(list)
+    const { data } = await query
+    setSubs(data || [])
     setLoading(false)
   }
 
@@ -308,6 +310,7 @@ function AllSubcontractorsTab({ designTeam }) {
       {showModal && (
         <SubcontractorModal
           sub={editing}
+          defaultCategory={designTeam ? 'design_team' : 'subcontractor'}
           onClose={() => setShowModal(false)}
           onSaved={() => { setShowModal(false); load() }}
         />
