@@ -15,7 +15,7 @@ export default function Dashboard() {
 
   async function loadDashboard() {
     const [subsRes, docsRes, projectsRes, suppliersRes] = await Promise.all([
-      supabase.from('subcontractors').select('id, status, company_name, documents_with_status(id, expiry_date, status)'),
+      supabase.from('subcontractors').select('id, status, company_name, category, documents_with_status(id, expiry_date, status)'),
       supabase.from('documents_with_status').select('id, document_name, document_type, expiry_date, status, subcontractor_id, subcontractors(company_name, trade)').in('status', ['expired', 'expiring_soon']).order('expiry_date'),
       supabase.from('projects').select('id, status'),
       supabase.from('suppliers').select('id, status'),
@@ -33,7 +33,13 @@ export default function Dashboard() {
   const { subs, alerts, projects, suppliers } = data
   const expired = alerts.filter(a => a.status === 'expired')
   const expiring = alerts.filter(a => a.status === 'expiring_soon')
-  const activeSubs = subs.filter(s => s.status === 'active' || s.status === 'approved').length
+
+  // Split by category: 'subcontractor', 'design_team', or 'both'
+  const contractualSubs = subs.filter(s => s.category === 'subcontractor' || s.category === 'both' || !s.category)
+  const designTeamSubs = subs.filter(s => s.category === 'design_team' || s.category === 'both')
+  const activeContractual = contractualSubs.filter(s => s.status === 'active' || s.status === 'approved').length
+  const activeDesign = designTeamSubs.filter(s => s.status === 'active' || s.status === 'approved').length
+
   const activeProjects = projects.filter(p => p.status === 'active').length
 
   // Worst compliance subs
@@ -57,6 +63,9 @@ export default function Dashboard() {
           <button className="btn btn-primary btn-sm" onClick={() => navigate('/subcontractors')}>
             <IconPlus size={13} /> Add Subcontractor
           </button>
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/subcontractors/design-team')}>
+            <IconPlus size={13} /> Add Design Team
+          </button>
           <button className="btn btn-sm" onClick={() => navigate('/projects')}>
             <IconPlus size={13} /> New Project
           </button>
@@ -70,8 +79,13 @@ export default function Dashboard() {
       <div className="stats-grid">
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/subcontractors')}>
           <div className="stat-label">Subcontractors</div>
-          <div className="stat-value">{subs.length}</div>
-          <div className="stat-sub">{activeSubs} active</div>
+          <div className="stat-value">{contractualSubs.length}</div>
+          <div className="stat-sub">{activeContractual} active</div>
+        </div>
+        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/subcontractors/design-team')}>
+          <div className="stat-label">Design Team</div>
+          <div className="stat-value">{designTeamSubs.length}</div>
+          <div className="stat-sub">{activeDesign} active</div>
         </div>
         <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/projects')}>
           <div className="stat-label">Active Projects</div>
