@@ -248,9 +248,34 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
   async function zipFolder() {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.head.appendChild(s); await new Promise(r => s.onload = r)
-    const zip = new window.JSZip(); const { data: allFiles } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', folder.key)
+    const zip = new window.JSZip()
+    // Gather this folder + all descendants in project_sub_folders
+    const { data: allSubFolders } = await supabase.from('project_sub_folders').select('folder_key, parent_key, label').eq('project_sub_id', projectSubId)
+    const folderMap = {}; (allSubFolders || []).forEach(f => { folderMap[f.folder_key] = f })
+    const descendants = new Set([folder.key])
+    let frontier = [folder.key]
+    while (frontier.length) {
+      const next = []
+      for (const k of frontier) {
+        for (const f of (allSubFolders || [])) {
+          if (f.parent_key === k && !descendants.has(f.folder_key)) { descendants.add(f.folder_key); next.push(f.folder_key) }
+        }
+      }
+      frontier = next
+    }
+    function pathFor(key) {
+      if (key === folder.key) return ''
+      const parts = []
+      let cur = key
+      while (cur && cur !== folder.key && folderMap[cur]) { parts.unshift(folderMap[cur].label || cur); cur = folderMap[cur].parent_key }
+      return parts.join('/')
+    }
+    const { data: allFiles } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).in('folder_key', Array.from(descendants))
     if (!allFiles?.length) { alert('No files.'); return }
-    for (const f of allFiles) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300); if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
+    for (const f of allFiles) {
+      const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
+      if (data?.signedUrl) { const res = await fetch(data.signedUrl); const rel = pathFor(f.folder_key); zip.file((rel ? rel + '/' : '') + f.file_name, await res.blob()) }
+    }
     const blob = await zip.generateAsync({ type: 'blob' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '.zip'; document.body.appendChild(a); a.click(); document.body.removeChild(a)
   }
   async function bulkZip() {
