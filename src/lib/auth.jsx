@@ -76,6 +76,10 @@ export function AuthProvider({ children }) {
 
   const role = profile?.role
 
+  // Operations Manager has identical permissions to Project Manager —
+  // alias at the permission check so every existing permission entry applies.
+  const effectiveRole = role === 'operations_manager' ? 'project_manager' : role
+
   const can = (action) => {
     if (!profile) return false
     if (role === 'admin') return true
@@ -110,18 +114,21 @@ export function AuthProvider({ children }) {
       manage_settings:       ['project_manager', 'accountant'],
       view_tracker:          ['project_manager', 'accountant', 'director_viewer', 'viewer'],
     }
-    return permissions[action]?.includes(role) ?? false
+    return permissions[action]?.includes(effectiveRole) ?? false
   }
 
   const canAccessProject = (projectId) => {
     if (!profile) return false
-    if (['admin', 'project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'].includes(role)) return true
+    if (['admin', 'project_manager', 'operations_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'].includes(role)) return true
     if (role === 'site_manager') return projectAccess.includes(projectId)
     return false
   }
 
+  // Activity log visibility: Admin + Project Manager + Operations Manager
+  const canViewActivity = () => ['admin', 'project_manager', 'operations_manager'].includes(role)
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, projectAccess, role, setTheme, mfaVerified, markMfaVerified }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, canViewActivity, projectAccess, role, setTheme, mfaVerified, markMfaVerified }}>
       {children}
     </AuthContext.Provider>
   )
