@@ -379,16 +379,20 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Documents
         </div>
+        <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => { setActiveTab('subcontractors'); localStorage.setItem(_tabKey, 'subcontractors') }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Subcontractors<span className="tab-badge">{subs.filter(ps => { const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'; return c === 'contractual_work' }).length}</span>
+        </div>
+        <div className={`filter-tab ${activeTab === 'design_team' ? 'active' : ''}`} onClick={() => { setActiveTab('design_team'); localStorage.setItem(_tabKey, 'design_team') }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
+        </div>
         {can('view_hs_handover') && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           H&S Handover
         </div>
         )}
-        <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => { setActiveTab('subcontractors'); localStorage.setItem(_tabKey, 'subcontractors') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Subcontractors<span className="tab-badge">{subs.length}</span>
-        </div>
         {can('view_photos') && (
         <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => { setActiveTab('photos'); localStorage.setItem(_tabKey, 'photos') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -480,18 +484,32 @@ export default function ProjectDetail() {
         <CaseStudy project={project} subs={subs} docs={docs} photos={photos} />
       )}
 
-      {activeTab === 'subcontractors' && (
+      {(activeTab === 'subcontractors' || activeTab === 'design_team') && (() => {
+        const isDesignTeam = activeTab === 'design_team'
+        const categoryKey = isDesignTeam ? 'design_team' : 'contractual_work'
+        const catSubs = subs.filter(ps => {
+          const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
+          return c === categoryKey
+        })
+        const catLabel = isDesignTeam ? 'Design Team' : 'Subcontractors'
+        const catColor = isDesignTeam ? '#85B7EB' : '#97C459'
+        const catBg = isDesignTeam ? '#042C53' : '#173404'
+        return (
         <div>
           <div className="section-header">
-            <div className="section-title">Assigned Subcontractors</div>
+            <div className="section-title">Assigned {catLabel}</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {(can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-sm" style={{ borderColor: '#185FA5', color: '#185FA5', background: '#E6F1FB' }} onClick={() => setShowAssignEA(true)}><IconPlus size={13} /> Assign EA</button>}
-              {(can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-primary btn-sm" onClick={() => setShowAssignSub(true)}><IconPlus size={13} /> Assign Subcontractor</button>}
+              {!isDesignTeam && (can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-sm" style={{ borderColor: '#185FA5', color: '#185FA5', background: '#E6F1FB' }} onClick={() => setShowAssignEA(true)}><IconPlus size={13} /> Assign EA</button>}
+              {(can('manage_projects') || can('manage_subcontractors')) && (
+                <button className="btn btn-primary btn-sm" onClick={() => { setAssignForm(f => ({ ...f, category: categoryKey })); setShowAssignSub(true) }}>
+                  <IconPlus size={13} /> Assign {catLabel === 'Subcontractors' ? 'Subcontractor' : 'Design Team'}
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Employers Agent section — above Design Team */}
-          {projectEAs.length > 0 && (
+          {/* Employers Agent section — only on Subcontractors tab */}
+          {!isDesignTeam && projectEAs.length > 0 && (
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 12px', background: '#042C53', borderRadius: 6, borderLeft: '3px solid #5b9bd5' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -536,115 +554,100 @@ export default function ProjectDetail() {
               </div>
             </div>
           )}
-          {subs.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No subcontractors assigned to this project yet.</div>
+
+          {catSubs.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No {catLabel.toLowerCase()} assigned to this project yet.</div>
           ) : (
             <>
-              {[
-                { key: 'design_team', label: 'Design Team', color: '#85B7EB', bg: '#042C53' },
-                { key: 'contractual_work', label: 'Contractual Work', color: '#97C459', bg: '#173404' },
-              ].map(cat => {
-                const catSubs = subs.filter(ps => {
-                  const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
-                  return c === cat.key
-                })
-                if (!catSubs.length) return null
-                return (
-                  <div key={cat.key} style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 12px', background: cat.bg, borderRadius: 6, borderLeft: `3px solid ${cat.color}` }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: cat.color }}>{cat.label}</div>
-                      <div style={{ fontSize: 11, color: cat.color + '99' }}>{catSubs.length} assigned</div>
-                    </div>
-                    <div className="table-wrap">
-                      <table>
-                        <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th>{can('view_project_value') && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th><th></th></tr></thead>
-                        <tbody>
-                          {catSubs.map(ps => {
-                            const isExpanded = expandedSubId === ps.id
-                            const colCount = 5 + (can('view_project_value') ? 3 : 0)
-                            return (
-                            <Fragment key={ps.id}>
-                            <tr style={{ background: isExpanded ? 'var(--surface2)' : undefined }}>
-                              <td>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flex: 1 }} onClick={() => setExpandedSubId(isExpanded ? null : ps.id)}>
-                                    <Avatar name={ps.subcontractors?.company_name} size="sm" />
-                                    <div>
-                                      <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        {ps.subcontractors?.company_name}
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9"/></svg>
-                                      </div>
-                                      {subFiles.filter(f => f.project_sub_id === ps.id).length > 0 && (
-                                        <span style={{ fontSize: 9, color: 'var(--blue)', fontWeight: 500 }}>{subFiles.filter(f => f.project_sub_id === ps.id).length} docs</span>
-                                      )}
-                                    </div>
+              <div style={{ marginBottom: 16 }}>
+                <div className="table-wrap">
+                  <table>
+                    <thead><tr><th>Company</th><th>Trade on Project</th><th>Start</th><th>End</th>{can('view_project_value') && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th><th></th></tr></thead>
+                    <tbody>
+                      {catSubs.map(ps => {
+                        const isExpanded = expandedSubId === ps.id
+                        const colCount = 5 + (can('view_project_value') ? 3 : 0)
+                        return (
+                        <Fragment key={ps.id}>
+                        <tr style={{ background: isExpanded ? 'var(--surface2)' : undefined }}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flex: 1 }} onClick={() => setExpandedSubId(isExpanded ? null : ps.id)}>
+                                <Avatar name={ps.subcontractors?.company_name} size="sm" />
+                                <div>
+                                  <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {ps.subcontractors?.company_name}
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9"/></svg>
                                   </div>
-                                  <span
-                                    onClick={e => { e.stopPropagation(); navigate(`/subcontractors/${ps.subcontractors?.id}`, { state: { from: `/projects/${id}` } }) }}
-                                    style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 4, border: '0.5px solid var(--accent)', fontWeight: 500 }}>
-                                    View Profile
-                                  </span>
-                                </div>
-                              </td>
-                              <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
-                              <td className="td-muted">{formatDate(ps.start_date)}</td>
-                              <td className="td-muted">{formatDate(ps.end_date)}</td>
-                              {can('view_project_value') && (
-                              <>
-                              <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
-                              <td>
-                                {ps.variation_amount > 0 ? (
-                                  <div>
-                                    <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
-                                    {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
-                                      <div key={i} style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  can('manage_projects') && (
-                                    <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
-                                      + Add
-                                    </button>
-                                  )
-                                )}
-                              </td>
-                              <td style={{ fontWeight: 600, color: (parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
-                                {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
-                                  ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
-                                  : '—'}
-                              </td>
-                              </>
-                              )}
-                              <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
-                              <td>
-                                <div style={{ display: 'flex', gap: 4 }}>
-                                  {can('manage_projects') && ps.variation_amount > 0 && (
-                                    <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
-                                      +VAR
-                                    </button>
+                                  {subFiles.filter(f => f.project_sub_id === ps.id).length > 0 && (
+                                    <span style={{ fontSize: 9, color: 'var(--blue)', fontWeight: 500 }}>{subFiles.filter(f => f.project_sub_id === ps.id).length} docs</span>
                                   )}
-                                  {can('manage_projects') && <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemove(ps.id)}><IconTrash size={12}/></button>}
                                 </div>
-                              </td>
-                            </tr>
-                            {isExpanded && (
-                              <tr>
-                                <td colSpan={colCount} style={{ padding: 0, background: 'var(--surface2)' }}>
-                                  <SubcontractorDocs projectId={id} projectSubId={ps.id} subFiles={subFiles.filter(f => f.project_sub_id === ps.id)} onReload={load} canManage={can('manage_projects') || can('manage_documents')} />
-                                </td>
-                              </tr>
+                              </div>
+                              <span
+                                onClick={e => { e.stopPropagation(); navigate(`/subcontractors/${ps.subcontractors?.id}`, { state: { from: `/projects/${id}` } }) }}
+                                style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 4, border: '0.5px solid var(--accent)', fontWeight: 500 }}>
+                                View Profile
+                              </span>
+                            </div>
+                          </td>
+                          <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
+                          <td className="td-muted">{formatDate(ps.start_date)}</td>
+                          <td className="td-muted">{formatDate(ps.end_date)}</td>
+                          {can('view_project_value') && (
+                          <>
+                          <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                          <td>
+                            {ps.variation_amount > 0 ? (
+                              <div>
+                                <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
+                                {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
+                                  <div key={i} style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
+                                ))}
+                              </div>
+                            ) : (
+                              can('manage_projects') && (
+                                <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                                  + Add
+                                </button>
+                              )
                             )}
-                            </Fragment>
-                          )})}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )
-              })}
-              {can('view_project_value') && subs.length > 1 && (() => {
-                const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
-                const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
+                          </td>
+                          <td style={{ fontWeight: 600, color: (parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                            {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
+                              ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
+                              : '—'}
+                          </td>
+                          </>
+                          )}
+                          <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {can('manage_projects') && ps.variation_amount > 0 && (
+                                <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                                  +VAR
+                                </button>
+                              )}
+                              {can('manage_projects') && <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemove(ps.id)}><IconTrash size={12}/></button>}
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={colCount} style={{ padding: 0, background: 'var(--surface2)' }}>
+                              <SubcontractorDocs projectId={id} projectSubId={ps.id} subFiles={subFiles.filter(f => f.project_sub_id === ps.id)} onReload={load} canManage={can('manage_projects') || can('manage_documents')} />
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
+                      )})}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              {can('view_project_value') && catSubs.length > 1 && (() => {
+                const totalOrder = catSubs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
+                const totalVar = catSubs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
                 const totalAll = totalOrder + totalVar
                 return (
                   <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', padding: '12px 0', borderTop: '2px solid var(--border)', marginTop: 8 }}>
@@ -657,7 +660,7 @@ export default function ProjectDetail() {
             </>
           )}
         </div>
-      )}
+      )})()}
 
       {activeTab === 'documents' && (
         <div>
