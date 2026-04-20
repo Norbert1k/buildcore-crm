@@ -57,17 +57,20 @@ export default function SubcontractorModal({ sub, onClose, onSaved, defaultCateg
     onSaved()
   }
 
+  const isDesignTeam = form.category === 'design_team' || defaultCategory === 'design_team'
+  const entityLabel = isDesignTeam ? 'Design Team' : 'Subcontractor'
+
   return (
     <Modal
       open
       onClose={onClose}
-      title={editing ? `Edit: ${sub.company_name}` : 'Add New Subcontractor'}
+      title={editing ? `Edit: ${sub.company_name}` : `Add New ${entityLabel}`}
       size="lg"
       footer={
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Subcontractor'}
+            {saving ? 'Saving…' : editing ? 'Save Changes' : `Add ${entityLabel}`}
           </button>
         </>
       }
