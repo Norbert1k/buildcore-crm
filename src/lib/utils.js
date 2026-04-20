@@ -61,6 +61,7 @@ export const SUB_STATUSES = {
 export const ROLES = {
   admin:                { label: 'Admin',               cls: 'pill-red',    desc: 'Full access including user management' },
   project_manager:      { label: 'Project Manager',     cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
+  operations_manager:   { label: 'Operations Manager',  cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
   director_viewer:      { label: 'Director Viewer',     cls: 'pill-blue',   desc: 'View everything including financials — read-only, no editing' },
   accountant:           { label: 'Accountant',          cls: 'pill-purple', desc: 'Manage suppliers, add/edit subcontractor VAT & CIS, view financials' },
   site_manager:         { label: 'Site Manager',        cls: 'pill-amber',  desc: 'Access assigned projects & compliance docs only' },
@@ -71,6 +72,7 @@ export const ROLES = {
 export const ROLE_PERMISSIONS = {
   admin:               { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   project_manager:     { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  operations_manager:  { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   accountant:          { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
   site_manager:        { nav: ['dashboard','subcontractors','projects','suppliers','company','settings'], financials: false, performance: true },
