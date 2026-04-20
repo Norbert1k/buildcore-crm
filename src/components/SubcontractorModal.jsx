@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { TRADES, SUB_STATUSES } from '../lib/utils'
+import { TRADES, DESIGN_TEAM_TRADES, SUB_STATUSES } from '../lib/utils'
 import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
 
-export default function SubcontractorModal({ sub, onClose, onSaved }) {
+export default function SubcontractorModal({ sub, onClose, onSaved, defaultCategory }) {
   const { profile } = useAuth()
   const editing = !!sub
 
@@ -24,6 +24,7 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
     cis_number: sub?.cis_number || '',
     cis_verified: sub?.cis_verified || false,
     notes: sub?.notes || '',
+    category: sub?.category || defaultCategory || 'subcontractor',
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -93,8 +94,18 @@ export default function SubcontractorModal({ sub, onClose, onSaved }) {
           </select>
         </Field>
         <Field label="Trade / Specialty *" error={errors.trade}>
-          <select value={form.trade} onChange={e => set('trade', e.target.value)}>
+          <select value={form.trade} onChange={e => {
+            set('trade', e.target.value)
+            if (!editing) set('category', DESIGN_TEAM_TRADES.includes(e.target.value) ? 'design_team' : 'subcontractor')
+          }}>
             {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Field>
+        <Field label="Category">
+          <select value={form.category} onChange={e => set('category', e.target.value)}>
+            <option value="subcontractor">Subcontractor</option>
+            <option value="design_team">Design Team</option>
+            <option value="both">Both</option>
           </select>
         </Field>
         <Field label="Email Address" error={errors.email}>
