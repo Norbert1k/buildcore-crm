@@ -215,6 +215,7 @@ function ProtectedLayout() {
     '/': 'Dashboard',
     '/subcontractors': 'Subcontractors',
     '/subcontractors/ea': 'Subcontractors',
+    '/subcontractors/design-team': 'Subcontractors',
     '/subcontractors/compliance': 'Subcontractors',
     '/clients': 'Clients',
     '/projects': 'Projects',
@@ -244,6 +245,7 @@ function ProtectedLayout() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/subcontractors" element={<Subcontractors />} />
             <Route path="/subcontractors/ea" element={<Subcontractors />} />
+            <Route path="/subcontractors/design-team" element={<Subcontractors />} />
             <Route path="/subcontractors/compliance" element={<Subcontractors />} />
             <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
             <Route path="/projects" element={<Projects />} />
