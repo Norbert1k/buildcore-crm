@@ -12,8 +12,9 @@ export const TRADES = [
 
 // Trades that default to Design Team when assigning to a project
 export const DESIGN_TEAM_TRADES = [
-  'Architects', 'Building Control', 'Civil Engineers', 'Fire Consultants',
-  'Principle Designers', 'SFS Engineers', 'Structural Engineers', 'Warranty Providers',
+  'Architects', 'Building Control', 'Civil Engineers', 'Consultant',
+  'Fire Consultants', 'Principle Designers', 'Setting Out Engineer',
+  'SFS Engineers', 'Structural Engineers', 'Warranty Providers',
 ]
 
 export const SUBCONTRACTOR_CATEGORIES = {
