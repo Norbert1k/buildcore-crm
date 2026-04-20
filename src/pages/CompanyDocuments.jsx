@@ -754,12 +754,22 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     setZipping(true)
     const { data: allFiles } = await supabase.from('company_documents').select('*').eq('category', cat.key)
     if (!allFiles?.length) { alert('No files in this folder.'); setZipping(false); return }
+    // Load all subfolders for this category to resolve label paths
+    const { data: catSubfolders } = await supabase.from('company_doc_subfolders').select('folder_key, parent_folder_key, label').eq('category_key', cat.key)
+    const folderMap = {}; (catSubfolders || []).forEach(f => { folderMap[f.folder_key] = f })
+    function pathFor(key) {
+      if (!key) return ''
+      const parts = []
+      let cur = key
+      while (cur && folderMap[cur]) { parts.unshift(folderMap[cur].label || cur); cur = folderMap[cur].parent_folder_key }
+      return parts.join('/')
+    }
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
       for (const f of allFiles) {
         const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.subfolder_key ? f.subfolder_key + '/' + f.file_name : f.file_name, await res.blob()) }
+        if (data?.signedUrl) { const res = await fetch(data.signedUrl); const sub = pathFor(f.subfolder_key); zip.file((sub ? sub + '/' : '') + f.file_name, await res.blob()) }
       }
       const blob = await zip.generateAsync({ type: 'blob' })
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '.zip'; a.click()
@@ -791,13 +801,34 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
+      const { data: catSubfolders } = await supabase.from('company_doc_subfolders').select('folder_key, parent_folder_key, label').eq('category_key', cat.key)
+      const folderMap = {}; (catSubfolders || []).forEach(f => { folderMap[f.folder_key] = f })
       for (const sfKey of selectedSubs) {
         const sf = subfolders.find(s => s.folder_key === sfKey)
-        const folderName = sf ? sf.label : sfKey
-        const { data: sfFiles } = await supabase.from('company_documents').select('*').eq('subfolder_key', sfKey)
+        const rootName = sf ? sf.label : (folderMap[sfKey]?.label || sfKey)
+        // BFS descendants of this subfolder
+        const descendants = new Set([sfKey])
+        let frontier = [sfKey]
+        while (frontier.length) {
+          const next = []
+          for (const k of frontier) {
+            for (const f of (catSubfolders || [])) {
+              if (f.parent_folder_key === k && !descendants.has(f.folder_key)) { descendants.add(f.folder_key); next.push(f.folder_key) }
+            }
+          }
+          frontier = next
+        }
+        function pathFor(key) {
+          if (key === sfKey) return ''
+          const parts = []
+          let cur = key
+          while (cur && cur !== sfKey && folderMap[cur]) { parts.unshift(folderMap[cur].label || cur); cur = folderMap[cur].parent_folder_key }
+          return parts.join('/')
+        }
+        const { data: sfFiles } = await supabase.from('company_documents').select('*').in('subfolder_key', Array.from(descendants))
         for (const f of (sfFiles || [])) {
           const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
-          if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
+          if (data?.signedUrl) { const res = await fetch(data.signedUrl); const rel = pathFor(f.subfolder_key); zip.file(rootName + (rel ? '/' + rel : '') + '/' + f.file_name, await res.blob()) }
         }
       }
       const blob = await zip.generateAsync({ type: 'blob' })
