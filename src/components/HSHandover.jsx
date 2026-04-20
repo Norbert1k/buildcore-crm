@@ -904,18 +904,63 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   }
 
   async function zipFolder() {
-    const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId).eq('folder_key', node.key)
+    // Gather this folder + all descendants across hs_folders + HS_STRUCTURE
+    const { data: allCustom } = await supabase.from('hs_folders').select('folder_key, parent_key, label').eq('project_id', projectId)
+    // Build a unified map: structure children + custom children, keyed by parent folder_key
+    const childrenByParent = {}
+    function walkStruct(nodes) {
+      (nodes || []).forEach(n => {
+        if (n.children && n.children.length) {
+          childrenByParent[n.key] = (childrenByParent[n.key] || []).concat(n.children.map(c => ({ folder_key: c.key, label: c.label })))
+          walkStruct(n.children)
+        }
+      })
+    }
+    walkStruct(HS_STRUCTURE)
+    ;(allCustom || []).forEach(cf => {
+      if (!cf.parent_key) return
+      childrenByParent[cf.parent_key] = (childrenByParent[cf.parent_key] || []).concat([{ folder_key: cf.folder_key, label: cf.label }])
+    })
+    // BFS descendants of node.key
+    const descendants = new Set([node.key])
+    const labelByKey = { [node.key]: node.label }
+    const parentByKey = {}
+    let frontier = [node.key]
+    while (frontier.length) {
+      const next = []
+      for (const k of frontier) {
+        for (const child of (childrenByParent[k] || [])) {
+          if (!descendants.has(child.folder_key)) {
+            descendants.add(child.folder_key)
+            labelByKey[child.folder_key] = child.label
+            parentByKey[child.folder_key] = k
+            next.push(child.folder_key)
+          }
+        }
+      }
+      frontier = next
+    }
+    function pathFor(key) {
+      if (key === node.key) return ''
+      const parts = []
+      let cur = key
+      while (cur && cur !== node.key) { parts.unshift(labelByKey[cur] || cur); cur = parentByKey[cur]; if (!cur) break }
+      return parts.join('/')
+    }
+    const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId).in('folder_key', Array.from(descendants))
     if (!allFiles?.length) { alert('No files in this folder.'); return }
     const script = document.createElement('script')
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     script.onload = async () => {
       const zip = new window.JSZip()
-      const folder = zip.folder(node.label)
+      const rootFolder = zip.folder(node.label)
       for (const f of allFiles) {
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
         if (data?.signedUrl) {
           const resp = await fetch(data.signedUrl)
-          folder.file(f.file_name, await resp.blob())
+          const rel = pathFor(f.folder_key)
+          const target = rel ? rootFolder.folder(rel) : rootFolder
+          target.file(f.file_name, await resp.blob())
         }
       }
       const content = await zip.generateAsync({ type: 'blob' })
