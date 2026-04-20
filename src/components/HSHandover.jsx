@@ -648,7 +648,7 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }
 
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('hs_files').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', file.id)
+    await supabase.from('hs_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
     file.file_name = renameVal.trim()
     setRenaming(false)
   }
@@ -744,7 +744,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
 
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('hs_files').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', file.id)
+    await supabase.from('hs_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
     file.file_name = renameVal.trim()
     setRenaming(false)
   }
@@ -855,7 +855,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       const path = `projects/${projectId}/hs/${node.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('hs-handover').upload(path, file)
       if (!error) {
-        await supabase.from('hs_files').insert({ project_id: projectId, folder_key: node.key, storage_path: path, file_name: file.name, file_size: file.size, uploaded_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('hs_files').insert({ project_id: projectId, folder_key: node.key, storage_path: path, file_name: file.name, file_size: file.size })
       } else { errors.push(file.name) }
     }
     setUploading(false)
@@ -875,13 +875,13 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         const parentKey = parentPath ? keyMap[parentPath] : node.key
         const key = 'custom-' + (parentKey || node.key) + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('hs_folders').insert({ project_id: projectId, parent_key: parentKey || node.key, folder_key: key, label, created_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('hs_folders').insert({ project_id: projectId, parent_key: parentKey || node.key, folder_key: key, label })
       }
       for (const { file, path } of drop.files) {
         const fKey = path ? keyMap[path] : node.key
         const storagePath = `projects/${projectId}/hs/${fKey}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('hs-handover').upload(storagePath, file)
-        if (!error) await supabase.from('hs_files').insert({ project_id: projectId, folder_key: fKey, storage_path: storagePath, file_name: file.name, file_size: file.size, uploaded_by: profile?.id, updated_by: profile?.id })
+        if (!error) await supabase.from('hs_files').insert({ project_id: projectId, folder_key: fKey, storage_path: storagePath, file_name: file.name, file_size: file.size })
       }
       onCustomFolderAdded?.(); loadFiles()
     } else {
@@ -901,7 +901,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     if (!newFolderName.trim()) return
     setSavingFolder(true)
     const key = 'custom-' + node.key + '-' + Date.now()
-    await supabase.from('hs_folders').insert({ project_id: projectId, parent_key: node.key, folder_key: key, label: newFolderName.trim(), created_by: profile?.id, updated_by: profile?.id })
+    await supabase.from('hs_folders').insert({ project_id: projectId, parent_key: node.key, folder_key: key, label: newFolderName.trim() })
     onCustomFolderAdded?.({ project_id: projectId, parent_key: node.key, folder_key: key, label: newFolderName.trim() })
     setNewFolderName(''); setShowAddFolder(false); setSavingFolder(false)
   }
@@ -1125,7 +1125,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
           {/* Files grid */}
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
             onMove={async (targetKey) => {
-              for (const id of selected) await supabase.from('hs_files').update({ folder_key: targetKey, updated_by: profile?.id }).eq('id', id)
+              for (const id of selected) await supabase.from('hs_files').update({ folder_key: targetKey }).eq('id', id)
               setSelected(new Set()); loadFiles()
             }}
             moveTargets={[
@@ -1433,7 +1433,7 @@ export default function HSHandover({ projectId, projectName }) {
               setCustomFolders(prev => prev.filter(f => f.folder_key !== key))
             }}
             onRenameNode={async (key, label) => {
-              await supabase.from('hs_folders').update({ label, updated_by: profile?.id }).eq('folder_key', key).eq('project_id', projectId)
+              await supabase.from('hs_folders').update({ label }).eq('folder_key', key).eq('project_id', projectId)
               setCustomFolders(prev => prev.map(f => f.folder_key === key ? { ...f, label } : f))
             }}
           />
