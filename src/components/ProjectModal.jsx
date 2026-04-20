@@ -81,7 +81,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     if (result.error) {
       const msg = result.error.message
       if (msg.includes('projects_project_ref_key') || msg.includes('unique constraint')) {
-        setErrors({ _global: 'This Project Reference is already in use Ã¢ÂÂ please use a different ref number.' })
+        setErrors({ _global: 'This Project Reference is already in use — please use a different ref number.' })
       } else {
         setErrors({ _global: msg })
       }
@@ -100,7 +100,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <>
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={save} disabled={saving}>
-            {saving ? 'SavingÃ¢ÂÂ¦' : editing ? 'Save Changes' : 'Create Project'}
+            {saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Project'}
           </button>
         </>
       }
@@ -114,7 +114,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <div className="form-section">Project Details</div>
         <div className="full">
           <Field label="Project Name *" error={errors.project_name}>
-            <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments Ã¢ÂÂ Phase 2" autoFocus />
+            <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments — Phase 2" autoFocus />
           </Field>
         </div>
      <Field label="Project Reference">
@@ -140,7 +140,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
           </select>
         </Field>
-        <Field label="Contract Value (Ã£)">
+        <Field label="Contract Value (£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
         <div className="form-section">Dates</div>
@@ -165,7 +165,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <div className="form-section">Additional Info</div>
         <div className="full">
           <Field label="Description / Notes">
-            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional detailsÃ¢ÂÂ¦" />
+            <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Project scope, notes, or any additional details…" />
           </Field>
         </div>
       </div>
