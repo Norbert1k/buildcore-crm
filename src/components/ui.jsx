@@ -39,7 +39,7 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }) {
   }
 
   return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()} onKeyDown={handleOverlayKeyDown}>
+    <div className="modal-overlay" onKeyDown={handleOverlayKeyDown}>
       <div className={`modal modal-${size}`}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>
