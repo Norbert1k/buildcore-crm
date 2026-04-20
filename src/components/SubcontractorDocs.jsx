@@ -389,21 +389,14 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
 // ── Main ─────────────────────────────────────────────────────
 export default function SubcontractorDocs({ projectId, projectSubId, subFiles, onReload, canManage }) {
   const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('subDocView') || 'grid' } catch { return 'grid' } })
-  const [direction, setDirection] = useState('received')
   const [previewFile, setPreviewFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const direction = 'received'
   function setView(mode) { setViewMode(mode); try { localStorage.setItem('subDocView', mode) } catch {} }
   function openPreview(file, url) { setPreviewFile(file); setPreviewUrl(url || null); if (!url) supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600).then(({ data }) => { if (data?.signedUrl) setPreviewUrl(data.signedUrl) }) }
 
   return (
     <div style={{ padding: '10px 16px 14px' }}>
-      {canManage && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 11, color: 'var(--text3)' }}>Upload direction:</span>
-        <div style={{ display: 'flex', gap: 0, border: '0.5px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
-          <button onClick={() => setDirection('sent')} style={{ fontSize: 11, padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: direction === 'sent' ? '#448a40' : 'var(--surface)', color: direction === 'sent' ? 'white' : 'var(--text2)' }}>↑ Sent to them</button>
-          <button onClick={() => setDirection('received')} style={{ fontSize: 11, padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: direction === 'received' ? '#448a40' : 'var(--surface)', color: direction === 'received' ? 'white' : 'var(--text2)' }}>↓ Received from them</button>
-        </div>
-      </div>}
       {SUB_DOC_FOLDERS.map(folder => <PrimeFolder key={folder.key} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} setView={setView} onPreview={openPreview} onReload={onReload} direction={direction} />)}
       {previewFile && previewUrl && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setPreviewFile(null); setPreviewUrl(null) }}>
