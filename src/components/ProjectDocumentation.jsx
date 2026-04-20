@@ -351,7 +351,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
 
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('project_doc_files').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', file.id)
+    await supabase.from('project_doc_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
     file.file_name = renameVal.trim()
     setRenaming(false)
   }
@@ -427,7 +427,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
 
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('project_doc_files').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', file.id)
+    await supabase.from('project_doc_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
     file.file_name = renameVal.trim()
     setRenaming(false)
   }
@@ -556,7 +556,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   }
 
   async function moveFile(docId) {
-    await supabase.from('project_doc_files').update({ subfolder_key: subfolder.key, updated_by: profile?.id }).eq('id', docId)
+    await supabase.from('project_doc_files').update({ subfolder_key: subfolder.key }).eq('id', docId)
     loadFiles()
     if (onReload) onReload(docId)
   }
@@ -576,7 +576,6 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
-        uploaded_by: profile?.id, updated_by: profile?.id,
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
@@ -595,13 +594,13 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     if (!newSubName.trim()) return
     setSavingSub(true)
     const key = subfolder.key + '-sub-' + Date.now()
-    await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: subfolder.key, folder_key: key, label: newSubName.trim(), created_by: profile?.id, updated_by: profile?.id })
+    await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: subfolder.key, folder_key: key, label: newSubName.trim() })
     setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadChildFolders()
   }
 
   async function renameFolder() {
     if (!renameVal.trim()) return
-    await supabase.from('project_doc_folders').update({ label: renameVal.trim(), updated_by: profile?.id }).eq('folder_key', subfolder.key).eq('project_id', projectId)
+    await supabase.from('project_doc_folders').update({ label: renameVal.trim() }).eq('folder_key', subfolder.key).eq('project_id', projectId)
     setSubLabel(renameVal.trim()); setRenaming(false)
   }
 
@@ -614,7 +613,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 
   async function moveSubfolder(key) {
     if (key === subfolder.key) return
-    await supabase.from('project_doc_folders').update({ parent_key: subfolder.key, updated_by: profile?.id }).eq('folder_key', key).eq('project_id', projectId)
+    await supabase.from('project_doc_folders').update({ parent_key: subfolder.key }).eq('folder_key', key).eq('project_id', projectId)
     loadChildFolders()
     if (onReload) onReload('__folder_deleted__')
   }
@@ -706,13 +705,13 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         const parentKey = parentPath ? keyMap[parentPath] : subfolder.key
         const key = (parentKey || subfolder.key) + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || subfolder.key, folder_key: key, label, created_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || subfolder.key, folder_key: key, label })
       }
       for (const { file, path } of drop.files) {
         const sfKey = path ? keyMap[path] : subfolder.key
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath, uploaded_by: profile?.id, updated_by: profile?.id })
+        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
       loadChildFolders(); loadFiles()
     } else {
@@ -802,7 +801,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
           style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
             onMove={async (targetKey) => {
-              for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey || subfolder.key, updated_by: profile?.id }).eq('id', id)
+              for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey || subfolder.key }).eq('id', id)
               setSelected(new Set()); loadFiles()
             }}
             moveTargets={childFolders.map(cf => ({ key: cf.folder_key, label: cf.label }))} />
@@ -887,13 +886,13 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
     if (!newFolderName.trim()) return
     setSavingFolder(true)
     const key = folder.key + '-custom-' + Date.now()
-    await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: folder.key, folder_key: key, label: newFolderName.trim(), created_by: profile?.id, updated_by: profile?.id })
+    await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: folder.key, folder_key: key, label: newFolderName.trim() })
     setSubfolders(prev => [...prev, { key, label: newFolderName.trim(), custom: true }])
     setNewFolderName(''); setShowAddFolder(false); setSavingFolder(false)
   }
 
   async function moveFileToRoot(docId) {
-    await supabase.from('project_doc_files').update({ subfolder_key: null, updated_by: profile?.id }).eq('id', docId)
+    await supabase.from('project_doc_files').update({ subfolder_key: null }).eq('id', docId)
     loadRootFiles()
   }
 
@@ -912,7 +911,6 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
         project_id: projectId, folder_key: folder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
-        uploaded_by: profile?.id, updated_by: profile?.id,
       })
       if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
@@ -1036,7 +1034,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   }
 
   async function moveSubfolderToRoot(key) {
-    await supabase.from('project_doc_folders').update({ parent_key: folder.key, updated_by: profile?.id }).eq('folder_key', key).eq('project_id', projectId)
+    await supabase.from('project_doc_folders').update({ parent_key: folder.key }).eq('folder_key', key).eq('project_id', projectId)
     loadCustomSubfolders()
   }
 
@@ -1054,13 +1052,13 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
         const parentKey = parentPath ? keyMap[parentPath] : folder.key
         const key = (parentKey || folder.key) + '-custom-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || folder.key, folder_key: key, label, created_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || folder.key, folder_key: key, label })
       }
       for (const { file, path } of drop.files) {
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath, uploaded_by: profile?.id, updated_by: profile?.id })
+        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
       loadCustomSubfolders(); loadRootFiles()
     } else {
@@ -1085,13 +1083,13 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
         const parentKey = parentPath ? keyMap[parentPath] : folder.key
         const key = (parentKey || folder.key) + '-custom-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || folder.key, folder_key: key, label, created_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || folder.key, folder_key: key, label })
       }
       for (const { file, path } of drop.files) {
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath, uploaded_by: profile?.id, updated_by: profile?.id })
+        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
       loadCustomSubfolders(); loadRootFiles()
     } else {
@@ -1191,7 +1189,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
             onMove={async (targetKey) => {
-              for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey, updated_by: profile?.id }).eq('id', id)
+              for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey }).eq('id', id)
               setSelected(new Set()); loadRootFiles()
             }}
             moveTargets={subfolders.map(sf => ({ key: sf.key, label: sf.label }))} />
@@ -1337,7 +1335,7 @@ export default function ProjectDocumentation({ projectId, projectName }) {
 
   async function addTopFolder(name) {
     const key = 'custom-' + Date.now()
-    await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: null, folder_key: key, label: name, created_by: profile?.id, updated_by: profile?.id })
+    await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: null, folder_key: key, label: name })
     setCustomTopFolders(prev => [...prev, { key, label: name, color: '#888780', bg: '#F1EFE8', subfolders: [], custom: true }])
   }
 
