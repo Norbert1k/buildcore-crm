@@ -28,6 +28,7 @@ const TEMPLATE_FOLDERS = [
   { key: '02-payment-application',  label: '02. Payment Application',     color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
   { key: '03-payment-notice',       label: '03. Payment Notice (Client)', color: '#BA7517', bg: '#FAEEDA', subfolders: [] },
   { key: '04-variations',           label: '04. Variations',              color: '#993C1D', bg: '#FAECE7', subfolders: [] },
+  { key: '04a-progress-report',    label: '04a. Project Progress Report', color: '#3B6D11', bg: '#EAF3DE', subfolders: [] },
   { key: '05-project-programme',    label: '05. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
 ]
 
@@ -68,6 +69,13 @@ const FOLDER_ICONS = {
   '04-variations': ({ color, size }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="4 4 12 20 20 4"/>
+    </svg>
+  ),
+  '04a-progress-report': ({ color, size }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <path d="M7 17l3-4 2.5 3L16 12l4 5"/>
+      <line x1="7" y1="8" x2="10" y2="8"/>
     </svg>
   ),
   '05-project-programme': ({ color, size }) => (
@@ -1276,7 +1284,7 @@ export default function ProjectDocumentation({ projectId, projectName }) {
   if (!can('view_cff')) { hiddenSubfolders.push('cff') }
 
   // Site managers can only see Project Information and Project Programme
-  const SITE_MANAGER_FOLDERS = ['00-project-information', '05-project-programme']
+  const SITE_MANAGER_FOLDERS = ['00-project-information', '04a-progress-report', '05-project-programme']
 
   const allFolders = [...TEMPLATE_FOLDERS, ...(role === 'site_manager' ? [] : customTopFolders)]
     .filter(f => role === 'site_manager' ? SITE_MANAGER_FOLDERS.includes(f.key) : !hiddenFolders.includes(f.key))
