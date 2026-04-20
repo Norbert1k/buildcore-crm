@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { PasswordInput } from '../components/ui'
 
 export default function Login() {
   const { signIn, markMfaVerified, user } = useAuth()
@@ -125,7 +126,7 @@ export default function Login() {
                 </div>
                 <div style={{ marginBottom: 20 }}>
                   <label>Password</label>
-                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
+                  <PasswordInput value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
                 </div>
                 {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
                 <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading}>
@@ -169,11 +170,11 @@ export default function Login() {
               <form onSubmit={handleChangePassword}>
                 <div style={{ marginBottom: 14 }}>
                   <label>New Password</label>
-                  <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 8 characters" required autoFocus />
+                  <PasswordInput value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 8 characters" autoFocus required />
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label>Confirm Password</label>
-                  <input type="password" value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Repeat new password" required />
+                  <PasswordInput value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Repeat new password" required />
                 </div>
                 {newPass && (
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
