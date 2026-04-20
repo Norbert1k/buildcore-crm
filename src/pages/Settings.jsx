@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ROLES, ROLE_PERMISSIONS } from '../lib/utils'
-import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit } from '../components/ui'
+import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, PasswordInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
 export default function Settings() {
@@ -231,7 +231,7 @@ export default function Settings() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Full Name *"><input value={addForm.full_name} onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Jane Smith" autoFocus /></Field>
               <Field label="Email Address *"><input type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@cltd.co.uk" /></Field>
-              <Field label="Temporary Password *"><input type="password" value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 characters" /></Field>
+              <Field label="Temporary Password *"><PasswordInput value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 characters" /></Field>
               <Field label="Role">
                 <select value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))}>
                   {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -487,13 +487,13 @@ function ChangePasswordModal({ onClose }) {
             </div>
           )}
           <Field label="Current Password">
-            <input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="Enter your current password" autoFocus />
+            <PasswordInput value={current} onChange={e => setCurrent(e.target.value)} placeholder="Enter your current password" autoFocus />
           </Field>
           <Field label="New Password">
-            <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 8 characters" />
+            <PasswordInput value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 8 characters" />
           </Field>
           <Field label="Confirm New Password">
-            <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat new password" />
+            <PasswordInput value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat new password" />
           </Field>
           {newPass && (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
