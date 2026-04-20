@@ -124,7 +124,11 @@ export default function ProjectModal({ project, onClose, onSaved }) {
           </div>
         </Field>
         <Field label="Client">
-          <select value={form.client_id} onChange={e => set('client_id', e.target.value)}>
+          <select value={form.client_id} onChange={e => {
+              const selectedClient = clients.find(c => c.id === e.target.value)
+              set('client_id', e.target.value)
+              set('client_name', selectedClient?.name || '')
+            }}>
             <option value="">— Select client —</option>
             {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
