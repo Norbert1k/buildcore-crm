@@ -100,7 +100,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
 
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('project_sub_files').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', file.id)
+    await supabase.from('project_sub_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
     file.file_name = renameVal.trim(); setRenaming(false)
   }
 
@@ -164,7 +164,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
   const isSent = file.direction === 'sent'
 
   useEffect(() => { supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600).then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) }) }, [file.storage_path])
-  async function renameFile() { if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }; await supabase.from('project_sub_files').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', file.id); file.file_name = renameVal.trim(); setRenaming(false) }
+  async function renameFile() { if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }; await supabase.from('project_sub_files').update({ file_name: renameVal.trim() }).eq('id', file.id); file.file_name = renameVal.trim(); setRenaming(false) }
 
   return (
     <>
@@ -233,7 +233,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   async function loadFileCount() { const { count } = await supabase.from('project_sub_files').select('id', { count: 'exact', head: true }).eq('project_sub_id', projectSubId).eq('folder_key', folder.key); setFileCount(count || 0) }
   async function loadCustomSubfolders() { const { data } = await supabase.from('project_sub_folders').select('*').eq('project_sub_id', projectSubId).eq('parent_key', folder.key).order('created_at'); setSubfolders((data || []).map(d => ({ key: d.folder_key, label: d.label, custom: true }))) }
   async function loadRootFiles() { const { data } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', folder.key).order('created_at', { ascending: false }); setFiles(naturalSort(data || [])); setFileCount((data || []).length) }
-  async function addCustomSubfolder() { if (!newFolderName.trim()) return; setSavingFolder(true); const key = folder.key + '-custom-' + Date.now(); await supabase.from('project_sub_folders').insert({ project_id: projectId, project_sub_id: projectSubId, parent_key: folder.key, folder_key: key, label: newFolderName.trim(), created_by: profile?.id, updated_by: profile?.id }); setSubfolders(prev => [...prev, { key, label: newFolderName.trim(), custom: true }]); setNewFolderName(''); setShowAddFolder(false); setSavingFolder(false) }
+  async function addCustomSubfolder() { if (!newFolderName.trim()) return; setSavingFolder(true); const key = folder.key + '-custom-' + Date.now(); await supabase.from('project_sub_folders').insert({ project_id: projectId, project_sub_id: projectSubId, parent_key: folder.key, folder_key: key, label: newFolderName.trim() }); setSubfolders(prev => [...prev, { key, label: newFolderName.trim(), custom: true }]); setNewFolderName(''); setShowAddFolder(false); setSavingFolder(false) }
 
   async function uploadToFolder(fileList) {
     if (!fileList.length) return; const fileArr = Array.from(fileList); setUploading(true)
@@ -242,7 +242,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i }))
       const path = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: folder.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received', uploaded_by: profile?.id, updated_by: profile?.id })
+      if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: folder.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received' })
     }
     setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] })
     loadRootFiles()
@@ -291,8 +291,8 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
     e.preventDefault(); e.stopPropagation(); if (!canManage) return
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
-      const keyMap = {}; for (const fp of drop.folders.sort()) { const parts = fp.split('/'); const label = parts[parts.length - 1]; const parentPath = parts.slice(0, -1).join('/'); const parentKey = parentPath ? keyMap[parentPath] : folder.key; const key = (parentKey || folder.key) + '-custom-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6); keyMap[fp] = key; await supabase.from('project_sub_folders').insert({ project_id: projectId, project_sub_id: projectSubId, parent_key: parentKey || folder.key, folder_key: key, label, created_by: profile?.id, updated_by: profile?.id }) }
-      for (const { file, path } of drop.files) { const sfKey = path ? keyMap[path] : null; const sp = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(sp, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sfKey || folder.key, file_name: file.name, file_size: file.size, storage_path: sp, direction: direction || 'received', uploaded_by: profile?.id, updated_by: profile?.id }) }
+      const keyMap = {}; for (const fp of drop.folders.sort()) { const parts = fp.split('/'); const label = parts[parts.length - 1]; const parentPath = parts.slice(0, -1).join('/'); const parentKey = parentPath ? keyMap[parentPath] : folder.key; const key = (parentKey || folder.key) + '-custom-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6); keyMap[fp] = key; await supabase.from('project_sub_folders').insert({ project_id: projectId, project_sub_id: projectSubId, parent_key: parentKey || folder.key, folder_key: key, label }) }
+      for (const { file, path } of drop.files) { const sfKey = path ? keyMap[path] : null; const sp = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(sp, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sfKey || folder.key, file_name: file.name, file_size: file.size, storage_path: sp, direction: direction || 'received' }) }
       loadCustomSubfolders(); loadRootFiles()
     } else { const f = drop.files.map(x => x.file); if (f.length) uploadToFolder(f) }
   }
@@ -365,14 +365,14 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
   async function loadChildren() { const { data } = await supabase.from('project_sub_folders').select('*').eq('project_sub_id', projectSubId).eq('parent_key', sf.key).order('created_at'); setChildren(data || []) }
   async function uploadFiles(fileList) {
     if (!fileList.length) return; const fileArr = Array.from(fileList); setUploading(true); setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
-    for (let i = 0; i < fileArr.length; i++) { const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i })); const path = `projects/${projectId}/subs/${projectSubId}/${sf.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(path, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sf.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received', uploaded_by: profile?.id, updated_by: profile?.id }) }
+    for (let i = 0; i < fileArr.length; i++) { const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i })); const path = `projects/${projectId}/subs/${projectSubId}/${sf.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(path, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sf.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received' }) }
     setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] }); loadFiles()
   }
   async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
   function onDrop(e) { e.preventDefault(); e.stopPropagation(); if (!canManage) return; const f = Array.from(e.dataTransfer?.files || []); if (f.length) uploadFiles(f) }
-  async function rename() { if (!renameVal.trim()) return; await supabase.from('project_sub_folders').update({ label: renameVal.trim(), updated_by: profile?.id }).eq('folder_key', sf.key).eq('project_sub_id', projectSubId); setLabel(renameVal.trim()); setRenaming(false) }
+  async function rename() { if (!renameVal.trim()) return; await supabase.from('project_sub_folders').update({ label: renameVal.trim() }).eq('folder_key', sf.key).eq('project_sub_id', projectSubId); setLabel(renameVal.trim()); setRenaming(false) }
   async function deleteFolder() { await supabase.from('project_sub_folders').delete().eq('folder_key', sf.key).eq('project_sub_id', projectSubId); onReload() }
-  async function addChild() { if (!newSubName.trim()) return; const key = sf.key + '-sub-' + Date.now(); await supabase.from('project_sub_folders').insert({ project_sub_id: projectSubId, project_id: projectId, parent_key: sf.key, folder_key: key, label: newSubName.trim(), created_by: profile?.id, updated_by: profile?.id }); setNewSubName(''); setShowAddSub(false); loadChildren() }
+  async function addChild() { if (!newSubName.trim()) return; const key = sf.key + '-sub-' + Date.now(); await supabase.from('project_sub_folders').insert({ project_sub_id: projectSubId, project_id: projectId, parent_key: sf.key, folder_key: key, label: newSubName.trim() }); setNewSubName(''); setShowAddSub(false); loadChildren() }
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
   return (
