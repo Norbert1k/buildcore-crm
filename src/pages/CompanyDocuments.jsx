@@ -473,8 +473,8 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 
   async function loadFiles() {
     const { data } = await supabase.from('company_documents')
-      .select('*, profiles(full_name)').eq('category', categoryKey).eq('subfolder_key', subfolder.key)
-      .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
+      .select('*').eq('category', categoryKey).eq('subfolder_key', subfolder.key)
+      .order('created_at', { ascending: false })
     setFiles(naturalSort(data || []))
     setFileCount((data || []).length)
   }
@@ -705,8 +705,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
 
   async function loadFiles() {
     const { data } = await supabase.from('company_documents')
-      .select('*, profiles(full_name)').eq('category', cat.key).is('subfolder_key', null)
-      .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
+      .select('*').eq('category', cat.key).is('subfolder_key', null)
+      .order('created_at', { ascending: false })
     setFiles(naturalSort(data || []))
   }
   async function loadSubfolders() {
