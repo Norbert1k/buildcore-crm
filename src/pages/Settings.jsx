@@ -48,11 +48,28 @@ export default function Settings() {
     if (addForm.password.length < 6) { setAddError('Password must be at least 6 characters'); return }
     setSaving(true)
     setAddError('')
+
+    // Capture the current admin session before signUp — Supabase's signUp will
+    // hijack the browser session and log us in as the new user. We restore our
+    // session immediately after.
+    const { data: sessionData } = await supabase.auth.getSession()
+    const adminSession = sessionData?.session
+
     const { data, error } = await supabase.auth.signUp({
       email: addForm.email,
       password: addForm.password,
       options: { data: { full_name: addForm.full_name, role: addForm.role } }
     })
+
+    // Restore the admin session *before* any other supabase calls run with
+    // the new user's credentials.
+    if (adminSession) {
+      await supabase.auth.setSession({
+        access_token: adminSession.access_token,
+        refresh_token: adminSession.refresh_token,
+      })
+    }
+
     if (error) { setAddError(error.message); setSaving(false); return }
     if (data?.user) {
       await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, must_change_password: true })
