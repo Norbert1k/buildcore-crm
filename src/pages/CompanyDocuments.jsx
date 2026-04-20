@@ -204,7 +204,7 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
 
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === doc.file_name) { setRenaming(false); return }
-    await supabase.from('company_documents').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', doc.id)
+    await supabase.from('company_documents').update({ file_name: renameVal.trim() }).eq('id', doc.id)
     doc.file_name = renameVal.trim()
     setRenaming(false)
   }
@@ -288,7 +288,7 @@ function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }
 
   async function renameFile() {
     if (!renameVal.trim() || renameVal.trim() === doc.file_name) { setRenaming(false); return }
-    await supabase.from('company_documents').update({ file_name: renameVal.trim(), updated_by: profile?.id }).eq('id', doc.id)
+    await supabase.from('company_documents').update({ file_name: renameVal.trim() }).eq('id', doc.id)
     doc.file_name = renameVal.trim()
     setRenaming(false)
   }
@@ -483,7 +483,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     setChildFolders(data || [])
   }
   async function moveFile(docId) {
-    await supabase.from('company_documents').update({ subfolder_key: subfolder.key, updated_by: profile?.id }).eq('id', docId)
+    await supabase.from('company_documents').update({ subfolder_key: subfolder.key }).eq('id', docId)
     loadFiles(); if (onReload) onReload(docId)
   }
   async function upload(fileList) {
@@ -497,7 +497,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
       setUploadProgress(prev => ({ ...prev, current: i }))
       const path = 'company/' + categoryKey + '/' + subfolder.key + '/' + Date.now() + '-' + file.name
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
-      if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: subfolder.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path, uploaded_by: profile?.id, updated_by: profile?.id })
+      if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: subfolder.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
       else errors.push(file.name)
     }
     setUploading(false)
@@ -513,17 +513,17 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     if (!newSubName.trim()) return
     setSavingSub(true)
     const key = subfolder.key + '-sub-' + Date.now()
-    await supabase.from('company_doc_subfolders').insert({ category_key: categoryKey, folder_key: key, label: newSubName.trim(), parent_folder_key: subfolder.key, created_by: profile?.id, updated_by: profile?.id })
+    await supabase.from('company_doc_subfolders').insert({ category_key: categoryKey, folder_key: key, label: newSubName.trim(), parent_folder_key: subfolder.key })
     setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadChildFolders(); if (onReload) onReload('__folder_renamed__')
   }
   async function renameFolder() {
     if (!renameVal.trim()) return
-    await supabase.from('company_doc_subfolders').update({ label: renameVal.trim(), updated_by: profile?.id }).eq('folder_key', subfolder.key)
+    await supabase.from('company_doc_subfolders').update({ label: renameVal.trim() }).eq('folder_key', subfolder.key)
     setSubLabel(renameVal.trim()); setRenaming(false)
     if (onReload) onReload('__folder_renamed__')
   }
   async function deleteFolder() {
-    await supabase.from('company_documents').update({ subfolder_key: null, updated_by: profile?.id }).eq('subfolder_key', subfolder.key)
+    await supabase.from('company_documents').update({ subfolder_key: null }).eq('subfolder_key', subfolder.key)
     await supabase.from('company_doc_subfolders').delete().eq('folder_key', subfolder.key)
     setConfirmDelFolder(false)
     if (onReload) onReload('__folder_deleted__')
@@ -543,7 +543,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     document.head.appendChild(s)
   }
   async function bulkMove(targetSubfolder, targetCategory) {
-    const upd = { subfolder_key: targetSubfolder, updated_by: profile?.id }
+    const upd = { subfolder_key: targetSubfolder }
     if (targetCategory && targetCategory !== categoryKey) upd.category = targetCategory
     for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
@@ -551,7 +551,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   async function moveSubfolder(key) {
     // Move subfolder into this subfolder (set parent_folder_key to this subfolder's key)
     if (key === subfolder.key) return // can't move into itself
-    await supabase.from('company_doc_subfolders').update({ parent_folder_key: subfolder.key, updated_by: profile?.id }).eq('folder_key', key)
+    await supabase.from('company_doc_subfolders').update({ parent_folder_key: subfolder.key }).eq('folder_key', key)
     loadChildFolders()
     if (onReload) onReload('__folder_deleted__') // trigger parent to refresh its list
   }
@@ -572,13 +572,13 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
         const parentKey = parentPath ? keyMap[parentPath] : subfolder.key
         const key = (parentKey || subfolder.key) + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('company_doc_subfolders').insert({ category_key: categoryKey, folder_key: key, label, parent_folder_key: parentKey || subfolder.key, created_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('company_doc_subfolders').insert({ category_key: categoryKey, folder_key: key, label, parent_folder_key: parentKey || subfolder.key })
       }
       for (const { file, path } of drop.files) {
         const sfKey = path ? keyMap[path] : subfolder.key
         const storagePath = 'company/' + categoryKey + '/' + sfKey + '/' + Date.now() + '-' + file.name
         const { error } = await supabase.storage.from('company-docs').upload(storagePath, file)
-        if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath, uploaded_by: profile?.id, updated_by: profile?.id })
+        if (!error) await supabase.from('company_documents').insert({ category: categoryKey, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath })
       }
       loadChildFolders(); loadFiles(); if (onReload) onReload('__folder_renamed__')
     } else {
@@ -720,7 +720,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     setAllSubfolders(grouped)
   }
   async function moveToRoot(docId) {
-    await supabase.from('company_documents').update({ subfolder_key: null, updated_by: profile?.id }).eq('id', docId)
+    await supabase.from('company_documents').update({ subfolder_key: null }).eq('id', docId)
     loadFiles()
   }
   async function upload(fileList) {
@@ -734,7 +734,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
       setUploadProgress(prev => ({ ...prev, current: i }))
       const path = 'company/' + cat.key + '/' + Date.now() + '-' + file.name
       const { error } = await supabase.storage.from('company-docs').upload(path, file)
-      if (!error) await supabase.from('company_documents').insert({ category: cat.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path, uploaded_by: profile?.id, updated_by: profile?.id })
+      if (!error) await supabase.from('company_documents').insert({ category: cat.key, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: path })
       else errors.push(file.name)
     }
     setUploading(false)
@@ -751,7 +751,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     if (!newSubName.trim()) return
     setSavingSub(true)
     const key = cat.key + '-sub-' + Date.now()
-    await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label: newSubName.trim(), created_by: profile?.id, updated_by: profile?.id })
+    await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label: newSubName.trim() })
     setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadSubfolders(); loadAllSubfolders()
   }
   async function zipFolder() {
@@ -796,7 +796,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     document.head.appendChild(s)
   }
   async function bulkMove(targetSubfolder, targetCategory) {
-    const upd = { subfolder_key: targetSubfolder, updated_by: profile?.id }
+    const upd = { subfolder_key: targetSubfolder }
     if (targetCategory && targetCategory !== cat.key) upd.category = targetCategory
     for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
@@ -856,13 +856,13 @@ function CategoryFolder({ cat, canManage, onPreview }) {
         const parentKey = parentPath ? keyMap[parentPath] : null
         const key = cat.key + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label, parent_folder_key: parentKey || null, created_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label, parent_folder_key: parentKey || null })
       }
       for (const { file, path } of drop.files) {
         const sfKey = path ? keyMap[path] : null
         const storagePath = 'company/' + cat.key + '/' + (sfKey || 'root') + '/' + Date.now() + '-' + file.name
         const { error } = await supabase.storage.from('company-docs').upload(storagePath, file)
-        if (!error) await supabase.from('company_documents').insert({ category: cat.key, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath, uploaded_by: profile?.id, updated_by: profile?.id })
+        if (!error) await supabase.from('company_documents').insert({ category: cat.key, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath })
       }
       loadSubfolders(); loadFiles(); loadAllSubfolders()
     } else {
@@ -871,7 +871,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     }
   }
   async function moveSubfolderToRoot(key) {
-    await supabase.from('company_doc_subfolders').update({ parent_folder_key: null, updated_by: profile?.id }).eq('folder_key', key)
+    await supabase.from('company_doc_subfolders').update({ parent_folder_key: null }).eq('folder_key', key)
     loadSubfolders()
   }
 
@@ -891,13 +891,13 @@ function CategoryFolder({ cat, canManage, onPreview }) {
         const parentKey = parentPath ? keyMap[parentPath] : null
         const key = cat.key + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label, parent_folder_key: parentKey || null, created_by: profile?.id, updated_by: profile?.id })
+        await supabase.from('company_doc_subfolders').insert({ category_key: cat.key, folder_key: key, label, parent_folder_key: parentKey || null })
       }
       for (const { file, path } of drop.files) {
         const sfKey = path ? keyMap[path] : null
         const storagePath = 'company/' + cat.key + '/' + (sfKey || 'root') + '/' + Date.now() + '-' + file.name
         const { error } = await supabase.storage.from('company-docs').upload(storagePath, file)
-        if (!error) await supabase.from('company_documents').insert({ category: cat.key, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath, uploaded_by: profile?.id, updated_by: profile?.id })
+        if (!error) await supabase.from('company_documents').insert({ category: cat.key, subfolder_key: sfKey, file_name: file.name, file_type: file.type, file_size: file.size, storage_path: storagePath })
       }
       loadSubfolders(); loadFiles(); loadAllSubfolders()
     } else {
