@@ -113,7 +113,7 @@ export default function Sidebar({ expCount, open, onClose }) {
                   <NavLink to={item.to} end className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
                     <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
                     {item.icon}
-                    All {item.label}
+                    {item.label}
                   </NavLink>
                   {item.children.filter(child => !child.before && perms.nav.includes(child.key)).map(child => (
                     <NavLink key={child.to} to={child.to} className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
