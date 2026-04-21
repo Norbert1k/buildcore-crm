@@ -6,6 +6,7 @@ import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, Conf
 import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
+import EAModal from '../components/EAModal'
 import ProjectDocumentation from '../components/ProjectDocumentation'
 import HSHandover from '../components/HSHandover'
 import SubcontractorDocs from '../components/SubcontractorDocs'
@@ -148,6 +149,7 @@ export default function ProjectDetail() {
   const [projectEAs, setProjectEAs] = useState([])
   const [allEAs, setAllEAs] = useState([])
   const [showAssignEA, setShowAssignEA] = useState(false)
+  const [showEAProfile, setShowEAProfile] = useState(null)
   const [eaAssignForm, setEaAssignForm] = useState({ ea_id: '', submission_email: '' })
   const [confirmRemoveEA, setConfirmRemoveEA] = useState(null)
   // Inline sub docs state
@@ -358,10 +360,12 @@ export default function ProjectDetail() {
                   {project.client_id ? (
                     <span
                       onClick={() => navigate(`/clients/${project.client_id}`)}
-                      style={{ fontWeight: 600, color: 'var(--accent)', cursor: 'pointer', borderBottom: '1px dashed var(--accent)', paddingBottom: 1 }}
+                      style={{ fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
                     >{project.client_name}</span>
                   ) : (
-                    <span>{project.client_name}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--text)' }}>{project.client_name}</span>
                   )}
                 </div>
               )}
@@ -406,16 +410,20 @@ export default function ProjectDetail() {
         {projectEAs.length > 0 && (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Submission Email (this project)</th><th></th></tr></thead>
+              <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Payment Application Email (This Project)</th><th></th></tr></thead>
               <tbody>
                 {projectEAs.map(pea => (
                   <tr key={pea.id}>
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: pea.employer_agents ? 'pointer' : 'default' }}
+                        onClick={() => pea.employer_agents && setShowEAProfile(pea.employer_agents)}
+                        title={pea.employer_agents ? 'View company profile' : ''}>
                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
                           {pea.employer_agents?.company_name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?'}
                         </div>
-                        <span style={{ fontWeight: 500 }}>{pea.employer_agents?.company_name}</span>
+                        <span style={{ fontWeight: 500, color: pea.employer_agents ? 'var(--accent)' : 'var(--text)' }}>
+                          {pea.employer_agents?.company_name}
+                        </span>
                       </div>
                     </td>
                     <td>
@@ -866,6 +874,8 @@ export default function ProjectDetail() {
       </Modal>
 
       <ConfirmDialog open={!!confirmRemoveEA} onClose={() => setConfirmRemoveEA(null)} onConfirm={() => removeEA(confirmRemoveEA)} title="Remove Employers Agent" message="Remove this EA from the project?" danger />
+
+      {showEAProfile && <EAModal ea={showEAProfile} onClose={() => setShowEAProfile(null)} onSaved={() => { setShowEAProfile(null); load() }} />}
     </div>
   )
 }
