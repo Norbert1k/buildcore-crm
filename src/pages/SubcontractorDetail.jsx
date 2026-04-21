@@ -293,11 +293,14 @@ export default function SubcontractorDetail() {
           ) : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Document</th><th>Reference</th><th>Issue Date</th><th>Expiry Date</th><th>Status</th><th></th></tr></thead>
+                <thead><tr><th>Document</th><th>Reference</th><th>File</th><th>Issue Date</th><th>Expiry Date</th><th>Status</th><th></th></tr></thead>
                 <tbody>
                   {docs.map(doc => {
                     const info = docStatusInfo(doc.expiry_date)
                     const days = daysUntilExpiry(doc.expiry_date)
+                    const linkedCount = doc.storage_path
+                      ? docs.filter(d => d.storage_path === doc.storage_path).length
+                      : 0
                     return (
                       <tr key={doc.id}>
                         <td>
@@ -305,6 +308,29 @@ export default function SubcontractorDetail() {
                           {doc.document_name !== DOCUMENT_TYPES[doc.document_type] && <div className="td-muted">{doc.document_name}</div>}
                         </td>
                         <td className="td-muted">{doc.reference_number || '—'}</td>
+                        <td>
+                          {doc.storage_path ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <button
+                                className="btn btn-sm"
+                                style={{ fontSize: 11, padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+                                onClick={async () => {
+                                  const { data } = await supabase.storage.from('project-docs').createSignedUrl(doc.storage_path, 300)
+                                  if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+                                }}
+                                title={doc.file_name || 'View file'}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                View
+                              </button>
+                              {linkedCount > 1 && (
+                                <span title={`Same file shared by ${linkedCount} document types`}
+                                  style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', fontWeight: 600 }}>
+                                  🔗 {linkedCount}
+                                </span>
+                              )}
+                            </div>
+                          ) : <span style={{ color: 'var(--text3)', fontSize: 11 }}>No file</span>}
+                        </td>
                         <td className="td-muted">{formatDate(doc.issue_date)}</td>
                         <td>
                           <div style={{ fontWeight: 500 }}>{formatDate(doc.expiry_date)}</div>
