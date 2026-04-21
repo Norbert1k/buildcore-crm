@@ -20,10 +20,22 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
     notes: doc?.notes || '',
     _nameManuallySet: !!doc,
   })
+  // Cover amount per insurance type. In edit mode, seed with the existing doc's amount.
+  const [coverAmounts, setCoverAmounts] = useState(() => {
+    if (editing && INSURANCE_TYPES.includes(doc.document_type)) {
+      return { [doc.document_type]: doc.cover_amount != null ? String(doc.cover_amount) : '' }
+    }
+    return {}
+  })
   const [file, setFile] = useState(null)          // new file to upload (required for new, optional when editing)
   const [dragging, setDragging] = useState(false)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+
+  function setCoverAmount(type, v) {
+    setCoverAmounts(prev => ({ ...prev, [type]: v }))
+    setErrors(e => ({ ...e, ['cover_' + type]: '' }))
+  }
 
   function setName(v) {
     setForm(f => ({ ...f, document_name: v, _nameManuallySet: true }))
@@ -56,6 +68,15 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
     if (types.length === 0) e.types = 'Select at least one document type'
     if (!form.document_name.trim()) e.document_name = 'Document name is required'
     if (hasInsurance && !form.expiry_date) e.expiry_date = 'Expiry date is required for insurance documents'
+    // Cover amount required for every selected insurance type
+    for (const t of types) {
+      if (INSURANCE_TYPES.includes(t)) {
+        const v = coverAmounts[t]
+        if (!v || !String(v).trim() || Number(v) <= 0) {
+          e['cover_' + t] = 'Cover amount is required'
+        }
+      }
+    }
     // File is required when adding a new document (not when editing existing)
     if (!editing && !file) e.file = 'Please attach the document file'
     setErrors(e)
@@ -99,12 +120,18 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
 
     let result
     if (editing) {
-      // Update this row
-      const updatePayload = { ...basePayload, document_type: doc.document_type }
+      // Update this row — include cover_amount only if this is an insurance type
+      const isInsuranceDoc = INSURANCE_TYPES.includes(doc.document_type)
+      const updatePayload = {
+        ...basePayload,
+        document_type: doc.document_type,
+        cover_amount: isInsuranceDoc ? (parseInt(coverAmounts[doc.document_type], 10) || null) : null,
+      }
       result = await supabase.from('documents').update(updatePayload).eq('id', doc.id).select()
 
       // If we uploaded a NEW file and this doc was linked to siblings (shared storage_path),
       // push the new file reference + metadata to all siblings so they stay in sync.
+      // NOTE: cover_amount is NOT synced — each row keeps its own amount.
       if (file && doc.storage_path) {
         const siblingPayload = {
           storage_path: storagePath,
@@ -121,8 +148,13 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
           .neq('id', doc.id)
       }
     } else {
-      // Insert one row per selected type, all sharing the same storage_path
-      const rows = types.map(t => ({ ...basePayload, document_type: t }))
+      // Insert one row per selected type, all sharing the same storage_path.
+      // cover_amount is per-insurance-type; null for non-insurance rows.
+      const rows = types.map(t => ({
+        ...basePayload,
+        document_type: t,
+        cover_amount: INSURANCE_TYPES.includes(t) ? (parseInt(coverAmounts[t], 10) || null) : null,
+      }))
       result = await supabase.from('documents').insert(rows).select()
     }
 
@@ -246,6 +278,53 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
             )}
           </Field>
         </div>
+
+        {/* Cover amounts — one per selected insurance type */}
+        {types.filter(t => INSURANCE_TYPES.includes(t)).map(t => {
+          const presets = [
+            { label: '£1m', val: 1000000 },
+            { label: '£2m', val: 2000000 },
+            { label: '£5m', val: 5000000 },
+            { label: '£10m', val: 10000000 },
+          ]
+          const current = coverAmounts[t] || ''
+          const errKey = 'cover_' + t
+          return (
+            <div className="full" key={'cover-' + t}>
+              <Field label={DOCUMENT_TYPES[t] + ' — Cover Amount (£) *'} error={errors[errKey]}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                  {presets.map(p => {
+                    const active = String(current) === String(p.val)
+                    return (
+                      <button type="button" key={p.label}
+                        onClick={() => setCoverAmount(t, String(p.val))}
+                        style={{
+                          fontSize: 12, padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+                          background: active ? 'var(--accent)' : 'var(--surface2)',
+                          color: active ? '#fff' : 'var(--text)',
+                          border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
+                          fontWeight: active ? 600 : 400,
+                          transition: 'background .1s, color .1s'
+                        }}>
+                        {p.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <input type="number" min="0" step="100000"
+                  value={current}
+                  onChange={e => setCoverAmount(t, e.target.value)}
+                  placeholder="Custom amount in £ (e.g. 7500000 for £7.5m)"
+                />
+                {current && parseInt(current, 10) > 0 && (
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                    = £{Number(current).toLocaleString('en-GB')}
+                  </div>
+                )}
+              </Field>
+            </div>
+          )
+        })}
 
         {/* File upload / drop zone */}
         <div className="full">
