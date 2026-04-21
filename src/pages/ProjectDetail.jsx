@@ -141,6 +141,9 @@ export default function ProjectDetail() {
   const [showOrderValue, setShowOrderValue] = useState(null)
   const [orderValueForm, setOrderValueForm] = useState('')
   const [savingOrderValue, setSavingOrderValue] = useState(false)
+  const [showEditAssign, setShowEditAssign] = useState(null)
+  const [editAssignForm, setEditAssignForm] = useState({ trade_on_project: '', start_date: '', end_date: '', contract_value: '', status: 'active' })
+  const [savingEditAssign, setSavingEditAssign] = useState(false)
   const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
@@ -295,6 +298,23 @@ export default function ProjectDetail() {
     setSavingOrderValue(false)
     setShowOrderValue(null)
     setOrderValueForm('')
+    load()
+  }
+
+  async function saveEditAssign() {
+    const ps = showEditAssign
+    if (!ps) return
+    setSavingEditAssign(true)
+    const payload = {
+      trade_on_project: editAssignForm.trade_on_project || null,
+      start_date: editAssignForm.start_date || null,
+      end_date: editAssignForm.end_date || null,
+      contract_value: editAssignForm.contract_value ? parseFloat(editAssignForm.contract_value) : null,
+      status: editAssignForm.status || 'active',
+    }
+    await supabase.from('project_subcontractors').update(payload).eq('id', ps.id)
+    setSavingEditAssign(false)
+    setShowEditAssign(null)
     load()
   }
 
@@ -665,6 +685,22 @@ export default function ProjectDetail() {
                           <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
                           <td>
                             <div style={{ display: 'flex', gap: 4 }}>
+                              {can('manage_projects') && (
+                                <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Edit assignment"
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    setEditAssignForm({
+                                      trade_on_project: ps.trade_on_project || '',
+                                      start_date: ps.start_date ? ps.start_date.substring(0, 10) : '',
+                                      end_date: ps.end_date ? ps.end_date.substring(0, 10) : '',
+                                      contract_value: ps.contract_value != null ? String(ps.contract_value) : '',
+                                      status: ps.status || 'active',
+                                    })
+                                    setShowEditAssign(ps)
+                                  }}>
+                                  <IconEdit size={12} />
+                                </button>
+                              )}
                               {can('manage_projects') && ps.variation_amount > 0 && (
                                 <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
                                   +VAR
@@ -828,6 +864,52 @@ export default function ProjectDetail() {
           </div>
         </div>
       )}
+
+      {/* Edit Assignment Modal */}
+      <Modal open={!!showEditAssign} onClose={() => setShowEditAssign(null)} title={showEditAssign ? `Edit: ${showEditAssign.subcontractors?.company_name}` : 'Edit Assignment'} size="sm"
+        footer={<>
+          <button className="btn" onClick={() => setShowEditAssign(null)}>Cancel</button>
+          <button className="btn btn-primary" onClick={saveEditAssign} disabled={savingEditAssign}>
+            {savingEditAssign ? 'Saving…' : 'Save Changes'}
+          </button>
+        </>}>
+        <div className="form-grid">
+          <div className="full">
+            <Field label="Trade on Project">
+              <input value={editAssignForm.trade_on_project} onChange={e => setEditAssignForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder="e.g. Electrical" />
+            </Field>
+          </div>
+          <Field label="Start Date">
+            <input type="date" value={editAssignForm.start_date} onChange={e => setEditAssignForm(f => ({ ...f, start_date: e.target.value }))} />
+          </Field>
+          <Field label="End Date">
+            <input type="date" value={editAssignForm.end_date} onChange={e => setEditAssignForm(f => ({ ...f, end_date: e.target.value }))} />
+          </Field>
+          {can('view_project_value') && (
+            <div className="full">
+              <Field label="Order Value (£)">
+                <input type="number" value={editAssignForm.contract_value} onChange={e => setEditAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" min="0" step="100" />
+              </Field>
+            </div>
+          )}
+          <div className="full">
+            <Field label="Status">
+              <select value={editAssignForm.status} onChange={e => setEditAssignForm(f => ({ ...f, status: e.target.value }))}>
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="on_hold">On Hold</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </Field>
+          </div>
+          {showEditAssign && showEditAssign.variation_amount > 0 && (
+            <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 6, padding: '10px 12px', fontSize: 12, color: 'var(--text2)' }}>
+              <div style={{ fontWeight: 600, color: 'var(--amber)', marginBottom: 2 }}>Note: Variation of +{formatCurrency(showEditAssign.variation_amount)} is attached to this assignment.</div>
+              <div>Use the +VAR button on the row to manage variations separately.</div>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {activeTab === 'hs' && can('view_hs_handover') && (
         <HSHandover projectId={id} projectName={project?.project_name} />
