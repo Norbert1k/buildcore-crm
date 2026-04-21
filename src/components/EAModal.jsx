@@ -15,6 +15,9 @@ export default function EAModal({ ea, onClose, onSaved }) {
     payment_submission_email: ea?.payment_submission_email || '',
     website: ea?.website || '',
     status: ea?.status || 'active',
+    street_address: ea?.street_address || '',
+    city: ea?.city || '',
+    postcode: ea?.postcode || '',
     notes: ea?.notes || '',
   })
   const [errors, setErrors] = useState({})
@@ -100,6 +103,18 @@ export default function EAModal({ ea, onClose, onSaved }) {
         </div>
         <Field label="Website">
           <input value={form.website} onChange={e => set('website', e.target.value)} placeholder="https://www.company.com" />
+        </Field>
+        <div className="form-section">Address</div>
+        <div className="full">
+          <Field label="Street Address">
+            <input value={form.street_address} onChange={e => set('street_address', e.target.value)} placeholder="e.g. 10 Finsbury Square" />
+          </Field>
+        </div>
+        <Field label="City / Town">
+          <input value={form.city} onChange={e => set('city', e.target.value)} placeholder="London" />
+        </Field>
+        <Field label="Postcode">
+          <input value={form.postcode} onChange={e => set('postcode', e.target.value)} placeholder="EC2A 1AF" />
         </Field>
         <div className="form-section">Notes</div>
         <div className="full">
