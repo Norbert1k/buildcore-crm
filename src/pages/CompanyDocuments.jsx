@@ -150,7 +150,7 @@ function Confirm({ message, onOk, onCancel }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
       <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>{message}</div>
+        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={B}>Cancel</button>
           <button onClick={onOk} style={BR}>Delete</button>
@@ -190,7 +190,6 @@ function FileTypeBadge({ doc, size = 36 }) {
 
 // ── File Card (grid/compact view) ─────────────────────────────────────────────
 function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
-  const { profile } = useAuth()
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -272,7 +271,6 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
 
 // ── File List Row (list view) ──────────────────────────────────────────────────
 function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
-  const { profile } = useAuth()
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -446,7 +444,6 @@ function BulkBar({ selected, onZip, onMove, onClear, allSubfolders }) {
 
 // ── Subfolder Section ─────────────────────────────────────────────────────────
 function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload, depth = 0, viewMode = 'grid' }) {
-  const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -473,8 +470,8 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 
   async function loadFiles() {
     const { data } = await supabase.from('company_documents')
-      .select('*').eq('category', categoryKey).eq('subfolder_key', subfolder.key)
-      .order('created_at', { ascending: false })
+      .select('*, profiles(full_name)').eq('category', categoryKey).eq('subfolder_key', subfolder.key)
+      .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
     setFiles(naturalSort(data || []))
     setFileCount((data || []).length)
   }
@@ -674,7 +671,6 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 
 // ── Category Folder ───────────────────────────────────────────────────────────
 function CategoryFolder({ cat, canManage, onPreview }) {
-  const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [subfolders, setSubfolders] = useState([])
@@ -705,8 +701,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
 
   async function loadFiles() {
     const { data } = await supabase.from('company_documents')
-      .select('*').eq('category', cat.key).is('subfolder_key', null)
-      .order('created_at', { ascending: false })
+      .select('*, profiles(full_name)').eq('category', cat.key).is('subfolder_key', null)
+      .order('sort_order', { ascending: true }).order('created_at', { ascending: false })
     setFiles(naturalSort(data || []))
   }
   async function loadSubfolders() {
@@ -758,22 +754,12 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     setZipping(true)
     const { data: allFiles } = await supabase.from('company_documents').select('*').eq('category', cat.key)
     if (!allFiles?.length) { alert('No files in this folder.'); setZipping(false); return }
-    // Load all subfolders for this category to resolve label paths
-    const { data: catSubfolders } = await supabase.from('company_doc_subfolders').select('folder_key, parent_folder_key, label').eq('category_key', cat.key)
-    const folderMap = {}; (catSubfolders || []).forEach(f => { folderMap[f.folder_key] = f })
-    function pathFor(key) {
-      if (!key) return ''
-      const parts = []
-      let cur = key
-      while (cur && folderMap[cur]) { parts.unshift(folderMap[cur].label || cur); cur = folderMap[cur].parent_folder_key }
-      return parts.join('/')
-    }
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
       for (const f of allFiles) {
         const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); const sub = pathFor(f.subfolder_key); zip.file((sub ? sub + '/' : '') + f.file_name, await res.blob()) }
+        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.subfolder_key ? f.subfolder_key + '/' + f.file_name : f.file_name, await res.blob()) }
       }
       const blob = await zip.generateAsync({ type: 'blob' })
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '.zip'; a.click()
@@ -805,34 +791,13 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
       const zip = new window.JSZip()
-      const { data: catSubfolders } = await supabase.from('company_doc_subfolders').select('folder_key, parent_folder_key, label').eq('category_key', cat.key)
-      const folderMap = {}; (catSubfolders || []).forEach(f => { folderMap[f.folder_key] = f })
       for (const sfKey of selectedSubs) {
         const sf = subfolders.find(s => s.folder_key === sfKey)
-        const rootName = sf ? sf.label : (folderMap[sfKey]?.label || sfKey)
-        // BFS descendants of this subfolder
-        const descendants = new Set([sfKey])
-        let frontier = [sfKey]
-        while (frontier.length) {
-          const next = []
-          for (const k of frontier) {
-            for (const f of (catSubfolders || [])) {
-              if (f.parent_folder_key === k && !descendants.has(f.folder_key)) { descendants.add(f.folder_key); next.push(f.folder_key) }
-            }
-          }
-          frontier = next
-        }
-        function pathFor(key) {
-          if (key === sfKey) return ''
-          const parts = []
-          let cur = key
-          while (cur && cur !== sfKey && folderMap[cur]) { parts.unshift(folderMap[cur].label || cur); cur = folderMap[cur].parent_folder_key }
-          return parts.join('/')
-        }
-        const { data: sfFiles } = await supabase.from('company_documents').select('*').in('subfolder_key', Array.from(descendants))
+        const folderName = sf ? sf.label : sfKey
+        const { data: sfFiles } = await supabase.from('company_documents').select('*').eq('subfolder_key', sfKey)
         for (const f of (sfFiles || [])) {
           const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
-          if (data?.signedUrl) { const res = await fetch(data.signedUrl); const rel = pathFor(f.subfolder_key); zip.file(rootName + (rel ? '/' + rel : '') + '/' + f.file_name, await res.blob()) }
+          if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
         }
       }
       const blob = await zip.generateAsync({ type: 'blob' })
