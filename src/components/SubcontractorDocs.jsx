@@ -56,7 +56,7 @@ function ConfirmDlg({ message, onOk, onCancel }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
       <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: 24, maxWidth: 340, width: '90%' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>{message}</div>
+        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={Btn}>Cancel</button>
           <button onClick={onOk} style={BtnR}>Delete</button>
@@ -85,7 +85,6 @@ function BulkBar({ selected, onZip, onClear }) {
 
 // ── FileCard — EXACT same design as ProjectDocumentation ─────
 function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
-  const { profile } = useAuth()
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -153,7 +152,6 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
 
 // ── FileListRow — same as ProjectDocumentation ───────────────
 function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
-  const { profile } = useAuth()
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -242,7 +240,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i }))
       const path = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: folder.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received' })
+      if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: folder.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received', uploaded_by: profile?.id })
     }
     setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] })
     loadRootFiles()
@@ -250,34 +248,9 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
   async function zipFolder() {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.head.appendChild(s); await new Promise(r => s.onload = r)
-    const zip = new window.JSZip()
-    // Gather this folder + all descendants in project_sub_folders
-    const { data: allSubFolders } = await supabase.from('project_sub_folders').select('folder_key, parent_key, label').eq('project_sub_id', projectSubId)
-    const folderMap = {}; (allSubFolders || []).forEach(f => { folderMap[f.folder_key] = f })
-    const descendants = new Set([folder.key])
-    let frontier = [folder.key]
-    while (frontier.length) {
-      const next = []
-      for (const k of frontier) {
-        for (const f of (allSubFolders || [])) {
-          if (f.parent_key === k && !descendants.has(f.folder_key)) { descendants.add(f.folder_key); next.push(f.folder_key) }
-        }
-      }
-      frontier = next
-    }
-    function pathFor(key) {
-      if (key === folder.key) return ''
-      const parts = []
-      let cur = key
-      while (cur && cur !== folder.key && folderMap[cur]) { parts.unshift(folderMap[cur].label || cur); cur = folderMap[cur].parent_key }
-      return parts.join('/')
-    }
-    const { data: allFiles } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).in('folder_key', Array.from(descendants))
+    const zip = new window.JSZip(); const { data: allFiles } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', folder.key)
     if (!allFiles?.length) { alert('No files.'); return }
-    for (const f of allFiles) {
-      const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-      if (data?.signedUrl) { const res = await fetch(data.signedUrl); const rel = pathFor(f.folder_key); zip.file((rel ? rel + '/' : '') + f.file_name, await res.blob()) }
-    }
+    for (const f of allFiles) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300); if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
     const blob = await zip.generateAsync({ type: 'blob' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '.zip'; document.body.appendChild(a); a.click(); document.body.removeChild(a)
   }
   async function bulkZip() {
@@ -365,7 +338,7 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
   async function loadChildren() { const { data } = await supabase.from('project_sub_folders').select('*').eq('project_sub_id', projectSubId).eq('parent_key', sf.key).order('created_at'); setChildren(data || []) }
   async function uploadFiles(fileList) {
     if (!fileList.length) return; const fileArr = Array.from(fileList); setUploading(true); setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
-    for (let i = 0; i < fileArr.length; i++) { const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i })); const path = `projects/${projectId}/subs/${projectSubId}/${sf.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(path, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sf.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received' }) }
+    for (let i = 0; i < fileArr.length; i++) { const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i })); const path = `projects/${projectId}/subs/${projectSubId}/${sf.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(path, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sf.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received', uploaded_by: profile?.id }) }
     setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] }); loadFiles()
   }
   async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
@@ -416,14 +389,21 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
 // ── Main ─────────────────────────────────────────────────────
 export default function SubcontractorDocs({ projectId, projectSubId, subFiles, onReload, canManage }) {
   const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('subDocView') || 'grid' } catch { return 'grid' } })
+  const [direction, setDirection] = useState('received')
   const [previewFile, setPreviewFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
-  const direction = 'received'
   function setView(mode) { setViewMode(mode); try { localStorage.setItem('subDocView', mode) } catch {} }
   function openPreview(file, url) { setPreviewFile(file); setPreviewUrl(url || null); if (!url) supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600).then(({ data }) => { if (data?.signedUrl) setPreviewUrl(data.signedUrl) }) }
 
   return (
     <div style={{ padding: '10px 16px 14px' }}>
+      {canManage && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--text3)' }}>Upload direction:</span>
+        <div style={{ display: 'flex', gap: 0, border: '0.5px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+          <button onClick={() => setDirection('sent')} style={{ fontSize: 11, padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: direction === 'sent' ? '#448a40' : 'var(--surface)', color: direction === 'sent' ? 'white' : 'var(--text2)' }}>↑ Sent to them</button>
+          <button onClick={() => setDirection('received')} style={{ fontSize: 11, padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: direction === 'received' ? '#448a40' : 'var(--surface)', color: direction === 'received' ? 'white' : 'var(--text2)' }}>↓ Received from them</button>
+        </div>
+      </div>}
       {SUB_DOC_FOLDERS.map(folder => <PrimeFolder key={folder.key} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} setView={setView} onPreview={openPreview} onReload={onReload} direction={direction} />)}
       {previewFile && previewUrl && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setPreviewFile(null); setPreviewUrl(null) }}>
