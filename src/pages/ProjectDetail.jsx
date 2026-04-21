@@ -647,7 +647,7 @@ export default function ProjectDetail() {
                               </span>
                             </div>
                           </td>
-                          <td>{ps.trade_on_project || ps.subcontractors?.trade}</td>
+                          <td>{ps.subcontractors?.trade || ps.trade_on_project}</td>
                           <td className="td-muted">{formatDate(ps.start_date)}</td>
                           <td className="td-muted">{formatDate(ps.end_date)}</td>
                           {can('view_project_value') && (
@@ -1018,7 +1018,7 @@ function CaseStudy({ project, subs, docs, photos }) {
     setGeneratingAI(true)
     try {
       const duration = calcDuration(project.start_date, project.end_date)
-      const trades = subs.map(s => s.trade_on_project || s.subcontractors?.trade).filter(Boolean).join(', ')
+      const trades = subs.map(s => s.subcontractors?.trade || s.trade_on_project).filter(Boolean).join(', ')
       const prompt = `You are writing a professional project case study for City Construction Ltd, a UK construction company. 
 Rewrite the following project description into a compelling, professional 2-3 paragraph overview suitable for a client-facing case study PDF.
 Use professional construction industry language. Highlight the scope, complexity and value delivered. Do not invent facts.
@@ -1177,7 +1177,7 @@ Write only the overview text, no headings or labels.`
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{ps.subcontractors?.company_name}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{ps.trade_on_project || ps.subcontractors?.trade}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || ps.trade_on_project}</div>
                     </div>
                   </div>
                 ))}
