@@ -389,6 +389,58 @@ export default function ProjectDetail() {
         </div>
       )}
 
+      {/* Employers Agent — always visible directly under Project Description */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: projectEAs.length > 0 ? 8 : 0, padding: '8px 12px', background: '#042C53', borderRadius: 6, borderLeft: '3px solid #5b9bd5' }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
+          </svg>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#85B7EB' }}>Employers Agent</div>
+          <div style={{ fontSize: 11, color: '#85B7EB99', flex: 1 }}>{projectEAs.length > 0 ? `${projectEAs.length} assigned` : 'None assigned'}</div>
+          {(can('manage_projects') || can('manage_subcontractors')) && (
+            <button className="btn btn-sm" style={{ borderColor: '#5b9bd5', color: '#85B7EB', background: 'transparent' }} onClick={() => setShowAssignEA(true)}>
+              <IconPlus size={13} /> Assign EA
+            </button>
+          )}
+        </div>
+        {projectEAs.length > 0 && (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Submission Email (this project)</th><th></th></tr></thead>
+              <tbody>
+                {projectEAs.map(pea => (
+                  <tr key={pea.id}>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
+                          {pea.employer_agents?.company_name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?'}
+                        </div>
+                        <span style={{ fontWeight: 500 }}>{pea.employer_agents?.company_name}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div>{pea.employer_agents?.contact_name || '—'}</div>
+                      <div className="td-muted">{pea.employer_agents?.phone || ''}</div>
+                    </td>
+                    <td className="td-muted">{pea.employer_agents?.email || '—'}</td>
+                    <td>
+                      <span style={{ fontWeight: 500, color: 'var(--blue)' }}>
+                        {pea.submission_email || pea.employer_agents?.payment_submission_email || <span style={{ color: 'var(--text3)', fontWeight: 400 }}>—</span>}
+                      </span>
+                    </td>
+                    <td>
+                      {can('manage_projects') && (
+                        <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemoveEA(pea.id)}><IconTrash size={12}/></button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <ProjectFileSearch projectId={id} />
 
       <div className="filter-tabs">
@@ -516,7 +568,6 @@ export default function ProjectDetail() {
           <div className="section-header">
             <div className="section-title">Assigned {catLabel}</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {!isDesignTeam && (can('manage_projects') || can('manage_subcontractors')) && <button className="btn btn-sm" style={{ borderColor: '#185FA5', color: '#185FA5', background: '#E6F1FB' }} onClick={() => setShowAssignEA(true)}><IconPlus size={13} /> Assign EA</button>}
               {(can('manage_projects') || can('manage_subcontractors')) && (
                 <button className="btn btn-primary btn-sm" onClick={() => { setAssignForm(f => ({ ...f, category: categoryKey })); setShowAssignSub(true) }}>
                   <IconPlus size={13} /> Assign {catLabel === 'Subcontractors' ? 'Subcontractor' : 'Design Team'}
@@ -524,53 +575,6 @@ export default function ProjectDetail() {
               )}
             </div>
           </div>
-
-          {/* Employers Agent section — only on Subcontractors tab */}
-          {!isDesignTeam && projectEAs.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 12px', background: '#042C53', borderRadius: 6, borderLeft: '3px solid #5b9bd5' }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                  <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
-                </svg>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#85B7EB' }}>Employers Agent</div>
-                <div style={{ fontSize: 11, color: '#85B7EB99' }}>{projectEAs.length} assigned</div>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Submission Email (this project)</th><th></th></tr></thead>
-                  <tbody>
-                    {projectEAs.map(pea => (
-                      <tr key={pea.id}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
-                              {pea.employer_agents?.company_name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?'}
-                            </div>
-                            <span style={{ fontWeight: 500 }}>{pea.employer_agents?.company_name}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <div>{pea.employer_agents?.contact_name || '—'}</div>
-                          <div className="td-muted">{pea.employer_agents?.phone || ''}</div>
-                        </td>
-                        <td className="td-muted">{pea.employer_agents?.email || '—'}</td>
-                        <td>
-                          <span style={{ fontWeight: 500, color: 'var(--blue)' }}>
-                            {pea.submission_email || pea.employer_agents?.payment_submission_email || <span style={{ color: 'var(--text3)', fontWeight: 400 }}>—</span>}
-                          </span>
-                        </td>
-                        <td>
-                          {can('manage_projects') && (
-                            <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemoveEA(pea.id)}><IconTrash size={12}/></button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
           {catSubs.length === 0 ? (
             <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No {catLabel.toLowerCase()} assigned to this project yet.</div>
