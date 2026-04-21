@@ -5,7 +5,7 @@ export const TRADES = [
   'Consultant','Core Drilling & Sawing','Demolition','Drainage','Ecologist','Electrical',
   'Fire Consultants','Fire Protection','Flood Risk Consultants','Flooring','Glazing','Ground Investigation','Groundworks',
   'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','MEP Consultants',
-  'Noise Consultants','Painting & Decorating','Planning Consultants','Plastering','Plumbing','Principle Designers',
+  'Noise Consultants','Nurse Call System','Painting & Decorating','Planning Consultants','Plastering','Plumbing','Principle Designers',
   'Roofing','Roofing Trusses','Scaffolding',
   'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
   'Structural Engineers','Wardrobes','Warranty Providers','Other'
@@ -21,7 +21,7 @@ export const DESIGN_TEAM_TRADES = [
 // Trades that default to "Both" (can sit in Subcontractor OR Design Team tab)
 export const BOTH_TRADES = [
   'Asbestos Surveys', 'Ecologist', 'Flood Risk Consultants', 'Ground Investigation',
-  'Lighting Consultants', 'Noise Consultants', 'Planning Consultants',
+  'Lighting Consultants', 'Noise Consultants', 'Nurse Call System', 'Planning Consultants',
 ]
 
 export const SUBCONTRACTOR_CATEGORIES = {
