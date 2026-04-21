@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { TRADES, DESIGN_TEAM_TRADES, SUB_STATUSES } from '../lib/utils'
+import { TRADES, DESIGN_TEAM_TRADES, BOTH_TRADES, SUB_STATUSES } from '../lib/utils'
 import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
 
@@ -99,7 +99,13 @@ export default function SubcontractorModal({ sub, onClose, onSaved, defaultCateg
         <Field label="Trade / Specialty *" error={errors.trade}>
           <select value={form.trade} onChange={e => {
             set('trade', e.target.value)
-            if (!editing) set('category', DESIGN_TEAM_TRADES.includes(e.target.value) ? 'design_team' : 'subcontractor')
+            if (!editing) {
+              const t = e.target.value
+              const nextCategory = BOTH_TRADES.includes(t) ? 'both'
+                : DESIGN_TEAM_TRADES.includes(t) ? 'design_team'
+                : 'subcontractor'
+              set('category', nextCategory)
+            }
           }}>
             {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
