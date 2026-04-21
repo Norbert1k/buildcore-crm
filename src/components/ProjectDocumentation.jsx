@@ -187,7 +187,7 @@ function ConfirmDlg({ message, onOk, onCancel }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
       <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>{message}</div>
+        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={Btn}>Cancel</button>
           <button onClick={onOk} style={BtnR}>Delete</button>
@@ -516,7 +516,6 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 
 // ── Subfolder Section (recursive — supports nested sub-subfolders) ────────────
 function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0 }) {
-  const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -619,52 +618,14 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   }
 
   async function zipSubfolder() {
-    // Collect this subfolder + all descendants recursively
-    const { data: allProjFolders } = await supabase.from('project_doc_folders').select('folder_key, parent_key, label').eq('project_id', projectId)
-    const folderMap = {}
-    ;(allProjFolders || []).forEach(f => { folderMap[f.folder_key] = f })
-    // Build label path for each folder key (relative to this subfolder)
-    function pathFor(key) {
-      const parts = []
-      let cur = key
-      while (cur && cur !== subfolder.key) {
-        const node = folderMap[cur]
-        if (!node) break
-        parts.unshift(node.label || cur)
-        cur = node.parent_key
-      }
-      return parts.join('/')
-    }
-    // BFS descendants
-    const descendants = new Set([subfolder.key])
-    let frontier = [subfolder.key]
-    while (frontier.length) {
-      const next = []
-      for (const k of frontier) {
-        for (const f of (allProjFolders || [])) {
-          if (f.parent_key === k && !descendants.has(f.folder_key)) {
-            descendants.add(f.folder_key); next.push(f.folder_key)
-          }
-        }
-      }
-      frontier = next
-    }
-    // Fetch all files in any of those subfolders
-    const { data: allFiles } = await supabase.from('project_doc_files').select('*')
-      .eq('project_id', projectId).in('subfolder_key', Array.from(descendants))
-    if (!allFiles?.length) { alert('No files in this subfolder.'); return }
+    if (!files.length) { alert('No files in this subfolder.'); return }
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     document.head.appendChild(s)
     await new Promise(r => s.onload = r)
     const zip = new window.JSZip()
-    for (const f of allFiles) {
+    for (const f of files) {
       const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-      if (data?.signedUrl) {
-        const res = await fetch(data.signedUrl)
-        const sub = f.subfolder_key === subfolder.key ? '' : pathFor(f.subfolder_key)
-        const p = sub ? sub + '/' + f.file_name : f.file_name
-        zip.file(p, await res.blob())
-      }
+      if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
     }
     const blob = await zip.generateAsync({ type: 'blob' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = subLabel + '.zip'
@@ -831,7 +792,6 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 
 // ── Prime Folder Section ──────────────────────────────────────────────────────
 function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts, onDeleteFolder, onRenameFolder }) {
-  const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [subfolders, setSubfolders] = useState(folder.subfolders || [])
   const [showAddFolder, setShowAddFolder] = useState(false)
@@ -933,28 +893,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
     const zip = new window.JSZip()
     const { data: allFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId).eq('folder_key', folder.key)
     if (!allFiles?.length) { alert('No files in this folder.'); return }
-    // Build label paths for any subfolder key using project_doc_folders
-    const { data: allProjFolders } = await supabase.from('project_doc_folders').select('folder_key, parent_key, label').eq('project_id', projectId)
-    const folderMap = {}
-    ;(allProjFolders || []).forEach(f => { folderMap[f.folder_key] = f })
-    function pathFor(key) {
-      if (!key) return ''
-      const parts = []
-      let cur = key
-      // stop when we hit the top-level folder key (not in folderMap) or null
-      while (cur && folderMap[cur]) {
-        parts.unshift(folderMap[cur].label || cur)
-        cur = folderMap[cur].parent_key
-        if (cur === folder.key) break
-      }
-      return parts.join('/')
-    }
     for (const f of allFiles) {
       const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
       if (data?.signedUrl) {
         const res = await fetch(data.signedUrl)
-        const sub = pathFor(f.subfolder_key)
-        zip.file((sub ? sub + '/' : '') + f.file_name, await res.blob())
+        const sub = f.subfolder_key ? f.subfolder_key + '/' : ''
+        zip.file(sub + f.file_name, await res.blob())
       }
     }
     const blob = await zip.generateAsync({ type: 'blob' })
@@ -985,45 +929,13 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
     document.head.appendChild(s)
     await new Promise(r => s.onload = r)
     const zip = new window.JSZip()
-    const { data: allProjFolders } = await supabase.from('project_doc_folders').select('folder_key, parent_key, label').eq('project_id', projectId)
-    const folderMap = {}
-    ;(allProjFolders || []).forEach(f => { folderMap[f.folder_key] = f })
     for (const sfKey of selectedSubs) {
       const sf = subfolders.find(s => s.key === sfKey)
-      const rootName = sf ? sf.label : (folderMap[sfKey]?.label || sfKey)
-      // BFS descendants of this subfolder
-      const descendants = new Set([sfKey])
-      let frontier = [sfKey]
-      while (frontier.length) {
-        const next = []
-        for (const k of frontier) {
-          for (const f of (allProjFolders || [])) {
-            if (f.parent_key === k && !descendants.has(f.folder_key)) {
-              descendants.add(f.folder_key); next.push(f.folder_key)
-            }
-          }
-        }
-        frontier = next
-      }
-      function pathFor(key) {
-        if (key === sfKey) return ''
-        const parts = []
-        let cur = key
-        while (cur && cur !== sfKey && folderMap[cur]) {
-          parts.unshift(folderMap[cur].label || cur)
-          cur = folderMap[cur].parent_key
-        }
-        return parts.join('/')
-      }
-      const { data: sfFiles } = await supabase.from('project_doc_files').select('*')
-        .eq('project_id', projectId).in('subfolder_key', Array.from(descendants))
+      const folderName = sf ? sf.label : sfKey
+      const { data: sfFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId).eq('subfolder_key', sfKey)
       for (const f of (sfFiles || [])) {
         const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-        if (data?.signedUrl) {
-          const res = await fetch(data.signedUrl)
-          const rel = pathFor(f.subfolder_key)
-          zip.file(rootName + (rel ? '/' + rel : '') + '/' + f.file_name, await res.blob())
-        }
+        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
       }
     }
     const blob = await zip.generateAsync({ type: 'blob' })
