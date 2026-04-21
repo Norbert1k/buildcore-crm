@@ -29,30 +29,36 @@ export default function ProjectModal({ project, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase.from('profiles').select('id, full_name, role').in('role', ['admin', 'project_manager']).order('full_name').then(({ data }) => setManagers(data || []))
+    supabase.from('profiles').select('id, full_name, role').order('full_name').then(({ data }) => setManagers(data || []))
     supabase.from('clients').select('id, name').order('name').then(({ data }) => setClients(data || []))
-    // Auto-generate project ref only on new projects
-    if (!project) {
-      const year = new Date().getFullYear()
-      supabase.from('projects').select('project_ref').like('project_ref', `${year}-%`).order('project_ref', { ascending: false }).limit(1).single()
-        .then(({ data }) => {
-          let nextNum = 1
-          if (data?.project_ref) {
-            const parts = data.project_ref.split('-')
-            const last = parseInt(parts[parts.length - 1])
-            if (!isNaN(last)) nextNum = last + 1
-          }
-          const ref = `${year}-${String(nextNum).padStart(3, '0')}`
-          set('project_ref', ref)
-        })
+    // Auto-generate project ref only for new projects that are not Tender
+    if (!project && form.status !== 'tender') {
+      generateRef()
     }
   }, [])
+
+  async function generateRef() {
+    const year = new Date().getFullYear()
+    const { data } = await supabase.from('projects').select('project_ref').like('project_ref', `${year}-%`).order('project_ref', { ascending: false }).limit(1).single()
+    let nextNum = 1
+    if (data?.project_ref) {
+      const parts = data.project_ref.split('-')
+      const last = parseInt(parts[parts.length - 1])
+      if (!isNaN(last)) nextNum = last + 1
+    }
+    const ref = `${year}-${String(nextNum).padStart(3, '0')}`
+    set('project_ref', ref)
+  }
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })) }
 
   function validate() {
     const e = {}
     if (!form.project_name.trim()) e.project_name = 'Project name is required'
+    // Reference required for any status except tender
+    if (form.status !== 'tender' && !form.project_ref.trim()) {
+      e.project_ref = 'Project reference is required when status is not Tender'
+    }
     if (form.end_date && form.start_date && form.end_date < form.start_date) {
       e.end_date = 'End date cannot be before start date'
     }
@@ -61,10 +67,15 @@ export default function ProjectModal({ project, onClose, onSaved }) {
   }
 
   async function save() {
+    // If moving from Tender → something else and no ref yet, generate one first
+    if (form.status !== 'tender' && !form.project_ref.trim()) {
+      await generateRef()
+    }
     if (!validate()) return
     setSaving(true)
     const payload = {
       ...form,
+      project_ref: form.project_ref.trim() || null,
       value: form.value ? parseFloat(form.value) : null,
       project_manager_id: form.project_manager_id || null,
       start_date: form.start_date || null,
@@ -117,11 +128,15 @@ export default function ProjectModal({ project, onClose, onSaved }) {
             <input value={form.project_name} onChange={e => set('project_name', e.target.value)} placeholder="e.g. Riverside Apartments — Phase 2" autoFocus />
           </Field>
         </div>
-     <Field label="Project Reference">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, color: form.project_ref ? 'var(--text)' : 'var(--text3)', cursor: 'default' }}>
-            <span style={{ flex: 1, fontWeight: 600 }}>{form.project_ref || 'Generating...'}</span>
-            <span style={{ fontSize: 13, opacity: .5 }}>🔒</span>
-          </div>
+     <Field label={form.status === 'tender' ? 'Project Reference (optional for Tender)' : 'Project Reference *'} error={errors.project_ref}>
+          {form.status === 'tender' ? (
+            <input value={form.project_ref} onChange={e => set('project_ref', e.target.value)} placeholder="Optional — assigned when project becomes Active" />
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, color: form.project_ref ? 'var(--text)' : 'var(--text3)', cursor: 'default' }}>
+              <span style={{ flex: 1, fontWeight: 600 }}>{form.project_ref || 'Will be assigned on save'}</span>
+              <span style={{ fontSize: 13, opacity: .5 }}>🔒</span>
+            </div>
+          )}
         </Field>
         <Field label="Client">
           <select value={form.client_id} onChange={e => {
