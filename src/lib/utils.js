@@ -1,11 +1,11 @@
 import { differenceInDays, format, parseISO } from 'date-fns'
 
 export const TRADES = [
-  'Architects','Brickwork','Building Control','Carpentry','Civil Engineers',
-  'Consultant','Core Drilling & Sawing','Demolition','Drainage','Electrical',
-  'Fire Consultants','Fire Protection','Flooring','Glazing','Groundworks',
-  'HVAC','Insulation','Landscaping','Lift Installation','MEP Consultants',
-  'Painting & Decorating','Plastering','Plumbing','Principle Designers',
+  'Architects','Asbestos Surveys','Brickwork','Building Control','Carpentry','Civil Engineers',
+  'Consultant','Core Drilling & Sawing','Demolition','Drainage','Ecologist','Electrical',
+  'Fire Consultants','Fire Protection','Flood Risk Consultants','Flooring','Glazing','Ground Investigation','Groundworks',
+  'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','MEP Consultants',
+  'Noise Consultants','Painting & Decorating','Planning Consultants','Plastering','Plumbing','Principle Designers',
   'Roofing','Roofing Trusses','Scaffolding',
   'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
   'Structural Engineers','Wardrobes','Warranty Providers','Other'
@@ -16,6 +16,12 @@ export const DESIGN_TEAM_TRADES = [
   'Architects', 'Building Control', 'Civil Engineers', 'Consultant',
   'Fire Consultants', 'MEP Consultants', 'Principle Designers', 'Setting Out Engineer',
   'SFS Engineers', 'Structural Engineers', 'Warranty Providers',
+]
+
+// Trades that default to "Both" (can sit in Subcontractor OR Design Team tab)
+export const BOTH_TRADES = [
+  'Asbestos Surveys', 'Ecologist', 'Flood Risk Consultants', 'Ground Investigation',
+  'Lighting Consultants', 'Noise Consultants', 'Planning Consultants',
 ]
 
 export const SUBCONTRACTOR_CATEGORIES = {
