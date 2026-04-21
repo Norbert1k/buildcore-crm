@@ -141,6 +141,7 @@ export default function SubcontractorDetail() {
       Document: DOCUMENT_TYPES[d.document_type] || d.document_name,
       Name: d.document_name,
       Reference: d.reference_number || '',
+      'Cover Amount (£)': d.cover_amount || '',
       'Issue Date': formatDate(d.issue_date),
       'Expiry Date': formatDate(d.expiry_date),
       Status: d.status || '',
@@ -340,6 +341,11 @@ export default function SubcontractorDetail() {
                         <td>
                           <div style={{ fontWeight: 500 }}>{DOCUMENT_TYPES[doc.document_type] || doc.document_name}</div>
                           {doc.document_name !== DOCUMENT_TYPES[doc.document_type] && <div className="td-muted">{doc.document_name}</div>}
+                          {doc.cover_amount > 0 && (
+                            <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500, marginTop: 2 }}>
+                              £{Number(doc.cover_amount).toLocaleString('en-GB')} cover
+                            </div>
+                          )}
                         </td>
                         <td className="td-muted">{doc.reference_number || '—'}</td>
                         <td>
