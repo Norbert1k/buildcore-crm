@@ -7,7 +7,7 @@ import { useAuth } from '../lib/auth'
 
 const STATUS_COLORS = {
   active: '#448a40',
-  tender: '#378ADD',
+  tender: '#9b87e0',
   on_hold: '#BA7517',
   completed: '#888780',
   cancelled: '#E24B4A',
@@ -213,7 +213,12 @@ export default function ProjectTracker() {
   const counts = Object.keys(STATUS_COLORS).reduce((acc, s) => {
     acc[s] = projects.filter(p => p.status === s).length; return acc
   }, {})
-  const totalValue = filtered.reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0)
+  const valueByStatus = Object.keys(STATUS_COLORS).reduce((acc, s) => {
+    acc[s] = projects.filter(p => p.status === s).reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0)
+    return acc
+  }, {})
+  const liveProjects = filtered.filter(p => p.status !== 'tender')
+  const tenderProjects = filtered.filter(p => p.status === 'tender')
 
   if (loading) return <Spinner />
 
@@ -233,9 +238,35 @@ export default function ProjectTracker() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Project Tracker</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{filtered.length} projects{can('view_project_value') ? ' · ' + formatCurrency(totalValue) + ' total value' : ''}</p>
+          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{projects.length} projects</p>
         </div>
       </div>
+
+      {/* Value cards: Active · Tender · Completed · Cancelled */}
+      {can('view_project_value') && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+          <div className="stat-card" style={{ borderTop: '3px solid #448a40' }}>
+            <div className="stat-label">Active Value</div>
+            <div className="stat-value green" style={{ fontSize: 18 }}>{valueByStatus.active > 0 ? formatCurrency(valueByStatus.active) : '—'}</div>
+            <div className="stat-sub">{counts.active || 0} project{counts.active === 1 ? '' : 's'}</div>
+          </div>
+          <div className="stat-card" style={{ borderTop: '3px solid #9b87e0' }}>
+            <div className="stat-label">Tender Value</div>
+            <div className="stat-value" style={{ fontSize: 18, color: '#9b87e0' }}>{valueByStatus.tender > 0 ? formatCurrency(valueByStatus.tender) : '—'}</div>
+            <div className="stat-sub">{counts.tender || 0} project{counts.tender === 1 ? '' : 's'}</div>
+          </div>
+          <div className="stat-card" style={{ borderTop: '3px solid #888780' }}>
+            <div className="stat-label">Completed Value</div>
+            <div className="stat-value" style={{ fontSize: 18, color: 'var(--text2)' }}>{valueByStatus.completed > 0 ? formatCurrency(valueByStatus.completed) : '—'}</div>
+            <div className="stat-sub">{counts.completed || 0} project{counts.completed === 1 ? '' : 's'}</div>
+          </div>
+          <div className="stat-card" style={{ borderTop: '3px solid #E24B4A' }}>
+            <div className="stat-label">Cancelled Value</div>
+            <div className="stat-value" style={{ fontSize: 18, color: 'var(--red)' }}>{valueByStatus.cancelled > 0 ? formatCurrency(valueByStatus.cancelled) : '—'}</div>
+            <div className="stat-sub">{counts.cancelled || 0} project{counts.cancelled === 1 ? '' : 's'}</div>
+          </div>
+        </div>
+      )}
 
       <div className="filter-tabs" style={{ marginBottom: 14 }}>
         <div className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
@@ -249,36 +280,92 @@ export default function ProjectTracker() {
         ))}
       </div>
 
-      <div style={{ borderRadius: 'var(--radius-lg, 12px)', overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 16 }}>
+      <div style={{ borderRadius: 'var(--radius-lg, 12px)', overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 20 }}>
         <div ref={mapRef} style={{ height: 480, width: '100%', background: '#1a1a2e' }} />
       </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Project</th>
-              <th>Client</th>
-              <th>Location</th>
-              {can('view_project_value') && <th>Value</th>}
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(p => (
-              <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
-                <td>
-                  <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                  {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
-                </td>
-                <td>{p.client_name || '\u2014'}</td>
-                <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
-                {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
-                <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* ─── Live Projects ────────────────────────────────────── */}
+      <div style={{ marginBottom: 24 }}>
+        <div className="section-header" style={{ marginBottom: 10 }}>
+          <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#448a40', display: 'inline-block' }} />
+            Live Projects
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{liveProjects.length}</span>
+          </div>
+        </div>
+        {liveProjects.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No live projects in current filter.</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Client</th>
+                  <th>Location</th>
+                  {can('view_project_value') && <th>Value</th>}
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveProjects.map(p => (
+                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{p.project_name}</div>
+                      {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
+                    </td>
+                    <td>{p.client_name || '\u2014'}</td>
+                    <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
+                    {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
+                    <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ─── Tender Projects ──────────────────────────────────── */}
+      <div>
+        <div className="section-header" style={{ marginBottom: 10 }}>
+          <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9b87e0', display: 'inline-block' }} />
+            Tender Projects
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{tenderProjects.length}</span>
+          </div>
+        </div>
+        {tenderProjects.length === 0 ? (
+          <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No projects at tender stage.</div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Client</th>
+                  <th>Location</th>
+                  {can('view_project_value') && <th>Value</th>}
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tenderProjects.map(p => (
+                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{p.project_name}</div>
+                      {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
+                    </td>
+                    <td>{p.client_name || '\u2014'}</td>
+                    <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
+                    {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
+                    <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
