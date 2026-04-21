@@ -59,11 +59,16 @@ export default function ProjectTracker() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [mapReady, setMapReady] = useState(false)
+  const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('track_live_open') === 'true')
+  const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('track_tender_open') === 'true')
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef([])
   const navigate = useNavigate()
   const { can } = useAuth()
+
+  function toggleLive() { setLiveOpen(v => { localStorage.setItem('track_live_open', !v); return !v }) }
+  function toggleTender() { setTenderOpen(v => { localStorage.setItem('track_tender_open', !v); return !v }) }
 
   useEffect(() => {
     if (!can('view_tracker')) navigate('/')
@@ -285,86 +290,106 @@ export default function ProjectTracker() {
       </div>
 
       {/* ─── Live Projects ────────────────────────────────────── */}
-      <div style={{ marginBottom: 24 }}>
-        <div className="section-header" style={{ marginBottom: 10 }}>
+      <div style={{ marginBottom: 16 }}>
+        <div className="section-header" onClick={toggleLive}
+          style={{ marginBottom: liveOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
           <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: liveOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#448a40', display: 'inline-block' }} />
             Live Projects
             <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{liveProjects.length}</span>
+            {!liveOpen && liveProjects.length > 0 && (
+              <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
+            )}
           </div>
         </div>
-        {liveProjects.length === 0 ? (
-          <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No live projects in current filter.</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Project</th>
-                  <th>Client</th>
-                  <th>Location</th>
-                  {can('view_project_value') && <th>Value</th>}
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {liveProjects.map(p => (
-                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
-                    <td>
-                      <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                      {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
-                    </td>
-                    <td>{p.client_name || '\u2014'}</td>
-                    <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
-                    {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
-                    <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
+        {liveOpen && (
+          liveProjects.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No live projects in current filter.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Client</th>
+                    <th>Location</th>
+                    {can('view_project_value') && <th>Value</th>}
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {liveProjects.map(p => (
+                    <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{p.project_name}</div>
+                        {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
+                      </td>
+                      <td>{p.client_name || '\u2014'}</td>
+                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
+                      {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
+                      <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
 
       {/* ─── Tender Projects ──────────────────────────────────── */}
       <div>
-        <div className="section-header" style={{ marginBottom: 10 }}>
+        <div className="section-header" onClick={toggleTender}
+          style={{ marginBottom: tenderOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
           <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: tenderOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9b87e0', display: 'inline-block' }} />
             Tender Projects
             <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{tenderProjects.length}</span>
+            {!tenderOpen && tenderProjects.length > 0 && (
+              <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
+            )}
           </div>
         </div>
-        {tenderProjects.length === 0 ? (
-          <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No projects at tender stage.</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Project</th>
-                  <th>Client</th>
-                  <th>Location</th>
-                  {can('view_project_value') && <th>Value</th>}
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tenderProjects.map(p => (
-                  <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
-                    <td>
-                      <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                      {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
-                    </td>
-                    <td>{p.client_name || '\u2014'}</td>
-                    <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
-                    {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
-                    <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
+        {tenderOpen && (
+          tenderProjects.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No projects at tender stage.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Client</th>
+                    <th>Location</th>
+                    {can('view_project_value') && <th>Value</th>}
+                    <th>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tenderProjects.map(p => (
+                    <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{p.project_name}</div>
+                        {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
+                      </td>
+                      <td>{p.client_name || '\u2014'}</td>
+                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
+                      {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
+                      <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
     </div>
