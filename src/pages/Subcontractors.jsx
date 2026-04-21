@@ -140,6 +140,7 @@ function AllSubcontractorsTab({ designTeam }) {
   const [subs, setSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [tradeFilter, setTradeFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -174,6 +175,7 @@ function AllSubcontractorsTab({ designTeam }) {
   function filtered() {
     let list = subs
     if (filter !== 'all') list = list.filter(s => s.status === filter)
+    if (tradeFilter !== 'all') list = list.filter(s => s.trade === tradeFilter)
     if (search) {
       const q = search.toLowerCase()
       list = list.filter(s =>
@@ -185,6 +187,9 @@ function AllSubcontractorsTab({ designTeam }) {
     }
     return list
   }
+
+  // Unique trades present in the current tab, alphabetical — used for the dropdown
+  const availableTrades = [...new Set(subs.map(s => s.trade).filter(Boolean))].sort()
 
   const counts = {
     all: subs.length,
