@@ -165,8 +165,8 @@ export default function ProjectDetail() {
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
       supabase.from('project_documents').select('*, subcontractors(company_name), profiles!project_documents_uploaded_by_fkey(full_name)').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
-      supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email)').eq('project_id', id),
-      supabase.from('employer_agents').select('id, company_name, payment_submission_email').eq('status', 'active').order('company_name'),
+      supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
+      supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
     ])
     setProject(projRes.data)
     setDriveFolderId(projRes.data?.drive_folder_id || null)
@@ -421,9 +421,16 @@ export default function ProjectDetail() {
                         <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
                           {pea.employer_agents?.company_name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?'}
                         </div>
-                        <span style={{ fontWeight: 500, color: pea.employer_agents ? 'var(--accent)' : 'var(--text)' }}>
-                          {pea.employer_agents?.company_name}
-                        </span>
+                        <div>
+                          <div style={{ fontWeight: 700, color: pea.employer_agents ? '#185FA5' : 'var(--text)' }}>
+                            {pea.employer_agents?.company_name}
+                          </div>
+                          {(pea.employer_agents?.city || pea.employer_agents?.postcode) && (
+                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                              {pea.employer_agents?.city || ''}{pea.employer_agents?.city && pea.employer_agents?.postcode ? ' · ' : ''}{pea.employer_agents?.postcode || ''}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td>
