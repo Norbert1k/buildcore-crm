@@ -67,6 +67,7 @@ function EmployersAgentTab() {
                 <th>Company</th>
                 <th>Contact</th>
                 <th>Email</th>
+                <th>Location</th>
                 <th>Submission Email</th>
                 <th>Status</th>
                 <th></th>
@@ -91,6 +92,13 @@ function EmployersAgentTab() {
                     <div className="td-muted">{ea.phone || ''}</div>
                   </td>
                   <td className="td-muted">{ea.email || '—'}</td>
+                  <td className="td-muted">
+                    {ea.city || ea.postcode ? (
+                      <>
+                        {ea.city || ''}{ea.city && ea.postcode ? ' · ' : ''}{ea.postcode || ''}
+                      </>
+                    ) : '—'}
+                  </td>
                   <td>
                     {ea.payment_submission_email ? (
                       <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--blue)' }}>{ea.payment_submission_email}</span>
@@ -212,10 +220,28 @@ function AllSubcontractorsTab({ designTeam }) {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div className="search-wrap" style={{ position: 'relative' }}>
           <span className="search-icon" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}><IconSearch size={13} /></span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, trade, city…" style={{ paddingLeft: 32, width: 260 }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 500 }}>Trade:</span>
+          <select value={tradeFilter} onChange={e => setTradeFilter(e.target.value)}
+            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, cursor: 'pointer', minWidth: 160 }}>
+            <option value="all">All trades ({subs.length})</option>
+            {availableTrades.map(t => (
+              <option key={t} value={t}>
+                {t} ({subs.filter(s => s.trade === t).length})
+              </option>
+            ))}
+          </select>
+          {tradeFilter !== 'all' && (
+            <button onClick={() => setTradeFilter('all')} title="Clear trade filter"
+              style={{ fontSize: 11, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
+              ✕ Clear
+            </button>
+          )}
         </div>
         <div className="filter-tabs" style={{ marginBottom: 0 }}>
           {Object.entries({ all: 'All', active: 'Active', approved: 'Approved', on_hold: 'On Hold', inactive: 'Inactive' }).map(([k, v]) => (
@@ -229,6 +255,16 @@ function AllSubcontractorsTab({ designTeam }) {
           ))}
         </div>
       </div>
+
+      {tradeFilter !== 'all' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
+          <span style={{ fontWeight: 500 }}>Showing {list.length} {tradeFilter}</span>
+          <span style={{ opacity: 0.6 }}>— alphabetical by company</span>
+          <button onClick={() => setTradeFilter('all')} style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 8px', border: '1px solid currentColor', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
+            Show all trades
+          </button>
+        </div>
+      )}
 
       {loading ? <Spinner /> : list.length === 0 ? (
         <EmptyState icon={designTeam ? '🏗️' : '👷'} title={designTeam ? 'No design team found' : 'No subcontractors found'} message={search ? 'Try adjusting your search.' : designTeam ? 'Add your first design team member to get started.' : 'Add your first subcontractor to get started.'} action={can('manage_subcontractors') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> {designTeam ? 'Add Design Team' : 'Add Subcontractor'}</button>} />
@@ -268,7 +304,9 @@ function AllSubcontractorsTab({ designTeam }) {
                         </div>
                       </div>
                     </td>
-                    <td><Pill cls="pill-blue">{s.trade}</Pill></td>
+                    <td onClick={e => { e.stopPropagation(); setTradeFilter(s.trade) }} style={{ cursor: 'pointer' }} title={`Filter by ${s.trade}`}>
+                      <Pill cls="pill-blue">{s.trade}</Pill>
+                    </td>
                     <td>
                       <div>{s.contact_name}</div>
                       <div className="td-muted">{s.phone}</div>
