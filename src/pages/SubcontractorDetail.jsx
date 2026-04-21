@@ -34,6 +34,8 @@ export default function SubcontractorDetail() {
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteForm, setNoteForm] = useState({ note: '', note_type: 'note' })
   const [savingNote, setSavingNote] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
 
   useEffect(() => { load() }, [id])
 
@@ -62,6 +64,38 @@ export default function SubcontractorDetail() {
     await supabase.from('documents').delete().eq('id', docId)
     setConfirmDelete(null)
     load()
+  }
+
+  // File preview helpers — opens docs inline (modal), same pattern as Documentation/H&S
+  function docFileTypeInfo(fileName) {
+    const n = (fileName || '').toLowerCase()
+    return {
+      isImage: /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(n),
+      isPdf: /\.pdf$/i.test(n),
+    }
+  }
+
+  async function openDocPreview(doc) {
+    if (!doc?.storage_path) return
+    setPreviewDoc(doc)
+    setPreviewUrl(null)
+    const { data } = await supabase.storage.from('project-docs').createSignedUrl(doc.storage_path, 3600)
+    if (data?.signedUrl) setPreviewUrl(data.signedUrl)
+  }
+
+  async function triggerDocDownload() {
+    if (!previewUrl || !previewDoc) return
+    try {
+      const res = await fetch(previewUrl)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = previewDoc.file_name || 'document'
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    } catch (e) {
+      window.open(previewUrl, '_blank')
+    }
   }
 
 
@@ -314,10 +348,7 @@ export default function SubcontractorDetail() {
                               <button
                                 className="btn btn-sm"
                                 style={{ fontSize: 11, padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
-                                onClick={async () => {
-                                  const { data } = await supabase.storage.from('project-docs').createSignedUrl(doc.storage_path, 300)
-                                  if (data?.signedUrl) window.open(data.signedUrl, '_blank')
-                                }}
+                                onClick={() => openDocPreview(doc)}
                                 title={doc.file_name || 'View file'}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                 View
@@ -441,6 +472,38 @@ export default function SubcontractorDetail() {
       {showEditSub && <SubcontractorModal sub={sub} onClose={() => setShowEditSub(false)} onSaved={() => { setShowEditSub(false); load() }} />}
       {showDocModal && <DocumentModal doc={editingDoc} subcontractorId={id} onClose={() => setShowDocModal(false)} onSaved={() => { setShowDocModal(false); load() }} />}
       <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)} title="Delete document" message="Are you sure? This cannot be undone." danger />
+
+      {/* Compliance Document Preview */}
+      {previewDoc && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }}>
+          <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 8, zIndex: 1001 }}>
+            {previewUrl && (
+              <button onClick={e => { e.stopPropagation(); triggerDocDownload() }}
+                style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+                ↓ Download
+              </button>
+            )}
+            <button onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }}
+              style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+              ✕ Close
+            </button>
+          </div>
+          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 12 }}>
+            {previewDoc.file_name || previewDoc.document_name}
+          </div>
+          {previewUrl ? (
+            docFileTypeInfo(previewDoc.file_name).isImage
+              ? <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
+              : docFileTypeInfo(previewDoc.file_name).isPdf
+              ? <iframe src={previewUrl} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8 }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
+              : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8, background: '#fff' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
+          ) : (
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Loading…</div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
