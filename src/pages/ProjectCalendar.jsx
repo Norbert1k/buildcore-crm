@@ -179,7 +179,7 @@ export default function ProjectCalendar() {
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
           Monthly workload — active &amp; tender projects
         </div>
-        <WorkloadChart monthlyLoad={monthlyLoad} maxCount={maxCount} monthsShown={monthsShown} />
+        <WorkloadChart monthlyLoad={monthlyLoad} maxCount={maxCount} monthsShown={monthsShown} canViewValue={can('view_project_value')} />
       </div>
 
       {/* Tooltip */}
@@ -345,7 +345,7 @@ function GanttChart({ projects, viewStart, viewEnd, totalDays, monthsShown, toda
   )
 }
 
-function WorkloadChart({ monthlyLoad, maxCount, monthsShown }) {
+function WorkloadChart({ monthlyLoad, maxCount, monthsShown, canViewValue }) {
   const [containerW, setContainerW] = useState(600)
   const ref = useRef(null)
 
@@ -368,7 +368,7 @@ function WorkloadChart({ monthlyLoad, maxCount, monthsShown }) {
           const barColor = m.count >= 5 ? '#E24B4A' : m.count >= 3 ? '#BA7517' : '#448a40'
           return (
             <div key={i} style={{ width: colW, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: 60 }}
-              title={`${m.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}: ${m.count} project${m.count !== 1 ? 's' : ''}${m.value && can('view_project_value') ? ' · ' + formatCurrency(m.value) : ''}`}>
+              title={`${m.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}: ${m.count} project${m.count !== 1 ? 's' : ''}${m.value && canViewValue ? ' · ' + formatCurrency(m.value) : ''}`}>
               {m.count > 0 && (
                 <div style={{ fontSize: 9, fontWeight: 700, color: barColor, marginBottom: 2 }}>{m.count}</div>
               )}
