@@ -99,19 +99,57 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
 
     let result
     if (editing) {
-      // Edit updates a single row (type locked)
-      result = await supabase.from('documents').update({
-        ...basePayload,
-        document_type: doc.document_type,
-      }).eq('id', doc.id)
+      // Update this row
+      const updatePayload = { ...basePayload, document_type: doc.document_type }
+      result = await supabase.from('documents').update(updatePayload).eq('id', doc.id).select()
+
+      // If we uploaded a NEW file and this doc was linked to siblings (shared storage_path),
+      // push the new file reference + metadata to all siblings so they stay in sync.
+      if (file && doc.storage_path) {
+        const siblingPayload = {
+          storage_path: storagePath,
+          file_name: fileName,
+          file_size: fileSize,
+          reference_number: form.reference_number || null,
+          issue_date: form.issue_date || null,
+          expiry_date: form.expiry_date || null,
+          notes: form.notes || null,
+        }
+        await supabase.from('documents')
+          .update(siblingPayload)
+          .eq('storage_path', doc.storage_path)
+          .neq('id', doc.id)
+      }
     } else {
       // Insert one row per selected type, all sharing the same storage_path
       const rows = types.map(t => ({ ...basePayload, document_type: t }))
-      result = await supabase.from('documents').insert(rows)
+      result = await supabase.from('documents').insert(rows).select()
+    }
+
+    if (result.error) {
+      setSaving(false)
+      setErrors({ _global: 'Save failed: ' + result.error.message })
+      return
+    }
+
+    // Verify storage_path actually made it into the DB. If it didn't, the DB
+    // columns don't exist yet — roll back and tell the user.
+    if (file && Array.isArray(result.data) && result.data.length > 0) {
+      const persisted = result.data[0].storage_path
+      if (!persisted) {
+        // Clean up the orphaned storage file and the rows we just inserted
+        if (storagePath) await supabase.storage.from('project-docs').remove([storagePath])
+        if (!editing) {
+          const ids = result.data.map(r => r.id)
+          if (ids.length) await supabase.from('documents').delete().in('id', ids)
+        }
+        setSaving(false)
+        setErrors({ _global: 'Database migration not applied yet — file columns are missing. Please run the add_document_storage_path.sql migration in Supabase, then try again.' })
+        return
+      }
     }
 
     setSaving(false)
-    if (result.error) { setErrors({ _global: result.error.message }); return }
     onSaved()
   }
 
