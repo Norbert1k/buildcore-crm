@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { avatarColor, initials } from '../lib/utils'
 
 // ── Avatar ───────────────────────────────────────────────────
@@ -124,6 +125,52 @@ export const IconPlus = ({ size }) => <Icon size={size} path="M8 1v6H2v2h6v6h2V9
 export const IconEdit = ({ size }) => <Icon size={size} path="M11.5 2.5l2 2L4 14H2v-2L11.5 2.5zM10 4l2 2-8 8H2v-2l8-8z" />
 export const IconTrash = ({ size }) => <Icon size={size} path="M3 5h10v9a1 1 0 01-1 1H4a1 1 0 01-1-1V5zm3 0V3h4v2M1 5h14" />
 export const IconEye = ({ size }) => <Icon size={size} path="M8 3C4.7 3 1.9 5.1 1 8c.9 2.9 3.7 5 7 5s6.1-2.1 7-5c-.9-2.9-3.7-5-7-5zm0 8a3 3 0 110-6 3 3 0 010 6zm0-5a2 2 0 100 4 2 2 0 000-4z" />
+export const IconEyeOff = ({ size }) => (
+  <svg width={size||16} height={size||16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+    <path d="M1 1l14 14"/>
+    <path d="M6.7 6.7a2 2 0 002.6 2.6"/>
+    <path d="M9.36 4.12A5.9 5.9 0 008 4C4.7 4 1.9 6.1 1 9c.27.88.68 1.67 1.2 2.35"/>
+    <path d="M5.4 12.6A6.1 6.1 0 008 13c3.3 0 6.1-2.1 7-5a7.4 7.4 0 00-2.8-3.6"/>
+  </svg>
+)
+
+// ── Password Input — text field with eye toggle ──────────────
+export function PasswordInput({ value, onChange, placeholder, autoFocus, name, id, disabled, style }) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <div style={{ position: 'relative', ...style }}>
+      <input
+        type={visible ? 'text' : 'password'}
+        value={value || ''}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+        name={name}
+        id={id}
+        disabled={disabled}
+        style={{ width: '100%', paddingRight: 38 }}
+      />
+      <button
+        type="button"
+        onClick={() => setVisible(v => !v)}
+        tabIndex={-1}
+        aria-label={visible ? 'Hide password' : 'Show password'}
+        title={visible ? 'Hide password' : 'Show password'}
+        style={{
+          position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          padding: '4px 6px', borderRadius: 4, color: 'var(--text3)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          lineHeight: 0,
+        }}
+        onMouseEnter={e => e.currentTarget.style.color = 'var(--text)'}
+        onMouseLeave={e => e.currentTarget.style.color = 'var(--text3)'}
+      >
+        {visible ? <IconEyeOff size={15} /> : <IconEye size={15} />}
+      </button>
+    </div>
+  )
+}
 export const IconSearch = ({ size }) => <Icon size={size} path="M11.742 10.344a6.5 6.5 0 10-1.397 1.398l3.85 3.85a1 1 0 001.415-1.414l-3.868-3.834zm-5.24 1.4a5 5 0 110-10 5 5 0 010 10z" />
 export const IconChevron = ({ size, dir = 'right' }) => {
   const paths = { right:'M6 3l5 5-5 5', left:'M10 3L5 8l5 5', down:'M3 6l5 5 5-5', up:'M3 10l5-5 5 5' }
