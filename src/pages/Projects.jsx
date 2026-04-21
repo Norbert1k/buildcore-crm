@@ -129,7 +129,7 @@ export default function Projects() {
                         </td>
                         <td onClick={e => { if (p.client_id) { e.stopPropagation(); navigate(`/clients/${p.client_id}`) } }}>
                           {p.client_id
-                            ? <span style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}>{p.client_name || '—'}</span>
+                            ? <span style={{ color: 'var(--text)', cursor: 'pointer', fontWeight: 700 }}>{p.client_name || '—'}</span>
                             : (p.client_name || '—')
                           }
                         </td>
@@ -189,7 +189,7 @@ export default function Projects() {
                         </td>
                         <td onClick={e => { if (p.client_id) { e.stopPropagation(); navigate(`/clients/${p.client_id}`) } }}>
                           {p.client_id
-                            ? <span style={{ color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}>{p.client_name || '—'}</span>
+                            ? <span style={{ color: 'var(--text)', cursor: 'pointer', fontWeight: 700 }}>{p.client_name || '—'}</span>
                             : (p.client_name || '—')
                           }
                         </td>
