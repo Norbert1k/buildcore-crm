@@ -50,6 +50,10 @@ export default function SubcontractorDetail() {
       supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
       supabase.from('performance_ratings').select('*, profiles(full_name), projects(project_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
     ])
+    // Log any errors so silent-failure bugs become visible in the console
+    for (const [name, res] of [['sub', subRes], ['docs', docsRes], ['projects', projRes], ['allProjects', allProjRes], ['notes', notesRes], ['contacts', contactsRes], ['ratings', ratingsRes]]) {
+      if (res?.error) console.error('[SubcontractorDetail] ' + name + ' query error:', res.error)
+    }
     setSub(subRes.data)
     setDocs(docsRes.data || [])
     setProjects(projRes.data || [])
