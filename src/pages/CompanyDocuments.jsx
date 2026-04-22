@@ -626,7 +626,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
               ? <>
                   <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus
                     onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                    style={{ fontSize: 11, lineHeight: '24px', padding: '0 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 90 }} />
+                    style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
                   <button onClick={addChildFolder} disabled={savingSub} style={BG}>{savingSub ? '...' : 'Add'}</button>
                   <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={B}>✕</button>
                 </>
@@ -895,7 +895,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
             <>
               <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addSubfolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 130, alignSelf: 'center' }} />
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260, alignSelf: 'center' }} />
               <button onClick={addSubfolder} disabled={savingSub} style={BG}>{savingSub ? '...' : 'Add'}</button>
               <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={B}>✕</button>
             </>
