@@ -175,7 +175,8 @@ function AllSubcontractorsTab({ designTeam }) {
     } else {
       query = query.in('category', ['subcontractor', 'both'])
     }
-    const { data } = await query
+    const { data, error } = await query
+    if (error) console.error('[Subcontractors] load error:', error)
     setSubs(data || [])
     setLoading(false)
   }
