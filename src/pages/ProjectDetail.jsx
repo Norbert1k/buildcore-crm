@@ -323,7 +323,24 @@ export default function ProjectDetail() {
   }
 
   async function assignSub() {
-    await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: assignForm.contract_value || null })
+    if (!assignForm.subcontractor_id) return
+    const payload = {
+      project_id: id,
+      subcontractor_id: assignForm.subcontractor_id,
+      trade_on_project: assignForm.trade_on_project || null,
+      category: assignForm.category || 'contractual_work',
+      start_date: assignForm.start_date || null,
+      end_date: assignForm.end_date || null,
+      contract_value: assignForm.contract_value ? parseFloat(assignForm.contract_value) : null,
+      variation_amount: assignForm.variation_amount || 0,
+      variation_notes: assignForm.variation_notes || null,
+    }
+    const { error } = await supabase.from('project_subcontractors').insert(payload)
+    if (error) {
+      console.error('[ProjectDetail] assignSub error:', error)
+      alert('Could not assign: ' + error.message)
+      return
+    }
     setShowAssignSub(false)
     setAssignForm({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
     load()
