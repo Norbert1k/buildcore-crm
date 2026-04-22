@@ -161,6 +161,14 @@ export default function ProjectDetail() {
 
   useEffect(() => { load() }, [id])
 
+  // If project is tender and user was on a tab that's now hidden, snap to Documents
+  useEffect(() => {
+    if (project?.status === 'tender' && ['hs', 'photos', 'casestudy'].includes(activeTab)) {
+      setActiveTab('documents')
+      localStorage.setItem(_tabKey, 'documents')
+    }
+  }, [project?.status, activeTab])
+
   async function load() {
     setLoading(true)
     const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
@@ -512,20 +520,20 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
         </div>
-        {can('view_hs_handover') && (
+        {can('view_hs_handover') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           H&S Handover
         </div>
         )}
-        {can('view_photos') && (
+        {can('view_photos') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => { setActiveTab('photos'); localStorage.setItem(_tabKey, 'photos') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           Photos<span className="tab-badge">{photos.length}</span>
         </div>
         )}
 
-        {can('view_case_study') && (
+        {can('view_case_study') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => { setActiveTab('casestudy'); localStorage.setItem(_tabKey, 'casestudy') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Case Study
@@ -567,7 +575,7 @@ export default function ProjectDetail() {
 
 
 
-      {activeTab === 'photos' && can('view_photos') && (
+      {activeTab === 'photos' && can('view_photos') && project?.status !== 'tender' && (
         <div>
           <div className="section-header" style={{ marginBottom: 16 }}>
             <div className="section-title">Project Photos</div>
@@ -605,7 +613,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === 'casestudy' && can('view_case_study') && (
+      {activeTab === 'casestudy' && can('view_case_study') && project?.status !== 'tender' && (
         <CaseStudy project={project} subs={subs} docs={docs} photos={photos} />
       )}
 
@@ -764,7 +772,7 @@ export default function ProjectDetail() {
       {activeTab === 'documents' && (
         <div>
           {/* Project Documentation folder system */}
-          <ProjectDocumentation projectId={id} projectName={project?.project_name} />
+          <ProjectDocumentation projectId={id} projectName={project?.project_name} projectStatus={project?.status} />
 
           {/* Divider */}
           <div style={{ margin: '24px 0', borderTop: '1px solid var(--border)' }} />
@@ -932,7 +940,7 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
-      {activeTab === 'hs' && can('view_hs_handover') && (
+      {activeTab === 'hs' && can('view_hs_handover') && project?.status !== 'tender' && (
         <HSHandover projectId={id} projectName={project?.project_name} />
       )}
 
