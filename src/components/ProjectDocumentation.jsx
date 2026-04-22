@@ -738,7 +738,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
                   ? <>
                       <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus
                         onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                        style={{ fontSize: 11, lineHeight: '24px', padding: '0 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 90 }} />
+                        style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
                       <button onClick={addChildFolder} disabled={savingSub} style={BtnG}>{savingSub ? '...' : 'Add'}</button>
                       <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={Btn}>✕</button>
                     </>
@@ -1050,7 +1050,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
               <button onClick={addCustomSubfolder} disabled={savingFolder} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
               <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
             </>
@@ -1200,7 +1200,7 @@ function AddTopFolderButton({ onAdd }) {
     <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Folder name" autoFocus
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setShow(false) }}
-        style={{ fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)', color: 'var(--text)', flex: 1 }} />
+        style={{ fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)', color: 'var(--text)', flex: 1, minWidth: 260 }} />
       <button onClick={save} disabled={saving} style={BtnG}>{saving ? '...' : 'Add'}</button>
       <button onClick={() => setShow(false)} style={Btn}>Cancel</button>
     </div>
