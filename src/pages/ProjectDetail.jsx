@@ -318,7 +318,6 @@ export default function ProjectDetail() {
     if (!ps) return
     setSavingEditAssign(true)
     const payload = {
-      trade_on_project: editAssignForm.trade_on_project || null,
       start_date: editAssignForm.start_date || null,
       end_date: editAssignForm.end_date || null,
       contract_value: editAssignForm.contract_value ? parseFloat(editAssignForm.contract_value) : null,
@@ -903,14 +902,6 @@ export default function ProjectDetail() {
           </button>
         </>}>
         <div className="form-grid">
-          <div className="full">
-            <Field label="Trade on Project">
-              <select value={editAssignForm.trade_on_project} onChange={e => setEditAssignForm(f => ({ ...f, trade_on_project: e.target.value }))}>
-                <option value="">— Select trade —</option>
-                {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </Field>
-          </div>
           <Field label="Start Date">
             <input type="date" value={editAssignForm.start_date} onChange={e => setEditAssignForm(f => ({ ...f, start_date: e.target.value }))} />
           </Field>
