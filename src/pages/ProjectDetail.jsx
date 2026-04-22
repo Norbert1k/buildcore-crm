@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
+import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo, TRADES } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
@@ -676,7 +676,7 @@ export default function ProjectDetail() {
                               </span>
                             </div>
                           </td>
-                          <td>{ps.subcontractors?.trade || ps.trade_on_project}</td>
+                          <td>{ps.subcontractors?.trade ? <Pill cls="pill-blue">{ps.subcontractors.trade}</Pill> : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                           <td className="td-muted">{formatDate(ps.start_date)}</td>
                           <td className="td-muted">{formatDate(ps.end_date)}</td>
                           {can('view_project_value') && (
@@ -905,7 +905,10 @@ export default function ProjectDetail() {
         <div className="form-grid">
           <div className="full">
             <Field label="Trade on Project">
-              <input value={editAssignForm.trade_on_project} onChange={e => setEditAssignForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder="e.g. Electrical" />
+              <select value={editAssignForm.trade_on_project} onChange={e => setEditAssignForm(f => ({ ...f, trade_on_project: e.target.value }))}>
+                <option value="">— Select trade —</option>
+                {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
             </Field>
           </div>
           <Field label="Start Date">
@@ -957,6 +960,12 @@ export default function ProjectDetail() {
             <option value="design_team">Design Team</option>
             <option value="contractual_work">Contractual Work</option>
           </select></Field></div>
+          <div className="full"><Field label="Trade on Project">
+            <select value={assignForm.trade_on_project} onChange={e => setAssignForm(f => ({ ...f, trade_on_project: e.target.value }))}>
+              <option value="">— Select trade —</option>
+              {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </Field></div>
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
           <div className="full"><Field label="Order Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" /></Field></div>
@@ -1047,7 +1056,7 @@ function CaseStudy({ project, subs, docs, photos }) {
     setGeneratingAI(true)
     try {
       const duration = calcDuration(project.start_date, project.end_date)
-      const trades = subs.map(s => s.subcontractors?.trade || s.trade_on_project).filter(Boolean).join(', ')
+      const trades = subs.map(s => s.subcontractors?.trade).filter(Boolean).join(', ')
       const prompt = `You are writing a professional project case study for City Construction Ltd, a UK construction company. 
 Rewrite the following project description into a compelling, professional 2-3 paragraph overview suitable for a client-facing case study PDF.
 Use professional construction industry language. Highlight the scope, complexity and value delivered. Do not invent facts.
@@ -1206,7 +1215,7 @@ Write only the overview text, no headings or labels.`
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{ps.subcontractors?.company_name}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || ps.trade_on_project}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || '—'}</div>
                     </div>
                   </div>
                 ))}
