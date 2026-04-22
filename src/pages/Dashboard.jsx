@@ -20,6 +20,9 @@ export default function Dashboard() {
       supabase.from('projects').select('id, status'),
       supabase.from('suppliers').select('id, status'),
     ])
+    for (const [name, res] of [['subs', subsRes], ['docs', docsRes], ['projects', projectsRes], ['suppliers', suppliersRes]]) {
+      if (res?.error) console.error('[Dashboard] ' + name + ' query error:', res.error)
+    }
     setData({
       subs: subsRes.data || [],
       alerts: docsRes.data || [],
