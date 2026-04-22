@@ -20,12 +20,30 @@ export default function Sidebar({ expCount, open, onClose }) {
   const { profile } = useAuth()
   const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
   const location = useLocation()
-  const [expandedKey, setExpandedKey] = useState(null)
+  const [expandedKeys, setExpandedKeys] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sidebar:expanded')
+      return saved ? new Set(JSON.parse(saved)) : new Set()
+    } catch { return new Set() }
+  })
 
   useEffect(() => {
-    if (location.pathname.startsWith('/subcontractors')) setExpandedKey('subcontractors')
-    if (location.pathname.startsWith('/projects')) setExpandedKey('projects')
+    if (location.pathname.startsWith('/subcontractors')) {
+      setExpandedKeys(prev => { const n = new Set(prev); n.add('subcontractors'); return n })
+    }
+    if (location.pathname.startsWith('/projects')) {
+      setExpandedKeys(prev => { const n = new Set(prev); n.add('projects'); return n })
+    }
   }, [location.pathname])
+
+  function toggleExpanded(key) {
+    setExpandedKeys(prev => {
+      const n = new Set(prev)
+      if (n.has(key)) n.delete(key); else n.add(key)
+      try { localStorage.setItem('sidebar:expanded', JSON.stringify([...n])) } catch {}
+      return n
+    })
+  }
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -84,13 +102,13 @@ export default function Sidebar({ expCount, open, onClose }) {
               {item.children ? (
                 <div
                   className={`nav-item${location.pathname.startsWith(item.to) ? ' active' : ''}`}
-                  onClick={() => setExpandedKey(k => k === item.key ? null : item.key)}
+                  onClick={() => toggleExpanded(item.key)}
                   style={{ userSelect: 'none' }}
                 >
                   {item.icon}
                   {item.label}
                   {item.badge && <span className="nav-badge">{item.badge}</span>}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform .2s', transform: expandedKey === item.key ? 'rotate(180deg)' : 'none' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform .2s', transform: expandedKeys.has(item.key) ? 'rotate(180deg)' : 'none' }}>
                     <polyline points="6 9 12 15 18 9"/>
                   </svg>
                 </div>
@@ -101,7 +119,7 @@ export default function Sidebar({ expCount, open, onClose }) {
                   {item.badge && <span className="nav-badge">{item.badge}</span>}
                 </NavLink>
               )}
-              {item.children && expandedKey === item.key && (
+              {item.children && expandedKeys.has(item.key) && (
                 <>
                   {item.children.filter(child => child.before && perms.nav.includes(child.key)).map(child => (
                     <NavLink key={child.to} to={child.to} className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
