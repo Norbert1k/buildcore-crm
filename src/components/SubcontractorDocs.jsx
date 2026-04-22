@@ -280,7 +280,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           {showAddFolder ? <>
-            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
+            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
             <button onClick={addCustomSubfolder} disabled={savingFolder} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
             <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
           </> : <>
@@ -358,7 +358,7 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
             <button onClick={() => { setRenameVal(label); setRenaming(true) }} style={Btn} title="Rename">{PENCIL}</button>
             {confirmDel ? <><button onClick={deleteFolder} style={BtnR}>Confirm</button><button onClick={() => setConfirmDel(false)} style={Btn}>✕</button></> : <button onClick={() => setConfirmDel(true)} style={BtnR} title="Delete">{BIN}</button>}
             {showAddSub ? <>
-              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addChild(); if (e.key === 'Escape') setShowAddSub(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 6px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 90 }} />
+              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addChild(); if (e.key === 'Escape') setShowAddSub(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
               <button onClick={addChild} style={BtnG}>Add</button><button onClick={() => setShowAddSub(false)} style={Btn}>✕</button>
             </> : <button onClick={() => setShowAddSub(true)} style={Btn}>+ Sub</button>}
           </>}
