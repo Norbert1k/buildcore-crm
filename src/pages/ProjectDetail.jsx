@@ -166,11 +166,15 @@ export default function ProjectDetail() {
     const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
-      supabase.from('project_documents').select('*, subcontractors(company_name), profiles!project_documents_uploaded_by_fkey(full_name)').eq('project_id', id).order('created_at', { ascending: false }),
+      supabase.from('project_documents').select('*, subcontractors(company_name)').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
       supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
     ])
+    // Log any query errors so silent-failure bugs become visible instead of showing empty lists
+    for (const [name, res] of [['project', projRes], ['subs', subsRes], ['docs', docsRes], ['allSubs', allSubsRes], ['ea', eaRes], ['allEAs', allEARes]]) {
+      if (res?.error) console.error('[ProjectDetail] ' + name + ' query error:', res.error)
+    }
     setProject(projRes.data)
     setDriveFolderId(projRes.data?.drive_folder_id || null)
     setDriveFolderName(projRes.data?.drive_folder_name || null)
