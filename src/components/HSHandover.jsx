@@ -1056,7 +1056,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addCustomFolder(); if (e.key === 'Escape') { setShowAddFolder(false); setNewFolderName('') } }}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
               <button onClick={addCustomFolder} disabled={!newFolderName.trim()} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
               <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
             </>
