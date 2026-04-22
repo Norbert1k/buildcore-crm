@@ -1208,7 +1208,7 @@ function AddTopFolderButton({ onAdd }) {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export default function ProjectDocumentation({ projectId, projectName }) {
+export default function ProjectDocumentation({ projectId, projectName, projectStatus }) {
   const { can, role } = useAuth()
   const [fileCounts, setFileCounts] = useState({})
   const [customTopFolders, setCustomTopFolders] = useState([])
@@ -1286,8 +1286,18 @@ export default function ProjectDocumentation({ projectId, projectName }) {
   // Site managers can only see Project Information and Project Programme
   const SITE_MANAGER_FOLDERS = ['00-project-information', '05-progress-report', '06-project-programme']
 
+  // Tender projects only need Project Information + Project Programme.
+  // The other folders (Orders, Payments, Variations, Progress Reports) are
+  // only relevant once the project is Active, so hide them to reduce clutter.
+  const TENDER_FOLDERS = ['00-project-information', '06-project-programme']
+  const isTender = projectStatus === 'tender'
+
   const allFolders = [...TEMPLATE_FOLDERS, ...(role === 'site_manager' ? [] : customTopFolders)]
-    .filter(f => role === 'site_manager' ? SITE_MANAGER_FOLDERS.includes(f.key) : !hiddenFolders.includes(f.key))
+    .filter(f => {
+      if (role === 'site_manager') return SITE_MANAGER_FOLDERS.includes(f.key)
+      if (isTender) return TENDER_FOLDERS.includes(f.key)
+      return !hiddenFolders.includes(f.key)
+    })
     .map(f => f.subfolders ? { ...f, subfolders: f.subfolders.filter(sf => !hiddenSubfolders.includes(sf.key)) } : f)
 
   return (
