@@ -36,10 +36,11 @@ export default function Projects() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('projects')
       .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
       .order('created_at', { ascending: false })
+    if (error) console.error('[Projects] load error:', error)
     setProjects(data || [])
     setLoading(false)
   }
