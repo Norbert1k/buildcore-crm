@@ -16,10 +16,11 @@ export default function Documents() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('documents_with_status')
       .select('*, subcontractors(id, company_name, trade)')
       .order('expiry_date', { nullsFirst: false })
+    if (error) console.error('[Documents] load error:', error)
     setDocs(data || [])
     setLoading(false)
   }
