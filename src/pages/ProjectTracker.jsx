@@ -78,10 +78,11 @@ export default function ProjectTracker() {
 
   async function loadProjects() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('projects')
       .select('id, project_name, project_ref, client_name, status, value, site_address, city, postcode, start_date, end_date, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
       .order('created_at', { ascending: false })
+    if (error) console.error('[ProjectTracker] load error:', error)
 
     const withCoords = await Promise.all((data || []).map(async (p) => {
       let coords = await geocodePostcode(p.postcode)
