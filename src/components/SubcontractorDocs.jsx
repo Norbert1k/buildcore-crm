@@ -90,7 +90,6 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState('')
   const { isImage, isPdf } = fileTypeInfo(file.file_name)
-  const isSent = file.direction === 'sent'
 
   useEffect(() => {
     supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
@@ -112,8 +111,6 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
           style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
-        {/* Sent/Received badge */}
-        <div style={{ position: 'absolute', top: 6, left: 30, zIndex: 1, width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, background: isSent ? '#e8f5e7' : '#E6F1FB', color: isSent ? '#448a40' : '#185FA5' }}>{isSent ? '↑' : '↓'}</div>
         {/* Thumbnail preview */}
         <div style={{ height: 120, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onPreview(file, url)}>
           {isImage && url ? <img src={url} alt={file.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -159,7 +156,6 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
   const { isPdf, isWord, isExcel, isPpt, isImage } = fileTypeInfo(file.file_name)
   const iconColor = isPdf ? '#E24B4A' : isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : isImage ? '#448a40' : '#888'
   const iconLetter = isPdf ? 'PDF' : isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
-  const isSent = file.direction === 'sent'
 
   useEffect(() => { supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600).then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) }) }, [file.storage_path])
   async function renameFile() { if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }; await supabase.from('project_sub_files').update({ file_name: renameVal.trim() }).eq('id', file.id); file.file_name = renameVal.trim(); setRenaming(false) }
@@ -171,7 +167,6 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
         <div onClick={e => { e.stopPropagation(); onSelect(file.id) }} style={{ width: 16, height: 16, borderRadius: 3, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.3)'), background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
-        <div style={{ width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 600, flexShrink: 0, background: isSent ? '#e8f5e7' : '#E6F1FB', color: isSent ? '#448a40' : '#185FA5' }}>{isSent ? '↑' : '↓'}</div>
         <div style={{ width: 32, height: 32, borderRadius: 5, background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {iconLetter ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
         </div>
@@ -212,7 +207,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 }
 
 // ── PrimeFolder ──────────────────────────────────────────────
-function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, setView, onPreview, onReload, direction }) {
+function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, setView, onPreview, onReload }) {
   const [open, setOpen] = useState(false)
   const [subfolders, setSubfolders] = useState([])
   const [showAddFolder, setShowAddFolder] = useState(false)
@@ -240,7 +235,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i }))
       const path = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: folder.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received', uploaded_by: profile?.id })
+      if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: folder.key, file_name: file.name, file_size: file.size, storage_path: path, uploaded_by: profile?.id })
     }
     setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] })
     loadRootFiles()
@@ -265,7 +260,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
       const keyMap = {}; for (const fp of drop.folders.sort()) { const parts = fp.split('/'); const label = parts[parts.length - 1]; const parentPath = parts.slice(0, -1).join('/'); const parentKey = parentPath ? keyMap[parentPath] : folder.key; const key = (parentKey || folder.key) + '-custom-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6); keyMap[fp] = key; await supabase.from('project_sub_folders').insert({ project_id: projectId, project_sub_id: projectSubId, parent_key: parentKey || folder.key, folder_key: key, label }) }
-      for (const { file, path } of drop.files) { const sfKey = path ? keyMap[path] : null; const sp = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(sp, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sfKey || folder.key, file_name: file.name, file_size: file.size, storage_path: sp, direction: direction || 'received' }) }
+      for (const { file, path } of drop.files) { const sfKey = path ? keyMap[path] : null; const sp = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(sp, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sfKey || folder.key, file_name: file.name, file_size: file.size, storage_path: sp }) }
       loadCustomSubfolders(); loadRootFiles()
     } else { const f = drop.files.map(x => x.file); if (f.length) uploadToFolder(f) }
   }
@@ -300,7 +295,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
-          {subfolders.map(sf => <SubFolder key={sf.key} sf={sf} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} direction={direction} onReload={() => { loadCustomSubfolders(); loadRootFiles() }} />)}
+          {subfolders.map(sf => <SubFolder key={sf.key} sf={sf} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadCustomSubfolders(); loadRootFiles() }} />)}
           {files.length === 0 && subfolders.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 80, border: '0.5px dashed var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
@@ -314,7 +309,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
 }
 
 // ── SubFolder (recursive child folders) ──────────────────────
-function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, onPreview, direction, onReload }) {
+function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, onPreview, onReload }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [children, setChildren] = useState([])
@@ -338,7 +333,7 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
   async function loadChildren() { const { data } = await supabase.from('project_sub_folders').select('*').eq('project_sub_id', projectSubId).eq('parent_key', sf.key).order('created_at'); setChildren(data || []) }
   async function uploadFiles(fileList) {
     if (!fileList.length) return; const fileArr = Array.from(fileList); setUploading(true); setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
-    for (let i = 0; i < fileArr.length; i++) { const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i })); const path = `projects/${projectId}/subs/${projectSubId}/${sf.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(path, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sf.key, file_name: file.name, file_size: file.size, storage_path: path, direction: direction || 'received', uploaded_by: profile?.id }) }
+    for (let i = 0; i < fileArr.length; i++) { const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i })); const path = `projects/${projectId}/subs/${projectSubId}/${sf.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(path, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sf.key, file_name: file.name, file_size: file.size, storage_path: path, uploaded_by: profile?.id }) }
     setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] }); loadFiles()
   }
   async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
@@ -373,7 +368,7 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
       </div>
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ marginLeft: 14, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
-          {children.map(ch => <SubFolder key={ch.folder_key} sf={{ key: ch.folder_key, label: ch.label, custom: true }} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} direction={direction} onReload={() => { loadFiles(); loadChildren() }} />)}
+          {children.map(ch => <SubFolder key={ch.folder_key} sf={{ key: ch.folder_key, label: ch.label, custom: true }} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadFiles(); loadChildren() }} />)}
           {files.length === 0 && children.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
@@ -389,7 +384,6 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
 // ── Main ─────────────────────────────────────────────────────
 export default function SubcontractorDocs({ projectId, projectSubId, subFiles, onReload, canManage }) {
   const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('subDocView') || 'grid' } catch { return 'grid' } })
-  const [direction, setDirection] = useState('received')
   const [previewFile, setPreviewFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   function setView(mode) { setViewMode(mode); try { localStorage.setItem('subDocView', mode) } catch {} }
@@ -397,14 +391,7 @@ export default function SubcontractorDocs({ projectId, projectSubId, subFiles, o
 
   return (
     <div style={{ padding: '10px 16px 14px' }}>
-      {canManage && <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 11, color: 'var(--text3)' }}>Upload direction:</span>
-        <div style={{ display: 'flex', gap: 0, border: '0.5px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
-          <button onClick={() => setDirection('sent')} style={{ fontSize: 11, padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: direction === 'sent' ? '#448a40' : 'var(--surface)', color: direction === 'sent' ? 'white' : 'var(--text2)' }}>↑ Sent to them</button>
-          <button onClick={() => setDirection('received')} style={{ fontSize: 11, padding: '4px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: direction === 'received' ? '#448a40' : 'var(--surface)', color: direction === 'received' ? 'white' : 'var(--text2)' }}>↓ Received from them</button>
-        </div>
-      </div>}
-      {SUB_DOC_FOLDERS.map(folder => <PrimeFolder key={folder.key} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} setView={setView} onPreview={openPreview} onReload={onReload} direction={direction} />)}
+      {SUB_DOC_FOLDERS.map(folder => <PrimeFolder key={folder.key} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} setView={setView} onPreview={openPreview} onReload={onReload} />)}
       {previewFile && previewUrl && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setPreviewFile(null); setPreviewUrl(null) }}>
           <div style={{ width: '100%', maxWidth: 900, maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
