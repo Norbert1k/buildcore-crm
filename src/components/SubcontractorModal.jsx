@@ -147,7 +147,7 @@ export default function SubcontractorModal({ sub, onClose, onSaved, defaultCateg
         <Field label="VAT Number">
           <input value={form.vat_number} onChange={e => set('vat_number', e.target.value)} placeholder="e.g. GB123456789" />
         </Field>
-        <Field label="CIS Number">
+        <Field label="UTR">
           <input value={form.cis_number} onChange={e => set('cis_number', e.target.value)} placeholder="e.g. 1234567890" />
         </Field>
         <div className="full">
