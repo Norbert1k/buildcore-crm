@@ -1,11 +1,11 @@
 import { differenceInDays, format, parseISO } from 'date-fns'
 
 export const TRADES = [
-  'Architects','Asbestos Surveys','Brickwork','Building Control','Carpentry','Civil Engineers',
+  'Architects','Asbestos Surveys','Borehole Investigations','Brickwork','Building Control','Carpentry','Civil Engineers',
   'Consultant','Core Drilling & Sawing','Demolition','Drainage','Ecologist','Electrical',
   'Fire Consultants','Fire Engineer','Fire Protection','Flood Risk Consultants','Flooring','Glazing','Ground Investigation','Groundworks',
-  'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','MEP Consultants',
-  'Noise Consultants','Nurse Call System','Painting & Decorating','Planning Consultants','Plastering','Plumbing','Principle Designers',
+  'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','Mastic Man','MEP Consultants',
+  'Noise Consultants','Nurse Call System','Painting & Decorating','Piling','Planning Consultants','Plastering','Plumbing','Precast Concrete B&B','Principle Designers',
   'Roofing','Roofing Trusses','Scaffolding',
   'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
   'Structural Engineers','Wardrobes','Warranty Providers','Other'
@@ -20,7 +20,7 @@ export const DESIGN_TEAM_TRADES = [
 
 // Trades that default to "Both" (can sit in Subcontractor OR Design Team tab)
 export const BOTH_TRADES = [
-  'Asbestos Surveys', 'Ecologist', 'Fire Engineer', 'Flood Risk Consultants', 'Ground Investigation',
+  'Asbestos Surveys', 'Borehole Investigations', 'Ecologist', 'Fire Engineer', 'Flood Risk Consultants', 'Ground Investigation',
   'Lighting Consultants', 'Noise Consultants', 'Nurse Call System', 'Planning Consultants',
 ]
 
