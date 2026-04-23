@@ -328,147 +328,187 @@ export default function ProjectDetail() {
   }
 
   // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
-  // Category: 'design_team' or 'contractual_work'
+  // Uses jsPDF + autoTable loaded from CDN — builds PDF from data, no DOM capture.
   async function exportDirectoryPDF(category) {
-    console.log('[exportDirectoryPDF] clicked', category, 'subs:', subs.length)
+    console.log('[exportDirectoryPDF] clicked', category)
     try {
       const isDesignTeam = category === 'design_team'
       const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
+
+      // Filter subs for this category
       const catSubs = subs.filter(ps => {
         const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
         return c === category
       })
-      console.log('[exportDirectoryPDF] catSubs:', catSubs.length)
-    // Sort alphabetically by company name (case-insensitive), inline so this works
-    // regardless of whether utils.js sortBy helper is deployed yet.
-    const rows = catSubs.map(ps => ({
-      role: ps.subcontractors?.trade || ps.trade_on_project || '—',
-      company: ps.subcontractors?.company_name || '—',
-      contact: ps.subcontractors?.contact_name || '—',
-      phone: ps.subcontractors?.phone || '',
-      email: ps.subcontractors?.email || '',
-    })).sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
 
-    // Build an offscreen container — html2canvas captures what actually renders,
-    // so we can't use display:none or opacity:0. Push it far off-screen instead.
-    const container = document.createElement('div')
-    container.style.position = 'fixed'
-    container.style.left = '-20000px'
-    container.style.top = '0'
-    container.style.width = '1123px' // A4 landscape at 96dpi = 1123 x 794
-    container.style.background = 'white'
-    container.style.color = '#1a1a1a'
-    container.style.fontFamily = 'Arial, Helvetica, sans-serif'
-    container.style.padding = '40px 48px'
-    container.style.boxSizing = 'border-box'
-    container.style.zIndex = '-9999'
-
-    const address = 'One Canada Square, Canary Wharf, London E14 5AA'
-    const phone   = '0203 948 1930'
-    const email   = 'info@cltd.co.uk'
-    const web     = 'www.cltd.co.uk'
-
-    container.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px;">
-        <div>
-          <div style="font-size:22px; font-weight:600; color:#1a1a1a; margin-bottom:10px;">City Construction Group</div>
-          <div style="font-size:10.5px; color:#555; line-height:1.6;">${address}</div>
-          <div style="font-size:10.5px; color:#555; line-height:1.6;">
-            <strong>T:</strong> ${phone} &nbsp;&nbsp;
-            <strong>E:</strong> ${email} &nbsp;&nbsp;
-            <strong>W:</strong> ${web}
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:18px; font-weight:700; letter-spacing:0.02em; color:#1a1a1a;">CITY</div>
-          <div style="font-size:10px; letter-spacing:0.15em; color:#448a40; margin-top:2px;">CONSTRUCTION</div>
-        </div>
-      </div>
-      <div style="border-top:0.5px solid #cfcfcf; margin-bottom:30px;"></div>
-      <div style="font-size:20px; font-weight:600; margin-bottom:18px;">${title}</div>
-      ${rows.length === 0 ? `
-        <div style="padding:40px; text-align:center; color:#888; font-size:13px; border:1px solid #e0e0e0; border-radius:4px;">
-          No ${isDesignTeam ? 'design team members' : 'subcontractors'} assigned to this project yet.
-        </div>
-      ` : `
-        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-          <thead>
-            <tr style="background:#1a1a1a; color:white;">
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Role</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Company</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Contact Name</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Telephone</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Email</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map((r, i) => `
-              <tr style="border-bottom:0.5px solid #e0e0e0;">
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.role)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.company)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.contact)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top; white-space:nowrap;">${escapeHtml(r.phone)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.email)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `}
-      <div style="text-align:center; color:#aaa; font-size:10px; margin-top:40px; padding-top:12px; border-top:0.5px solid #e5e5e5;">City Construction Group</div>
-    `
-
-    document.body.appendChild(container)
-    console.log('[exportDirectoryPDF] container dims:', container.offsetWidth, 'x', container.offsetHeight)
-
-    // Load html2pdf if not already loaded
-    const runExport = () => {
-      // Give the browser a render tick to lay out the DOM before capture
-      setTimeout(() => {
-        console.log('[exportDirectoryPDF] capturing. Container dims now:', container.offsetWidth, 'x', container.offsetHeight)
-        window.html2pdf().set({
-          margin: 10,
-          filename: `${project?.project_name || 'Project'} - ${title}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: true, windowWidth: 1123, backgroundColor: '#ffffff' },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-        }).from(container).save().then(() => {
-          console.log('[exportDirectoryPDF] save complete')
-          document.body.removeChild(container)
-        }).catch(err => {
-          console.error('[exportDirectoryPDF] html2pdf save failed:', err)
-          alert('PDF export failed. Check console for details.')
-          if (container.parentNode) document.body.removeChild(container)
-        })
-      }, 200)
-    }
-
-    if (window.html2pdf) {
-      console.log('[exportDirectoryPDF] html2pdf already loaded')
-      runExport()
-    } else {
-      console.log('[exportDirectoryPDF] loading html2pdf from CDN')
-      const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
-      script.onload = () => { console.log('[exportDirectoryPDF] CDN loaded'); runExport() }
-      script.onerror = (e) => {
-        console.error('[exportDirectoryPDF] CDN load failed:', e)
-        alert('Could not load PDF library. Check your internet connection.')
-        if (container.parentNode) document.body.removeChild(container)
+      // Build unified entry list. For design team, prepend assigned Employers Agents.
+      const entries = []
+      if (isDesignTeam) {
+        for (const pea of (projectEAs || [])) {
+          const ea = pea.employer_agents || {}
+          entries.push({
+            role: "Employer's Agent",
+            company: ea.company_name || '—',
+            contact: ea.contact_name || '—',
+            phone: ea.phone || '',
+            email: ea.email || '',
+            address: [pea.street_address || ea.street_address, pea.city || ea.city, pea.postcode || ea.postcode].filter(Boolean).join(', ') || ''
+          })
+        }
       }
-      document.head.appendChild(script)
-    }
+      for (const ps of catSubs) {
+        const s = ps.subcontractors || {}
+        entries.push({
+          role: s.trade || ps.trade_on_project || '—',
+          company: s.company_name || '—',
+          contact: s.contact_name || '—',
+          phone: s.phone || '',
+          email: s.email || '',
+          address: [s.address, s.city, s.postcode].filter(Boolean).join(', ') || ''
+        })
+      }
+      // Sort alphabetically by company name (case-insensitive)
+      entries.sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
+      console.log('[exportDirectoryPDF] entries:', entries.length)
+
+      // Load jsPDF + autoTable from CDN
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = src
+        s.onload = resolve
+        s.onerror = () => reject(new Error('Failed to load ' + src))
+        document.head.appendChild(s)
+      })
+      if (!window.jspdf) {
+        console.log('[exportDirectoryPDF] loading jsPDF')
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        console.log('[exportDirectoryPDF] loading autoTable')
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
+      }
+      const { jsPDF } = window.jspdf
+
+      // Create portrait A4 PDF (each entry is its own vertical section)
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+
+      // Header: City Construction Group + address bar
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(16)
+      doc.setTextColor(26, 26, 26)
+      doc.text('City Construction Group', 15, 18)
+
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.setTextColor(90, 90, 90)
+      doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 24)
+      doc.text('T: 0203 948 1930    E: info@cltd.co.uk    W: www.cltd.co.uk', 15, 29)
+
+      // Right side: logo wordmark
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(14)
+      doc.setTextColor(26, 26, 26)
+      doc.text('CITY', pageW - 15, 18, { align: 'right' })
+      doc.setFontSize(8)
+      doc.setTextColor(68, 138, 64)
+      doc.setFont('helvetica', 'normal')
+      doc.text('CONSTRUCTION', pageW - 15, 23, { align: 'right' })
+
+      // Divider
+      doc.setDrawColor(207, 207, 207)
+      doc.setLineWidth(0.2)
+      doc.line(15, 34, pageW - 15, 34)
+
+      // Title
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(14)
+      doc.setTextColor(26, 26, 26)
+      doc.text(title, 15, 44)
+
+      // Project name (subtitle)
+      if (project?.project_name) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(10)
+        doc.setTextColor(100, 100, 100)
+        doc.text(project.project_name, 15, 50)
+      }
+
+      if (entries.length === 0) {
+        doc.setFont('helvetica', 'italic')
+        doc.setFontSize(11)
+        doc.setTextColor(150, 150, 150)
+        doc.text(isDesignTeam ? 'No design team members assigned to this project yet.' : 'No subcontractors assigned to this project yet.', pageW / 2, 80, { align: 'center' })
+      } else {
+        // Per-entry vertical label/value table (matches docx template)
+        let currentY = 58
+        const bottomMargin = 25
+
+        entries.forEach((e, i) => {
+          // Role heading
+          const headingH = 8
+          const rows = [
+            ['Company Name', e.company || '—'],
+            ['Postal Address', e.address || '—'],
+            ['Contact Name', e.contact || '—'],
+            ['Telephone Number', e.phone || '—'],
+            ['Email Address', e.email || '—'],
+          ]
+          // Rough height estimate: each row ~7mm
+          const estimatedH = headingH + rows.length * 7 + 8
+
+          // Page break if this entry won't fit
+          if (currentY + estimatedH > pageH - bottomMargin) {
+            doc.addPage()
+            currentY = 20
+          }
+
+          // Role heading (green bar + white text)
+          doc.setFillColor(68, 138, 64)
+          doc.rect(15, currentY, pageW - 30, 8, 'F')
+          doc.setFont('helvetica', 'bold')
+          doc.setFontSize(11)
+          doc.setTextColor(255, 255, 255)
+          doc.text(e.role || '—', 18, currentY + 5.5)
+          currentY += 8
+
+          // Label/value table
+          doc.autoTable({
+            startY: currentY,
+            body: rows,
+            theme: 'grid',
+            styles: { font: 'helvetica', fontSize: 10, cellPadding: 2.5, textColor: [51, 51, 51], lineColor: [220, 220, 220], lineWidth: 0.1, valign: 'top' },
+            columnStyles: {
+              0: { cellWidth: 45, fontStyle: 'bold', fillColor: [245, 245, 245], textColor: [80, 80, 80] },
+              1: { cellWidth: 'auto' },
+            },
+            margin: { left: 15, right: 15 },
+            didDrawPage: (data) => { /* noop — autoTable manages page breaks internally */ },
+          })
+
+          currentY = doc.lastAutoTable.finalY + 6
+        })
+      }
+
+      // Footer
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(160, 160, 160)
+        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
+        doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
+      }
+
+      const filename = `${project?.project_name || 'Project'} - ${title}.pdf`
+      doc.save(filename)
+      console.log('[exportDirectoryPDF] saved:', filename)
     } catch (err) {
       console.error('[exportDirectoryPDF] error:', err)
       alert('PDF export failed: ' + (err?.message || err))
     }
-  }
-
-  // HTML-escape helper — prevents injection and broken markup from special chars
-  function escapeHtml(s) {
-    if (s == null) return ''
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   }
 
   async function assignSub() {
