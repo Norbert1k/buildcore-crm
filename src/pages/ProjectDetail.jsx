@@ -171,7 +171,7 @@ export default function ProjectDetail() {
     setLoading(true)
     const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
-      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
+      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name)').eq('project_id', id),
       supabase.from('project_documents').select('*, subcontractors(company_name)').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
@@ -622,6 +622,16 @@ export default function ProjectDetail() {
           <div className="section-header">
             <div className="section-title">Assigned {catLabel}</div>
             <div style={{ display: 'flex', gap: 8 }}>
+              {catSubs.length > 0 && (
+                <button className="btn btn-sm" onClick={() => exportDirectoryPDF(categoryKey)} title="Export as PDF">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  {isDesignTeam ? 'Export Project Directory PDF' : 'Export PDF Procured Works'}
+                </button>
+              )}
               {(can('manage_projects') || can('manage_subcontractors')) && (
                 <button className="btn btn-primary btn-sm" onClick={() => { setAssignForm(f => ({ ...f, category: categoryKey })); setShowAssignSub(true) }}>
                   <IconPlus size={13} /> Assign {catLabel === 'Subcontractors' ? 'Subcontractor' : 'Design Team'}
@@ -1006,6 +1016,121 @@ Write only the overview text, no headings or labels.`
       if (text) setAiOverview(text)
     } catch (e) { console.error(e) }
     setGeneratingAI(false)
+  }
+
+  // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
+  // Category: 'design_team' or 'contractual_work'
+  async function exportDirectoryPDF(category) {
+    const isDesignTeam = category === 'design_team'
+    const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
+    const catSubs = subs.filter(ps => {
+      const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
+      return c === category
+    })
+    // Sort alphabetically by company name (case-insensitive)
+    const rows = sortBy(catSubs.map(ps => ({
+      role: ps.subcontractors?.trade || ps.trade_on_project || '—',
+      company: ps.subcontractors?.company_name || '—',
+      contact: ps.subcontractors?.contact_name || '—',
+      phone: ps.subcontractors?.phone || '',
+      email: ps.subcontractors?.email || '',
+    })), 'company')
+
+    // Build an offscreen container
+    const container = document.createElement('div')
+    container.style.position = 'fixed'
+    container.style.left = '-10000px'
+    container.style.top = '0'
+    container.style.width = '794px' // A4 width at 96dpi landscape-ish
+    container.style.background = 'white'
+    container.style.color = '#1a1a1a'
+    container.style.fontFamily = 'Arial, Helvetica, sans-serif'
+    container.style.padding = '40px 48px'
+
+    const address = 'One Canada Square, Canary Wharf, London E14 5AA'
+    const phone   = '0203 948 1930'
+    const email   = 'info@cltd.co.uk'
+    const web     = 'www.cltd.co.uk'
+
+    container.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px;">
+        <div>
+          <div style="font-size:22px; font-weight:600; color:#1a1a1a; margin-bottom:10px;">City Construction Group</div>
+          <div style="font-size:10.5px; color:#555; line-height:1.6;">${address}</div>
+          <div style="font-size:10.5px; color:#555; line-height:1.6;">
+            <strong>T:</strong> ${phone} &nbsp;&nbsp;
+            <strong>E:</strong> ${email} &nbsp;&nbsp;
+            <strong>W:</strong> ${web}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <img src="/logo.png" alt="City Construction" style="height:60px; width:auto; object-fit:contain;" />
+        </div>
+      </div>
+      <div style="border-top:0.5px solid #cfcfcf; margin-bottom:30px;"></div>
+      <div style="font-size:20px; font-weight:600; margin-bottom:18px;">${title}</div>
+      ${rows.length === 0 ? `
+        <div style="padding:40px; text-align:center; color:#888; font-size:13px; border:1px solid #e0e0e0; border-radius:4px;">
+          No ${isDesignTeam ? 'design team members' : 'subcontractors'} assigned to this project yet.
+        </div>
+      ` : `
+        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+          <thead>
+            <tr style="background:#1a1a1a; color:white;">
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Role</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Company</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Contact Name</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Telephone</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Email</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r, i) => `
+              <tr style="border-bottom:0.5px solid #e0e0e0;">
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.role)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.company)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.contact)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top; white-space:nowrap;">${escapeHtml(r.phone)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.email)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+      <div style="text-align:center; color:#aaa; font-size:10px; margin-top:40px; padding-top:12px; border-top:0.5px solid #e5e5e5;">City Construction Group</div>
+    `
+
+    document.body.appendChild(container)
+
+    // Load html2pdf if not already loaded
+    const runExport = () => {
+      window.html2pdf().set({
+        margin: 0,
+        filename: `${project?.project_name || 'Project'} - ${title}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+      }).from(container).save().then(() => {
+        document.body.removeChild(container)
+      })
+    }
+
+    if (window.html2pdf) {
+      runExport()
+    } else {
+      const script = document.createElement('script')
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
+      script.onload = runExport
+      document.head.appendChild(script)
+    }
+  }
+
+  // HTML-escape helper — prevents injection and broken markup from special chars
+  function escapeHtml(s) {
+    if (s == null) return ''
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
   }
 
   function exportPDF() {
