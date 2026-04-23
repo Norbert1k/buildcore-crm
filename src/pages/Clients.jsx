@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { sortBy } from '../lib/utils'
 import { useAuth } from '../lib/auth'
 import { Avatar } from '../components/ui'
 
@@ -85,7 +86,7 @@ export default function Clients() {
       const activeCount = projs.filter(p => ['active', 'tender'].includes(p.status)).length
       return { ...c, projects: projs, totalValue, activeCount }
     })
-    setClients(enriched)
+    setClients(sortBy(enriched, 'name'))
     setLoading(false)
   }
 
