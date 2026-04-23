@@ -1021,20 +1021,24 @@ Write only the overview text, no headings or labels.`
   // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
   // Category: 'design_team' or 'contractual_work'
   async function exportDirectoryPDF(category) {
-    const isDesignTeam = category === 'design_team'
-    const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
-    const catSubs = subs.filter(ps => {
-      const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
-      return c === category
-    })
-    // Sort alphabetically by company name (case-insensitive)
-    const rows = sortBy(catSubs.map(ps => ({
+    console.log('[exportDirectoryPDF] clicked', category, 'subs:', subs.length)
+    try {
+      const isDesignTeam = category === 'design_team'
+      const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
+      const catSubs = subs.filter(ps => {
+        const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
+        return c === category
+      })
+      console.log('[exportDirectoryPDF] catSubs:', catSubs.length)
+    // Sort alphabetically by company name (case-insensitive), inline so this works
+    // regardless of whether utils.js sortBy helper is deployed yet.
+    const rows = catSubs.map(ps => ({
       role: ps.subcontractors?.trade || ps.trade_on_project || '—',
       company: ps.subcontractors?.company_name || '—',
       contact: ps.subcontractors?.contact_name || '—',
       phone: ps.subcontractors?.phone || '',
       email: ps.subcontractors?.email || '',
-    })), 'company')
+    })).sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
 
     // Build an offscreen container
     const container = document.createElement('div')
@@ -1111,17 +1115,33 @@ Write only the overview text, no headings or labels.`
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
       }).from(container).save().then(() => {
+        console.log('[exportDirectoryPDF] save complete')
         document.body.removeChild(container)
+      }).catch(err => {
+        console.error('[exportDirectoryPDF] html2pdf save failed:', err)
+        alert('PDF export failed. Check console for details.')
+        if (container.parentNode) document.body.removeChild(container)
       })
     }
 
     if (window.html2pdf) {
+      console.log('[exportDirectoryPDF] html2pdf already loaded')
       runExport()
     } else {
+      console.log('[exportDirectoryPDF] loading html2pdf from CDN')
       const script = document.createElement('script')
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
-      script.onload = runExport
+      script.onload = () => { console.log('[exportDirectoryPDF] CDN loaded'); runExport() }
+      script.onerror = (e) => {
+        console.error('[exportDirectoryPDF] CDN load failed:', e)
+        alert('Could not load PDF library. Check your internet connection.')
+        if (container.parentNode) document.body.removeChild(container)
+      }
       document.head.appendChild(script)
+    }
+    } catch (err) {
+      console.error('[exportDirectoryPDF] error:', err)
+      alert('PDF export failed: ' + (err?.message || err))
     }
   }
 
