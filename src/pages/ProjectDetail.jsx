@@ -327,6 +327,141 @@ export default function ProjectDetail() {
     load()
   }
 
+  // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
+  // Category: 'design_team' or 'contractual_work'
+  async function exportDirectoryPDF(category) {
+    console.log('[exportDirectoryPDF] clicked', category, 'subs:', subs.length)
+    try {
+      const isDesignTeam = category === 'design_team'
+      const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
+      const catSubs = subs.filter(ps => {
+        const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
+        return c === category
+      })
+      console.log('[exportDirectoryPDF] catSubs:', catSubs.length)
+    // Sort alphabetically by company name (case-insensitive), inline so this works
+    // regardless of whether utils.js sortBy helper is deployed yet.
+    const rows = catSubs.map(ps => ({
+      role: ps.subcontractors?.trade || ps.trade_on_project || '—',
+      company: ps.subcontractors?.company_name || '—',
+      contact: ps.subcontractors?.contact_name || '—',
+      phone: ps.subcontractors?.phone || '',
+      email: ps.subcontractors?.email || '',
+    })).sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
+
+    // Build an offscreen container
+    const container = document.createElement('div')
+    container.style.position = 'fixed'
+    container.style.left = '-10000px'
+    container.style.top = '0'
+    container.style.width = '794px' // A4 width at 96dpi landscape-ish
+    container.style.background = 'white'
+    container.style.color = '#1a1a1a'
+    container.style.fontFamily = 'Arial, Helvetica, sans-serif'
+    container.style.padding = '40px 48px'
+
+    const address = 'One Canada Square, Canary Wharf, London E14 5AA'
+    const phone   = '0203 948 1930'
+    const email   = 'info@cltd.co.uk'
+    const web     = 'www.cltd.co.uk'
+
+    container.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px;">
+        <div>
+          <div style="font-size:22px; font-weight:600; color:#1a1a1a; margin-bottom:10px;">City Construction Group</div>
+          <div style="font-size:10.5px; color:#555; line-height:1.6;">${address}</div>
+          <div style="font-size:10.5px; color:#555; line-height:1.6;">
+            <strong>T:</strong> ${phone} &nbsp;&nbsp;
+            <strong>E:</strong> ${email} &nbsp;&nbsp;
+            <strong>W:</strong> ${web}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <img src="/logo.png" alt="City Construction" style="height:60px; width:auto; object-fit:contain;" />
+        </div>
+      </div>
+      <div style="border-top:0.5px solid #cfcfcf; margin-bottom:30px;"></div>
+      <div style="font-size:20px; font-weight:600; margin-bottom:18px;">${title}</div>
+      ${rows.length === 0 ? `
+        <div style="padding:40px; text-align:center; color:#888; font-size:13px; border:1px solid #e0e0e0; border-radius:4px;">
+          No ${isDesignTeam ? 'design team members' : 'subcontractors'} assigned to this project yet.
+        </div>
+      ` : `
+        <table style="width:100%; border-collapse:collapse; font-size:11px;">
+          <thead>
+            <tr style="background:#1a1a1a; color:white;">
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Role</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Company</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Contact Name</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Telephone</th>
+              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Email</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r, i) => `
+              <tr style="border-bottom:0.5px solid #e0e0e0;">
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.role)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.company)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.contact)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top; white-space:nowrap;">${escapeHtml(r.phone)}</td>
+                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.email)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `}
+      <div style="text-align:center; color:#aaa; font-size:10px; margin-top:40px; padding-top:12px; border-top:0.5px solid #e5e5e5;">City Construction Group</div>
+    `
+
+    document.body.appendChild(container)
+
+    // Load html2pdf if not already loaded
+    const runExport = () => {
+      window.html2pdf().set({
+        margin: 0,
+        filename: `${project?.project_name || 'Project'} - ${title}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+      }).from(container).save().then(() => {
+        console.log('[exportDirectoryPDF] save complete')
+        document.body.removeChild(container)
+      }).catch(err => {
+        console.error('[exportDirectoryPDF] html2pdf save failed:', err)
+        alert('PDF export failed. Check console for details.')
+        if (container.parentNode) document.body.removeChild(container)
+      })
+    }
+
+    if (window.html2pdf) {
+      console.log('[exportDirectoryPDF] html2pdf already loaded')
+      runExport()
+    } else {
+      console.log('[exportDirectoryPDF] loading html2pdf from CDN')
+      const script = document.createElement('script')
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
+      script.onload = () => { console.log('[exportDirectoryPDF] CDN loaded'); runExport() }
+      script.onerror = (e) => {
+        console.error('[exportDirectoryPDF] CDN load failed:', e)
+        alert('Could not load PDF library. Check your internet connection.')
+        if (container.parentNode) document.body.removeChild(container)
+      }
+      document.head.appendChild(script)
+    }
+    } catch (err) {
+      console.error('[exportDirectoryPDF] error:', err)
+      alert('PDF export failed: ' + (err?.message || err))
+    }
+  }
+
+  // HTML-escape helper — prevents injection and broken markup from special chars
+  function escapeHtml(s) {
+    if (s == null) return ''
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  }
+
   async function assignSub() {
     if (!assignForm.subcontractor_id) return
     const payload = {
@@ -1018,140 +1153,6 @@ Write only the overview text, no headings or labels.`
     setGeneratingAI(false)
   }
 
-  // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
-  // Category: 'design_team' or 'contractual_work'
-  async function exportDirectoryPDF(category) {
-    console.log('[exportDirectoryPDF] clicked', category, 'subs:', subs.length)
-    try {
-      const isDesignTeam = category === 'design_team'
-      const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
-      const catSubs = subs.filter(ps => {
-        const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
-        return c === category
-      })
-      console.log('[exportDirectoryPDF] catSubs:', catSubs.length)
-    // Sort alphabetically by company name (case-insensitive), inline so this works
-    // regardless of whether utils.js sortBy helper is deployed yet.
-    const rows = catSubs.map(ps => ({
-      role: ps.subcontractors?.trade || ps.trade_on_project || '—',
-      company: ps.subcontractors?.company_name || '—',
-      contact: ps.subcontractors?.contact_name || '—',
-      phone: ps.subcontractors?.phone || '',
-      email: ps.subcontractors?.email || '',
-    })).sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
-
-    // Build an offscreen container
-    const container = document.createElement('div')
-    container.style.position = 'fixed'
-    container.style.left = '-10000px'
-    container.style.top = '0'
-    container.style.width = '794px' // A4 width at 96dpi landscape-ish
-    container.style.background = 'white'
-    container.style.color = '#1a1a1a'
-    container.style.fontFamily = 'Arial, Helvetica, sans-serif'
-    container.style.padding = '40px 48px'
-
-    const address = 'One Canada Square, Canary Wharf, London E14 5AA'
-    const phone   = '0203 948 1930'
-    const email   = 'info@cltd.co.uk'
-    const web     = 'www.cltd.co.uk'
-
-    container.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px;">
-        <div>
-          <div style="font-size:22px; font-weight:600; color:#1a1a1a; margin-bottom:10px;">City Construction Group</div>
-          <div style="font-size:10.5px; color:#555; line-height:1.6;">${address}</div>
-          <div style="font-size:10.5px; color:#555; line-height:1.6;">
-            <strong>T:</strong> ${phone} &nbsp;&nbsp;
-            <strong>E:</strong> ${email} &nbsp;&nbsp;
-            <strong>W:</strong> ${web}
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <img src="/logo.png" alt="City Construction" style="height:60px; width:auto; object-fit:contain;" />
-        </div>
-      </div>
-      <div style="border-top:0.5px solid #cfcfcf; margin-bottom:30px;"></div>
-      <div style="font-size:20px; font-weight:600; margin-bottom:18px;">${title}</div>
-      ${rows.length === 0 ? `
-        <div style="padding:40px; text-align:center; color:#888; font-size:13px; border:1px solid #e0e0e0; border-radius:4px;">
-          No ${isDesignTeam ? 'design team members' : 'subcontractors'} assigned to this project yet.
-        </div>
-      ` : `
-        <table style="width:100%; border-collapse:collapse; font-size:11px;">
-          <thead>
-            <tr style="background:#1a1a1a; color:white;">
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Role</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Company</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Contact Name</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Telephone</th>
-              <th style="padding:12px 14px; text-align:left; font-weight:600; font-size:11px;">Email</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map((r, i) => `
-              <tr style="border-bottom:0.5px solid #e0e0e0;">
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.role)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.company)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.contact)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top; white-space:nowrap;">${escapeHtml(r.phone)}</td>
-                <td style="padding:14px; color:#333; vertical-align:top;">${escapeHtml(r.email)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `}
-      <div style="text-align:center; color:#aaa; font-size:10px; margin-top:40px; padding-top:12px; border-top:0.5px solid #e5e5e5;">City Construction Group</div>
-    `
-
-    document.body.appendChild(container)
-
-    // Load html2pdf if not already loaded
-    const runExport = () => {
-      window.html2pdf().set({
-        margin: 0,
-        filename: `${project?.project_name || 'Project'} - ${title}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-      }).from(container).save().then(() => {
-        console.log('[exportDirectoryPDF] save complete')
-        document.body.removeChild(container)
-      }).catch(err => {
-        console.error('[exportDirectoryPDF] html2pdf save failed:', err)
-        alert('PDF export failed. Check console for details.')
-        if (container.parentNode) document.body.removeChild(container)
-      })
-    }
-
-    if (window.html2pdf) {
-      console.log('[exportDirectoryPDF] html2pdf already loaded')
-      runExport()
-    } else {
-      console.log('[exportDirectoryPDF] loading html2pdf from CDN')
-      const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
-      script.onload = () => { console.log('[exportDirectoryPDF] CDN loaded'); runExport() }
-      script.onerror = (e) => {
-        console.error('[exportDirectoryPDF] CDN load failed:', e)
-        alert('Could not load PDF library. Check your internet connection.')
-        if (container.parentNode) document.body.removeChild(container)
-      }
-      document.head.appendChild(script)
-    }
-    } catch (err) {
-      console.error('[exportDirectoryPDF] error:', err)
-      alert('PDF export failed: ' + (err?.message || err))
-    }
-  }
-
-  // HTML-escape helper — prevents injection and broken markup from special chars
-  function escapeHtml(s) {
-    if (s == null) return ''
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-  }
 
   function exportPDF() {
     const el = document.getElementById('case-study-content')
