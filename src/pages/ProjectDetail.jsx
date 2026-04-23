@@ -341,12 +341,13 @@ export default function ProjectDetail() {
         return c === category
       })
 
-      // Build entries. For design team, prepend assigned Employers Agents.
-      const entries = []
+      // Build entries. EAs always appear first (pinned), then alphabetical subs/design team.
+      const eaEntries = []
+      const subEntries = []
       if (isDesignTeam) {
         for (const pea of (projectEAs || [])) {
           const ea = pea.employer_agents || {}
-          entries.push({
+          eaEntries.push({
             role: "Employer\u2019s Agent",
             company: ea.company_name || '',
             contact: ea.contact_name || '',
@@ -357,7 +358,7 @@ export default function ProjectDetail() {
       }
       for (const ps of catSubs) {
         const s = ps.subcontractors || {}
-        entries.push({
+        subEntries.push({
           role: s.trade || ps.trade_on_project || '',
           company: s.company_name || '',
           contact: s.contact_name || '',
@@ -365,8 +366,13 @@ export default function ProjectDetail() {
           email: s.email || '',
         })
       }
-      entries.sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
-      console.log('[exportDirectoryPDF] entries:', entries.length)
+      // Sort EAs and subs each alphabetically by company name (case-insensitive),
+      // then combine: EAs always come first in the final list.
+      const alphaSort = (a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true })
+      eaEntries.sort(alphaSort)
+      subEntries.sort(alphaSort)
+      const entries = [...eaEntries, ...subEntries]
+      console.log('[exportDirectoryPDF] entries:', entries.length, '(EAs:', eaEntries.length, ')')
 
       // Load jsPDF + autoTable from CDN
       const loadScript = (src) => new Promise((resolve, reject) => {
@@ -420,10 +426,10 @@ export default function ProjectDetail() {
         doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
         doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
 
-        // Thin divider under letterhead
+        // Thin divider under letterhead — below the logo which ends at ~y=36
         doc.setDrawColor(207, 207, 207)
         doc.setLineWidth(0.2)
-        doc.line(15, 34, pageW - 15, 34)
+        doc.line(15, 40, pageW - 15, 40)
       }
 
       // Initial letterhead + title
@@ -431,7 +437,7 @@ export default function ProjectDetail() {
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(16)
       doc.setTextColor(45, 45, 45)
-      doc.text(title, 15, 44)
+      doc.text(title, 15, 50)
 
       if (entries.length === 0) {
         doc.setFont('helvetica', 'italic')
@@ -441,12 +447,12 @@ export default function ProjectDetail() {
       } else {
         const body = entries.map(e => [e.role, e.company, e.contact, e.phone, e.email])
         doc.autoTable({
-          startY: 50,
+          startY: 56,
           head: [['Role', 'Company', 'Contact Name', 'Telephone', 'Email']],
           body,
           theme: 'plain',
           styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 3.5, textColor: [45, 45, 45], lineWidth: 0, overflow: 'linebreak' },
-          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: 4 },
+          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: { top: 2, bottom: 2, left: 4, right: 4 }, minCellHeight: 7 },
           alternateRowStyles: { fillColor: [249, 249, 249] },
           columnStyles: {
             0: { cellWidth: 53 },  // Role
@@ -455,7 +461,7 @@ export default function ProjectDetail() {
             3: { cellWidth: 45 },  // Telephone
             4: { cellWidth: 'auto' }, // Email
           },
-          margin: { left: 15, right: 15, top: 40 },
+          margin: { left: 15, right: 15, top: 46 },
           didDrawPage: (data) => {
             // On any new page, re-draw the letterhead
             if (data.pageNumber > 1) {
