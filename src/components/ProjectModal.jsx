@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES } from '../lib/utils'
+import { PROJECT_STATUSES, sortBy } from '../lib/utils'
 import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
 
@@ -29,8 +29,8 @@ export default function ProjectModal({ project, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    supabase.from('profiles').select('id, full_name, role').order('full_name').then(({ data }) => setManagers(data || []))
-    supabase.from('clients').select('id, name').order('name').then(({ data }) => setClients(data || []))
+    supabase.from('profiles').select('id, full_name, role').order('full_name').then(({ data }) => setManagers(sortBy(data || [], 'full_name')))
+    supabase.from('clients').select('id, name').order('name').then(({ data }) => setClients(sortBy(data || [], 'name')))
     // Auto-generate project ref only for new projects that are not Tender
     if (!project && form.status !== 'tender') {
       generateRef()
