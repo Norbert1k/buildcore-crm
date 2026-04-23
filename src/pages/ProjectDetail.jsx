@@ -171,7 +171,7 @@ export default function ProjectDetail() {
     setLoading(true)
     const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
-      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name)').eq('project_id', id),
+      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name, address, city, postcode)').eq('project_id', id),
       supabase.from('project_documents').select('*, subcontractors(company_name)').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
@@ -352,7 +352,7 @@ export default function ProjectDetail() {
             contact: ea.contact_name || '—',
             phone: ea.phone || '',
             email: ea.email || '',
-            address: [pea.street_address || ea.street_address, pea.city || ea.city, pea.postcode || ea.postcode].filter(Boolean).join(', ') || ''
+            address: [pea.street_address || ea.street_address, pea.city || ea.city, pea.postcode || ea.postcode].filter(Boolean).join('\n') || ''
           })
         }
       }
@@ -364,7 +364,7 @@ export default function ProjectDetail() {
           contact: s.contact_name || '—',
           phone: s.phone || '',
           email: s.email || '',
-          address: [s.address, s.city, s.postcode].filter(Boolean).join(', ') || ''
+          address: [s.address, s.city, s.postcode].filter(Boolean).join('\n') || ''
         })
       }
       // Sort alphabetically by company name (case-insensitive)
@@ -405,16 +405,6 @@ export default function ProjectDetail() {
       doc.setTextColor(90, 90, 90)
       doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 24)
       doc.text('T: 0203 948 1930    E: info@cltd.co.uk    W: www.cltd.co.uk', 15, 29)
-
-      // Right side: logo wordmark
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(14)
-      doc.setTextColor(26, 26, 26)
-      doc.text('CITY', pageW - 15, 18, { align: 'right' })
-      doc.setFontSize(8)
-      doc.setTextColor(68, 138, 64)
-      doc.setFont('helvetica', 'normal')
-      doc.text('CONSTRUCTION', pageW - 15, 23, { align: 'right' })
 
       // Divider
       doc.setDrawColor(207, 207, 207)
@@ -464,30 +454,27 @@ export default function ProjectDetail() {
             currentY = 20
           }
 
-          // Role heading (green bar + white text)
-          doc.setFillColor(68, 138, 64)
-          doc.rect(15, currentY, pageW - 30, 8, 'F')
+          // Role heading — green bold text only (matches docx template #006600)
           doc.setFont('helvetica', 'bold')
-          doc.setFontSize(11)
-          doc.setTextColor(255, 255, 255)
-          doc.text(e.role || '—', 18, currentY + 5.5)
-          currentY += 8
+          doc.setFontSize(12)
+          doc.setTextColor(0, 102, 0)
+          doc.text(e.role || '—', 15, currentY + 5)
+          currentY += 7
 
-          // Label/value table
+          // Label/value table — grey #DADADA label cells
           doc.autoTable({
             startY: currentY,
             body: rows,
             theme: 'grid',
-            styles: { font: 'helvetica', fontSize: 10, cellPadding: 2.5, textColor: [51, 51, 51], lineColor: [220, 220, 220], lineWidth: 0.1, valign: 'top' },
+            styles: { font: 'helvetica', fontSize: 10, cellPadding: 2.5, textColor: [0, 0, 0], lineColor: [150, 150, 150], lineWidth: 0.1, valign: 'top' },
             columnStyles: {
-              0: { cellWidth: 45, fontStyle: 'bold', fillColor: [245, 245, 245], textColor: [80, 80, 80] },
+              0: { cellWidth: 45, fontStyle: 'bold', fillColor: [218, 218, 218], textColor: [0, 0, 0] },
               1: { cellWidth: 'auto' },
             },
             margin: { left: 15, right: 15 },
-            didDrawPage: (data) => { /* noop — autoTable manages page breaks internally */ },
           })
 
-          currentY = doc.lastAutoTable.finalY + 6
+          currentY = doc.lastAutoTable.finalY + 8
         })
       }
 
