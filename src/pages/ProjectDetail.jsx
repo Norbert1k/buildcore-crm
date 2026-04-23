@@ -333,7 +333,7 @@ export default function ProjectDetail() {
     console.log('[exportDirectoryPDF] clicked', category)
     try {
       const isDesignTeam = category === 'design_team'
-      const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
+      const title = isDesignTeam ? 'Project Directory' : 'Packages Procured'
 
       // Filter assigned companies for this category
       const catSubs = subs.filter(ps => {
@@ -786,16 +786,16 @@ export default function ProjectDetail() {
           <div className="section-header">
             <div className="section-title">Assigned {catLabel}</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {catSubs.length > 0 && (
-                <button className="btn btn-sm" onClick={() => exportDirectoryPDF(categoryKey)} title="Export as PDF">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  {isDesignTeam ? 'Export Project Directory PDF' : 'Export PDF Procured Works'}
-                </button>
-              )}
+              <button className="btn btn-sm" onClick={() => exportDirectoryPDF(categoryKey)}
+                disabled={catSubs.length === 0 && (!isDesignTeam || (projectEAs || []).length === 0)}
+                title={catSubs.length === 0 && (!isDesignTeam || (projectEAs || []).length === 0) ? 'Nothing to export yet' : 'Export as PDF'}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                {isDesignTeam ? 'Export Project Directory PDF' : 'Export Packages Procured PDF'}
+              </button>
               {(can('manage_projects') || can('manage_subcontractors')) && (
                 <button className="btn btn-primary btn-sm" onClick={() => { setAssignForm(f => ({ ...f, category: categoryKey })); setShowAssignSub(true) }}>
                   <IconPlus size={13} /> Assign {catLabel === 'Subcontractors' ? 'Subcontractor' : 'Design Team'}
