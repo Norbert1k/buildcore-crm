@@ -328,43 +328,41 @@ export default function ProjectDetail() {
   }
 
   // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
-  // Uses jsPDF + autoTable loaded from CDN — builds PDF from data, no DOM capture.
+  // Single landscape table matching the Consultants_Directory template.
   async function exportDirectoryPDF(category) {
     console.log('[exportDirectoryPDF] clicked', category)
     try {
       const isDesignTeam = category === 'design_team'
       const title = isDesignTeam ? 'Project Directory' : 'Procured Works'
 
-      // Filter subs for this category
+      // Filter assigned companies for this category
       const catSubs = subs.filter(ps => {
         const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
         return c === category
       })
 
-      // Build unified entry list. For design team, prepend assigned Employers Agents.
+      // Build entries. For design team, prepend assigned Employers Agents.
       const entries = []
       if (isDesignTeam) {
         for (const pea of (projectEAs || [])) {
           const ea = pea.employer_agents || {}
           entries.push({
-            role: "Employer's Agent",
-            company: ea.company_name || '—',
-            contact: ea.contact_name || '—',
+            role: "Employer\u2019s Agent",
+            company: ea.company_name || '',
+            contact: ea.contact_name || '',
             phone: ea.phone || '',
             email: ea.email || '',
-            address: [pea.street_address || ea.street_address, pea.city || ea.city, pea.postcode || ea.postcode].filter(Boolean).join('\n') || ''
           })
         }
       }
       for (const ps of catSubs) {
         const s = ps.subcontractors || {}
         entries.push({
-          role: s.trade || ps.trade_on_project || '—',
-          company: s.company_name || '—',
-          contact: s.contact_name || '—',
+          role: s.trade || ps.trade_on_project || '',
+          company: s.company_name || '',
+          contact: s.contact_name || '',
           phone: s.phone || '',
           email: s.email || '',
-          address: [s.address, s.city, s.postcode].filter(Boolean).join('\n') || ''
         })
       }
       // Sort alphabetically by company name (case-insensitive)
@@ -380,114 +378,56 @@ export default function ProjectDetail() {
         document.head.appendChild(s)
       })
       if (!window.jspdf) {
-        console.log('[exportDirectoryPDF] loading jsPDF')
         await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
       }
       if (!window.jspdf?.jsPDF?.API?.autoTable) {
-        console.log('[exportDirectoryPDF] loading autoTable')
         await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
       }
       const { jsPDF } = window.jspdf
 
-      // Create landscape A4 PDF
-      console.log('[exportDirectoryPDF] creating PDF with orientation: LANDSCAPE (build v2)')
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      console.log('[exportDirectoryPDF] page dimensions:', doc.internal.pageSize.getWidth(), 'x', doc.internal.pageSize.getHeight(), 'mm')
       const pageW = doc.internal.pageSize.getWidth()
       const pageH = doc.internal.pageSize.getHeight()
 
-      // Header: City Construction Group + address bar
+      // Title: "Project Directory" (or "Procured Works"), dark grey, bold
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(16)
-      doc.setTextColor(26, 26, 26)
-      doc.text('City Construction Group', 15, 18)
-
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      doc.setTextColor(90, 90, 90)
-      doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 24)
-      doc.text('T: 0203 948 1930    E: info@cltd.co.uk    W: www.cltd.co.uk', 15, 29)
-
-      // Divider
-      doc.setDrawColor(207, 207, 207)
-      doc.setLineWidth(0.2)
-      doc.line(15, 34, pageW - 15, 34)
-
-      // Title
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(14)
-      doc.setTextColor(26, 26, 26)
-      doc.text(title, 15, 44)
-
-      // Project name (subtitle)
-      if (project?.project_name) {
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(10)
-        doc.setTextColor(100, 100, 100)
-        doc.text(project.project_name, 15, 50)
-      }
+      doc.setFontSize(18)
+      doc.setTextColor(45, 45, 45)
+      doc.text(title, 15, 20)
 
       if (entries.length === 0) {
         doc.setFont('helvetica', 'italic')
         doc.setFontSize(11)
         doc.setTextColor(150, 150, 150)
-        doc.text(isDesignTeam ? 'No design team members assigned to this project yet.' : 'No subcontractors assigned to this project yet.', pageW / 2, 80, { align: 'center' })
+        doc.text(isDesignTeam ? 'No design team members assigned to this project yet.' : 'No subcontractors assigned to this project yet.', pageW / 2, 50, { align: 'center' })
       } else {
-        // Per-entry vertical label/value table (matches docx template)
-        let currentY = 58
-        const bottomMargin = 25
-
-        entries.forEach((e, i) => {
-          // Role heading
-          const headingH = 8
-          const rows = [
-            ['Company Name', e.company || '—'],
-            ['Postal Address', e.address || '—'],
-            ['Contact Name', e.contact || '—'],
-            ['Telephone Number', e.phone || '—'],
-            ['Email Address', e.email || '—'],
-          ]
-          // Rough height estimate: each row ~7mm
-          const estimatedH = headingH + rows.length * 7 + 8
-
-          // Page break if this entry won't fit
-          if (currentY + estimatedH > pageH - bottomMargin) {
-            doc.addPage()
-            currentY = 20
-          }
-
-          // Role heading — green bold text only (matches docx template #006600)
-          doc.setFont('helvetica', 'bold')
-          doc.setFontSize(12)
-          doc.setTextColor(0, 102, 0)
-          doc.text(e.role || '—', 15, currentY + 5)
-          currentY += 7
-
-          // Label/value table — grey #DADADA label cells
-          doc.autoTable({
-            startY: currentY,
-            body: rows,
-            theme: 'grid',
-            styles: { font: 'helvetica', fontSize: 10, cellPadding: 2.5, textColor: [0, 0, 0], lineColor: [150, 150, 150], lineWidth: 0.1, valign: 'top' },
-            columnStyles: {
-              0: { cellWidth: 55, fontStyle: 'bold', fillColor: [218, 218, 218], textColor: [0, 0, 0] },
-              1: { cellWidth: 'auto' },
-            },
-            margin: { left: 15, right: 15 },
-          })
-
-          currentY = doc.lastAutoTable.finalY + 8
+        const body = entries.map(e => [e.role, e.company, e.contact, e.phone, e.email])
+        doc.autoTable({
+          startY: 30,
+          head: [['Role', 'Company', 'Contact Name', 'Telephone', 'Email']],
+          body,
+          theme: 'plain',
+          styles: { font: 'helvetica', fontSize: 10, cellPadding: 4, textColor: [45, 45, 45], lineWidth: 0 },
+          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: 5 },
+          alternateRowStyles: { fillColor: [249, 249, 249] },
+          columnStyles: {
+            0: { cellWidth: 55 },
+            1: { cellWidth: 70 },
+            2: { cellWidth: 50 },
+            3: { cellWidth: 45 },
+            4: { cellWidth: 'auto' }
+          },
+          margin: { left: 15, right: 15 }
         })
       }
 
-      // Footer
+      // Footer page numbers (subtle)
       const pageCount = doc.internal.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(8)
         doc.setTextColor(160, 160, 160)
-        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
         doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
       }
 
