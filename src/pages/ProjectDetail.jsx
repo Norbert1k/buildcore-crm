@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo, TRADES } from '../lib/utils'
+import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo, TRADES, sortBy } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
@@ -186,7 +186,7 @@ export default function ProjectDetail() {
     setDriveFolderName(projRes.data?.drive_folder_name || null)
     setSubs(subsRes.data || [])
     setDocs(docsRes.data || [])
-    setAllSubs(allSubsRes.data || [])
+    setAllSubs(sortBy(allSubsRes.data || [], 'company_name'))
     setProjectEAs(eaRes.data || [])
     setAllEAs(allEARes.data || [])
     // Load subcontractor files
