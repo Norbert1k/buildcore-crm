@@ -443,7 +443,7 @@ function BulkBar({ selected, onZip, onMove, onClear, allSubfolders }) {
 }
 
 // ── Subfolder Section ─────────────────────────────────────────────────────────
-function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload, depth = 0, viewMode = 'grid' }) {
+function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview, onReload, depth = 0, viewMode = 'grid', treeVersion, refreshTree }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -461,6 +461,12 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 
   useEffect(() => { loadFileCount() }, [])
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
+  // Refetch on any tree move — clears ghost copies
+  useEffect(() => {
+    if (!treeVersion) return
+    loadFileCount()
+    if (open) { loadFiles(); loadChildFolders() }
+  }, [treeVersion])
 
   async function loadFileCount() {
     const { count } = await supabase.from('company_documents').select('id', { count: 'exact', head: true })
@@ -483,6 +489,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
   async function moveFile(docId) {
     await supabase.from('company_documents').update({ subfolder_key: subfolder.key }).eq('id', docId)
     loadFiles(); if (onReload) onReload(docId)
+    refreshTree?.()
   }
   async function upload(fileList) {
     if (!fileList.length) return
@@ -545,6 +552,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     if (targetCategory && targetCategory !== categoryKey) upd.category = targetCategory
     for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
+    refreshTree?.()
   }
   async function moveSubfolder(key) {
     // Move subfolder into this subfolder (set parent_folder_key to this subfolder's key)
@@ -552,6 +560,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     await supabase.from('company_doc_subfolders').update({ parent_folder_key: subfolder.key }).eq('folder_key', key)
     loadChildFolders()
     if (onReload) onReload('__folder_deleted__') // trigger parent to refresh its list
+    refreshTree?.()
   }
 
   async function onDrop(e) {
@@ -651,7 +660,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
             <SubfolderSection key={cf.folder_key} subfolder={{ key: cf.folder_key, label: cf.label }}
               categoryKey={categoryKey} color={color} canManage={canManage} onPreview={onPreview} viewMode={viewMode}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
-              depth={depth + 1} />
+              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree} />
           ))}
           {files.length === 0 && childFolders.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
@@ -671,7 +680,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
 }
 
 // ── Category Folder ───────────────────────────────────────────────────────────
-function CategoryFolder({ cat, canManage, onPreview }) {
+function CategoryFolder({ cat, canManage, onPreview, treeVersion, refreshTree }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [subfolders, setSubfolders] = useState([])
@@ -699,6 +708,11 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     supabase.from('company_documents').select('id', { count: 'exact' }).eq('category', cat.key)
       .then(({ count }) => setTotalCount(count || 0))
   }, [cat.key, open])
+  // Kill ghost copies when any move happens anywhere in the tree
+  useEffect(() => {
+    if (!treeVersion) return
+    if (open) { loadFiles(); loadSubfolders(); loadAllSubfolders() }
+  }, [treeVersion])
 
   async function loadFiles() {
     const { data, error } = await supabase.from('company_documents')
@@ -720,6 +734,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   async function moveToRoot(docId) {
     await supabase.from('company_documents').update({ subfolder_key: null }).eq('id', docId)
     loadFiles()
+    refreshTree?.()
   }
   async function upload(fileList) {
     if (!fileList.length) return
@@ -788,6 +803,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
     if (targetCategory && targetCategory !== cat.key) upd.category = targetCategory
     for (const id of selected) await supabase.from('company_documents').update(upd).eq('id', id)
     setSelected(new Set()); loadFiles()
+    refreshTree?.()
   }
   async function zipSelected() {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
@@ -840,6 +856,7 @@ function CategoryFolder({ cat, canManage, onPreview }) {
   async function moveSubfolderToRoot(key) {
     await supabase.from('company_doc_subfolders').update({ parent_folder_key: null }).eq('folder_key', key)
     loadSubfolders()
+    refreshTree?.()
   }
 
   async function onDropBody(e) {
@@ -944,7 +961,8 @@ function CategoryFolder({ cat, canManage, onPreview }) {
                     if (id === '__folder_deleted__') { loadSubfolders(); loadAllSubfolders() }
                     else if (id === '__folder_renamed__') { loadAllSubfolders() }
                     else setFiles(prev => prev.filter(f => f.id !== id))
-                  }} />
+                  }}
+                  treeVersion={treeVersion} refreshTree={refreshTree} />
               </div>
             </div>
           ))}
@@ -982,6 +1000,9 @@ export default function CompanyDocuments() {
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const canManage = can('manage_documents')
+  // Global counter — bumped after any move; all folder components refetch on change
+  const [treeVersion, setTreeVersion] = useState(0)
+  const refreshTree = () => setTreeVersion(v => v + 1)
 
   useEffect(() => {
     const prevent = e => e.preventDefault()
@@ -1004,7 +1025,7 @@ export default function CompanyDocuments() {
         <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>Upload and manage company-wide documents — accessible to all staff</p>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {visibleCategories.map(cat => <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} />)}
+        {visibleCategories.map(cat => <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} treeVersion={treeVersion} refreshTree={refreshTree} />)}
       </div>
       {previewDoc && (
         fileTypeInfo(previewDoc).isExcel
