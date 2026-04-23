@@ -349,16 +349,19 @@ export default function ProjectDetail() {
       email: ps.subcontractors?.email || '',
     })).sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
 
-    // Build an offscreen container
+    // Build an offscreen container — html2canvas captures what actually renders,
+    // so we can't use display:none or opacity:0. Push it far off-screen instead.
     const container = document.createElement('div')
     container.style.position = 'fixed'
-    container.style.left = '-10000px'
+    container.style.left = '-20000px'
     container.style.top = '0'
-    container.style.width = '794px' // A4 width at 96dpi landscape-ish
+    container.style.width = '1123px' // A4 landscape at 96dpi = 1123 x 794
     container.style.background = 'white'
     container.style.color = '#1a1a1a'
     container.style.fontFamily = 'Arial, Helvetica, sans-serif'
     container.style.padding = '40px 48px'
+    container.style.boxSizing = 'border-box'
+    container.style.zIndex = '-9999'
 
     const address = 'One Canada Square, Canary Wharf, London E14 5AA'
     const phone   = '0203 948 1930'
@@ -377,7 +380,8 @@ export default function ProjectDetail() {
           </div>
         </div>
         <div style="text-align:right;">
-          <img src="/logo.png" alt="City Construction" style="height:60px; width:auto; object-fit:contain;" />
+          <div style="font-size:18px; font-weight:700; letter-spacing:0.02em; color:#1a1a1a;">CITY</div>
+          <div style="font-size:10px; letter-spacing:0.15em; color:#448a40; margin-top:2px;">CONSTRUCTION</div>
         </div>
       </div>
       <div style="border-top:0.5px solid #cfcfcf; margin-bottom:30px;"></div>
@@ -414,23 +418,28 @@ export default function ProjectDetail() {
     `
 
     document.body.appendChild(container)
+    console.log('[exportDirectoryPDF] container dims:', container.offsetWidth, 'x', container.offsetHeight)
 
     // Load html2pdf if not already loaded
     const runExport = () => {
-      window.html2pdf().set({
-        margin: 0,
-        filename: `${project?.project_name || 'Project'} - ${title}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-      }).from(container).save().then(() => {
-        console.log('[exportDirectoryPDF] save complete')
-        document.body.removeChild(container)
-      }).catch(err => {
-        console.error('[exportDirectoryPDF] html2pdf save failed:', err)
-        alert('PDF export failed. Check console for details.')
-        if (container.parentNode) document.body.removeChild(container)
-      })
+      // Give the browser a render tick to lay out the DOM before capture
+      setTimeout(() => {
+        console.log('[exportDirectoryPDF] capturing. Container dims now:', container.offsetWidth, 'x', container.offsetHeight)
+        window.html2pdf().set({
+          margin: 10,
+          filename: `${project?.project_name || 'Project'} - ${title}.pdf`,
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true, logging: true, windowWidth: 1123, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+        }).from(container).save().then(() => {
+          console.log('[exportDirectoryPDF] save complete')
+          document.body.removeChild(container)
+        }).catch(err => {
+          console.error('[exportDirectoryPDF] html2pdf save failed:', err)
+          alert('PDF export failed. Check console for details.')
+          if (container.parentNode) document.body.removeChild(container)
+        })
+      }, 200)
     }
 
     if (window.html2pdf) {
