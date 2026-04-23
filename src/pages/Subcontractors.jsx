@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { SUB_STATUSES, TRADES, DESIGN_TEAM_TRADES, subDocSummary, initials, avatarColor } from '../lib/utils'
+import { SUB_STATUSES, TRADES, DESIGN_TEAM_TRADES, subDocSummary, initials, avatarColor, sortBy } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { RatingBadge } from '../components/PerformanceTab'
 import { useAuth } from '../lib/auth'
@@ -24,7 +24,7 @@ function EmployersAgentTab() {
   async function load() {
     setLoading(true)
     const { data } = await supabase.from('employer_agents').select('*').order('company_name')
-    setEas(data || [])
+    setEas(sortBy(data || [], 'company_name'))
     setLoading(false)
   }
 
@@ -177,7 +177,7 @@ function AllSubcontractorsTab({ designTeam }) {
     }
     const { data, error } = await query
     if (error) console.error('[Subcontractors] load error:', error)
-    setSubs(data || [])
+    setSubs(sortBy(data || [], 'company_name'))
     setLoading(false)
   }
 
