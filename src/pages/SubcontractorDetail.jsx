@@ -50,10 +50,6 @@ export default function SubcontractorDetail() {
       supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
       supabase.from('performance_ratings').select('*, profiles(full_name), projects(project_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
     ])
-    // Log any errors so silent-failure bugs become visible in the console
-    for (const [name, res] of [['sub', subRes], ['docs', docsRes], ['projects', projRes], ['allProjects', allProjRes], ['notes', notesRes], ['contacts', contactsRes], ['ratings', ratingsRes]]) {
-      if (res?.error) console.error('[SubcontractorDetail] ' + name + ' query error:', res.error)
-    }
     setSub(subRes.data)
     setDocs(docsRes.data || [])
     setProjects(projRes.data || [])
@@ -254,7 +250,7 @@ export default function SubcontractorDetail() {
           )}
         </div>
 
-        {/* VAT & CIS */}
+        {/* VAT & UTR */}
         {(sub.vat_number || sub.cis_number) && (
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 4 }}>
             {sub.vat_number && (
@@ -265,7 +261,7 @@ export default function SubcontractorDetail() {
             )}
             {sub.cis_number && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>CIS No.</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>UTR</span>
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.cis_number}</span>
                 {sub.cis_verified && <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>✓ Verified</span>}
               </div>
