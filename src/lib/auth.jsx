@@ -113,6 +113,7 @@ export function AuthProvider({ children }) {
       view_company_templates:['project_manager', 'accountant', 'director_viewer', 'document_controller'],
       manage_settings:       ['project_manager', 'accountant'],
       view_tracker:          ['project_manager', 'accountant', 'director_viewer', 'viewer'],
+      blacklist_manage:      [], // admin-only, handled by `role === 'admin'` short-circuit above
     }
     return permissions[action]?.includes(effectiveRole) ?? false
   }
