@@ -5,10 +5,13 @@ import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconTrash, Modal
 import { useAuth } from '../lib/auth'
 
 const CATEGORIES = [
-  'Builders Merchant', 'Timber & Sheet', 'Electrical Supplies', 'Plumbing & Heating',
-  'Plant & Tool Hire', 'Scaffolding', 'Roofing Supplies', 'Roofing Materials', 'Fixings & Fasteners',
-  'Groundworks', 'Aggregates & Concrete', 'Insulation', 'Ironmongery',
-  'Kitchens', 'Wardrobes', 'Safety & PPE', 'Drainage', 'Landscaping', 'General'
+  'Aggregates & Concrete', 'Architectural & Design', 'Bricklaying', 'Builders Merchant',
+  'Carpentry & Joinery', 'Cladding', 'Doors', 'Drainage', 'Drylining',
+  'Electrical Supplies', 'Fixings & Fasteners', 'General', 'Groundworks',
+  'Insulation', 'Ironmongery', 'Kitchens', 'Landscaping', 'Lifts',
+  'Painting & Decorating', 'Plant & Tool Hire', 'Plumbing & Heating',
+  'Recycling', 'Roofing Materials', 'Safety & PPE', 'Scaffolding',
+  'Tiling', 'Timber & Sheet', 'Wardrobes', 'Windows & Glazing'
 ]
 
 const PAYMENT_TERMS = ['7 days', '14 days', '30 days', '60 days', '90 days', 'Proforma', 'Credit card', 'Cash on delivery']
