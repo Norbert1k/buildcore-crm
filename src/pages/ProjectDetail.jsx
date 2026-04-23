@@ -328,7 +328,7 @@ export default function ProjectDetail() {
   }
 
   // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
-  // Single landscape table matching the Consultants_Directory template.
+  // Landscape A4, single 5-column table, with company letterhead + logo on every page.
   async function exportDirectoryPDF(category) {
     console.log('[exportDirectoryPDF] clicked', category)
     try {
@@ -365,16 +365,13 @@ export default function ProjectDetail() {
           email: s.email || '',
         })
       }
-      // Sort alphabetically by company name (case-insensitive)
       entries.sort((a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true }))
       console.log('[exportDirectoryPDF] entries:', entries.length)
 
       // Load jsPDF + autoTable from CDN
       const loadScript = (src) => new Promise((resolve, reject) => {
-        const s = document.createElement('script')
-        s.src = src
-        s.onload = resolve
-        s.onerror = () => reject(new Error('Failed to load ' + src))
+        const s = document.createElement('script'); s.src = src
+        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load ' + src))
         document.head.appendChild(s)
       })
       if (!window.jspdf) {
@@ -385,49 +382,97 @@ export default function ProjectDetail() {
       }
       const { jsPDF } = window.jspdf
 
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const pageW = doc.internal.pageSize.getWidth()
-      const pageH = doc.internal.pageSize.getHeight()
+      // Load logo as base64 data URL (from /cltd-logo.jpg in public folder)
+      let logoDataUrl = null
+      try {
+        const resp = await fetch('/cltd-logo.jpg')
+        if (resp.ok) {
+          const blob = await resp.blob()
+          logoDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result)
+            reader.readAsDataURL(blob)
+          })
+        }
+      } catch (e) { console.warn('[exportDirectoryPDF] logo load failed:', e) }
 
-      // Title: "Project Directory" (or "Procured Works"), dark grey, bold
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()   // 297mm
+      const pageH = doc.internal.pageSize.getHeight()  // 210mm
+
+      // Draw letterhead on every page via didDrawPage hook
+      const drawLetterhead = () => {
+        // Logo top right (~28 x 28mm, keeps aspect ratio)
+        if (logoDataUrl) {
+          try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) { console.warn('addImage failed', e) }
+        }
+
+        // Company name top left (bold, 16pt)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(14)
+        doc.setTextColor(45, 45, 45)
+        doc.text('City Construction Group', 15, 16)
+
+        // Address line (7.5pt grey)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7.5)
+        doc.setTextColor(90, 90, 90)
+        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
+        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
+
+        // Thin divider under letterhead
+        doc.setDrawColor(207, 207, 207)
+        doc.setLineWidth(0.2)
+        doc.line(15, 34, pageW - 15, 34)
+      }
+
+      // Initial letterhead + title
+      drawLetterhead()
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(18)
+      doc.setFontSize(16)
       doc.setTextColor(45, 45, 45)
-      doc.text(title, 15, 20)
+      doc.text(title, 15, 44)
 
       if (entries.length === 0) {
         doc.setFont('helvetica', 'italic')
         doc.setFontSize(11)
         doc.setTextColor(150, 150, 150)
-        doc.text(isDesignTeam ? 'No design team members assigned to this project yet.' : 'No subcontractors assigned to this project yet.', pageW / 2, 50, { align: 'center' })
+        doc.text(isDesignTeam ? 'No design team members assigned to this project yet.' : 'No subcontractors assigned to this project yet.', pageW / 2, 70, { align: 'center' })
       } else {
         const body = entries.map(e => [e.role, e.company, e.contact, e.phone, e.email])
         doc.autoTable({
-          startY: 30,
+          startY: 50,
           head: [['Role', 'Company', 'Contact Name', 'Telephone', 'Email']],
           body,
           theme: 'plain',
-          styles: { font: 'helvetica', fontSize: 10, cellPadding: 4, textColor: [45, 45, 45], lineWidth: 0 },
-          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: 5 },
+          styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 3.5, textColor: [45, 45, 45], lineWidth: 0, overflow: 'linebreak' },
+          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: 4 },
           alternateRowStyles: { fillColor: [249, 249, 249] },
           columnStyles: {
-            0: { cellWidth: 55 },
-            1: { cellWidth: 70 },
-            2: { cellWidth: 50 },
-            3: { cellWidth: 45 },
-            4: { cellWidth: 'auto' }
+            0: { cellWidth: 53 },  // Role
+            1: { cellWidth: 56 },  // Company
+            2: { cellWidth: 46 },  // Contact
+            3: { cellWidth: 45 },  // Telephone
+            4: { cellWidth: 'auto' }, // Email
           },
-          margin: { left: 15, right: 15 }
+          margin: { left: 15, right: 15, top: 40 },
+          didDrawPage: (data) => {
+            // On any new page, re-draw the letterhead
+            if (data.pageNumber > 1) {
+              drawLetterhead()
+            }
+          },
         })
       }
 
-      // Footer page numbers (subtle)
+      // Footer on every page
       const pageCount = doc.internal.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
         doc.setFont('helvetica', 'normal')
         doc.setFontSize(8)
         doc.setTextColor(160, 160, 160)
+        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
         doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
       }
 
