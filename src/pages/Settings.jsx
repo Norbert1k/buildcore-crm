@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { ROLES, ROLE_PERMISSIONS } from '../lib/utils'
+import { ROLES, ROLE_PERMISSIONS, sortBy } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, PasswordInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
@@ -34,13 +34,13 @@ export default function Settings() {
       ...u,
       projectIds: (access || []).filter(a => a.user_id === u.id).map(a => a.project_id)
     }))
-    setUsers(usersWithAccess)
+    setUsers(sortBy(usersWithAccess, 'full_name'))
     setLoading(false)
   }
 
   async function loadProjects() {
     const { data } = await supabase.from('projects').select('id, project_name, project_ref').order('project_name')
-    setProjects(data || [])
+    setProjects(sortBy(data || [], 'project_name'))
   }
 
   async function createUser() {
