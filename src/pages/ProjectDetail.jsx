@@ -173,7 +173,7 @@ export default function ProjectDetail() {
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name, address, city, postcode)').eq('project_id', id),
       supabase.from('project_documents').select('*, subcontractors(company_name)').eq('project_id', id).order('created_at', { ascending: false }),
-      supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
+      supabase.from('subcontractors').select('id, company_name, trade, blacklisted').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
       supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
     ])
@@ -1062,7 +1062,7 @@ export default function ProjectDetail() {
           <div className="full"><Field label="Subcontractor *"><select value={assignForm.subcontractor_id} onChange={e => {
             const selected = allSubs.find(s => s.id === e.target.value)
             setAssignForm(f => ({ ...f, subcontractor_id: e.target.value, trade_on_project: selected?.trade || '' }))
-          }}><option value="">Select…</option>{allSubs.filter(s => !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
+          }}><option value="">Select…</option>{allSubs.filter(s => !s.blacklisted && !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
           <div className="full"><Field label="Category *"><select value={assignForm.category} onChange={e => setAssignForm(f => ({ ...f, category: e.target.value }))}>
             <option value="design_team">Design Team</option>
             <option value="contractual_work">Contractual Work</option>
