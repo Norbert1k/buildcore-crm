@@ -183,7 +183,9 @@ function AllSubcontractorsTab({ designTeam }) {
 
   function filtered() {
     let list = subs
-    if (filter !== 'all') list = list.filter(s => s.status === filter)
+    if (filter === 'blacklisted') list = list.filter(s => s.blacklisted)
+    else if (filter !== 'all') list = list.filter(s => s.status === filter && !s.blacklisted)
+    else list = list.filter(s => !s.blacklisted) // hide blacklisted from "All" by default
     if (tradeFilter !== 'all') list = list.filter(s => s.trade === tradeFilter)
     if (search) {
       const q = search.toLowerCase()
@@ -201,11 +203,12 @@ function AllSubcontractorsTab({ designTeam }) {
   const availableTrades = [...new Set(subs.map(s => s.trade).filter(Boolean))].sort()
 
   const counts = {
-    all: subs.length,
-    active: subs.filter(s => s.status === 'active').length,
-    approved: subs.filter(s => s.status === 'approved').length,
-    on_hold: subs.filter(s => s.status === 'on_hold').length,
-    inactive: subs.filter(s => s.status === 'inactive').length,
+    all: subs.filter(s => !s.blacklisted).length,
+    active: subs.filter(s => s.status === 'active' && !s.blacklisted).length,
+    approved: subs.filter(s => s.status === 'approved' && !s.blacklisted).length,
+    on_hold: subs.filter(s => s.status === 'on_hold' && !s.blacklisted).length,
+    inactive: subs.filter(s => s.status === 'inactive' && !s.blacklisted).length,
+    blacklisted: subs.filter(s => s.blacklisted).length,
   }
 
   const list = filtered()
@@ -245,13 +248,13 @@ function AllSubcontractorsTab({ designTeam }) {
           )}
         </div>
         <div className="filter-tabs" style={{ marginBottom: 0 }}>
-          {Object.entries({ all: 'All', active: 'Active', approved: 'Approved', on_hold: 'On Hold', inactive: 'Inactive' }).map(([k, v]) => (
+          {Object.entries({ all: 'All', active: 'Active', approved: 'Approved', on_hold: 'On Hold', inactive: 'Inactive', blacklisted: 'Blacklisted' }).map(([k, v]) => (
             <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
               {k === 'all'
                 ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                : <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: k === 'active' ? '#448a40' : k === 'approved' ? '#378ADD' : k === 'on_hold' ? '#BA7517' : '#888780', display: 'inline-block' }} />
+                : <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: k === 'active' ? '#448a40' : k === 'approved' ? '#378ADD' : k === 'on_hold' ? '#BA7517' : k === 'blacklisted' ? '#c00' : '#888780', display: 'inline-block' }} />
               }
-              {v}<span className="tab-badge">{k === 'all' ? subs.length : counts[k] || 0}</span>
+              {v}<span className="tab-badge">{counts[k] || 0}</span>
             </div>
           ))}
         </div>
@@ -295,12 +298,19 @@ function AllSubcontractorsTab({ designTeam }) {
                   ? <Pill cls="pill-green">All valid</Pill>
                   : <Pill cls="pill-gray">No docs</Pill>
                 return (
-                  <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${s.id}`)}>
+                  <tr key={s.id} style={{ cursor: 'pointer', background: s.blacklisted ? 'rgba(204,0,0,0.06)' : undefined }} onClick={() => navigate(`/subcontractors/${s.id}`)}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <Avatar name={s.company_name} />
                         <div>
-                          <div style={{ fontWeight: 500 }}>{s.company_name}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div style={{ fontWeight: 500 }}>{s.company_name}</div>
+                            {s.blacklisted && (
+                              <span style={{ fontSize: 9, fontWeight: 700, background: '#c00', color: 'white', borderRadius: 3, padding: '2px 6px', letterSpacing: '0.05em' }}>
+                                ⛔ BLACKLISTED
+                              </span>
+                            )}
+                          </div>
                           <div className="td-muted">{s.email}</div>
                         </div>
                       </div>
