@@ -515,7 +515,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 }
 
 // ── Subfolder Section (recursive — supports nested sub-subfolders) ────────────
-function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0 }) {
+function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -533,6 +533,12 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 
   useEffect(() => { loadFileCount() }, [])
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
+  // Re-fetch when any move happens in the tree — removes ghost copies
+  useEffect(() => {
+    if (!treeVersion) return
+    loadFileCount()
+    if (open) { loadFiles(); loadChildFolders() }
+  }, [treeVersion])
 
   async function loadFileCount() {
     const { count } = await supabase.from('project_doc_files').select('id', { count: 'exact', head: true })
@@ -558,6 +564,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     await supabase.from('project_doc_files').update({ subfolder_key: subfolder.key }).eq('id', docId)
     loadFiles()
     if (onReload) onReload(docId)
+    refreshTree?.()
   }
 
   async function uploadFiles(fileList) {
@@ -615,6 +622,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     await supabase.from('project_doc_folders').update({ parent_key: subfolder.key }).eq('folder_key', key).eq('project_id', projectId)
     loadChildFolders()
     if (onReload) onReload('__folder_deleted__')
+    refreshTree?.()
   }
 
   async function zipSubfolder() {
@@ -764,6 +772,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
             onMove={async (targetKey) => {
               for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey || subfolder.key }).eq('id', id)
               setSelected(new Set()); loadFiles()
+              refreshTree?.()
             }}
             moveTargets={childFolders.map(cf => ({ key: cf.folder_key, label: cf.label }))} />
           {childFolders.map(cf => (
@@ -771,7 +780,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
               subfolder={{ key: cf.folder_key, label: cf.label, custom: true }}
               canManage={canManage} viewMode={viewMode} onPreview={onPreview}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
-              depth={depth + 1} />
+              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree} />
           ))}
           {files.length === 0 && childFolders.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
@@ -791,7 +800,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 }
 
 // ── Prime Folder Section ──────────────────────────────────────────────────────
-function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts, onDeleteFolder, onRenameFolder }) {
+function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts, onDeleteFolder, onRenameFolder, treeVersion, refreshTree }) {
   const [open, setOpen] = useState(false)
   const [subfolders, setSubfolders] = useState(folder.subfolders || [])
   const [showAddFolder, setShowAddFolder] = useState(false)
@@ -827,6 +836,12 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
 
   useEffect(() => { loadCustomSubfolders() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
+  // Re-fetch when any move happens anywhere in the tree (kills ghost copies)
+  useEffect(() => {
+    if (treeVersion === 0) return
+    loadCustomSubfolders()
+    if (open) loadRootFiles()
+  }, [treeVersion])
 
   async function loadCustomSubfolders() {
     const { data } = await supabase.from('project_doc_folders').select('*')
@@ -854,6 +869,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   async function moveFileToRoot(docId) {
     await supabase.from('project_doc_files').update({ subfolder_key: null }).eq('id', docId)
     loadRootFiles()
+    refreshTree?.()
   }
 
   async function uploadToFolder(fileList) {
@@ -948,6 +964,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   async function moveSubfolderToRoot(key) {
     await supabase.from('project_doc_folders').update({ parent_key: folder.key }).eq('folder_key', key).eq('project_id', projectId)
     loadCustomSubfolders()
+    refreshTree?.()
   }
 
   async function onDropFolder(e) {
@@ -1103,6 +1120,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
             onMove={async (targetKey) => {
               for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey }).eq('id', id)
               setSelected(new Set()); loadRootFiles()
+              refreshTree?.()
             }}
             moveTargets={subfolders.map(sf => ({ key: sf.key, label: sf.label }))} />
 
@@ -1121,7 +1139,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
                     if (id === '__folder_deleted__') loadCustomSubfolders()
                     else loadRootFiles()
                   }}
-                  depth={0} />
+                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
               </div>
             </div>
           ))}
@@ -1213,6 +1231,11 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
   const [fileCounts, setFileCounts] = useState({})
   const [customTopFolders, setCustomTopFolders] = useState([])
   const [zippingAll, setZippingAll] = useState(false)
+  // Bump this whenever a folder or file is moved anywhere in the tree.
+  // Every SubfolderSection / PrimeFolderSection watches it and re-fetches
+  // its own children, so stale "ghost" copies disappear from the old location.
+  const [treeVersion, setTreeVersion] = useState(0)
+  const refreshTree = () => setTreeVersion(v => v + 1)
 
   const canManage = can('manage_projects')
   const canAddFolders = can('manage_projects')
@@ -1313,11 +1336,13 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
         {allFolders.map(folder => (
           <PrimeFolderSection key={folder.key} projectId={projectId} folder={folder}
             canManage={canManage} canAddFolders={canAddFolders} allFileCounts={fileCounts}
+            treeVersion={treeVersion} refreshTree={refreshTree}
             onDeleteFolder={async (key) => {
               if (!window.confirm('Delete this folder and ALL its files? This cannot be undone.')) return
               await supabase.from('project_doc_files').delete().eq('project_id', projectId).eq('folder_key', key)
               await supabase.from('project_doc_folders').delete().eq('folder_key', key).eq('project_id', projectId)
               setCustomTopFolders(prev => prev.filter(f => f.key !== key))
+              refreshTree()
             }}
             onRenameFolder={async (key, label) => {
               await supabase.from('project_doc_folders').update({ label }).eq('folder_key', key).eq('project_id', projectId)
