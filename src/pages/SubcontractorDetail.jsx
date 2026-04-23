@@ -31,6 +31,10 @@ export default function SubcontractorDetail() {
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [confirmDeleteSub, setConfirmDeleteSub] = useState(false)
+  const [showBlacklistModal, setShowBlacklistModal] = useState(false)
+  const [blacklistForm, setBlacklistForm] = useState({ reason: '' })
+  const [savingBlacklist, setSavingBlacklist] = useState(false)
+  const [confirmUnblacklist, setConfirmUnblacklist] = useState(false)
   const [showNoteModal, setShowNoteModal] = useState(false)
   const [noteForm, setNoteForm] = useState({ note: '', note_type: 'note' })
   const [savingNote, setSavingNote] = useState(false)
@@ -111,6 +115,45 @@ export default function SubcontractorDetail() {
     setApprovingPayment(false)
   }
 
+  async function blacklistSub() {
+    if (!blacklistForm.reason.trim()) { alert('A reason is required.'); return }
+    setSavingBlacklist(true)
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('subcontractors').update({
+      blacklisted: true,
+      blacklisted_at: now,
+      blacklisted_by: profile?.id,
+      blacklist_reason: blacklistForm.reason.trim(),
+    }).eq('id', id)
+    if (error) {
+      console.error('[blacklist]', error)
+      alert('Blacklist failed: ' + error.message)
+      setSavingBlacklist(false); return
+    }
+    setSub(s => ({ ...s, blacklisted: true, blacklisted_at: now, blacklisted_by: profile?.id, blacklist_reason: blacklistForm.reason.trim() }))
+    setShowBlacklistModal(false)
+    setBlacklistForm({ reason: '' })
+    setSavingBlacklist(false)
+  }
+
+  async function unblacklistSub() {
+    setSavingBlacklist(true)
+    const { error } = await supabase.from('subcontractors').update({
+      blacklisted: false,
+      blacklisted_at: null,
+      blacklisted_by: null,
+      blacklist_reason: null,
+    }).eq('id', id)
+    if (error) {
+      console.error('[unblacklist]', error)
+      alert('Unblacklist failed: ' + error.message)
+      setSavingBlacklist(false); return
+    }
+    setSub(s => ({ ...s, blacklisted: false, blacklisted_at: null, blacklisted_by: null, blacklist_reason: null }))
+    setConfirmUnblacklist(false)
+    setSavingBlacklist(false)
+  }
+
   async function saveNote() {
     if (!noteForm.note.trim()) return
     setSavingNote(true)
@@ -170,6 +213,29 @@ export default function SubcontractorDetail() {
         <IconChevron size={13} dir="left" /> Back
       </button>
 
+      {/* Blacklist banner — prominent red warning */}
+      {sub.blacklisted && (
+        <div style={{ background: '#fee', border: '2px solid #c00', borderRadius: 8, padding: 14, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ fontSize: 22, lineHeight: 1 }}>⛔</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#c00', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              BLACKLISTED — DO NOT USE
+            </div>
+            <div style={{ fontSize: 12, color: '#8a0000', marginBottom: 4 }}>
+              <strong>Reason:</strong> {sub.blacklist_reason || '—'}
+            </div>
+            <div style={{ fontSize: 11, color: '#8a0000', opacity: 0.8 }}>
+              Cannot be assigned to any project. Blacklisted{sub.blacklisted_at ? ' on ' + formatDate(sub.blacklisted_at) : ''}.
+            </div>
+          </div>
+          {profile?.role === 'admin' && (
+            <button className="btn btn-sm" onClick={() => setConfirmUnblacklist(true)} style={{ flexShrink: 0 }}>
+              Remove from Blacklist
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 14 }}>
@@ -205,6 +271,11 @@ export default function SubcontractorDetail() {
             )}
             {can('manage_subcontractors') && (
               <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
+            )}
+            {profile?.role === 'admin' && !sub.blacklisted && (
+              <button className="btn btn-sm btn-danger" onClick={() => setShowBlacklistModal(true)} title="Blacklist this subcontractor">
+                ⛔ Blacklist
+              </button>
             )}
             {can('delete') && (
               <button className="btn btn-sm btn-danger" onClick={() => setConfirmDeleteSub(true)}><IconTrash size={13} /> Delete</button>
@@ -478,6 +549,36 @@ export default function SubcontractorDetail() {
       {showEditSub && <SubcontractorModal sub={sub} onClose={() => setShowEditSub(false)} onSaved={() => { setShowEditSub(false); load() }} />}
       {showDocModal && <DocumentModal doc={editingDoc} subcontractorId={id} onClose={() => setShowDocModal(false)} onSaved={() => { setShowDocModal(false); load() }} />}
       <ConfirmDialog open={!!confirmDelete} onClose={() => setConfirmDelete(null)} onConfirm={() => deleteDoc(confirmDelete)} title="Delete document" message="Are you sure? This cannot be undone." danger />
+
+      {/* Blacklist modal (admin only) */}
+      <Modal open={showBlacklistModal} onClose={() => { if (!savingBlacklist) { setShowBlacklistModal(false); setBlacklistForm({ reason: '' }) } }} title={`Blacklist ${sub.company_name}`} size="sm"
+        footer={<>
+          <button className="btn" onClick={() => { setShowBlacklistModal(false); setBlacklistForm({ reason: '' }) }} disabled={savingBlacklist}>Cancel</button>
+          <button className="btn btn-danger" onClick={blacklistSub} disabled={savingBlacklist || !blacklistForm.reason.trim()}>
+            {savingBlacklist ? 'Blacklisting...' : '⛔ Confirm Blacklist'}
+          </button>
+        </>}>
+        <div style={{ padding: '10px 14px', background: '#fee', border: '1px solid #fcc', borderRadius: 6, marginBottom: 14, fontSize: 12, color: '#8a0000' }}>
+          This will prevent <strong>{sub.company_name}</strong> from being assigned to any project. The block is enforced at the database level and cannot be bypassed. Only an administrator can remove the blacklist.
+        </div>
+        <Field label="Reason (required)">
+          <textarea
+            value={blacklistForm.reason}
+            onChange={e => setBlacklistForm({ reason: e.target.value })}
+            placeholder="e.g. Repeated H&S breaches on site; unresolved payment dispute; safety certification revoked"
+            style={{ minHeight: 80 }}
+            autoFocus
+          />
+        </Field>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmUnblacklist}
+        onClose={() => setConfirmUnblacklist(false)}
+        onConfirm={unblacklistSub}
+        title="Remove from blacklist"
+        message={`Remove ${sub.company_name} from the blacklist? They will be eligible to assign to projects again.`}
+      />
 
       {/* Compliance Document Preview */}
       {previewDoc && (
