@@ -389,8 +389,8 @@ export default function ProjectDetail() {
       }
       const { jsPDF } = window.jspdf
 
-      // Create portrait A4 PDF (each entry is its own vertical section)
-      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      // Create landscape A4 PDF
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
       const pageW = doc.internal.pageSize.getWidth()
       const pageH = doc.internal.pageSize.getHeight()
 
@@ -468,7 +468,7 @@ export default function ProjectDetail() {
             theme: 'grid',
             styles: { font: 'helvetica', fontSize: 10, cellPadding: 2.5, textColor: [0, 0, 0], lineColor: [150, 150, 150], lineWidth: 0.1, valign: 'top' },
             columnStyles: {
-              0: { cellWidth: 45, fontStyle: 'bold', fillColor: [218, 218, 218], textColor: [0, 0, 0] },
+              0: { cellWidth: 55, fontStyle: 'bold', fillColor: [218, 218, 218], textColor: [0, 0, 0] },
               1: { cellWidth: 'auto' },
             },
             margin: { left: 15, right: 15 },
