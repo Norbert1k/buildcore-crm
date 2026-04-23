@@ -6,7 +6,7 @@ export const TRADES = [
   'Fire Consultants','Fire Engineer','Fire Protection','Flood Risk Consultants','Flooring','Glazing','Ground Investigation','Groundworks',
   'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','Mastic Man','MEP Consultants',
   'Noise Consultants','Nurse Call System','Painting & Decorating','Piling','Planning Consultants','Plastering','Plumbing','Precast Concrete B&B','Principle Designers',
-  'Roofing','Roofing Trusses','Scaffolding',
+  'Roofing','Roofing & Cladding','Roofing Trusses','Scaffolding',
   'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
   'Structural Engineers','Wardrobes','Warranty Providers','Other'
 ]
