@@ -390,7 +390,9 @@ export default function ProjectDetail() {
       const { jsPDF } = window.jspdf
 
       // Create landscape A4 PDF
+      console.log('[exportDirectoryPDF] creating PDF with orientation: LANDSCAPE (build v2)')
       const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      console.log('[exportDirectoryPDF] page dimensions:', doc.internal.pageSize.getWidth(), 'x', doc.internal.pageSize.getHeight(), 'mm')
       const pageW = doc.internal.pageSize.getWidth()
       const pageH = doc.internal.pageSize.getHeight()
 
