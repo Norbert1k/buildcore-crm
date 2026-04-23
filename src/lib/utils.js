@@ -188,3 +188,17 @@ export function exportToCSV(data, filename) {
   a.href = url; a.download = filename; a.click()
   URL.revokeObjectURL(url)
 }
+
+// Case-insensitive alphabetical sort for any array of objects.
+// Usage: sortBy(subs, 'company_name') or sortBy(clients, 'name')
+// Nulls/undefineds sink to the bottom.
+export function sortBy(arr, key) {
+  if (!Array.isArray(arr)) return []
+  return [...arr].sort((a, b) => {
+    const va = a?.[key]; const vb = b?.[key]
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
+    if (vb == null) return -1
+    return String(va).localeCompare(String(vb), undefined, { sensitivity: 'base', numeric: true })
+  })
+}
