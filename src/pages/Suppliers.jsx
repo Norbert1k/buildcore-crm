@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { formatCurrency, avatarColor, initials } from '../lib/utils'
+import { formatCurrency, avatarColor, initials, sortBy } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconTrash, Modal, Field, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
@@ -30,7 +30,7 @@ export default function Suppliers() {
   async function load() {
     setLoading(true)
     const { data } = await supabase.from('suppliers').select('*').order('company_name')
-    setSuppliers(data || [])
+    setSuppliers(sortBy(data || [], 'company_name'))
     setLoading(false)
   }
 
