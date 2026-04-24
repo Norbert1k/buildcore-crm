@@ -39,7 +39,7 @@ export default function TaskTracker() {
     setLoading(true)
     try {
       const [projRes, taskRes, asgRes, usrRes] = await Promise.all([
-        supabase.from('projects').select('id, project_name, project_ref, status').in('status', ['tender', 'active']).order('project_name'),
+        supabase.from('projects').select('id, project_name, project_ref, status').in('status', ['tender', 'active']).order('project_ref'),
         supabase.from('tasks').select('*'),
         supabase.from('task_assignees').select('task_id, user_id, profiles(id, full_name)'),
         supabase.from('profiles').select('id, full_name, role').order('full_name'),
@@ -55,7 +55,7 @@ export default function TaskTracker() {
         map[a.task_id].push({ user_id: a.user_id, full_name: a.profiles?.full_name || 'Unknown' })
       }
       setAssignees(map)
-      setProjects(sortBy(projRes.data || [], 'project_name'))
+      setProjects(sortBy(projRes.data || [], 'project_ref'))
       setTasks(taskRes.data || [])
       setUsers(sortBy(usrRes.data || [], 'full_name'))
     } catch (e) {
