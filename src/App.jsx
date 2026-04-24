@@ -19,6 +19,10 @@ import CompanyDocuments from './pages/CompanyDocuments'
 import GoogleDrive from './pages/GoogleDrive'
 import Clients from './pages/Clients'
 import ClientDetail from './pages/ClientDetail'
+import TaskTracker from './pages/TaskTracker'
+import TaskList from './pages/TaskList'
+import TaskDetail from './pages/TaskDetail'
+import TasksGlobal from './pages/TasksGlobal'
 import { Spinner } from './components/ui'
 
 function HamburgerIcon() {
@@ -258,6 +262,10 @@ function ProtectedLayout() {
           <Route path="/google-drive" element={<GoogleDrive />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/:id" element={<ClientDetail />} />
+          <Route path="/tasks" element={<TaskTracker />} />
+          <Route path="/tasks/all" element={<TasksGlobal />} />
+          <Route path="/tasks/project/:projectId" element={<TaskList />} />
+          <Route path="/tasks/:taskId" element={<TaskDetail />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
