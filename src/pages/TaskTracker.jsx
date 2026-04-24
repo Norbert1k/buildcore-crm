@@ -154,7 +154,11 @@ export default function TaskTracker() {
     return new Date(b.created_at) - new Date(a.created_at)
   })
 
-  const projectName = (pid) => projects.find(p => p.id === pid)?.project_name || '—'
+  const projectDisplay = (pid) => {
+    const p = projects.find(p => p.id === pid)
+    if (!p) return { ref: '', name: '—' }
+    return { ref: p.project_ref || '', name: p.project_name || '—' }
+  }
 
   if (loading) return <Spinner />
 
@@ -172,31 +176,60 @@ export default function TaskTracker() {
         )}
       </div>
 
-      {projects.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Projects</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-            {projects.map(p => {
-              const c = taskCountsByProject[p.id] || { open: 0, closed: 0, high: 0 }
-              const isFiltered = filterProject === p.id
-              return (
-                <div key={p.id} className="card card-pad"
-                  onClick={() => setFilterProject(isFiltered ? 'all' : p.id)}
-                  style={{ cursor: 'pointer', padding: 12, borderColor: isFiltered ? 'var(--accent)' : undefined, background: isFiltered ? 'var(--surface2)' : undefined }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                    <Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill>
-                    {c.high > 0 && <span style={{ fontSize: 9, fontWeight: 700, background: '#fee', color: '#c00', borderRadius: 10, padding: '2px 6px' }}>{c.high} HIGH</span>}
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{p.project_name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                    <strong style={{ color: 'var(--text)' }}>{c.open}</strong> open · {c.closed} closed
+      {projects.length > 0 && (() => {
+        const activeProjs = projects.filter(p => p.status === 'active')
+        const tenderProjs = projects.filter(p => p.status === 'tender')
+
+        const renderCard = (p) => {
+          const c = taskCountsByProject[p.id] || { open: 0, closed: 0, high: 0 }
+          const isFiltered = filterProject === p.id
+          return (
+            <div key={p.id} className="card card-pad"
+              onClick={() => setFilterProject(isFiltered ? 'all' : p.id)}
+              style={{ cursor: 'pointer', padding: 12, borderColor: isFiltered ? 'var(--accent)' : undefined, background: isFiltered ? 'var(--surface2)' : undefined }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                {p.project_ref && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.03em' }}>{p.project_ref}</span>}
+                {c.high > 0 && <span style={{ fontSize: 9, fontWeight: 700, background: '#fee', color: '#c00', borderRadius: 10, padding: '2px 6px', marginLeft: 'auto' }}>{c.high} HIGH</span>}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{p.project_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                <strong style={{ color: 'var(--text)' }}>{c.open}</strong> open · {c.closed} closed
+              </div>
+            </div>
+          )
+        }
+
+        return (
+          <div style={{ marginBottom: 24 }}>
+            {activeProjs.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#448a40' }} />
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Active Projects ({activeProjs.length})
                   </div>
                 </div>
-              )
-            })}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+                  {activeProjs.map(renderCard)}
+                </div>
+              </div>
+            )}
+            {tenderProjs.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#7960c7' }} />
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Tender Projects ({tenderProjs.length})
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+                  {tenderProjs.map(renderCard)}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
         <div className="filter-tabs" style={{ marginBottom: 0 }}>
@@ -260,7 +293,14 @@ export default function TaskTracker() {
                         style={{ width: 10, height: 10, borderRadius: '50%', background: pri.color, display: 'inline-block' }} />
                     </td>
                     <td style={{ fontWeight: 500 }}>{t.title}</td>
-                    <td className="td-muted">{projectName(t.project_id)}</td>
+                    <td className="td-muted">
+                      {(() => { const { ref, name } = projectDisplay(t.project_id); return (
+                        <>
+                          {ref && <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', letterSpacing: '0.03em' }}>{ref}</div>}
+                          <div>{name}</div>
+                        </>
+                      ) })()}
+                    </td>
                     <td>
                       {asg.length === 0 ? (
                         <span style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>Unassigned</span>
