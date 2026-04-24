@@ -114,6 +114,8 @@ export function AuthProvider({ children }) {
       manage_settings:       ['project_manager', 'accountant'],
       view_tracker:          ['project_manager', 'accountant', 'director_viewer', 'viewer'],
       blacklist_manage:      [], // admin-only, handled by `role === 'admin'` short-circuit above
+      create_tasks:          ['project_manager', 'operations_manager'],
+      edit_tasks:            ['project_manager', 'operations_manager'],
     }
     return permissions[action]?.includes(effectiveRole) ?? false
   }
