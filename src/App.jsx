@@ -160,7 +160,7 @@ function NotificationBell() {
 
 function ProtectedLayout() {
   const { user, loading, mfaVerified } = useAuth()
-  const [expCount, setExpCount] = useState(0)
+  const [expCounts, setExpCounts] = useState({ expired: 0, expiring: 0 })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mfaCheck, setMfaCheck] = useState({ done: false, needed: false, factorId: null })
   const location = useLocation()
@@ -193,11 +193,14 @@ function ProtectedLayout() {
   }, [user, location.pathname])
 
   async function fetchExpCount() {
-    const { count } = await supabase
-      .from('documents_with_status')
-      .select('id', { count: 'exact', head: true })
-      .in('status', ['expired', 'expiring_soon'])
-    setExpCount(count || 0)
+    const [expiredRes, expiringRes] = await Promise.all([
+      supabase.from('documents_with_status').select('id', { count: 'exact', head: true }).eq('status', 'expired'),
+      supabase.from('documents_with_status').select('id', { count: 'exact', head: true }).eq('status', 'expiring_soon'),
+    ])
+    setExpCounts({
+      expired: expiredRes.count || 0,
+      expiring: expiringRes.count || 0,
+    })
   }
 
   if (loading || !mfaCheck.done) {
@@ -229,7 +232,7 @@ function ProtectedLayout() {
 
   return (
     <div className="app-layout">
-      <Sidebar expCount={expCount} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar expCounts={expCounts} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="main-area">
         <div className="topbar">
           <button className="topbar-menu-btn" onClick={() => setSidebarOpen(o => !o)}>
