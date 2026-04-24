@@ -8,7 +8,7 @@ export const TRADES = [
   'Noise Consultants','Nurse Call System','Painting & Decorating','Piling','Planning Consultants','Plastering','Plumbing','Precast Concrete B&B','Principle Designers',
   'Roofing','Roofing & Cladding','Roofing Trusses','Scaffolding',
   'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
-  'Structural Engineers','Wardrobes','Warranty Providers','Other'
+  'Structural Engineers','Underfloor Heating','Wardrobes','Warranty Providers','Other'
 ]
 
 // Trades that default to Design Team when assigning to a project
