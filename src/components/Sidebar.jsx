@@ -16,7 +16,7 @@ function IconClients() {
   )
 }
 
-export default function Sidebar({ expCount, open, onClose }) {
+export default function Sidebar({ expCounts = {}, open, onClose }) {
   const { profile } = useAuth()
   const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
   const location = useLocation()
@@ -61,11 +61,12 @@ export default function Sidebar({ expCount, open, onClose }) {
 
   const allNavItems = [
     { to: '/',               key: 'dashboard',      label: 'Dashboard',      icon: <IconDashboard /> },
-    { to: '/subcontractors', key: 'subcontractors', label: 'Subcontractors', icon: <IconUsers />, badge: expCount > 0 ? expCount : null,
+    { to: '/subcontractors', key: 'subcontractors', label: 'Subcontractors', icon: <IconUsers />,
       children: [
         { to: '/subcontractors/ea', key: 'subcontractors', label: 'Employers Agent', before: true, icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg> },
         { to: '/subcontractors/design-team', key: 'subcontractors', label: 'Design Team', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> },
-        { to: '/subcontractors/compliance', key: 'documents', label: 'Compliance', icon: <IconDoc /> },
+        { to: '/subcontractors/compliance', key: 'documents', label: 'Compliance', icon: <IconDoc />,
+          expired: expCounts.expired || 0, expiring: expCounts.expiring || 0 },
       ]
     },
     { to: '/projects',          key: 'projects', label: 'Projects',     icon: <IconProject />,
@@ -129,6 +130,8 @@ export default function Sidebar({ expCount, open, onClose }) {
                       <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
                       {child.icon}
                       {child.label}
+                      {child.expired > 0 && <span className="nav-badge" style={{ background: '#c00', color: 'white', marginLeft: 'auto' }}>{child.expired}</span>}
+                      {child.expiring > 0 && <span className="nav-badge" style={{ background: '#b87a00', color: 'white', marginLeft: child.expired > 0 ? 4 : 'auto' }}>{child.expiring}</span>}
                     </NavLink>
                   ))}
                   <NavLink to={item.to} end className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
@@ -141,6 +144,8 @@ export default function Sidebar({ expCount, open, onClose }) {
                       <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
                       {child.icon}
                       {child.label}
+                      {child.expired > 0 && <span className="nav-badge" style={{ background: '#c00', color: 'white', marginLeft: 'auto' }}>{child.expired}</span>}
+                      {child.expiring > 0 && <span className="nav-badge" style={{ background: '#b87a00', color: 'white', marginLeft: child.expired > 0 ? 4 : 'auto' }}>{child.expiring}</span>}
                     </NavLink>
                   ))}
                 </>
