@@ -11,7 +11,7 @@ const PRIORITIES = {
   low:    { label: 'Low',    color: '#448a40', bg: '#e8f5e7', border: '#c4e3c1' },
 }
 const STATUS_LABELS = {
-  active:      { label: 'Active',      cls: 'pill-blue' },
+  active:      { label: 'Active',      cls: 'pill-green' },
   working_on:  { label: 'Working On',  cls: 'pill-amber' },
   closed:      { label: 'Closed',      cls: 'pill-gray' },
 }
@@ -26,7 +26,7 @@ export default function TaskTracker() {
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ project_id: '', title: '', description: '', priority: 'medium', assignee_ids: [] })
+  const [form, setForm] = useState({ project_id: '', title: '', description: '', priority: 'medium', partner_id: '' })
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [filterProject, setFilterProject] = useState('all')
   const [filterPriority, setFilterPriority] = useState('all')
@@ -78,8 +78,11 @@ export default function TaskTracker() {
       }).select().single()
       if (error) throw error
 
-      if (form.assignee_ids.length > 0) {
-        const rows = form.assignee_ids.map(uid => ({ task_id: newTask.id, user_id: uid }))
+      // Always assign the creator, plus optional partner
+      const assigneeIds = [profile?.id]
+      if (form.partner_id && form.partner_id !== profile?.id) assigneeIds.push(form.partner_id)
+      const rows = assigneeIds.filter(Boolean).map(uid => ({ task_id: newTask.id, user_id: uid }))
+      if (rows.length) {
         const { error: ae } = await supabase.from('task_assignees').insert(rows)
         if (ae) console.error('[TaskTracker] assign error:', ae)
       }
@@ -90,7 +93,7 @@ export default function TaskTracker() {
       })
 
       setShowCreate(false)
-      setForm({ project_id: '', title: '', description: '', priority: 'medium', assignee_ids: [] })
+      setForm({ project_id: '', title: '', description: '', priority: 'medium', partner_id: '' })
       load()
     } catch (err) {
       console.error('[createTask]', err)
@@ -128,6 +131,232 @@ export default function TaskTracker() {
     load()
   }
 
+  // Export tasks as PDF — landscape, CCG letterhead.
+  // mode: 'list' = single table; 'detailed' = per-task sections with notes/comments.
+  async function exportTasksPDF(mode) {
+    console.log('[exportTasksPDF]', mode, 'items:', displayed.length)
+    try {
+      // Load jsPDF + autoTable from CDN (reuse same deps as Project Directory export)
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        const s = document.createElement('script'); s.src = src
+        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load ' + src))
+        document.head.appendChild(s)
+      })
+      if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      if (!window.jspdf?.jsPDF?.API?.autoTable) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
+      const { jsPDF } = window.jspdf
+
+      // Load logo
+      let logoDataUrl = null
+      try {
+        const resp = await fetch('/cltd-logo.jpg')
+        if (resp.ok) {
+          const blob = await resp.blob()
+          logoDataUrl = await new Promise(res => {
+            const r = new FileReader(); r.onloadend = () => res(r.result); r.readAsDataURL(blob)
+          })
+        }
+      } catch (e) { console.warn('[exportTasksPDF] logo failed', e) }
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+
+      const drawLetterhead = () => {
+        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) {} }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(45, 45, 45)
+        doc.text('City Construction Group', 15, 16)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90)
+        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
+        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
+        doc.setDrawColor(207, 207, 207); doc.setLineWidth(0.2)
+        doc.line(15, 40, pageW - 15, 40)
+      }
+
+      drawLetterhead()
+      const title = mode === 'list' ? 'Task List' : 'Detailed Task Report'
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(45, 45, 45)
+      doc.text(title, 15, 50)
+      // Filters summary
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 100, 100)
+      const summary = []
+      if (filterProject !== 'all') { const p = projects.find(pr => pr.id === filterProject); if (p) summary.push(`Project: ${p.project_name}`) }
+      if (filterPriority !== 'all') summary.push(`Priority: ${filterPriority}`)
+      if (filterAssignee !== 'all') {
+        if (filterAssignee === 'mine') summary.push('Assigned to me')
+        else if (filterAssignee === 'unassigned') summary.push('Unassigned')
+        else { const u = users.find(us => us.id === filterAssignee); if (u) summary.push(`Assignee: ${u.full_name}`) }
+      }
+      summary.push(`Status: ${viewMode === 'open' ? 'Open' : 'Closed'}`)
+      summary.push(`Generated: ${new Date().toLocaleString('en-GB')}`)
+      doc.text(summary.join(' · '), 15, 55)
+
+      if (displayed.length === 0) {
+        doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150)
+        doc.text('No tasks matched the current filters.', pageW / 2, 80, { align: 'center' })
+      } else if (mode === 'list') {
+        // LIST MODE — single table
+        const body = displayed.map(t => {
+          const asg = assignees[t.id] || []
+          const p = projects.find(pr => pr.id === t.project_id)
+          return [
+            (PRIORITIES[t.priority]?.label || t.priority || '').toUpperCase(),
+            t.title,
+            p ? (p.project_ref ? `${p.project_ref} — ${p.project_name}` : p.project_name) : '—',
+            asg.length === 0 ? 'Unassigned' : asg.map(a => a.full_name).join(', '),
+            (STATUS_LABELS[t.status]?.label || t.status),
+            new Date(t.created_at).toLocaleDateString('en-GB'),
+          ]
+        })
+        doc.autoTable({
+          startY: 62,
+          head: [['Priority', 'Title', 'Project', 'Assigned', 'Status', 'Created']],
+          body,
+          theme: 'plain',
+          styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 3.5, textColor: [45, 45, 45], lineWidth: 0, overflow: 'linebreak' },
+          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: { top: 2, bottom: 2, left: 4, right: 4 }, minCellHeight: 7 },
+          alternateRowStyles: { fillColor: [249, 249, 249] },
+          columnStyles: {
+            0: { cellWidth: 22, fontStyle: 'bold' },
+            1: { cellWidth: 70 },
+            2: { cellWidth: 65 },
+            3: { cellWidth: 55 },
+            4: { cellWidth: 28 },
+            5: { cellWidth: 'auto' },
+          },
+          didParseCell: (data) => {
+            // Colour the priority cell
+            if (data.section === 'body' && data.column.index === 0) {
+              const v = data.cell.raw
+              if (v === 'HIGH')   { data.cell.styles.textColor = [204, 0, 0] }
+              if (v === 'MEDIUM') { data.cell.styles.textColor = [184, 122, 0] }
+              if (v === 'LOW')    { data.cell.styles.textColor = [68, 138, 64] }
+            }
+          },
+          margin: { left: 15, right: 15, top: 46 },
+          didDrawPage: (data) => { if (data.pageNumber > 1) drawLetterhead() },
+        })
+      } else {
+        // DETAILED MODE — per-task section with description + notes
+        // Fetch notes for all displayed tasks in one query
+        const taskIds = displayed.map(t => t.id)
+        let allNotes = []
+        if (taskIds.length) {
+          const { data: n } = await supabase.from('task_notes').select('*, profiles(full_name)').in('task_id', taskIds).order('created_at', { ascending: true })
+          allNotes = n || []
+        }
+        const notesByTask = {}
+        for (const n of allNotes) { if (!notesByTask[n.task_id]) notesByTask[n.task_id] = []; notesByTask[n.task_id].push(n) }
+
+        let cursorY = 62
+        const sectionSpacing = 6
+        const bottomLimit = pageH - 20
+
+        for (let i = 0; i < displayed.length; i++) {
+          const t = displayed[i]
+          const asg = assignees[t.id] || []
+          const p = projects.find(pr => pr.id === t.project_id)
+          const pri = PRIORITIES[t.priority] || PRIORITIES.medium
+          const st = STATUS_LABELS[t.status] || STATUS_LABELS.active
+          const tNotes = notesByTask[t.id] || []
+
+          // Estimate section height
+          const estBaseH = 38 + (t.description ? 20 : 0)
+          const estNotesH = tNotes.length * 16 + (tNotes.length ? 12 : 0)
+          const estH = estBaseH + estNotesH + sectionSpacing + 10
+
+          if (cursorY + 30 > bottomLimit) { doc.addPage(); drawLetterhead(); cursorY = 46 }
+
+          // Divider line above each section except the first on its page
+          if (i > 0 && cursorY > 50) {
+            doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.2)
+            doc.line(15, cursorY, pageW - 15, cursorY)
+            cursorY += 6
+          }
+
+          // Priority pill + title
+          const priRGB = t.priority === 'high' ? [204, 0, 0] : t.priority === 'medium' ? [184, 122, 0] : [68, 138, 64]
+          doc.setFillColor(...priRGB); doc.roundedRect(15, cursorY - 4, 16, 6, 1, 1, 'F')
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(255, 255, 255)
+          doc.text(pri.label.toUpperCase(), 23, cursorY + 0.2, { align: 'center' })
+
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(45, 45, 45)
+          const titleLines = doc.splitTextToSize(t.title, pageW - 60)
+          doc.text(titleLines, 34, cursorY + 1)
+          cursorY += Math.max(5, titleLines.length * 4.5)
+
+          // Metadata row
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 100, 100)
+          const meta = [
+            `Status: ${st.label}`,
+            `Project: ${p ? (p.project_ref ? p.project_ref + ' — ' + p.project_name : p.project_name) : '—'}`,
+            `Assigned: ${asg.length ? asg.map(a => a.full_name).join(', ') : 'Unassigned'}`,
+            `Created: ${new Date(t.created_at).toLocaleDateString('en-GB')}`,
+          ]
+          doc.text(meta.join('   |   '), 15, cursorY + 4)
+          cursorY += 10
+
+          // Description
+          if (t.description && t.description.trim()) {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(80, 80, 80)
+            doc.text('Description:', 15, cursorY)
+            cursorY += 4
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(45, 45, 45)
+            const descLines = doc.splitTextToSize(t.description, pageW - 30)
+            if (cursorY + descLines.length * 4 > bottomLimit) { doc.addPage(); drawLetterhead(); cursorY = 46 }
+            doc.text(descLines, 15, cursorY)
+            cursorY += descLines.length * 4 + 4
+          }
+
+          // Notes / comments
+          if (tNotes.length > 0) {
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(80, 80, 80)
+            if (cursorY + 8 > bottomLimit) { doc.addPage(); drawLetterhead(); cursorY = 46 }
+            doc.text(`Progress Notes (${tNotes.length}):`, 15, cursorY)
+            cursorY += 5
+            for (const n of tNotes) {
+              const header = `${n.profiles?.full_name || 'Unknown'} — ${new Date(n.created_at).toLocaleString('en-GB')}`
+              const noteLines = doc.splitTextToSize(n.note || '', pageW - 40)
+              const block = 4 + noteLines.length * 4 + 2
+              if (cursorY + block > bottomLimit) { doc.addPage(); drawLetterhead(); cursorY = 46 }
+              // Left border accent
+              doc.setFillColor(68, 138, 64)
+              doc.rect(15, cursorY - 2.5, 1, block - 1, 'F')
+              doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(80, 80, 80)
+              doc.text(header, 19, cursorY)
+              cursorY += 3.5
+              doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(45, 45, 45)
+              doc.text(noteLines, 19, cursorY)
+              cursorY += noteLines.length * 4 + 3
+            }
+          } else {
+            doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(150, 150, 150)
+            doc.text('No progress notes yet.', 15, cursorY)
+            cursorY += 5
+          }
+
+          cursorY += sectionSpacing
+        }
+      }
+
+      // Footer on every page
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(160, 160, 160)
+        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
+        doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
+      }
+
+      const filename = `Tasks - ${title} - ${new Date().toISOString().slice(0, 10)}.pdf`
+      doc.save(filename)
+      console.log('[exportTasksPDF] saved:', filename)
+    } catch (err) {
+      console.error('[exportTasksPDF] error:', err)
+      alert('PDF export failed: ' + (err?.message || err))
+    }
+  }
+
   const taskCountsByProject = {}
   for (const t of tasks) {
     if (!taskCountsByProject[t.project_id]) taskCountsByProject[t.project_id] = { open: 0, closed: 0, high: 0 }
@@ -163,17 +392,31 @@ export default function TaskTracker() {
   if (loading) return <Spinner />
 
   return (
-    <div>
+    <div style={{ maxWidth: 1600, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20, gap: 12, flexWrap: 'wrap' }}>
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 4 }}>Task Tracker</h2>
           <p style={{ color: 'var(--text2)', fontSize: 13 }}>Track and manage in-house work across all projects</p>
         </div>
-        {can('create_tasks') && (
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            <IconPlus size={14} /> New Task
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {tasks.length > 0 && (
+            <>
+              <button className="btn btn-sm" onClick={() => exportTasksPDF('list')}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export Tasks List
+              </button>
+              <button className="btn btn-sm" onClick={() => exportTasksPDF('detailed')}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Export Detailed Tasks
+              </button>
+            </>
+          )}
+          {can('create_tasks') && (
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              <IconPlus size={14} /> New Task
+            </button>
+          )}
+        </div>
       </div>
 
       {projects.length > 0 && (() => {
@@ -269,13 +512,13 @@ export default function TaskTracker() {
           <table>
             <thead>
               <tr>
-                <th style={{ width: 24 }}></th>
+                <th style={{ width: 90 }}>Priority</th>
                 <th>Title</th>
                 <th>Project</th>
                 <th>Assigned</th>
                 <th>Status</th>
                 <th>Created</th>
-                <th style={{ width: 180 }}></th>
+                <th style={{ width: 200 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -285,12 +528,14 @@ export default function TaskTracker() {
                 const st = STATUS_LABELS[t.status] || STATUS_LABELS.active
                 const isAssignee = asg.some(a => a.user_id === profile?.id)
                 const canChangeStatus = isAssignee || profile?.role === 'admin'
-                const canDelete = profile?.role === 'admin' || can('edit_tasks')
+                const canDelete = profile?.role === 'admin' || (isAssignee && can('edit_tasks'))
                 return (
                   <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/tasks/${t.id}`)}>
                     <td onClick={e => e.stopPropagation()}>
-                      <div title={pri.label + ' priority'}
-                        style={{ width: 10, height: 10, borderRadius: '50%', background: pri.color, display: 'inline-block' }} />
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 10, background: pri.bg, border: '1px solid ' + pri.border }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: pri.color }} />
+                        <span style={{ fontSize: 11, fontWeight: 600, color: pri.color }}>{pri.label}</span>
+                      </div>
                     </td>
                     <td style={{ fontWeight: 500 }}>{t.title}</td>
                     <td className="td-muted">
@@ -366,29 +611,17 @@ export default function TaskTracker() {
               <option value="low">🟢 Low</option>
             </select>
           </Field>
-          <div className="full"><Field label="Assign to (optional)">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {users.map(u => {
-                const selected = form.assignee_ids.includes(u.id)
-                return (
-                  <button key={u.id} type="button"
-                    onClick={() => setForm(f => ({
-                      ...f,
-                      assignee_ids: selected ? f.assignee_ids.filter(id => id !== u.id) : [...f.assignee_ids, u.id]
-                    }))}
-                    style={{
-                      padding: '4px 10px', fontSize: 11, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
-                      border: '1px solid ' + (selected ? 'var(--accent)' : 'var(--border)'),
-                      background: selected ? 'var(--accent)' : 'var(--surface)',
-                      color: selected ? 'white' : 'var(--text)'
-                    }}>
-                    {u.full_name}
-                  </button>
-                )
-              })}
-              {users.length === 0 && <span style={{ color: 'var(--text3)', fontSize: 11 }}>No team members loaded</span>}
-            </div>
-          </Field></div>
+          <Field label="You (auto-assigned)">
+            <input value={profile?.full_name || 'You'} disabled readOnly style={{ opacity: 0.7, cursor: 'not-allowed' }} />
+          </Field>
+          <Field label="Partner (optional)">
+            <select value={form.partner_id} onChange={e => setForm(f => ({ ...f, partner_id: e.target.value }))}>
+              <option value="">— None —</option>
+              {users.filter(u => u.id !== profile?.id).map(u => (
+                <option key={u.id} value={u.id}>{u.full_name}</option>
+              ))}
+            </select>
+          </Field>
         </div>
       </Modal>
 
