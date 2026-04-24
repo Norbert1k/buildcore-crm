@@ -11,7 +11,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
   const editing = !!doc
 
   // Types is an array — multi-select for new docs; locked to the one type when editing
-  const [types, setTypes] = useState(editing ? [doc.document_type] : ['rams'])
+  const [types, setTypes] = useState(editing ? [doc.document_type] : ['public_liability'])
   const [form, setForm] = useState({
     document_name: doc?.document_name || '',
     reference_number: doc?.reference_number || '',
@@ -195,8 +195,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
 
   const docGroups = {
     'Insurance': ['public_liability', 'employers_liability', 'professional_indemnity'],
-    'Health & Safety': ['rams', 'method_statement', 'risk_assessment', 'f10_notification'],
-    'Certifications': ['cscs_card', 'gas_safe', 'niceic', 'chas', 'constructionline', 'trade_certificate'],
+    'Certifications': ['gas_safe', 'niceic', 'chas', 'constructionline', 'trade_certificate'],
     'Quality & Environment': ['iso_9001', 'iso_14001', 'iso_45001'],
     'Other': ['other'],
   }
