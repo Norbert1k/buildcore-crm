@@ -11,7 +11,7 @@ const PRIORITIES = {
   low:    { label: 'Low',    color: '#448a40' },
 }
 const STATUS_LABELS = {
-  active:      { label: 'Active',      cls: 'pill-blue' },
+  active:      { label: 'Active',      cls: 'pill-green' },
   working_on:  { label: 'Working On',  cls: 'pill-amber' },
   closed:      { label: 'Closed',      cls: 'pill-gray' },
 }
@@ -74,8 +74,14 @@ export default function TaskDetail() {
   }
 
   const isAssignee = assignees.some(a => a.user_id === profile?.id)
-  const canEditTask = profile?.role === 'admin' || can('edit_tasks')
-  const canChangeStatus = isAssignee || profile?.role === 'admin'
+  const isAdmin = profile?.role === 'admin'
+  // All task actions require being an assignee (or admin)
+  const canEditTask = isAssignee || isAdmin
+  const canChangeStatus = isAssignee || isAdmin
+  const canComment = isAssignee || isAdmin
+  const canUpload = isAssignee || isAdmin
+  const canDeleteNote = (note) => note.author_id === profile?.id || isAdmin
+  const canDeleteFile = (file) => file.uploaded_by === profile?.id || isAdmin
 
   async function addNote() {
     if (!noteText.trim()) return
@@ -238,7 +244,7 @@ export default function TaskDetail() {
   const st = STATUS_LABELS[task.status] || STATUS_LABELS.active
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/tasks')}><IconChevron size={13} dir="left" /> Back to Task Tracker</button>
 
       {/* Header */}
@@ -315,18 +321,24 @@ export default function TaskDetail() {
       {/* Notes */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Progress Notes</div>
-        <div style={{ marginBottom: 12 }}>
-          <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
-            placeholder="Add a progress update, question, or status note…"
-            style={{ width: '100%', minHeight: 70, fontSize: 13, padding: 10, fontFamily: 'inherit' }}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addNote() }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-            <div style={{ fontSize: 10, color: 'var(--text3)' }}>Ctrl/Cmd + Enter to post</div>
-            <button className="btn btn-sm btn-primary" onClick={addNote} disabled={savingNote || !noteText.trim()}>
-              {savingNote ? 'Posting…' : 'Post Note'}
-            </button>
+        {canComment ? (
+          <div style={{ marginBottom: 12 }}>
+            <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
+              placeholder="Add a progress update, question, or status note…"
+              style={{ width: '100%', minHeight: 70, fontSize: 13, padding: 10, fontFamily: 'inherit' }}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addNote() }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+              <div style={{ fontSize: 10, color: 'var(--text3)' }}>Ctrl/Cmd + Enter to post</div>
+              <button className="btn btn-sm btn-primary" onClick={addNote} disabled={savingNote || !noteText.trim()}>
+                {savingNote ? 'Posting…' : 'Post Note'}
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ marginBottom: 12, padding: 10, background: 'var(--surface2)', borderRadius: 6, fontSize: 11, color: 'var(--text3)', textAlign: 'center', fontStyle: 'italic' }}>
+            Only assigned team members can post notes. Claim this task to contribute.
+          </div>
+        )}
         {notes.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No notes yet. Be the first to post an update.</div>
         ) : (
@@ -337,7 +349,7 @@ export default function TaskDetail() {
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(n.created_at).toLocaleString('en-GB')}</div>
-                    {(n.author_id === profile?.id || profile?.role === 'admin') && (
+                    {canDeleteNote(n) && (
                       <button onClick={() => deleteNote(n.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: 0 }} title="Delete note">✕</button>
                     )}
                   </div>
@@ -353,11 +365,18 @@ export default function TaskDetail() {
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Files & Emails</div>
-          <label className="btn btn-sm btn-primary" style={{ cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
-            {uploading ? 'Uploading…' : '+ Upload'}
-            <input type="file" multiple onChange={e => { uploadFiles(e.target.files); e.target.value = '' }} disabled={uploading} style={{ display: 'none' }} />
-          </label>
+          {canUpload && (
+            <label className="btn btn-sm btn-primary" style={{ cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
+              {uploading ? 'Uploading…' : '+ Upload'}
+              <input type="file" multiple onChange={e => { uploadFiles(e.target.files); e.target.value = '' }} disabled={uploading} style={{ display: 'none' }} />
+            </label>
+          )}
         </div>
+        {!canUpload && files.length === 0 && (
+          <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', padding: 16, fontStyle: 'italic' }}>
+            Only assigned team members can upload files.
+          </div>
+        )}
         {files.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
             No files uploaded. Drag and drop, or click Upload. Supports any file type including .eml emails.
@@ -380,7 +399,7 @@ export default function TaskDetail() {
                   <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                     {isEml && <button className="btn btn-sm" onClick={() => previewFile(f)} title="Read email">Open</button>}
                     <button className="btn btn-sm" onClick={() => downloadFile(f)} title="Download">⬇</button>
-                    {(f.uploaded_by === profile?.id || can('edit_tasks') || profile?.role === 'admin') && (
+                    {canDeleteFile(f) && (
                       <button className="btn btn-sm btn-danger" onClick={() => deleteFile(f)} title="Delete">✕</button>
                     )}
                   </div>
