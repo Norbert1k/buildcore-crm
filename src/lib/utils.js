@@ -76,14 +76,14 @@ export const ROLES = {
 }
 
 export const ROLE_PERMISSIONS = {
-  admin:               { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
-  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
-  operations_manager:  { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
-  director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
-  accountant:          { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
-  site_manager:        { nav: ['dashboard','subcontractors','projects','suppliers','company','settings'], financials: false, performance: true },
-  document_controller: { nav: ['dashboard','subcontractors','documents','projects','clients','company'], financials: false, performance: false },
-  viewer:              { nav: ['dashboard','subcontractors','documents','projects','tracker','clients','company'], financials: false, performance: false },
+  admin:               { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  operations_manager:  { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  accountant:          { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','company','gdrive','settings'], financials: true, performance: true },
+  site_manager:        { nav: ['dashboard','subcontractors','projects','tasks','suppliers','company','settings'], financials: false, performance: true },
+  document_controller: { nav: ['dashboard','subcontractors','documents','projects','tasks','clients','company'], financials: false, performance: false },
+  viewer:              { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','company'], financials: false, performance: false },
 }
 
 export const NOTE_TYPES = {
