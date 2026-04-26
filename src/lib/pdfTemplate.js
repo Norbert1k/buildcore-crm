@@ -42,13 +42,13 @@ export async function loadLogo(pdfDoc) {
 }
 
 // ─────────────────────────────────────────────────────────
-// COVER PAGE (Option B — premium client-facing)
+// COVER PAGE — letterhead at top, content below
 // ─────────────────────────────────────────────────────────
 //
-// Layout:
-//   - Top green band (22% page height): white logo mark + "CITY CONSTRUCTION GROUP" + small contact line
-//   - Mid: "DOCUMENT TYPE" eyebrow, big title, project name, divider, address block, prepared-by/date metadata
-//   - Bottom green band (5%): "CONFIDENTIAL — CITY CONSTRUCTION LTD"
+// Layout (matches the on-screen mockup approved by user):
+//   - Top: same letterhead as content pages (logo right, address+contact left, divider)
+//   - Mid: eyebrow ("PROJECT CASE STUDY"), big title, optional subtitle, divider, project name + address block
+//   - Bottom: PREPARED BY + DATE pinned near bottom in two columns, thin divider, small confidential line
 //
 // `opts` = { eyebrow, title, subtitle?, projectName, addressLines: string[], preparedBy?, date? }
 export function drawCover(page, fonts, logo, opts) {
@@ -56,94 +56,62 @@ export function drawCover(page, fonts, logo, opts) {
   const { boldFont, regFont } = fonts
   const { eyebrow, title, subtitle, projectName, addressLines = [], preparedBy = 'City Construction Group', date = fmtDateLong() } = opts
 
-  // Top green band
-  const bandH = height * 0.22
-  page.drawRectangle({ x: 0, y: height - bandH, width, height: bandH, color: c(BRAND.green) })
+  // Reuse the same letterhead used on every content page — returns Y where content can start
+  const startY = drawLetterhead(page, fonts, logo)
 
-  // Logo (white square with green diamond) on the green band, top-left
-  if (logo?.img) {
-    const sz = 28
-    const gap = 10
-    page.drawRectangle({ x: 32, y: height - 56, width: sz, height: sz, color: c(BRAND.white) })
-    // Inset logo slightly to give padding
-    page.drawImage(logo.img, { x: 32 + 4, y: height - 56 + 4, width: sz - 8, height: sz - 8 })
-    page.drawText('CITY CONSTRUCTION GROUP', {
-      x: 32 + sz + gap, y: height - 44,
-      size: 11, font: boldFont, color: c(BRAND.white),
-    })
-    page.drawText('cltd.co.uk · info@cltd.co.uk · 0203 948 1930', {
-      x: 32 + sz + gap, y: height - 60,
-      size: 8, font: regFont, color: c(BRAND.white),
-      opacity: 0.8,
-    })
-  } else {
-    page.drawText('CITY CONSTRUCTION GROUP', {
-      x: 32, y: height - 44,
-      size: 11, font: boldFont, color: c(BRAND.white),
-    })
-    page.drawText('cltd.co.uk · info@cltd.co.uk · 0203 948 1930', {
-      x: 32, y: height - 60,
-      size: 8, font: regFont, color: c(BRAND.white), opacity: 0.8,
-    })
-  }
-
-  // ─ Title section (mid page) ─
-  let y = height - bandH - 70
+  // Generous breathing room below the letterhead before the title block
+  let y = startY - 110
 
   if (eyebrow) {
     page.drawText(eyebrow.toUpperCase(), {
-      x: 40, y, size: 9, font: regFont, color: c(BRAND.muted),
-      // letter-spacing isn't directly supported by pdf-lib drawText; spacing baked into the text if needed
+      x: 40, y, size: 10, font: regFont, color: c(BRAND.muted),
     })
-    y -= 22
+    y -= 24
   }
 
+  // Big title
   page.drawText(title, {
-    x: 40, y, size: 28, font: boldFont, color: c(BRAND.text),
+    x: 40, y, size: 32, font: boldFont, color: c(BRAND.text),
   })
-  y -= 32
+  y -= 38
 
   if (subtitle) {
     page.drawText(subtitle, {
-      x: 40, y, size: 18, font: boldFont, color: c(BRAND.text),
+      x: 40, y, size: 22, font: boldFont, color: c(BRAND.text),
     })
-    y -= 26
+    y -= 30
   }
 
   // Divider
-  page.drawRectangle({ x: 40, y: y - 6, width: width - 80, height: 0.8, color: c(BRAND.divider) })
-  y -= 24
+  page.drawRectangle({ x: 40, y: y - 4, width: width - 80, height: 0.5, color: c(BRAND.divider) })
+  y -= 26
 
-  // Project name (bold)
+  // Project name (bold) — for case study this is "Client: <name>", for H&S this is the project name
   if (projectName) {
     page.drawText(projectName, { x: 40, y, size: 13, font: boldFont, color: c(BRAND.text) })
-    y -= 16
+    y -= 18
   }
 
-  // Address block
+  // Address block (each line muted)
   for (const line of addressLines) {
     if (!line) continue
     page.drawText(line, { x: 40, y, size: 11, font: regFont, color: c(BRAND.muted) })
     y -= 14
   }
 
-  y -= 30
+  // ── PREPARED BY / DATE pinned to lower portion of the page ──
+  // Two columns side-by-side, label above value
+  const metaTopY = 110   // points up from page bottom
+  page.drawText('PREPARED BY', { x: 40, y: metaTopY, size: 8, font: regFont, color: c(BRAND.hint) })
+  page.drawText(preparedBy, { x: 40, y: metaTopY - 14, size: 11, font: regFont, color: c(BRAND.text) })
 
-  // Prepared by / Date metadata
-  page.drawText('PREPARED BY', { x: 40, y, size: 8, font: regFont, color: c(BRAND.hint) })
-  y -= 12
-  page.drawText(preparedBy, { x: 40, y, size: 11, font: regFont, color: c(BRAND.text) })
-  y -= 24
+  page.drawText('DATE', { x: 220, y: metaTopY, size: 8, font: regFont, color: c(BRAND.hint) })
+  page.drawText(date, { x: 220, y: metaTopY - 14, size: 11, font: regFont, color: c(BRAND.text) })
 
-  page.drawText('DATE', { x: 40, y, size: 8, font: regFont, color: c(BRAND.hint) })
-  y -= 12
-  page.drawText(date, { x: 40, y, size: 11, font: regFont, color: c(BRAND.text) })
-
-  // ─ Bottom green band ─
-  const footH = 26
-  page.drawRectangle({ x: 0, y: 0, width, height: footH, color: c(BRAND.green) })
+  // Bottom thin divider + small confidential line
+  page.drawRectangle({ x: 32, y: 60, width: width - 64, height: 0.4, color: c(BRAND.divider) })
   page.drawText('CONFIDENTIAL — CITY CONSTRUCTION LTD', {
-    x: 32, y: 9, size: 8, font: boldFont, color: c(BRAND.white), opacity: 0.95,
+    x: 32, y: 44, size: 7, font: regFont, color: c(BRAND.hint),
   })
 }
 
