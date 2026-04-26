@@ -1014,7 +1014,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   }
 
   async function loadProgressReports() {
-    if (folder.key !== '05-project-progress-report') return
+    if (folder.key !== '05-progress-report') return
     const { data } = await supabase.from('progress_reports')
       .select('id, report_number, report_date, created_at, updated_at, profiles:created_by(full_name)')
       .eq('project_id', projectId)
@@ -1022,7 +1022,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     setProgressReports(data || [])
   }
 
-  useEffect(() => { if (open && folder.key === '05-project-progress-report') loadProgressReports() }, [open, folder.key, projectId, treeVersion])
+  useEffect(() => { if (open && folder.key === '05-progress-report') loadProgressReports() }, [open, folder.key, projectId, treeVersion])
 
   async function deleteProgressReport(reportId) {
     // Best-effort: delete photos from storage first
@@ -1151,7 +1151,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   </button>
                 </>
               )}
-              {folder.key === '05-project-progress-report' && canManage && (
+              {folder.key === '05-progress-report' && canManage && (
                 <button onClick={(e) => { e.stopPropagation(); setEditingReportId(null); setShowProgressEditor(true) }}
                   style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#448a40', color: 'white', border: '0.5px solid #448a40' }}
                   title="Create a new monthly progress report">
@@ -1200,7 +1200,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
 
           {/* Progress reports list (folder 05 only) */}
-          {folder.key === '05-project-progress-report' && progressReports.length > 0 && (
+          {folder.key === '05-progress-report' && progressReports.length > 0 && (
             <div style={{ marginBottom: 14, padding: 12, border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)' }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
                 Saved Progress Reports ({progressReports.length})
@@ -1311,7 +1311,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
 
       {/* Live Gantt editor (programme folder only) */}
       {/* Progress Report editor */}
-      {showProgressEditor && folder.key === '05-project-progress-report' && (
+      {showProgressEditor && folder.key === '05-progress-report' && (
         <ProgressReportEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
