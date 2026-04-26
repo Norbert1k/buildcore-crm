@@ -18,7 +18,7 @@ const HEADER_H = 56  // date axis area
 
 const COLORS = ['#448a40','#378ADD','#BA7517','#993C1D','#3B6D11','#534AB7','#888780','#c00','#1F8A70']
 
-export default function GanttEditor({ projectId, projectName, onClose, canEdit }) {
+export default function GanttEditor({ projectId, projectName, onClose, canEdit, initialTasks = null }) {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -70,6 +70,13 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit }
         setActiveVersion(null)
         setTasks([])
         setOriginalTasks([])
+      }
+
+      // If we got pre-filled tasks from the AI parser, use them as the working set.
+      // Marks the editor dirty so the user is prompted to save when ready.
+      if (initialTasks && Array.isArray(initialTasks) && initialTasks.length > 0) {
+        setTasks(initialTasks)
+        // Don't update originalTasks — that way isDirty is true and a save prompt appears
       }
     } catch (e) { console.error('[Gantt] load:', e) }
     setLoading(false)
