@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
 import GanttEditor from './Gantt/GanttEditor'
+import ProgressReportEditor from './ProgressReportEditor'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -826,7 +827,11 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [renameFolderVal, setRenameFolderVal] = useState('')
   const [showGantt, setShowGantt] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const [generatePreview, setGeneratePreview] = useState(null) // { tasks, confidence, notes, filename, raw } when shown
+  const [generatePreview, setGeneratePreview] = useState(null)
+  const [showProgressEditor, setShowProgressEditor] = useState(false)
+  const [editingReportId, setEditingReportId] = useState(null)
+  const [progressReports, setProgressReports] = useState([])
+  const [confirmDeleteReport, setConfirmDeleteReport] = useState(null)
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('pdView_' + folder.key) || 'grid' } catch { return 'grid' }
   })
@@ -1008,6 +1013,28 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     }
   }
 
+  async function loadProgressReports() {
+    if (folder.key !== '05-project-progress-report') return
+    const { data } = await supabase.from('progress_reports')
+      .select('id, report_number, report_date, created_at, updated_at, profiles:created_by(full_name)')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+    setProgressReports(data || [])
+  }
+
+  useEffect(() => { if (open && folder.key === '05-project-progress-report') loadProgressReports() }, [open, folder.key, projectId, treeVersion])
+
+  async function deleteProgressReport(reportId) {
+    // Best-effort: delete photos from storage first
+    const { data: photos } = await supabase.from('progress_report_photos').select('storage_path').eq('report_id', reportId)
+    if (photos?.length) {
+      await supabase.storage.from('progress-photos').remove(photos.map(p => p.storage_path))
+    }
+    await supabase.from('progress_reports').delete().eq('id', reportId)
+    setConfirmDeleteReport(null)
+    loadProgressReports()
+  }
+
   async function generateGanttFromPdf(file) {
     if (!file?.storage_path) return
     setGenerating(true)
@@ -1124,6 +1151,14 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   </button>
                 </>
               )}
+              {folder.key === '05-project-progress-report' && canManage && (
+                <button onClick={(e) => { e.stopPropagation(); setEditingReportId(null); setShowProgressEditor(true) }}
+                  style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#448a40', color: 'white', border: '0.5px solid #448a40' }}
+                  title="Create a new monthly progress report">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                  New Progress Report
+                </button>
+              )}
               {folder.key === '06-project-programme' && (
                 <button onClick={(e) => { e.stopPropagation(); setShowGantt(true) }}
                   style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
@@ -1163,6 +1198,41 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDropBody}
           style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
+
+          {/* Progress reports list (folder 05 only) */}
+          {folder.key === '05-project-progress-report' && progressReports.length > 0 && (
+            <div style={{ marginBottom: 14, padding: 12, border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                Saved Progress Reports ({progressReports.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {progressReports.map(r => (
+                  <div key={r.id}
+                    onClick={() => { setEditingReportId(r.id); setShowProgressEditor(true) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: 'var(--surface)', borderRadius: 4, cursor: 'pointer', border: '0.5px solid var(--border)' }}>
+                    <span style={{ fontSize: 14 }}>📋</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{r.report_number}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                        Last updated {new Date(r.updated_at).toLocaleDateString('en-GB')} · {r.profiles?.full_name || 'Unknown'}
+                      </div>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setEditingReportId(r.id); setShowProgressEditor(true) }}
+                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
+                      Open
+                    </button>
+                    {canManage && (
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
+                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
             onMove={async (targetKey) => {
               for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey }).eq('id', id)
@@ -1240,6 +1310,22 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
       )}
 
       {/* Live Gantt editor (programme folder only) */}
+      {/* Progress Report editor */}
+      {showProgressEditor && folder.key === '05-project-progress-report' && (
+        <ProgressReportEditor
+          projectId={projectId}
+          projectName={projectName || 'Project'}
+          reportId={editingReportId}
+          onClose={() => { setShowProgressEditor(false); setEditingReportId(null); loadProgressReports() }}
+          onSaved={() => { loadProgressReports() }}
+        />
+      )}
+
+      {confirmDeleteReport && <ConfirmDlg
+        message="Permanently delete this progress report and all its photos? This cannot be undone."
+        onOk={() => deleteProgressReport(confirmDeleteReport)}
+        onCancel={() => setConfirmDeleteReport(null)} />}
+
       {showGantt && folder.key === '06-project-programme' && (
         <GanttEditor
           projectId={projectId}
