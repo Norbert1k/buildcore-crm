@@ -1245,102 +1245,118 @@ Write only the overview text, no headings or labels.`
         </div>
       )}
 
-      <div id="case-study-content" style={{ background: 'white', color: '#1a1a1a', fontFamily: 'Arial, sans-serif', maxWidth: 794 }}>
-        {/* Header */}
-        <div style={{ background: '#448a40', padding: '32px 40px', color: 'white' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-            <div>
-              <div style={{ fontSize: 11, letterSpacing: '0.1em', opacity: 0.8, marginBottom: 4 }}>PROJECT CASE STUDY</div>
-              <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.2 }}>{project.project_name}</div>
-            </div>
-            <div style={{ textAlign: 'right', fontSize: 12, opacity: 0.9 }}>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>City Construction</div>
-              <div>cltd.co.uk</div>
-            </div>
+      <div id="case-study-content" style={{ background: 'white', color: '#1a1a1a', fontFamily: 'Arial, sans-serif', maxWidth: 794, margin: '0 auto' }}>
+        {/* Letterhead — matches PDF content pages */}
+        <div style={{ padding: '24px 40px 16px', borderBottom: '0.5px solid #d0d0d0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>City Construction Group</div>
+            <div style={{ fontSize: 9, color: '#888', marginTop: 4, lineHeight: 1.5 }}>One Canada Square, Canary Wharf, London E14 5AA</div>
+            <div style={{ fontSize: 9, color: '#888', lineHeight: 1.5 }}>T: 0203 948 1930 &nbsp;·&nbsp; E: info@cltd.co.uk &nbsp;·&nbsp; W: www.cltd.co.uk</div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+          <img src="/cltd-logo.jpg" alt="CCG" style={{ width: 48, height: 48, flexShrink: 0 }} />
+        </div>
+
+        {/* Title block */}
+        <div style={{ padding: '56px 40px 32px' }}>
+          <div style={{ fontSize: 11, letterSpacing: '0.15em', color: '#888', marginBottom: 10 }}>PROJECT CASE STUDY</div>
+          <div style={{ fontSize: 36, fontWeight: 700, color: '#1a1a1a', lineHeight: 1.1 }}>{project.project_name}</div>
+          <div style={{ height: 0.5, background: '#d0d0d0', margin: '24px 0 16px' }} />
+          {project.client_name && (
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1a1a', marginBottom: 6 }}>Client: {project.client_name}</div>
+          )}
+          {[project.site_address, [project.city, project.postcode].filter(Boolean).join(', ')].filter(Boolean).map((line, i) => (
+            <div key={i} style={{ fontSize: 12, color: '#666', lineHeight: 1.55 }}>{line}</div>
+          ))}
+        </div>
+
+        {/* Project overview section */}
+        <div style={{ padding: '0 40px 32px' }}>
+          <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project overview</div>
+          <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
+
+          {/* Key facts grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 24 }}>
             {[
               ['Client', project.client_name || '—'],
               ['Duration', duration || '—'],
               ['Value', project.value ? `£${Number(project.value).toLocaleString()}` : '—'],
-              ['Status', project.status?.charAt(0).toUpperCase() + project.status?.slice(1) || '—'],
+              ['Status', (project.status?.charAt(0).toUpperCase() + project.status?.slice(1)) || '—'],
+              ['Reference', project.project_ref || '—'],
+              ['Project Manager', project.profiles?.full_name || '—'],
             ].map(([k, v]) => (
-              <div key={k} style={{ background: 'rgba(255,255,255,0.15)', borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ fontSize: 10, opacity: 0.8, marginBottom: 4 }}>{k.toUpperCase()}</div>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{v}</div>
+              <div key={k} style={{ background: '#f7f5ee', padding: '10px 14px', borderRadius: 4 }}>
+                <div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{k}</div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{v}</div>
               </div>
             ))}
           </div>
+
+          {/* Description */}
+          {overviewText && (
+            <div style={{ fontSize: 13, lineHeight: 1.7, color: '#333', whiteSpace: 'pre-wrap' }}>{overviewText}</div>
+          )}
         </div>
 
-        <div style={{ padding: '32px 40px' }}>
-          {/* Overview */}
-          {overviewText && (
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT OVERVIEW</div>
-              <div style={{ fontSize: 13, lineHeight: 1.8, color: '#333', whiteSpace: 'pre-wrap' }}>{overviewText}</div>
-            </div>
-          )}
-
-          {/* Details */}
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT DETAILS</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px', fontSize: 13 }}>
+        {/* Project details (extra info — dates) */}
+        {(project.start_date || project.end_date) && (
+          <div style={{ padding: '0 40px 32px' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project timeline</div>
+            <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 24px', fontSize: 13 }}>
               {[
-                ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', project.start_date ? new Date(project.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
                 ['Completion', project.end_date ? new Date(project.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
-                ['Project Manager', project.profiles?.full_name],
-                ['Reference', project.project_ref],
               ].filter(([, v]) => v).map(([k, v]) => (
-                <div key={k} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 6, paddingTop: 6, display: 'flex', gap: 8 }}>
+                <div key={k} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
                   <span style={{ color: '#888', minWidth: 120 }}>{k}:</span>
                   <span style={{ fontWeight: 500 }}>{v}</span>
                 </div>
               ))}
             </div>
           </div>
+        )}
 
-          {/* Photos */}
-          {Object.keys(photoUrls).length > 0 && (
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT PHOTOGRAPHY</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                {photos.slice(0, 6).map(p => photoUrls[p.id] ? (
-                  <div key={p.id}>
-                    <img src={photoUrls[p.id]} alt={p.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 4 }} crossOrigin="anonymous" />
-                    {p.caption && <div style={{ fontSize: 10, color: '#888', textAlign: 'center', marginTop: 3 }}>{p.caption}</div>}
-                  </div>
-                ) : null)}
-              </div>
+        {/* Project photography */}
+        {Object.keys(photoUrls).length > 0 && (
+          <div style={{ padding: '0 40px 32px' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project photography</div>
+            <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {photos.slice(0, 6).map(p => photoUrls[p.id] ? (
+                <div key={p.id}>
+                  <img src={photoUrls[p.id]} alt={p.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 4 }} crossOrigin="anonymous" />
+                  {p.caption && <div style={{ fontSize: 10, color: '#888', textAlign: 'center', marginTop: 3 }}>{p.caption}</div>}
+                </div>
+              ) : null)}
             </div>
-          )}
-
-          {/* Team */}
-          {subs.length > 0 && (
-            <div style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#448a40', borderBottom: '2px solid #448a40', paddingBottom: 6, marginBottom: 12 }}>PROJECT TEAM</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-                {subs.map(ps => (
-                  <div key={ps.id} style={{ border: '1px solid #eee', borderRadius: 6, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e8f5e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#448a40', flexShrink: 0 }}>
-                      {ps.subcontractors?.company_name?.charAt(0) || '?'}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{ps.subcontractors?.company_name}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || ps.trade_on_project}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Footer */}
-          <div style={{ borderTop: '1px solid #eee', paddingTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 11, color: '#999' }}>City Construction Ltd · cltd.co.uk</div>
-            <div style={{ fontSize: 11, color: '#999' }}>Generated {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
           </div>
+        )}
+
+        {/* Project team */}
+        {subs.length > 0 && (
+          <div style={{ padding: '0 40px 32px' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project team</div>
+            <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              {subs.map(ps => (
+                <div key={ps.id} style={{ background: '#f7f5ee', padding: '12px 14px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e8f5e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#448a40', flexShrink: 0 }}>
+                    {ps.subcontractors?.company_name?.charAt(0) || '?'}
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ps.subcontractors?.company_name}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || ps.trade_on_project}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div style={{ padding: '16px 40px', borderTop: '0.5px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#999' }}>
+          <span>City Construction Ltd · cltd.co.uk</span>
+          <span>Generated {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
         </div>
       </div>
     </div>
