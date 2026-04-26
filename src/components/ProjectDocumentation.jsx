@@ -1012,33 +1012,25 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     if (!file?.storage_path) return
     setGenerating(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) { alert('Not signed in'); setGenerating(false); return }
-
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-programme-pdf`
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ storage_path: file.storage_path }),
+      const { data, error } = await supabase.functions.invoke('parse-programme-pdf', {
+        body: { storage_path: file.storage_path },
       })
-      const result = await resp.json()
-      if (!resp.ok || !result.ok) {
-        throw new Error(result.error || result.parse_error || `HTTP ${resp.status}`)
+      if (error) throw error
+      if (!data?.ok) {
+        throw new Error(data?.error || data?.parse_error || 'Parser returned no result')
       }
       // Show preview to user
       setGeneratePreview({
         filename: file.file_name,
-        tasks: result.tasks || [],
-        confidence: result.confidence,
-        notes: result.notes,
-        raw: result.raw_response,
+        tasks: data.tasks || [],
+        confidence: data.confidence,
+        notes: data.notes,
+        raw: data.raw_response,
       })
     } catch (err) {
       console.error('[generateGantt]', err)
-      alert('Could not parse PDF: ' + (err?.message || err) + '\n\nThe AI parser may struggle with hand-drawn or low-quality PDFs. You can still build the Gantt manually.')
+      const msg = err?.message || err?.error?.message || String(err)
+      alert('Could not parse PDF: ' + msg + '\n\nThe AI parser may struggle with hand-drawn or low-quality PDFs. You can still build the Gantt manually.')
     }
     setGenerating(false)
   }
