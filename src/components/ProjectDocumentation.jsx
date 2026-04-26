@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
 import GanttEditor from './Gantt/GanttEditor'
-import ProgressReportEditor from './ProgressReportEditor'
+import ProgressReportEditor, { generateProgressReportPdf } from './ProgressReportEditor'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -1219,7 +1219,20 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); setEditingReportId(r.id); setShowProgressEditor(true) }}
                       style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
-                      Open / Export
+                      Open
+                    </button>
+                    <button onClick={async (e) => {
+                        e.stopPropagation()
+                        // Fetch full report + photos then generate PDF
+                        const [{ data: full }, { data: pics }] = await Promise.all([
+                          supabase.from('progress_reports').select('*').eq('id', r.id).single(),
+                          supabase.from('progress_report_photos').select('*').eq('report_id', r.id).order('display_order'),
+                        ])
+                        if (!full) { alert('Report not found'); return }
+                        await generateProgressReportPdf(full, pics || [], projectName)
+                      }}
+                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
+                      📄 Export PDF
                     </button>
                     {canManage && (
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
