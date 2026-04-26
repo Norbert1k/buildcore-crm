@@ -272,7 +272,9 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
 
       // ─ Letterhead drawn on every page after the cover ─
       const drawLetterhead = () => {
-        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 35, 8, 25, 25) } catch (e) {} }
+        // Logo top-right — sized so its bottom aligns with the divider at y=36
+        // Logo image is roughly square, so 22x22mm starting at y=11 ends at y=33 (just above divider with breathing room)
+        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 32, 11, 22, 22) } catch (e) {} }
         doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
         doc.text('City Construction Group', 15, 15)
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
