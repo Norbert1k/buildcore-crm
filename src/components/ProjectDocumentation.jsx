@@ -13,17 +13,17 @@ const TEMPLATE_FOLDERS = [
     color: '#448a40',
     bg: '#e8f5e7',
     subfolders: [
-      { key: 'drawings', label: 'Drawings' },
-      { key: 'reports',  label: 'Surveys & Reports' },
-      { key: 'csa',      label: 'CSA' },
-      { key: 'cff',      label: 'CFF - Cashflow Forecast' },
-      { key: 'f10',      label: 'F10' },
-      { key: 'hs',       label: 'Health & Safety' },
-      { key: 'pci',      label: 'PCI — Pre-Construction Information' },
-      { key: 'cpp',      label: 'CPP — Construction Phase Plan' },
-      { key: 'planning', label: 'Planning' },
-      { key: 'utilities', label: 'Utilities' },
-      { key: 'meetings', label: 'Meetings' },
+      { key: 'drawings', label: '01. Drawings' },
+      { key: 'reports',  label: '02. Surveys & Reports' },
+      { key: 'csa',      label: '03. CSA' },
+      { key: 'cff',      label: '04. CFF - Cashflow Forecast' },
+      { key: 'f10',      label: '05. F10' },
+      { key: 'hs',       label: '06. Health & Safety' },
+      { key: 'pci',      label: '07. PCI — Pre-Construction Information' },
+      { key: 'cpp',      label: '08. CPP — Construction Phase Plan' },
+      { key: 'planning', label: '09. Planning' },
+      { key: 'utilities', label: '10. Utilities' },
+      { key: 'meetings', label: '11. Meetings' },
     ]
   },
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
@@ -294,6 +294,17 @@ async function addFilesToZip(zip, files, pathMap, setProgress, startIndex = 0, t
 }
 
 // Trigger the actual download once a JSZip is built. Reports zipping progress.
+// Force every folder in the path map to appear in the zip, even if it has no files.
+// JSZip's `folder()` method registers the path; when serialized, the empty folder is included.
+// Without this, empty subfolders (e.g. F10, PCI when blank) silently disappear from the zip.
+function ensureFolders(zip, pathMap, pathPrefix = '') {
+  for (const path of Object.values(pathMap)) {
+    if (!path) continue
+    const fullPath = pathPrefix ? pathPrefix + '/' + path : path
+    zip.folder(fullPath)
+  }
+}
+
 async function downloadZip(zip, filename, setProgress) {
   const blob = await zip.generateAsync({ type: 'blob' }, (meta) => {
     if (setProgress) setProgress({ current: 0, total: 0, fileName: 'Compressing…', percent: meta.percent, label: 'Compressing zip' })
@@ -799,6 +810,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
       }
       const zip = new window.JSZip()
       await addFilesToZip(zip, fileList, pathMap, setZipProgress)
+      ensureFolders(zip, pathMap)
       await downloadZip(zip, subLabel + '.zip', setZipProgress)
     } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
     setZipProgress(null)
@@ -1099,13 +1111,12 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         nestedFiles = data || []
       }
       const allFiles = [...(topLevelFiles || []), ...nestedFiles]
-      if (!allFiles.length) {
-        setZipProgress(null)
-        alert('No files in this folder.')
-        return
-      }
       const zip = new window.JSZip()
-      await addFilesToZip(zip, allFiles, pathMap, setZipProgress)
+      if (allFiles.length > 0) {
+        await addFilesToZip(zip, allFiles, pathMap, setZipProgress)
+      }
+      // Always include the full folder structure — F10/PCI etc. show up even when empty
+      ensureFolders(zip, pathMap)
       await downloadZip(zip, folder.label + '.zip', setZipProgress)
     } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
     setZipProgress(null)
@@ -1166,6 +1177,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
       }
       const zip = new window.JSZip()
       await addFilesToZip(zip, allFiles, pathMap, setZipProgress)
+      ensureFolders(zip, pathMap)
       await downloadZip(zip, folder.label + '-folders.zip', setZipProgress)
       setSelectedSubs(new Set())
     } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
@@ -1711,11 +1723,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
     try {
       await loadJsZip()
       const { data: allFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId)
-      if (!allFiles?.length) {
-        setZipProgress(null); setZippingAll(false)
-        alert('No files in this project.')
-        return
-      }
+      const filesList = allFiles || []
       // Build label paths for every top-level folder (template + custom)
       const allTopFolders = [...TEMPLATE_FOLDERS, ...customTopFolders]
       const pathMaps = {}
@@ -1725,11 +1733,12 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
         topLabelMap[tf.key] = tf.label
       }
 
-      // Group files by top-level folder
       const zip = new window.JSZip()
-      const total = allFiles.length
+
+      // Add files (if any)
+      const total = filesList.length
       let i = 0
-      for (const f of allFiles) {
+      for (const f of filesList) {
         i++
         setZipProgress({ label: 'Preparing zip', current: i, total, fileName: f.file_name })
         const topLabel = topLabelMap[f.folder_key] || safeName(f.folder_key)
@@ -1749,6 +1758,13 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
           zip.file(parts.join('/'), blob)
         } catch (e) { console.warn('zip skip', f.file_name, e) }
       }
+
+      // ALWAYS include the full folder structure for every top-level folder,
+      // even when empty. This ensures F10, PCI etc. appear in the zip.
+      for (const tf of allTopFolders) {
+        ensureFolders(zip, pathMaps[tf.key], safeName(tf.label))
+      }
+
       await downloadZip(zip, (projectName || 'project') + '-all-docs.zip', setZipProgress)
     } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
     setZipProgress(null)
