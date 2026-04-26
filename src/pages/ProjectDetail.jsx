@@ -8,7 +8,7 @@ import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
 import EAModal from '../components/EAModal'
 import ProjectDocumentation from '../components/ProjectDocumentation'
-import { drawCover, drawLetterhead, drawFooter, loadLogo, BRAND, bc, fmtDateLong } from '../lib/pdfTemplate'
+import CaseStudyEditor from '../components/CaseStudyEditor'
 import HSHandover from '../components/HSHandover'
 import SubcontractorDocs from '../components/SubcontractorDocs'
 
@@ -125,7 +125,11 @@ export default function ProjectDetail() {
   const [allSubs, setAllSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const _tabKey = 'tab:' + window.location.pathname
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem(_tabKey) || 'documents')
+  const [activeTab, setActiveTab] = useState(() => {
+    const saved = localStorage.getItem(_tabKey) || 'documents'
+    // Photos tab was removed — fall back to documents to avoid a blank screen
+    return saved === 'photos' ? 'documents' : saved
+  })
   const [driveFolderId, setDriveFolderId] = useState(null)
   const [driveFolderName, setDriveFolderName] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
@@ -498,13 +502,6 @@ export default function ProjectDetail() {
           H&S Handover
         </div>
         )}
-        {can('view_photos') && (
-        <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => { setActiveTab('photos'); localStorage.setItem(_tabKey, 'photos') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          Photos<span className="tab-badge">{photos.length}</span>
-        </div>
-        )}
-
         {can('view_case_study') && (
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => { setActiveTab('casestudy'); localStorage.setItem(_tabKey, 'casestudy') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -547,46 +544,8 @@ export default function ProjectDetail() {
 
 
 
-      {activeTab === 'photos' && can('view_photos') && (
-        <div>
-          <div className="section-header" style={{ marginBottom: 16 }}>
-            <div className="section-title">Project Photos</div>
-            {can('manage_projects') && (
-              <label className="btn btn-primary btn-sm" style={{ cursor: 'pointer' }}>
-                {uploadingPhoto ? 'Uploading...' : '📷 Upload Photos'}
-                <input type="file" multiple accept="image/*" style={{ display: 'none' }}
-                  onChange={e => uploadPhoto(Array.from(e.target.files))} disabled={uploadingPhoto} />
-              </label>
-            )}
-          </div>
-          {photos.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>
-              No photos yet — upload project photos to showcase your work
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-              {photos.map(photo => (
-                <PhotoCard key={photo.id} photo={photo} onPreview={() => openPhotoPreview(photo)} onDelete={() => deletePhoto(photo)} canDelete={can('manage_projects')} />
-              ))}
-            </div>
-          )}
-          {/* Photo preview modal */}
-          {previewPhoto && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewPhoto(null)}>
-              <div style={{ maxWidth: 900, width: '100%' }} onClick={e => e.stopPropagation()}>
-                <img src={previewPhoto.url} alt={previewPhoto.caption || previewPhoto.file_name} style={{ width: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }} />
-                {previewPhoto.caption && <div style={{ color: 'white', textAlign: 'center', marginTop: 12, fontSize: 14 }}>{previewPhoto.caption}</div>}
-                <div style={{ textAlign: 'center', marginTop: 12 }}>
-                  <button className="btn" onClick={() => setPreviewPhoto(null)} style={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)' }}>✕ Close</button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {activeTab === 'casestudy' && can('view_case_study') && (
-        <CaseStudy project={project} subs={subs} docs={docs} photos={photos} />
+        <CaseStudyPanel projectId={id} projectName={project?.project_name} canManage={can('manage_projects')} />
       )}
 
       {(activeTab === 'subcontractors' || activeTab === 'design_team') && (() => {
@@ -1000,368 +959,80 @@ function PhotoCard({ photo, onPreview, onDelete, canDelete }) {
   )
 }
 
-// ── Case Study Component ─────────────────────────────────────
-function CaseStudy({ project, subs, docs, photos }) {
-  const [photoUrls, setPhotoUrls] = useState({})
-  const [aiOverview, setAiOverview] = useState(null)
-  const [generatingAI, setGeneratingAI] = useState(false)
-  const [exporting, setExporting] = useState(false)
 
-  useEffect(() => {
-    photos.slice(0, 6).forEach(async p => {
-      const { data } = await supabase.storage.from('company-docs').createSignedUrl(p.storage_path, 3600)
-      if (data?.signedUrl) setPhotoUrls(u => ({ ...u, [p.id]: data.signedUrl }))
-    })
-  }, [photos])
+// ── Case Study Panel ─────────────────────────────────────────
+// Lightweight wrapper shown in the Case Study tab. Detects if a case
+// study exists for this project; shows "Create" or summary card,
+// opens CaseStudyEditor in a fullscreen overlay.
+function CaseStudyPanel({ projectId, projectName, canManage }) {
+  const [loading, setLoading] = useState(true)
+  const [doc, setDoc] = useState(null)
+  const [showEditor, setShowEditor] = useState(false)
 
-  async function generateAIOverview() {
-    if (!project.description) return
-    setGeneratingAI(true)
+  async function reload() {
+    setLoading(true)
     try {
-      const duration = calcDuration(project.start_date, project.end_date)
-      const trades = subs.map(s => s.subcontractors?.trade || s.trade_on_project).filter(Boolean).join(', ')
-      const prompt = `You are writing a professional project case study for City Construction Ltd, a UK construction company. 
-Rewrite the following project description into a compelling, professional 2-3 paragraph overview suitable for a client-facing case study PDF.
-Use professional construction industry language. Highlight the scope, complexity and value delivered. Do not invent facts.
-
-Project: ${project.project_name}
-Client: ${project.client_name || 'Confidential'}
-Value: ${project.value ? '£' + Number(project.value).toLocaleString() : 'Not specified'}
-Duration: ${duration || 'Not specified'}
-Trades involved: ${trades || 'Various'}
-Original description: ${project.description}
-
-Write only the overview text, no headings or labels.`
-
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      })
-      const data = await response.json()
-      const text = data.content?.[0]?.text
-      if (text) setAiOverview(text)
-    } catch (e) { console.error(e) }
-    setGeneratingAI(false)
+      const { data } = await supabase.from('case_studies')
+        .select('id, title, photos, updated_at, created_at')
+        .eq('project_id', projectId).maybeSingle()
+      setDoc(data || null)
+    } catch (e) { console.warn('[CaseStudyPanel] load', e); setDoc(null) }
+    setLoading(false)
   }
+  useEffect(() => { reload() }, [projectId])
 
-  async function exportPDF() {
-    setExporting(true)
-    try {
-      // Lazy-load pdf-lib
-      if (!window.PDFLib) {
-        const script = document.createElement('script')
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'
-        document.head.appendChild(script)
-        await new Promise(r => { script.onload = r })
-      }
-      const { PDFDocument, StandardFonts, PageSizes } = window.PDFLib
-
-      const pdf = await PDFDocument.create()
-      const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold)
-      const regFont = await pdf.embedFont(StandardFonts.Helvetica)
-      const fonts = { boldFont, regFont }
-      const logo = await loadLogo(pdf)
-
-      const A4 = PageSizes.A4   // [595, 842]
-      const A4_W = A4[0], A4_H = A4[1]
-
-      const addressLines = [
-        project.site_address || '',
-        project.city || '',
-        project.postcode || '',
-      ].filter(Boolean)
-
-      // ── Page 1: Branded cover ──
-      const cover = pdf.addPage(A4)
-      drawCover(cover, fonts, logo, {
-        eyebrow: 'PROJECT CASE STUDY',
-        title: project.project_name || 'Project',
-        projectName: project.client_name ? `Client: ${project.client_name}` : undefined,
-        addressLines,
-      })
-
-      // ── Page 2: Project details + overview ──
-      const detailPage = pdf.addPage(A4)
-      let y = drawLetterhead(detailPage, fonts, logo)
-
-      detailPage.drawText('Project overview', { x: 32, y: y - 4, size: 20, font: boldFont, color: bc(BRAND.text) })
-      y -= 30
-
-      // Key facts grid
-      const facts = [
-        ['Client', project.client_name || '—'],
-        ['Duration', duration || '—'],
-        ['Value', project.value ? `£${Number(project.value).toLocaleString()}` : '—'],
-        ['Status', (project.status?.charAt(0).toUpperCase() + project.status?.slice(1)) || '—'],
-        ['Reference', project.project_ref || '—'],
-        ['Project Manager', project.profiles?.full_name || '—'],
-      ]
-      const colW = (A4_W - 64) / 2
-      for (let i = 0; i < facts.length; i++) {
-        const [k, v] = facts[i]
-        const col = i % 2
-        const row = Math.floor(i / 2)
-        const fx = 32 + col * colW
-        const fy = y - row * 38
-        // Light fill background for each fact
-        detailPage.drawRectangle({ x: fx, y: fy - 28, width: colW - 8, height: 32, color: bc({ r: 0.965, g: 0.961, b: 0.94 }) })
-        detailPage.drawText(k.toUpperCase(), { x: fx + 8, y: fy - 12, size: 8, font: regFont, color: bc(BRAND.muted) })
-        detailPage.drawText(String(v), { x: fx + 8, y: fy - 24, size: 11, font: boldFont, color: bc(BRAND.text) })
-      }
-      y -= Math.ceil(facts.length / 2) * 38 + 16
-
-      // Overview text
-      const overview = aiOverview || project.description
-      if (overview && overview.trim()) {
-        if (y < 200) { /* fits */ }
-        detailPage.drawText('Project description', { x: 32, y: y - 4, size: 14, font: boldFont, color: bc(BRAND.green) })
-        y -= 18
-        // Word-wrap helper
-        const wrap = (text, maxW, size) => {
-          const words = text.split(/\s+/)
-          const lines = []
-          let cur = ''
-          for (const w of words) {
-            const test = cur ? cur + ' ' + w : w
-            if (regFont.widthOfTextAtSize(test, size) > maxW) {
-              if (cur) lines.push(cur); cur = w
-            } else { cur = test }
-          }
-          if (cur) lines.push(cur)
-          return lines
-        }
-        const paras = overview.split(/\n\n+/)
-        for (const para of paras) {
-          const lines = wrap(para.replace(/\n/g, ' '), A4_W - 64, 11)
-          for (const line of lines) {
-            if (y < 80) break
-            detailPage.drawText(line, { x: 32, y, size: 11, font: regFont, color: bc(BRAND.text), lineHeight: 14 })
-            y -= 16
-          }
-          y -= 8
-          if (y < 80) break
-        }
-      }
-
-      // ── Photos page (if any) ──
-      const photoEntries = photos.slice(0, 6).filter(p => photoUrls[p.id])
-      if (photoEntries.length > 0) {
-        const photoPage = pdf.addPage(A4)
-        let py = drawLetterhead(photoPage, fonts, logo)
-        photoPage.drawText('Project photography', { x: 32, y: py - 4, size: 20, font: boldFont, color: bc(BRAND.text) })
-        py -= 30
-
-        // Embed each photo
-        const photoW = (A4_W - 64 - 12) / 2  // 2 columns
-        const photoH = photoW * 0.75
-        let col = 0
-        let cy = py
-        for (const ph of photoEntries) {
-          try {
-            const r = await fetch(photoUrls[ph.id])
-            const blob = await r.blob()
-            const ab = await blob.arrayBuffer()
-            let img = null
-            try { img = await pdf.embedJpg(ab) } catch { img = await pdf.embedPng(ab) }
-            const px = 32 + col * (photoW + 12)
-            if (cy - photoH < 60) break  // ran out of room
-            photoPage.drawImage(img, { x: px, y: cy - photoH, width: photoW, height: photoH })
-            col++
-            if (col >= 2) { col = 0; cy -= photoH + 12 }
-          } catch (e) { console.warn('photo skip', ph.id, e) }
-        }
-      }
-
-      // ── Team page (if any subs) ──
-      if (subs && subs.length > 0) {
-        const teamPage = pdf.addPage(A4)
-        let ty = drawLetterhead(teamPage, fonts, logo)
-        teamPage.drawText('Project team', { x: 32, y: ty - 4, size: 20, font: boldFont, color: bc(BRAND.text) })
-        ty -= 30
-
-        for (const ps of subs) {
-          if (ty < 80) break
-          const name = ps.subcontractors?.company_name || '—'
-          const trade = ps.subcontractors?.trade || ps.trade_on_project || ''
-          // Card
-          teamPage.drawRectangle({ x: 32, y: ty - 36, width: A4_W - 64, height: 32, color: bc({ r: 0.965, g: 0.961, b: 0.94 }) })
-          teamPage.drawText(name, { x: 44, y: ty - 18, size: 12, font: boldFont, color: bc(BRAND.text) })
-          teamPage.drawText(trade, { x: 44, y: ty - 30, size: 10, font: regFont, color: bc(BRAND.muted) })
-          ty -= 40
-        }
-      }
-
-      // ── Footer page numbers on every content page ──
-      const allPages = pdf.getPages()
-      const total = allPages.length
-      for (let i = 1; i < total; i++) {
-        drawFooter(allPages[i], fonts, project.project_name || '', i + 1, total)
-      }
-
-      const bytes = await pdf.save()
-      const blob = new Blob([bytes], { type: 'application/pdf' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = `${project.project_name || 'Project'} - Case Study.pdf`
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-    } catch (e) {
-      console.error('[CaseStudy.exportPDF]', e)
-      alert('Export failed: ' + (e?.message || e))
-    }
-    setExporting(false)
+  if (loading) {
+    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
   }
-
-  const duration = calcDuration(project.start_date, project.end_date)
-  const overviewText = aiOverview || project.description
 
   return (
     <div>
       <div className="section-header" style={{ marginBottom: 16 }}>
         <div>
           <div className="section-title">Case Study</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)' }}>Auto-compiled from project data — AI enhances the overview</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>An editable, exportable project case study. Edits don't affect the project record.</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {project.description && (
-            <button className="btn btn-sm" onClick={generateAIOverview} disabled={generatingAI}>
-              {generatingAI ? '✨ Writing...' : aiOverview ? '✨ Regenerate' : '✨ AI Overview'}
-            </button>
-          )}
-          <button className="btn btn-primary btn-sm" onClick={exportPDF} disabled={exporting}>
-            {exporting ? 'Generating...' : '⬇ Export PDF'}
-          </button>
-        </div>
+        {canManage && !doc && (
+          <button className="btn btn-primary btn-sm" onClick={() => setShowEditor(true)}>+ Create Case Study</button>
+        )}
       </div>
 
-      {aiOverview && (
-        <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 12, color: 'var(--green)', marginBottom: 16 }}>
-          ✨ AI has enhanced the project overview — review below before exporting
+      {!doc ? (
+        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>
+          No case study yet.
+          {canManage && (
+            <div style={{ marginTop: 14 }}>
+              <button className="btn btn-primary" onClick={() => setShowEditor(true)}>Create Case Study</button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="card card-pad" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between' }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>{doc.title || projectName || 'Case Study'}</div>
+            <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+              {(doc.photos?.length || 0)} photo{(doc.photos?.length || 0) === 1 ? '' : 's'}
+              {' · Last updated '}
+              {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button className="btn btn-sm" onClick={() => setShowEditor(true)}>{canManage ? 'Open / Edit' : 'View'}</button>
+          </div>
         </div>
       )}
 
-      <div id="case-study-content" style={{ background: 'white', color: '#1a1a1a', fontFamily: 'Arial, sans-serif', maxWidth: 794, margin: '0 auto' }}>
-        {/* Letterhead — matches PDF content pages */}
-        <div style={{ padding: '24px 40px 16px', borderBottom: '0.5px solid #d0d0d0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20 }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>City Construction Group</div>
-            <div style={{ fontSize: 9, color: '#888', marginTop: 4, lineHeight: 1.5 }}>One Canada Square, Canary Wharf, London E14 5AA</div>
-            <div style={{ fontSize: 9, color: '#888', lineHeight: 1.5 }}>T: 0203 948 1930 &nbsp;·&nbsp; E: info@cltd.co.uk &nbsp;·&nbsp; W: www.cltd.co.uk</div>
-          </div>
-          <img src="/cltd-logo.jpg" alt="CCG" style={{ width: 48, height: 48, flexShrink: 0 }} />
-        </div>
-
-        {/* Title block */}
-        <div style={{ padding: '56px 40px 32px' }}>
-          <div style={{ fontSize: 11, letterSpacing: '0.15em', color: '#888', marginBottom: 10 }}>PROJECT CASE STUDY</div>
-          <div style={{ fontSize: 36, fontWeight: 700, color: '#1a1a1a', lineHeight: 1.1 }}>{project.project_name}</div>
-          <div style={{ height: 0.5, background: '#d0d0d0', margin: '24px 0 16px' }} />
-          {project.client_name && (
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1a1a', marginBottom: 6 }}>Client: {project.client_name}</div>
-          )}
-          {[project.site_address, [project.city, project.postcode].filter(Boolean).join(', ')].filter(Boolean).map((line, i) => (
-            <div key={i} style={{ fontSize: 12, color: '#666', lineHeight: 1.55 }}>{line}</div>
-          ))}
-        </div>
-
-        {/* Project overview section */}
-        <div style={{ padding: '0 40px 32px' }}>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project overview</div>
-          <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
-
-          {/* Key facts grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 24 }}>
-            {[
-              ['Client', project.client_name || '—'],
-              ['Duration', duration || '—'],
-              ['Value', project.value ? `£${Number(project.value).toLocaleString()}` : '—'],
-              ['Status', (project.status?.charAt(0).toUpperCase() + project.status?.slice(1)) || '—'],
-              ['Reference', project.project_ref || '—'],
-              ['Project Manager', project.profiles?.full_name || '—'],
-            ].map(([k, v]) => (
-              <div key={k} style={{ background: '#f7f5ee', padding: '10px 14px', borderRadius: 4 }}>
-                <div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{k}</div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{v}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Description */}
-          {overviewText && (
-            <div style={{ fontSize: 13, lineHeight: 1.7, color: '#333', whiteSpace: 'pre-wrap' }}>{overviewText}</div>
-          )}
-        </div>
-
-        {/* Project details (extra info — dates) */}
-        {(project.start_date || project.end_date) && (
-          <div style={{ padding: '0 40px 32px' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project timeline</div>
-            <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 24px', fontSize: 13 }}>
-              {[
-                ['Start Date', project.start_date ? new Date(project.start_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
-                ['Completion', project.end_date ? new Date(project.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null],
-              ].filter(([, v]) => v).map(([k, v]) => (
-                <div key={k} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8, paddingTop: 8, display: 'flex', gap: 8 }}>
-                  <span style={{ color: '#888', minWidth: 120 }}>{k}:</span>
-                  <span style={{ fontWeight: 500 }}>{v}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Project photography */}
-        {Object.keys(photoUrls).length > 0 && (
-          <div style={{ padding: '0 40px 32px' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project photography</div>
-            <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {photos.slice(0, 6).map(p => photoUrls[p.id] ? (
-                <div key={p.id}>
-                  <img src={photoUrls[p.id]} alt={p.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 4 }} crossOrigin="anonymous" />
-                  {p.caption && <div style={{ fontSize: 10, color: '#888', textAlign: 'center', marginTop: 3 }}>{p.caption}</div>}
-                </div>
-              ) : null)}
-            </div>
-          </div>
-        )}
-
-        {/* Project team */}
-        {subs.length > 0 && (
-          <div style={{ padding: '0 40px 32px' }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#1a1a1a', marginBottom: 4 }}>Project team</div>
-            <div style={{ height: 0.5, background: '#e0e0e0', marginBottom: 20 }} />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-              {subs.map(ps => (
-                <div key={ps.id} style={{ background: '#f7f5ee', padding: '12px 14px', borderRadius: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e8f5e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#448a40', flexShrink: 0 }}>
-                    {ps.subcontractors?.company_name?.charAt(0) || '?'}
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ps.subcontractors?.company_name}</div>
-                    <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || ps.trade_on_project}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Footer */}
-        <div style={{ padding: '16px 40px', borderTop: '0.5px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#999' }}>
-          <span>City Construction Ltd · cltd.co.uk</span>
-          <span>Generated {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-        </div>
-      </div>
+      {showEditor && (
+        <CaseStudyEditor
+          projectId={projectId}
+          projectName={projectName}
+          onClose={() => { setShowEditor(false); reload() }}
+        />
+      )}
     </div>
   )
 }
+
 
 // ── Programme Card Component ─────────────────────────────────
 function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
