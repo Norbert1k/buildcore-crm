@@ -1219,7 +1219,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); setEditingReportId(r.id); setShowProgressEditor(true) }}
                       style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
-                      Open
+                      Open / Export
                     </button>
                     {canManage && (
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
