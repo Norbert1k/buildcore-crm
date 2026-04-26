@@ -333,7 +333,7 @@ function renderSubcontractorEmail(p: SubEmailParams): string {
     </td></tr>
   </table>
   <p style="font-size:14px;color:#5c5a54;margin:0 0 4px;line-height:1.7;">
-    Please reply to this email or send the renewed certificate to <a href="mailto:compliance@cltd.co.uk" style="color:#448a40;font-weight:600;">compliance@cltd.co.uk</a>.
+    Please reply to this email or send the renewed certificate to <a href="mailto:info@cltd.co.uk" style="color:#448a40;font-weight:600;">info@cltd.co.uk</a>.
   </p>
   <p style="font-size:14px;color:#5c5a54;margin:16px 0 0;line-height:1.7;">
     Many thanks,<br><strong style="color:#1c1b18;">City Construction Group</strong>
