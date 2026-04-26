@@ -199,6 +199,151 @@ function ConfirmDlg({ message, onOk, onCancel }) {
   )
 }
 
+// ─── ZIP HELPERS ──────────────────────────────────────────────
+// Reusable, used by all five zip flows below. Builds zips that mirror
+// the CRM folder layout 1:1 — using folder LABELS (not raw subfolder_key
+// IDs from the database). Reports progress via a setProgress callback.
+
+async function loadJsZip() {
+  if (window.JSZip) return window.JSZip
+  const s = document.createElement('script')
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+  document.head.appendChild(s)
+  await new Promise(r => { s.onload = r })
+  return window.JSZip
+}
+
+// Sanitize a label for filesystem safety
+function safeName(s) {
+  return (s || 'Untitled').replace(/[\/\\:*?"<>|]/g, '_').replace(/\.+$/, '').trim() || 'Untitled'
+}
+
+// Build a map of folder_key -> full label-based path
+// Recursively walks descendants of `rootKey`. Includes the root itself with "" path.
+// Also seeds the map with hard-coded template subfolders (e.g. "Drawings", "CFF") that
+// live only in the TEMPLATE_FOLDERS constant — not in the database.
+async function buildFolderPathMap(projectId, rootKey) {
+  const { data: allRows } = await supabase.from('project_doc_folders')
+    .select('folder_key, parent_key, label')
+    .eq('project_id', projectId)
+  const rows = allRows || []
+
+  // Seed with template subfolder labels for the well-known folders
+  const seeded = []
+  const tpl = TEMPLATE_FOLDERS.find(t => t.key === rootKey)
+  if (tpl) {
+    for (const sf of (tpl.subfolders || [])) {
+      seeded.push({ folder_key: sf.key, parent_key: rootKey, label: sf.label })
+    }
+  }
+  // Also seed for ALL template folders if rootKey is one of them — covers nested template subfolders
+  for (const t of TEMPLATE_FOLDERS) {
+    for (const sf of (t.subfolders || [])) {
+      if (!seeded.find(s => s.folder_key === sf.key)) {
+        seeded.push({ folder_key: sf.key, parent_key: t.key, label: sf.label })
+      }
+    }
+  }
+  // Merge with DB rows (DB overrides templates if labels were renamed)
+  const merged = [...seeded.filter(s => !rows.find(r => r.folder_key === s.folder_key)), ...rows]
+
+  const childIdx = new Map()
+  for (const r of merged) {
+    if (!childIdx.has(r.parent_key)) childIdx.set(r.parent_key, [])
+    childIdx.get(r.parent_key).push(r)
+  }
+  const map = {}
+  map[rootKey] = ''
+  function walk(parentKey, parentPath) {
+    const kids = childIdx.get(parentKey) || []
+    for (const k of kids) {
+      const myPath = parentPath ? parentPath + '/' + safeName(k.label) : safeName(k.label)
+      map[k.folder_key] = myPath
+      walk(k.folder_key, myPath)
+    }
+  }
+  walk(rootKey, '')
+  return map
+}
+
+// Add files into a JSZip object using the path map. Reports incremental progress.
+// `pathPrefix` is prepended to every file's resolved path (used by zipAll to
+// nest under each top-level folder).
+async function addFilesToZip(zip, files, pathMap, setProgress, startIndex = 0, totalOverride = null, pathPrefix = '') {
+  let i = startIndex
+  const total = totalOverride || files.length
+  for (const f of files) {
+    i++
+    if (setProgress) setProgress({ current: i, total, fileName: f.file_name })
+    try {
+      const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 600)
+      if (!data?.signedUrl) continue
+      const res = await fetch(data.signedUrl)
+      if (!res.ok) continue
+      const blob = await res.blob()
+      let folderPath = ''
+      if (f.subfolder_key) {
+        if (pathMap[f.subfolder_key] !== undefined) folderPath = pathMap[f.subfolder_key]
+        else folderPath = safeName(f.subfolder_key)  // last-ditch fallback
+      }
+      const parts = [pathPrefix, folderPath, safeName(f.file_name)].filter(Boolean)
+      zip.file(parts.join('/'), blob)
+    } catch (e) { console.warn('zip skip', f.file_name, e) }
+  }
+  return i  // updated counter
+}
+
+// Trigger the actual download once a JSZip is built. Reports zipping progress.
+async function downloadZip(zip, filename, setProgress) {
+  const blob = await zip.generateAsync({ type: 'blob' }, (meta) => {
+    if (setProgress) setProgress({ current: 0, total: 0, fileName: 'Compressing…', percent: meta.percent, label: 'Compressing zip' })
+  })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = safeName(filename)
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
+
+// Reusable progress overlay — appears while a zip is being built
+function ZipProgressOverlay({ progress }) {
+  if (!progress) return null
+  const { current = 0, total = 0, fileName = '', percent = null, label = 'Preparing zip' } = progress
+  const filesPct = total > 0 ? Math.round((current / total) * 100) : 0
+  const compressPct = percent != null ? Math.round(percent) : null
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '24px 28px', minWidth: 360, maxWidth: 460 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>{label}</div>
+        {total > 0 && compressPct == null && (
+          <>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Downloading file {current} of {total}</div>
+            <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: filesPct + '%', height: '100%', background: '#448a40', transition: 'width 0.2s' }} />
+            </div>
+            {fileName && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</div>}
+          </>
+        )}
+        {compressPct != null && (
+          <>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Compressing zip… {compressPct}%</div>
+            <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
+              <div style={{ width: compressPct + '%', height: '100%', background: '#448a40', transition: 'width 0.1s' }} />
+            </div>
+          </>
+        )}
+        {total === 0 && compressPct == null && (
+          <div style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: '#448a40', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+            Loading file list…
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 const PENCIL = <svg width="11" height="11" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/><rect x="10" y="7" width="4" height="4" fill="#FDD835"/><polygon points="10,18 14,18 12,23" fill="#fff"/><rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/></svg>
 const BIN = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
 
@@ -540,6 +685,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   const [confirmDelFolder, setConfirmDelFolder] = useState(false)
   const [subLabel, setSubLabel] = useState(subfolder.label)
   const [fileCount, setFileCount] = useState(0)
+  const [zipProgress, setZipProgress] = useState(null)
 
   useEffect(() => { loadFileCount() }, [])
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
@@ -636,36 +782,49 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   }
 
   async function zipSubfolder() {
-    if (!files.length) { alert('No files in this subfolder.'); return }
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-    document.head.appendChild(s)
-    await new Promise(r => s.onload = r)
-    const zip = new window.JSZip()
-    for (const f of files) {
-      const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-      if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
-    }
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = subLabel + '.zip'
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    setZipProgress({ label: 'Preparing zip', current: 0, total: 0 })
+    try {
+      await loadJsZip()
+      // Pull ALL files under this subfolder AND any descendants
+      const pathMap = await buildFolderPathMap(projectId, subfolder.key)
+      const folderKeys = Object.keys(pathMap)
+      const { data: allFiles } = await supabase.from('project_doc_files').select('*')
+        .eq('project_id', projectId)
+        .in('subfolder_key', folderKeys)
+      const fileList = allFiles || []
+      if (!fileList.length) {
+        setZipProgress(null)
+        alert('No files in this subfolder.')
+        return
+      }
+      const zip = new window.JSZip()
+      await addFilesToZip(zip, fileList, pathMap, setZipProgress)
+      await downloadZip(zip, subLabel + '.zip', setZipProgress)
+    } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
+    setZipProgress(null)
   }
 
   async function bulkZip() {
     const chosen = files.filter(f => selected.has(f.id))
     if (!chosen.length) return
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-    document.head.appendChild(s)
-    await new Promise(r => s.onload = r)
-    const zip = new window.JSZip()
-    for (const f of chosen) {
-      const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 120)
-      if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
-    }
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = subLabel + '-selected.zip'
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    setZipProgress({ label: 'Preparing zip', current: 0, total: chosen.length })
+    try {
+      await loadJsZip()
+      const zip = new window.JSZip()
+      // Selected files all live in this single subfolder, so just use file names directly
+      let i = 0
+      for (const f of chosen) {
+        i++
+        setZipProgress({ label: 'Preparing zip', current: i, total: chosen.length, fileName: f.file_name })
+        const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 600)
+        if (!data?.signedUrl) continue
+        const res = await fetch(data.signedUrl)
+        if (!res.ok) continue
+        zip.file(safeName(f.file_name), await res.blob())
+      }
+      await downloadZip(zip, subLabel + '-selected.zip', setZipProgress)
+    } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
+    setZipProgress(null)
   }
 
   async function onDrop(e) {
@@ -708,6 +867,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   return (
     <div style={{ marginBottom: 2 }}>
       <UploadProgress uploadState={uploadProgress} />
+      <ZipProgressOverlay progress={zipProgress} />
       <div
         draggable={isCustom && !renaming}
         onDragStart={e => { if (!isCustom) return; e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.effectAllowed = 'move' }}
@@ -832,6 +992,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
   const [confirmDeleteReport, setConfirmDeleteReport] = useState(null)
+  const [zipProgress, setZipProgress] = useState(null)
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('pdView_' + folder.key) || 'grid' } catch { return 'grid' }
   })
@@ -919,63 +1080,96 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   }
 
   async function zipFolder() {
-    const script = document.createElement('script')
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-    document.head.appendChild(script)
-    await new Promise(r => script.onload = r)
-    const zip = new window.JSZip()
-    const { data: allFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId).eq('folder_key', folder.key)
-    if (!allFiles?.length) { alert('No files in this folder.'); return }
-    for (const f of allFiles) {
-      const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-      if (data?.signedUrl) {
-        const res = await fetch(data.signedUrl)
-        const sub = f.subfolder_key ? f.subfolder_key + '/' : ''
-        zip.file(sub + f.file_name, await res.blob())
+    setZipProgress({ label: 'Preparing zip', current: 0, total: 0 })
+    try {
+      await loadJsZip()
+      // Pull EVERY file under this top-level folder (across all subfolders)
+      // We have two strategies because top-level files use folder_key while
+      // nested files use subfolder_key. Pull both.
+      const pathMap = await buildFolderPathMap(projectId, folder.key)
+      const subfolderKeys = Object.keys(pathMap).filter(k => k !== folder.key)
+      // Files at the top level of this folder (no subfolder set OR subfolder_key === folder.key)
+      const { data: topLevelFiles } = await supabase.from('project_doc_files').select('*')
+        .eq('project_id', projectId).eq('folder_key', folder.key).is('subfolder_key', null)
+      // Files in subfolders
+      let nestedFiles = []
+      if (subfolderKeys.length > 0) {
+        const { data } = await supabase.from('project_doc_files').select('*')
+          .eq('project_id', projectId).in('subfolder_key', subfolderKeys)
+        nestedFiles = data || []
       }
-    }
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '.zip'
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+      const allFiles = [...(topLevelFiles || []), ...nestedFiles]
+      if (!allFiles.length) {
+        setZipProgress(null)
+        alert('No files in this folder.')
+        return
+      }
+      const zip = new window.JSZip()
+      await addFilesToZip(zip, allFiles, pathMap, setZipProgress)
+      await downloadZip(zip, folder.label + '.zip', setZipProgress)
+    } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
+    setZipProgress(null)
   }
 
   async function bulkZip() {
     const chosen = files.filter(f => selected.has(f.id))
     if (!chosen.length) return
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-    document.head.appendChild(s)
-    await new Promise(r => s.onload = r)
-    const zip = new window.JSZip()
-    for (const f of chosen) {
-      const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 120)
-      if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
-    }
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '-selected.zip'
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    setZipProgress({ label: 'Preparing zip', current: 0, total: chosen.length })
+    try {
+      await loadJsZip()
+      const zip = new window.JSZip()
+      // These are files at the top of the folder, just put them flat in the zip
+      let i = 0
+      for (const f of chosen) {
+        i++
+        setZipProgress({ label: 'Preparing zip', current: i, total: chosen.length, fileName: f.file_name })
+        const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 600)
+        if (!data?.signedUrl) continue
+        const res = await fetch(data.signedUrl)
+        if (!res.ok) continue
+        zip.file(safeName(f.file_name), await res.blob())
+      }
+      await downloadZip(zip, folder.label + '-selected.zip', setZipProgress)
+    } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
+    setZipProgress(null)
   }
 
   async function zipSelectedSubs() {
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-    document.head.appendChild(s)
-    await new Promise(r => s.onload = r)
-    const zip = new window.JSZip()
-    for (const sfKey of selectedSubs) {
-      const sf = subfolders.find(s => s.key === sfKey)
-      const folderName = sf ? sf.label : sfKey
-      const { data: sfFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId).eq('subfolder_key', sfKey)
-      for (const f of (sfFiles || [])) {
-        const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
+    setZipProgress({ label: 'Preparing zip', current: 0, total: 0 })
+    try {
+      await loadJsZip()
+      // For each selected subfolder, pull all files (including descendants)
+      const pathMap = await buildFolderPathMap(projectId, folder.key)
+      const allKeysSet = new Set(Object.keys(pathMap))
+      // Filter the keys to those rooted at one of the selected subfolders
+      const wantedKeys = new Set()
+      for (const sfKey of selectedSubs) {
+        // Include the subfolder itself + all keys whose path starts with its label
+        const sfPath = pathMap[sfKey]
+        if (sfPath === undefined) continue
+        for (const k of allKeysSet) {
+          const p = pathMap[k]
+          if (k === sfKey || (sfPath && (p === sfPath || p.startsWith(sfPath + '/')))) wantedKeys.add(k)
+        }
       }
-    }
-    const blob = await zip.generateAsync({ type: 'blob' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '-folders.zip'
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-    setSelectedSubs(new Set())
+      if (wantedKeys.size === 0) {
+        setZipProgress(null)
+        alert('No subfolders selected.')
+        return
+      }
+      const { data: allFiles } = await supabase.from('project_doc_files').select('*')
+        .eq('project_id', projectId).in('subfolder_key', Array.from(wantedKeys))
+      if (!allFiles?.length) {
+        setZipProgress(null)
+        alert('Selected subfolders contain no files.')
+        return
+      }
+      const zip = new window.JSZip()
+      await addFilesToZip(zip, allFiles, pathMap, setZipProgress)
+      await downloadZip(zip, folder.label + '-folders.zip', setZipProgress)
+      setSelectedSubs(new Set())
+    } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
+    setZipProgress(null)
   }
 
   async function moveSubfolderToRoot(key) {
@@ -1104,6 +1298,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   return (
     <div style={{ marginBottom: 12 }}>
       <UploadProgress uploadState={uploadProgress} />
+      <ZipProgressOverlay progress={zipProgress} />
       {/* Folder header */}
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
@@ -1466,6 +1661,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
   const [fileCounts, setFileCounts] = useState({})
   const [customTopFolders, setCustomTopFolders] = useState([])
   const [zippingAll, setZippingAll] = useState(false)
+  const [zipProgress, setZipProgress] = useState(null)
   // Bump this whenever a folder or file is moved anywhere in the tree.
   // Every SubfolderSection / PrimeFolderSection watches it and re-fetches
   // its own children, so stale "ghost" copies disappear from the old location.
@@ -1511,27 +1707,51 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
 
   async function zipAll() {
     setZippingAll(true)
+    setZipProgress({ label: 'Preparing zip', current: 0, total: 0 })
     try {
-      const script = document.createElement('script')
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
-      document.head.appendChild(script)
-      await new Promise(r => script.onload = r)
-      const zip = new window.JSZip()
+      await loadJsZip()
       const { data: allFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId)
-      if (!allFiles?.length) { alert('No files in this project.'); setZippingAll(false); return }
-      for (const f of allFiles) {
-        const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300)
-        if (data?.signedUrl) {
-          const res = await fetch(data.signedUrl)
-          const sub = f.subfolder_key ? f.subfolder_key + '/' : ''
-          zip.file(f.folder_key + '/' + sub + f.file_name, await res.blob())
-        }
+      if (!allFiles?.length) {
+        setZipProgress(null); setZippingAll(false)
+        alert('No files in this project.')
+        return
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = (projectName || 'project') + '-all-docs.zip'
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-    } catch (e) { alert('Zip failed: ' + e.message) }
+      // Build label paths for every top-level folder (template + custom)
+      const allTopFolders = [...TEMPLATE_FOLDERS, ...customTopFolders]
+      const pathMaps = {}
+      const topLabelMap = {}
+      for (const tf of allTopFolders) {
+        pathMaps[tf.key] = await buildFolderPathMap(projectId, tf.key)
+        topLabelMap[tf.key] = tf.label
+      }
+
+      // Group files by top-level folder
+      const zip = new window.JSZip()
+      const total = allFiles.length
+      let i = 0
+      for (const f of allFiles) {
+        i++
+        setZipProgress({ label: 'Preparing zip', current: i, total, fileName: f.file_name })
+        const topLabel = topLabelMap[f.folder_key] || safeName(f.folder_key)
+        const pathMap = pathMaps[f.folder_key] || {}
+        try {
+          const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 600)
+          if (!data?.signedUrl) continue
+          const res = await fetch(data.signedUrl)
+          if (!res.ok) continue
+          const blob = await res.blob()
+          let folderPath = ''
+          if (f.subfolder_key) {
+            if (pathMap[f.subfolder_key] !== undefined) folderPath = pathMap[f.subfolder_key]
+            else folderPath = safeName(f.subfolder_key)
+          }
+          const parts = [safeName(topLabel), folderPath, safeName(f.file_name)].filter(Boolean)
+          zip.file(parts.join('/'), blob)
+        } catch (e) { console.warn('zip skip', f.file_name, e) }
+      }
+      await downloadZip(zip, (projectName || 'project') + '-all-docs.zip', setZipProgress)
+    } catch (e) { alert('Zip failed: ' + e.message); console.error(e) }
+    setZipProgress(null)
     setZippingAll(false)
   }
 
@@ -1560,6 +1780,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
 
   return (
     <div>
+      <ZipProgressOverlay progress={zipProgress} />
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
         <button onClick={zipAll} disabled={zippingAll}
           style={{ fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
