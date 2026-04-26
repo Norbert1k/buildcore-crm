@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
+import GanttEditor from './Gantt/GanttEditor'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -800,7 +801,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
 }
 
 // ── Prime Folder Section ──────────────────────────────────────────────────────
-function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFileCounts, onDeleteFolder, onRenameFolder, treeVersion, refreshTree }) {
+function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddFolders, allFileCounts, onDeleteFolder, onRenameFolder, treeVersion, refreshTree }) {
   const [open, setOpen] = useState(false)
   const [subfolders, setSubfolders] = useState(folder.subfolders || [])
   const [showAddFolder, setShowAddFolder] = useState(false)
@@ -815,6 +816,7 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
   const [previewUrl, setPreviewUrl] = useState(null)
   const [renamingFolder, setRenamingFolder] = useState(false)
   const [renameFolderVal, setRenameFolderVal] = useState('')
+  const [showGantt, setShowGantt] = useState(false)
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('pdView_' + folder.key) || 'grid' } catch { return 'grid' }
   })
@@ -1085,6 +1087,14 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
                   </button>
                 </>
               )}
+              {folder.key === '06-project-programme' && (
+                <button onClick={(e) => { e.stopPropagation(); setShowGantt(true) }}
+                  style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
+                  title="Open the live editable Gantt chart for this project">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Open Live Gantt
+                </button>
+              )}
               <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
                 Zip all
@@ -1189,6 +1199,16 @@ function PrimeFolderSection({ projectId, folder, canManage, canAddFolders, allFi
             <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Loading preview...</div>
           )}
         </div>
+      )}
+
+      {/* Live Gantt editor (programme folder only) */}
+      {showGantt && folder.key === '06-project-programme' && (
+        <GanttEditor
+          projectId={projectId}
+          projectName={projectName || 'Project'}
+          onClose={() => setShowGantt(false)}
+          canEdit={canManage}
+        />
       )}
     </div>
   )
@@ -1334,7 +1354,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
       </div>
       <div>
         {allFolders.map(folder => (
-          <PrimeFolderSection key={folder.key} projectId={projectId} folder={folder}
+          <PrimeFolderSection key={folder.key} projectId={projectId} projectName={projectName} folder={folder}
             canManage={canManage} canAddFolders={canAddFolders} allFileCounts={fileCounts}
             treeVersion={treeVersion} refreshTree={refreshTree}
             onDeleteFolder={async (key) => {
