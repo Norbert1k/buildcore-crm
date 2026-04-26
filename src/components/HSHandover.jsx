@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import { drawCover, drawLetterhead, drawFooter, addInternalLink, loadLogo, BRAND, fmtDateLong } from '../lib/pdfTemplate'
 import UploadProgress from './UploadProgress'
 
 // ── Full H&S folder template ─────────────────────────────────
@@ -1231,58 +1232,115 @@ export default function HSHandover({ projectId, projectName }) {
 
   const totalFiles = Object.values(fileCounts).reduce((a, b) => a + b, 0)
 
-  async function compileHandover(sectionKeys, filename) {
-    // Load pdf-lib
-    const script = document.createElement('script')
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'
-    document.head.appendChild(script)
-    await new Promise(r => script.onload = r)
-
-    const { PDFDocument, rgb, StandardFonts, PageSizes } = window.PDFLib
+  // ─── Compile a merged PDF with branded cover + clickable TOC + letterhead on every page ───
+  async function compileHandover(sectionKeys, filename, opts = {}) {
+    // Load pdf-lib (lazy)
+    if (!window.PDFLib) {
+      const script = document.createElement('script')
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'
+      document.head.appendChild(script)
+      await new Promise(r => { script.onload = r })
+    }
+    const { PDFDocument, StandardFonts, PageSizes } = window.PDFLib
 
     const merged = await PDFDocument.create()
     const boldFont = await merged.embedFont(StandardFonts.HelveticaBold)
     const regFont = await merged.embedFont(StandardFonts.Helvetica)
+    const fonts = { boldFont, regFont }
+    const logo = await loadLogo(merged)
 
-    // ── Cover page ────────────────────────────────────────────
+    const A4_W = PageSizes.A4[0]   // 595
+    const A4_H = PageSizes.A4[1]   // 842
+
+    // Pull project address details for cover
+    let address = null
+    try {
+      const { data } = await supabase.from('projects')
+        .select('project_name, address, town, postcode')
+        .eq('id', projectId).maybeSingle()
+      address = data
+    } catch {}
+
+    const addressLines = [
+      address?.address || '',
+      address?.town || '',
+      address?.postcode || '',
+    ].filter(Boolean)
+
+    // ── Page 1: Branded cover (Option B template) ───────────────
     const cover = merged.addPage(PageSizes.A4)
-    const { width, height } = cover.getSize()
+    drawCover(cover, fonts, logo, {
+      eyebrow: opts.eyebrow || 'HEALTH & SAFETY HANDOVER',
+      title: opts.title || filename.replace('.pdf', '').split('—').pop()?.trim() || 'Handover File',
+      subtitle: opts.subtitle,
+      projectName: address?.project_name || projectName || 'Project',
+      addressLines,
+    })
 
-    // Green header bar
-    cover.drawRectangle({ x: 0, y: height - 120, width, height: 120, color: rgb(0.267, 0.541, 0.251) })
-    cover.drawText('CITY CONSTRUCTION LTD', { x: 40, y: height - 55, size: 22, font: boldFont, color: rgb(1, 1, 1) })
-    cover.drawText('cltd.co.uk', { x: 40, y: height - 80, size: 12, font: regFont, color: rgb(0.9, 0.9, 0.9) })
-
-    // Title
-    cover.drawText(filename.replace('.pdf', ''), { x: 40, y: height - 200, size: 28, font: boldFont, color: rgb(0.1, 0.1, 0.1) })
-    cover.drawText(projectName || 'Project', { x: 40, y: height - 240, size: 16, font: regFont, color: rgb(0.4, 0.4, 0.4) })
-    cover.drawText(`Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, { x: 40, y: height - 270, size: 12, font: regFont, color: rgb(0.5, 0.5, 0.5) })
-
-    // Footer
-    cover.drawRectangle({ x: 0, y: 0, width, height: 40, color: rgb(0.267, 0.541, 0.251) })
-    cover.drawText('Confidential — City Construction Ltd', { x: 40, y: 14, size: 10, font: regFont, color: rgb(1, 1, 1) })
-
-    // ── Collect all PDF files ─────────────────────────────────
-    const query = sectionKeys ? supabase.from('hs_files').select('*').eq('project_id', projectId).in('folder_key', sectionKeys) : supabase.from('hs_files').select('*').eq('project_id', projectId)
+    // ── Pull files first (we need them to know which sections actually have content) ──
+    const query = sectionKeys
+      ? supabase.from('hs_files').select('*').eq('project_id', projectId).in('folder_key', sectionKeys)
+      : supabase.from('hs_files').select('*').eq('project_id', projectId)
     const { data: allFiles } = await query.order('folder_key').order('file_name')
-
     const pdfFiles = (allFiles || []).filter(f => f.file_name?.toLowerCase().endsWith('.pdf'))
     const otherFiles = (allFiles || []).filter(f => !f.file_name?.toLowerCase().endsWith('.pdf'))
 
-    let currentSection = null
+    // ── Build section list for TOC (main sections only) ──
+    // For O&M: walk Section 8's children. For full handover: every top-level section.
+    let tocSections = []
+    if (sectionKeys) {
+      // O&M mode: list section 8's direct children (8.1, 8.2, ...)
+      const s8 = HS_STRUCTURE.find(s => s.key === 's8')
+      tocSections = (s8?.children || []).map(c => ({ key: c.key, label: c.label }))
+    } else {
+      // Full handover mode: top-level sections
+      tocSections = HS_STRUCTURE.map(s => ({ key: s.key, label: s.label }))
+    }
 
+    // Filter to only sections that actually have files in them
+    tocSections = tocSections.filter(s => pdfFiles.some(f => f.folder_key === s.key || f.folder_key.startsWith(s.key + '-')))
+
+    // ── Page 2: TOC (placeholder — we'll add link annotations after all pages exist) ──
+    let tocPage = null
+    if (tocSections.length > 0) {
+      tocPage = merged.addPage(PageSizes.A4)
+      drawLetterhead(tocPage, fonts, logo)
+      let y = A4_H - 130
+      tocPage.drawText('Table of Contents', { x: 32, y, size: 22, font: boldFont, color: BRAND.text })
+      y -= 28
+      tocPage.drawText('Click any section below to jump straight to it.', {
+        x: 32, y, size: 10, font: regFont, color: BRAND.muted,
+      })
+      y -= 30
+      // Body filled in below after we know page numbers
+    }
+
+    // ── Add section divider pages + embed their PDFs ──
+    // We need to track which page each section starts at, so we can later
+    // create the clickable TOC entries pointing at them.
+    const sectionStartPage = {}  // sectionKey -> pdf-lib page object
+
+    let currentSection = null
     for (const file of pdfFiles) {
-      // Add section divider page if section changed
-      const section = HS_STRUCTURE.find(s => file.folder_key.startsWith(s.key))
+      // Determine which section this file belongs to (main-section level)
+      const section = tocSections.find(s => file.folder_key === s.key || file.folder_key.startsWith(s.key + '-'))
       if (section && section.key !== currentSection) {
         currentSection = section.key
+        // Add a section divider page (and record this as the section's first page)
         const divPage = merged.addPage(PageSizes.A4)
-        divPage.drawRectangle({ x: 0, y: 0, width, height, color: rgb(0.97, 0.97, 0.97) })
-        divPage.drawRectangle({ x: 0, y: height - 8, width, height: 8, color: rgb(0.267, 0.541, 0.251) })
-        divPage.drawText(section.label, { x: 40, y: height / 2 + 20, size: 24, font: boldFont, color: rgb(0.1, 0.1, 0.1) })
-        divPage.drawText(projectName || '', { x: 40, y: height / 2 - 10, size: 14, font: regFont, color: rgb(0.5, 0.5, 0.5) })
+        drawLetterhead(divPage, fonts, logo)
+        const { width, height } = divPage.getSize()
+        // Big section title centered
+        divPage.drawText(section.label, {
+          x: 40, y: height / 2 + 20, size: 22, font: boldFont, color: BRAND.text,
+        })
+        divPage.drawText(address?.project_name || projectName || '', {
+          x: 40, y: height / 2 - 6, size: 12, font: regFont, color: BRAND.muted,
+        })
+        sectionStartPage[section.key] = divPage
       }
 
+      // Embed the PDF
       try {
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(file.storage_path, 300)
         if (data?.signedUrl) {
@@ -1292,32 +1350,93 @@ export default function HSHandover({ projectId, projectName }) {
           const pages = await merged.copyPages(srcDoc, srcDoc.getPageIndices())
           pages.forEach(p => merged.addPage(p))
         }
-      } catch (e) { console.warn('Could not embed:', file.file_name) }
+      } catch (e) { console.warn('Could not embed:', file.file_name, e) }
     }
 
-    // ── Appendix: non-PDF file index ─────────────────────────
+    // ── Appendix for non-PDF files ──
     if (otherFiles.length > 0) {
       const appendix = merged.addPage(PageSizes.A4)
-      appendix.drawRectangle({ x: 0, y: height - 8, width, height: 8, color: rgb(0.267, 0.541, 0.251) })
-      appendix.drawText('Appendix — Additional Files', { x: 40, y: height - 60, size: 18, font: boldFont, color: rgb(0.1, 0.1, 0.1) })
-      appendix.drawText('The following files are included in the project but cannot be embedded in PDF format:', { x: 40, y: height - 90, size: 11, font: regFont, color: rgb(0.4, 0.4, 0.4) })
-      let y = height - 130
+      const startY = drawLetterhead(appendix, fonts, logo)
+      appendix.drawText('Appendix — Additional Files', {
+        x: 32, y: startY - 10, size: 18, font: boldFont, color: BRAND.text,
+      })
+      appendix.drawText('The following files are included in the project but cannot be embedded inline:', {
+        x: 32, y: startY - 30, size: 10, font: regFont, color: BRAND.muted,
+      })
+      let y = startY - 60
       for (const f of otherFiles) {
         if (y < 60) break
-        appendix.drawText(`• ${f.file_name}`, { x: 50, y, size: 10, font: regFont, color: rgb(0.2, 0.2, 0.2) })
-        y -= 18
+        appendix.drawText(`• ${f.file_name}`, { x: 40, y, size: 10, font: regFont, color: BRAND.text })
+        y -= 16
       }
+    }
+
+    // ── Now that all pages exist, fill in the TOC body + add clickable links ──
+    if (tocPage && tocSections.length > 0) {
+      let y = A4_H - 200
+      const allPages = merged.getPages()
+      for (const section of tocSections) {
+        if (y < 80) break  // ran out of room — overflow could go to a 2nd TOC page if needed
+        const targetPage = sectionStartPage[section.key]
+        if (!targetPage) continue
+        const pageNum = allPages.indexOf(targetPage) + 1   // 1-based
+
+        const linkX = 32
+        const linkY = y - 4
+        const linkW = A4_W - 64
+        const linkH = 20
+
+        // Row text
+        tocPage.drawText(section.label, {
+          x: linkX + 8, y: y, size: 11, font: regFont, color: BRAND.text,
+        })
+        // Page number on right
+        const pageStr = String(pageNum)
+        const pageWidth = regFont.widthOfTextAtSize(pageStr, 11)
+        tocPage.drawText(pageStr, {
+          x: A4_W - 32 - pageWidth, y: y, size: 11, font: boldFont, color: BRAND.green,
+        })
+        // Dotted leader between label and page number (simple repeated ".")
+        const labelEnd = linkX + 8 + regFont.widthOfTextAtSize(section.label, 11) + 6
+        const dotsAreaW = (A4_W - 32 - pageWidth - 6) - labelEnd
+        if (dotsAreaW > 20) {
+          let dotsStr = ''
+          const dotW = regFont.widthOfTextAtSize('. ', 11)
+          const count = Math.floor(dotsAreaW / dotW)
+          for (let i = 0; i < count; i++) dotsStr += '. '
+          tocPage.drawText(dotsStr, { x: labelEnd, y: y, size: 11, font: regFont, color: BRAND.divider })
+        }
+
+        // Add the clickable link annotation over the whole row
+        try {
+          addInternalLink(merged, tocPage, { x: linkX, y: linkY, w: linkW, h: linkH }, targetPage)
+        } catch (e) { console.warn('TOC link annotation failed:', e) }
+
+        y -= 24
+      }
+    }
+
+    // ── Footer (page numbers) on every page except the cover ──
+    const allPages = merged.getPages()
+    const total = allPages.length
+    for (let i = 1; i < total; i++) {  // start at 1 to skip cover
+      drawFooter(allPages[i], fonts, address?.project_name || projectName || '', i + 1, total)
     }
 
     const bytes = await merged.save()
     const blob = new Blob([bytes], { type: 'application/pdf' })
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click()
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
   }
 
   async function compileFullHandover() {
     setCompilingFull(true)
     try {
-      await compileHandover(null, `${projectName || 'Project'} — H&S Handover File.pdf`)
+      await compileHandover(null, `${projectName || 'Project'} — H&S Handover File.pdf`, {
+        eyebrow: 'HEALTH & SAFETY HANDOVER',
+        title: 'H&S Handover File',
+      })
     } catch (e) { alert('Error compiling PDF: ' + e.message) }
     setCompilingFull(false)
   }
@@ -1328,7 +1447,11 @@ export default function HSHandover({ projectId, projectName }) {
       // Get all keys under Section 8
       const s8 = HS_STRUCTURE.find(s => s.key === 's8')
       const s8Keys = getAllKeys([s8])
-      await compileHandover(s8Keys, `${projectName || 'Project'} — Section 8 O&M Manuals.pdf`)
+      await compileHandover(s8Keys, `${projectName || 'Project'} — Section 8 O&M Manuals.pdf`, {
+        eyebrow: 'OPERATION & MAINTENANCE',
+        title: 'Section 8',
+        subtitle: 'O&M Manuals',
+      })
     } catch (e) { alert('Error compiling PDF: ' + e.message) }
     setCompilingOm(false)
   }
