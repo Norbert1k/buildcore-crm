@@ -66,6 +66,14 @@ const DEFAULT_GROUPS = [
   ]},
 ]
 
+// Format YYYY-MM-DD or ISO date string as DD/MM/YYYY (UTC-safe)
+function fmtDateUK(d) {
+  if (!d) return ''
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  try { return new Date(d).toLocaleDateString('en-GB') } catch { return '' }
+}
+
 // Generate next PPR-YYYY-MM number for this project
 async function nextReportNumber(projectId) {
   const now = new Date()
@@ -219,6 +227,371 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
     setConfirmDeletePhoto(null)
   }
 
+  // ─── PDF Export ──────────────────────────────────────────
+  async function exportPDF() {
+    if (!report?.id) { alert('Save the report first'); return }
+    try {
+      // Lazy-load jsPDF + autoTable from CDN
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        const s = document.createElement('script'); s.src = src
+        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load ' + src))
+        document.head.appendChild(s)
+      })
+      if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      if (!window.jspdf?.jsPDF?.API?.autoTable) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
+      const { jsPDF } = window.jspdf
+
+      // Load CCG logo
+      let logoDataUrl = null
+      try {
+        const resp = await fetch('/cltd-logo.jpg')
+        if (resp.ok) {
+          const blob = await resp.blob()
+          logoDataUrl = await new Promise(res => {
+            const r = new FileReader(); r.onloadend = () => res(r.result); r.readAsDataURL(blob)
+          })
+        }
+      } catch (e) { console.warn('logo load failed', e) }
+
+      // Load all photo blobs as data URLs (need to embed in PDF)
+      const photoDataUrls = []
+      for (const p of photos) {
+        try {
+          const { data } = await supabase.storage.from('progress-photos').createSignedUrl(p.storage_path, 600)
+          if (!data?.signedUrl) continue
+          const r = await fetch(data.signedUrl)
+          const blob = await r.blob()
+          const dataUrl = await new Promise(res => { const fr = new FileReader(); fr.onloadend = () => res(fr.result); fr.readAsDataURL(blob) })
+          photoDataUrls.push({ dataUrl, mime: blob.type || 'image/jpeg' })
+        } catch (e) { console.warn('photo skipped', p.file_name, e) }
+      }
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()   // 210mm
+      const pageH = doc.internal.pageSize.getHeight()  // 297mm
+
+      // ─ Letterhead drawn on every page after the cover ─
+      const drawLetterhead = () => {
+        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 35, 8, 25, 25) } catch (e) {} }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
+        doc.text('City Construction Group', 15, 15)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
+        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 20)
+        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 24)
+        doc.setDrawColor(207, 207, 207); doc.setLineWidth(0.2)
+        doc.line(15, 36, pageW - 15, 36)
+      }
+
+      // ─ PAGE 1: Cover page (centered logo + title + project address) ─
+      // Get project address details for cover
+      const { data: projData } = await supabase.from('projects').select('project_name, project_ref, address, postcode, town').eq('id', report.project_id).maybeSingle()
+
+      if (logoDataUrl) {
+        try { doc.addImage(logoDataUrl, 'JPEG', pageW / 2 - 40, 60, 80, 80) } catch (e) {}
+      }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(45, 45, 45)
+      doc.text("MAIN CONTRACTOR'S PROGRESS REPORT", pageW / 2, 175, { align: 'center' })
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(13); doc.setTextColor(80, 80, 80)
+      const addressLines = [
+        projData?.project_name || projectName || 'Project',
+        projData?.address || '',
+        projData?.town || '',
+        projData?.postcode || '',
+      ].filter(Boolean)
+      let addrY = 200
+      for (const line of addressLines) {
+        doc.text(line, pageW / 2, addrY, { align: 'center' })
+        addrY += 8
+      }
+      // Report number small at bottom
+      doc.setFontSize(10); doc.setTextColor(150, 150, 150)
+      doc.text(report.report_number, pageW / 2, pageH - 20, { align: 'center' })
+
+      // ─ PAGE 2: Project info + programme summary + % tables ─
+      doc.addPage()
+      drawLetterhead()
+
+      let y = 46
+
+      // Section 1
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
+      doc.text('1. Project Overview', 15, y); y += 6
+      doc.setFontSize(11)
+      doc.text('1.1 Project Information', 15, y); y += 4
+
+      // Project info table
+      doc.autoTable({
+        startY: y,
+        body: [
+          ['Job No', report.job_no || ''],
+          ['Employer', report.employer || ''],
+          ['Project Manager', report.client_pm || ''],
+          ['Contract Administrator', report.contract_administrator || ''],
+          ['Surveyor', report.surveyor || ''],
+          ['Main Contractor', report.main_contractor || ''],
+          ['Project Manager (MC)', report.mc_pm || ''],
+          ['Site Manager', report.site_manager || ''],
+        ],
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 2.5, lineWidth: 0.1, lineColor: [200, 200, 200] },
+        columnStyles: { 0: { cellWidth: 55, fontStyle: 'bold', fillColor: [232, 245, 231], textColor: [60, 100, 60] }, 1: { cellWidth: 'auto' } },
+        margin: { left: 15, right: 15 },
+      })
+      y = doc.lastAutoTable.finalY + 6
+
+      // 1.2 Programme Summary
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(45, 45, 45)
+      doc.text('1.2 Programme Summary', 15, y); y += 4
+
+      doc.autoTable({
+        startY: y,
+        body: [
+          ['Start on Site', fmtDateUK(report.start_on_site), 'Contract Completion', fmtDateUK(report.contract_completion)],
+          ['Phase', report.current_phase || '', 'Target Completion', fmtDateUK(report.target_completion)],
+          ['Overall Progress', report.overall_progress || '', 'Estimated Completion', fmtDateUK(report.estimated_completion)],
+          ['Delays since last visit', report.delays_text || '', 'Reason', report.delays_reason || ''],
+        ],
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 2.5, lineWidth: 0.1, lineColor: [200, 200, 200], valign: 'top' },
+        columnStyles: {
+          0: { cellWidth: 48, fontStyle: 'bold', fillColor: [232, 245, 231], textColor: [60, 100, 60] },
+          1: { cellWidth: 48 },
+          2: { cellWidth: 48, fontStyle: 'bold', fillColor: [232, 245, 231], textColor: [60, 100, 60] },
+          3: { cellWidth: 'auto' },
+        },
+        margin: { left: 15, right: 15 },
+      })
+      y = doc.lastAutoTable.finalY + 6
+
+      // 1.3 Programme Summary tables
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
+      doc.text('1.3 Programme Summary', 15, y); y += 4
+
+      // Two columns of group tables
+      const groups = report.programme_groups || []
+      const colW = (pageW - 30 - 4) / 2  // 4mm gap between cols
+      const leftX = 15, rightX = 15 + colW + 4
+      let leftY = y, rightY = y
+
+      for (let i = 0; i < groups.length; i++) {
+        const g = groups[i]
+        const targetX = i % 2 === 0 ? leftX : rightX
+        let targetY = i % 2 === 0 ? leftY : rightY
+
+        // If table would overflow page, start a new page
+        const estH = 8 + g.items.length * 5
+        if (targetY + estH > pageH - 20) {
+          doc.addPage(); drawLetterhead()
+          leftY = rightY = 46
+          targetY = 46
+        }
+
+        doc.autoTable({
+          startY: targetY,
+          head: [['Items', 'Progress %']],
+          body: g.items.map(it => [it.label, (it.percent || 0) + '%']),
+          theme: 'plain',
+          styles: { fontSize: 8, cellPadding: 1.8, lineWidth: 0.1, lineColor: [200, 200, 200] },
+          headStyles: { fillColor: [180, 220, 175], textColor: [45, 70, 45], fontStyle: 'bold', fontSize: 8.5, halign: 'center' },
+          columnStyles: { 0: { cellWidth: colW - 22 }, 1: { cellWidth: 22, halign: 'center' } },
+          margin: { left: targetX, right: pageW - targetX - colW },
+          // Title above each table
+          didDrawPage: () => {},
+        })
+        // Draw group title above
+        const titleY = (doc.lastAutoTable.finalY - g.items.length * (1.8 * 2 + 8 * 0.35) - 10)
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(60, 100, 60)
+        doc.text(g.name, targetX, targetY - 1)
+
+        const finalY = doc.lastAutoTable.finalY + 4
+        if (i % 2 === 0) leftY = finalY
+        else rightY = finalY
+      }
+
+      y = Math.max(leftY, rightY)
+
+      // ─ PM Statement page ─
+      doc.addPage(); drawLetterhead(); y = 46
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(45, 45, 45)
+      doc.text("1.4 Project Manager's Statement", 15, y); y += 5
+
+      // Light green background block
+      const stmt = report.pm_statement || ''
+      const stmtLines = doc.splitTextToSize(stmt, pageW - 34)
+      const stmtH = stmtLines.length * 4 + 8
+      doc.setFillColor(232, 245, 231)
+      doc.rect(15, y, pageW - 30, stmtH, 'F')
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(45, 45, 45)
+      doc.text(stmtLines, 19, y + 5)
+      y += stmtH + 8
+
+      // 2. Health & Safety
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(45, 45, 45)
+      doc.text('2. Health & Safety Matters', 15, y); y += 5
+      const hsLines = doc.splitTextToSize(report.hs_text || '', pageW - 34)
+      const hsH = hsLines.length * 4 + 8
+      doc.setFillColor(232, 245, 231)
+      doc.rect(15, y, pageW - 30, hsH, 'F')
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(45, 45, 45)
+      doc.text(hsLines, 19, y + 5)
+      y += hsH + 8
+
+      // ─ Commercial page ─
+      if (y + 60 > pageH - 20) { doc.addPage(); drawLetterhead(); y = 46 }
+
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
+      doc.text('3. Commercial Management', 15, y); y += 6
+
+      doc.setFontSize(11)
+      doc.text('3.1 Valuations', 15, y); y += 3
+      doc.autoTable({
+        startY: y,
+        head: [['Valuation No.', 'Date Submitted', 'Amount Claimed (Net)', 'Amount Agreed (Net)']],
+        body: (report.valuations?.length ? report.valuations : [{}, {}, {}, {}]).map(v => [
+          v.no || '',
+          v.date_submitted ? fmtDateUK(v.date_submitted) : '',
+          v.amount_claimed ? '£' + v.amount_claimed : '£',
+          v.amount_agreed ? '£' + v.amount_agreed : '£',
+        ]),
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 3, lineWidth: 0.1, lineColor: [200, 200, 200] },
+        headStyles: { fillColor: [180, 220, 175], textColor: [45, 70, 45], fontStyle: 'bold', fontSize: 9 },
+        margin: { left: 15, right: 15 },
+      })
+      y = doc.lastAutoTable.finalY + 6
+
+      // 3.2 Variations
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
+      doc.text('3.2 Variations', 15, y); y += 3
+      doc.autoTable({
+        startY: y,
+        head: [['Inst. No.', 'SI Ref.', 'Issue Date', 'Details', 'Scope', 'Cost', 'Time', 'Agreed', 'Instructed']],
+        body: (report.variations?.length ? report.variations : [{ instruction_no: 'VO1' }]).map(v => [
+          v.instruction_no || '',
+          v.si_ref || '',
+          v.issue_date ? fmtDateUK(v.issue_date) : '',
+          v.instruction_details || '',
+          v.scope_impact || '',
+          v.cost_impact || '',
+          v.time_impact || '',
+          v.agreed_cost || '',
+          v.instructed || '',
+        ]),
+        theme: 'plain',
+        styles: { fontSize: 7.5, cellPadding: 2, lineWidth: 0.1, lineColor: [200, 200, 200] },
+        headStyles: { fillColor: [180, 220, 175], textColor: [45, 70, 45], fontStyle: 'bold', fontSize: 8 },
+        margin: { left: 15, right: 15 },
+      })
+      y = doc.lastAutoTable.finalY + 6
+
+      // 4. Risks
+      if (y + 40 > pageH - 20) { doc.addPage(); drawLetterhead(); y = 46 }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
+      doc.text('4. Project Risks', 15, y); y += 5
+
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Description', 'Consequence', 'Risk', 'Mitigation']],
+        body: (report.risks || []).map((r, i) => [String(i + 1), r.description || '', r.consequence || '', '', r.mitigation || '']),
+        theme: 'plain',
+        styles: { fontSize: 8.5, cellPadding: 2.5, lineWidth: 0.1, lineColor: [200, 200, 200], valign: 'top' },
+        headStyles: { fillColor: [180, 220, 175], textColor: [45, 70, 45], fontStyle: 'bold', fontSize: 8.5 },
+        columnStyles: { 0: { cellWidth: 8 }, 3: { cellWidth: 14 } },
+        // Colour the RAG cell
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 3) {
+            const r = report.risks[data.row.index]
+            if (r?.risk_rag === 'red') data.cell.styles.fillColor = [255, 200, 200]
+            else if (r?.risk_rag === 'amber') data.cell.styles.fillColor = [255, 230, 180]
+            else if (r?.risk_rag === 'green') data.cell.styles.fillColor = [200, 235, 200]
+          }
+        },
+        margin: { left: 15, right: 15 },
+      })
+      y = doc.lastAutoTable.finalY + 6
+
+      // 5. RFIs
+      if (y + 40 > pageH - 20) { doc.addPage(); drawLetterhead(); y = 46 }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
+      doc.text("5. Requests For Information (RFI's)", 15, y); y += 5
+
+      doc.autoTable({
+        startY: y,
+        head: [['RFI No.', 'Description', 'Open/Closed']],
+        body: (report.rfis?.length ? report.rfis : [{}, {}, {}]).map(r => [r.rfi_no || '', r.description || '', r.status === 'closed' ? 'Closed' : (r.status === 'open' ? 'Open' : '')]),
+        theme: 'plain',
+        styles: { fontSize: 9, cellPadding: 2.5, lineWidth: 0.1, lineColor: [200, 200, 200] },
+        headStyles: { fillColor: [180, 220, 175], textColor: [45, 70, 45], fontStyle: 'bold', fontSize: 9 },
+        columnStyles: { 0: { cellWidth: 25 }, 2: { cellWidth: 30, halign: 'center' } },
+        margin: { left: 15, right: 15 },
+      })
+      y = doc.lastAutoTable.finalY + 6
+
+      // 6. AOB
+      if (y + 30 > pageH - 20) { doc.addPage(); drawLetterhead(); y = 46 }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
+      doc.text('6. Any Other Business', 15, y); y += 5
+
+      if (report.aob?.trim()) {
+        const aobLines = doc.splitTextToSize(report.aob, pageW - 34)
+        const aobH = aobLines.length * 4 + 6
+        doc.setFillColor(248, 248, 248)
+        doc.rect(15, y, pageW - 30, aobH, 'F')
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(45, 45, 45)
+        doc.text(aobLines, 19, y + 4)
+        y += aobH + 6
+      }
+
+      // ─ Photo pages (3-column grid, auto-flowing) ─
+      if (photoDataUrls.length > 0) {
+        doc.addPage(); drawLetterhead(); y = 46
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
+        doc.text('7. Progress Photos', 15, y); y += 8
+
+        const cols = 3
+        const gap = 4
+        const photoW = (pageW - 30 - (cols - 1) * gap) / cols
+        const photoH = photoW  // square cells
+
+        let col = 0
+        let curY = y
+
+        for (const ph of photoDataUrls) {
+          if (curY + photoH > pageH - 20) {
+            doc.addPage(); drawLetterhead()
+            curY = 46
+            col = 0
+          }
+          const x = 15 + col * (photoW + gap)
+          try {
+            doc.addImage(ph.dataUrl, ph.mime.includes('png') ? 'PNG' : 'JPEG', x, curY, photoW, photoH, undefined, 'FAST')
+          } catch (e) { console.warn('addImage failed', e) }
+          col++
+          if (col >= cols) {
+            col = 0
+            curY += photoH + gap
+          }
+        }
+      }
+
+      // Footer + page numbers
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 2; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(160, 160, 160)
+        doc.text(report.report_number, 15, pageH - 8)
+        doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
+      }
+
+      const projName = (projData?.project_name || projectName || 'Project').replace(/[/\\]/g, '-')
+      doc.save(`${projName} - ${report.report_number}.pdf`)
+    } catch (err) {
+      console.error('[exportPDF]', err)
+      alert('PDF export failed: ' + (err?.message || err))
+    }
+  }
+
   // Helper editors for arrays
   const addRowToArr = (key, blank) => patch(key, [...(report[key] || []), blank])
   const updateRowInArr = (key, idx, patchObj) => patch(key, report[key].map((r, i) => i === idx ? { ...r, ...patchObj } : r))
@@ -255,6 +628,11 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
           {saving ? 'Saving…' : (report.id ? 'Save changes' : 'Create report')}
         </button>
+        {report.id && (
+          <button className="btn btn-sm" onClick={exportPDF} disabled={saving}>
+            📄 Export PDF
+          </button>
+        )}
         <button className="btn btn-sm" onClick={onClose}>Close</button>
       </div>
 
