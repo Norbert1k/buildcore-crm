@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { drawCover, drawLetterhead, drawFooter, addInternalLink, loadLogo, BRAND, fmtDateLong } from '../lib/pdfTemplate'
+import { drawCover, drawLetterhead, drawFooter, addInternalLink, loadLogo, BRAND, bc, fmtDateLong } from '../lib/pdfTemplate'
 import UploadProgress from './UploadProgress'
 
 // ── Full H&S folder template ─────────────────────────────────
@@ -1306,10 +1306,10 @@ export default function HSHandover({ projectId, projectName }) {
       tocPage = merged.addPage(PageSizes.A4)
       drawLetterhead(tocPage, fonts, logo)
       let y = A4_H - 130
-      tocPage.drawText('Table of Contents', { x: 32, y, size: 22, font: boldFont, color: BRAND.text })
+      tocPage.drawText('Table of Contents', { x: 32, y, size: 22, font: boldFont, color: bc(BRAND.text) })
       y -= 28
       tocPage.drawText('Click any section below to jump straight to it.', {
-        x: 32, y, size: 10, font: regFont, color: BRAND.muted,
+        x: 32, y, size: 10, font: regFont, color: bc(BRAND.muted),
       })
       y -= 30
       // Body filled in below after we know page numbers
@@ -1332,10 +1332,10 @@ export default function HSHandover({ projectId, projectName }) {
         const { width, height } = divPage.getSize()
         // Big section title centered
         divPage.drawText(section.label, {
-          x: 40, y: height / 2 + 20, size: 22, font: boldFont, color: BRAND.text,
+          x: 40, y: height / 2 + 20, size: 22, font: boldFont, color: bc(BRAND.text),
         })
         divPage.drawText(address?.project_name || projectName || '', {
-          x: 40, y: height / 2 - 6, size: 12, font: regFont, color: BRAND.muted,
+          x: 40, y: height / 2 - 6, size: 12, font: regFont, color: bc(BRAND.muted),
         })
         sectionStartPage[section.key] = divPage
       }
@@ -1358,15 +1358,15 @@ export default function HSHandover({ projectId, projectName }) {
       const appendix = merged.addPage(PageSizes.A4)
       const startY = drawLetterhead(appendix, fonts, logo)
       appendix.drawText('Appendix — Additional Files', {
-        x: 32, y: startY - 10, size: 18, font: boldFont, color: BRAND.text,
+        x: 32, y: startY - 10, size: 18, font: boldFont, color: bc(BRAND.text),
       })
       appendix.drawText('The following files are included in the project but cannot be embedded inline:', {
-        x: 32, y: startY - 30, size: 10, font: regFont, color: BRAND.muted,
+        x: 32, y: startY - 30, size: 10, font: regFont, color: bc(BRAND.muted),
       })
       let y = startY - 60
       for (const f of otherFiles) {
         if (y < 60) break
-        appendix.drawText(`• ${f.file_name}`, { x: 40, y, size: 10, font: regFont, color: BRAND.text })
+        appendix.drawText(`• ${f.file_name}`, { x: 40, y, size: 10, font: regFont, color: bc(BRAND.text) })
         y -= 16
       }
     }
@@ -1388,13 +1388,13 @@ export default function HSHandover({ projectId, projectName }) {
 
         // Row text
         tocPage.drawText(section.label, {
-          x: linkX + 8, y: y, size: 11, font: regFont, color: BRAND.text,
+          x: linkX + 8, y: y, size: 11, font: regFont, color: bc(BRAND.text),
         })
         // Page number on right
         const pageStr = String(pageNum)
         const pageWidth = regFont.widthOfTextAtSize(pageStr, 11)
         tocPage.drawText(pageStr, {
-          x: A4_W - 32 - pageWidth, y: y, size: 11, font: boldFont, color: BRAND.green,
+          x: A4_W - 32 - pageWidth, y: y, size: 11, font: boldFont, color: bc(BRAND.green),
         })
         // Dotted leader between label and page number (simple repeated ".")
         const labelEnd = linkX + 8 + regFont.widthOfTextAtSize(section.label, 11) + 6
@@ -1404,7 +1404,7 @@ export default function HSHandover({ projectId, projectName }) {
           const dotW = regFont.widthOfTextAtSize('. ', 11)
           const count = Math.floor(dotsAreaW / dotW)
           for (let i = 0; i < count; i++) dotsStr += '. '
-          tocPage.drawText(dotsStr, { x: labelEnd, y: y, size: 11, font: regFont, color: BRAND.divider })
+          tocPage.drawText(dotsStr, { x: labelEnd, y: y, size: 11, font: regFont, color: bc(BRAND.divider) })
         }
 
         // Add the clickable link annotation over the whole row
