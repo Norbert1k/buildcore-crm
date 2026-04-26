@@ -139,3 +139,34 @@ export function rollupGroups(tasks) {
   }
   return [...map.values()]
 }
+
+// ─── AI parser → Gantt task format ──────────────────────────
+// Converts the JSON Claude returns ([{ name, start_date, end_date, parent_name, ... }])
+// into the editor's task structure (with proper IDs and parent_id pointers).
+export function tasksFromAiResponse(aiTasks) {
+  if (!Array.isArray(aiTasks)) return []
+  // First pass: create tasks with new UUIDs
+  const out = aiTasks.map((t, i) => ({
+    id: crypto.randomUUID(),
+    name: t.name || `Task ${i + 1}`,
+    start_date: t.start_date || fmtDate(new Date()),
+    end_date: t.end_date || fmtDate(addDays(new Date(), 6)),
+    parent_id: null,            // resolved in pass 2
+    _parent_name: t.parent_name, // temporary lookup helper
+    depends_on: [],
+    color: t.color || '#448a40',
+    progress: 0,
+    notes: t.is_milestone ? 'Milestone' : '',
+    collapsed: false,
+  }))
+  // Second pass: resolve parent_id by matching parent_name to a task in the list
+  const byName = new Map()
+  for (const t of out) byName.set(t.name, t.id)
+  for (const t of out) {
+    if (t._parent_name && byName.has(t._parent_name)) {
+      t.parent_id = byName.get(t._parent_name)
+    }
+    delete t._parent_name
+  }
+  return out
+}
