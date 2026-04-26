@@ -8,7 +8,7 @@ import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
 import EAModal from '../components/EAModal'
 import ProjectDocumentation from '../components/ProjectDocumentation'
-import { drawCover, drawLetterhead, drawFooter, loadLogo, BRAND, fmtDateLong } from '../lib/pdfTemplate'
+import { drawCover, drawLetterhead, drawFooter, loadLogo, BRAND, bc, fmtDateLong } from '../lib/pdfTemplate'
 import HSHandover from '../components/HSHandover'
 import SubcontractorDocs from '../components/SubcontractorDocs'
 
@@ -1089,7 +1089,7 @@ Write only the overview text, no headings or labels.`
       const detailPage = pdf.addPage(A4)
       let y = drawLetterhead(detailPage, fonts, logo)
 
-      detailPage.drawText('Project overview', { x: 32, y: y - 4, size: 20, font: boldFont, color: BRAND.text })
+      detailPage.drawText('Project overview', { x: 32, y: y - 4, size: 20, font: boldFont, color: bc(BRAND.text) })
       y -= 30
 
       // Key facts grid
@@ -1109,9 +1109,9 @@ Write only the overview text, no headings or labels.`
         const fx = 32 + col * colW
         const fy = y - row * 38
         // Light fill background for each fact
-        detailPage.drawRectangle({ x: fx, y: fy - 28, width: colW - 8, height: 32, color: { r: 0.965, g: 0.961, b: 0.94 } })
-        detailPage.drawText(k.toUpperCase(), { x: fx + 8, y: fy - 12, size: 8, font: regFont, color: BRAND.muted })
-        detailPage.drawText(String(v), { x: fx + 8, y: fy - 24, size: 11, font: boldFont, color: BRAND.text })
+        detailPage.drawRectangle({ x: fx, y: fy - 28, width: colW - 8, height: 32, color: bc({ r: 0.965, g: 0.961, b: 0.94 }) })
+        detailPage.drawText(k.toUpperCase(), { x: fx + 8, y: fy - 12, size: 8, font: regFont, color: bc(BRAND.muted) })
+        detailPage.drawText(String(v), { x: fx + 8, y: fy - 24, size: 11, font: boldFont, color: bc(BRAND.text) })
       }
       y -= Math.ceil(facts.length / 2) * 38 + 16
 
@@ -1119,7 +1119,7 @@ Write only the overview text, no headings or labels.`
       const overview = aiOverview || project.description
       if (overview && overview.trim()) {
         if (y < 200) { /* fits */ }
-        detailPage.drawText('Project description', { x: 32, y: y - 4, size: 14, font: boldFont, color: BRAND.green })
+        detailPage.drawText('Project description', { x: 32, y: y - 4, size: 14, font: boldFont, color: bc(BRAND.green) })
         y -= 18
         // Word-wrap helper
         const wrap = (text, maxW, size) => {
@@ -1140,7 +1140,7 @@ Write only the overview text, no headings or labels.`
           const lines = wrap(para.replace(/\n/g, ' '), A4_W - 64, 11)
           for (const line of lines) {
             if (y < 80) break
-            detailPage.drawText(line, { x: 32, y, size: 11, font: regFont, color: BRAND.text, lineHeight: 14 })
+            detailPage.drawText(line, { x: 32, y, size: 11, font: regFont, color: bc(BRAND.text), lineHeight: 14 })
             y -= 16
           }
           y -= 8
@@ -1153,7 +1153,7 @@ Write only the overview text, no headings or labels.`
       if (photoEntries.length > 0) {
         const photoPage = pdf.addPage(A4)
         let py = drawLetterhead(photoPage, fonts, logo)
-        photoPage.drawText('Project photography', { x: 32, y: py - 4, size: 20, font: boldFont, color: BRAND.text })
+        photoPage.drawText('Project photography', { x: 32, y: py - 4, size: 20, font: boldFont, color: bc(BRAND.text) })
         py -= 30
 
         // Embed each photo
@@ -1181,7 +1181,7 @@ Write only the overview text, no headings or labels.`
       if (subs && subs.length > 0) {
         const teamPage = pdf.addPage(A4)
         let ty = drawLetterhead(teamPage, fonts, logo)
-        teamPage.drawText('Project team', { x: 32, y: ty - 4, size: 20, font: boldFont, color: BRAND.text })
+        teamPage.drawText('Project team', { x: 32, y: ty - 4, size: 20, font: boldFont, color: bc(BRAND.text) })
         ty -= 30
 
         for (const ps of subs) {
@@ -1189,9 +1189,9 @@ Write only the overview text, no headings or labels.`
           const name = ps.subcontractors?.company_name || '—'
           const trade = ps.subcontractors?.trade || ps.trade_on_project || ''
           // Card
-          teamPage.drawRectangle({ x: 32, y: ty - 36, width: A4_W - 64, height: 32, color: { r: 0.965, g: 0.961, b: 0.94 } })
-          teamPage.drawText(name, { x: 44, y: ty - 18, size: 12, font: boldFont, color: BRAND.text })
-          teamPage.drawText(trade, { x: 44, y: ty - 30, size: 10, font: regFont, color: BRAND.muted })
+          teamPage.drawRectangle({ x: 32, y: ty - 36, width: A4_W - 64, height: 32, color: bc({ r: 0.965, g: 0.961, b: 0.94 }) })
+          teamPage.drawText(name, { x: 44, y: ty - 18, size: 12, font: boldFont, color: bc(BRAND.text) })
+          teamPage.drawText(trade, { x: 44, y: ty - 30, size: 10, font: regFont, color: bc(BRAND.muted) })
           ty -= 40
         }
       }
