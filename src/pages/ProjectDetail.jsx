@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo, TRADES, sortBy } from '../lib/utils'
+import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
 import EAModal from '../components/EAModal'
 import ProjectDocumentation from '../components/ProjectDocumentation'
+import { drawCover, drawLetterhead, drawFooter, loadLogo, BRAND, fmtDateLong } from '../lib/pdfTemplate'
 import HSHandover from '../components/HSHandover'
 import SubcontractorDocs from '../components/SubcontractorDocs'
 
@@ -144,8 +145,10 @@ export default function ProjectDetail() {
   const [showEditAssign, setShowEditAssign] = useState(null)
   const [editAssignForm, setEditAssignForm] = useState({ trade_on_project: '', start_date: '', end_date: '', contract_value: '', status: 'active' })
   const [savingEditAssign, setSavingEditAssign] = useState(false)
+  const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
+  const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
   // EA state
   const [projectEAs, setProjectEAs] = useState([])
   const [allEAs, setAllEAs] = useState([])
@@ -159,34 +162,22 @@ export default function ProjectDetail() {
 
   useEffect(() => { load() }, [id])
 
-  // If project is tender and user was on a tab that's now hidden, snap to Documents
-  useEffect(() => {
-    if (project?.status === 'tender' && ['hs', 'photos', 'casestudy'].includes(activeTab)) {
-      setActiveTab('documents')
-      localStorage.setItem(_tabKey, 'documents')
-    }
-  }, [project?.status, activeTab])
-
   async function load() {
     setLoading(true)
     const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
-      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name, address, city, postcode)').eq('project_id', id),
-      supabase.from('project_documents').select('*, subcontractors(company_name)').eq('project_id', id).order('created_at', { ascending: false }),
-      supabase.from('subcontractors').select('id, company_name, trade, blacklisted').order('company_name'),
+      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
+      supabase.from('project_documents').select('*, subcontractors(company_name), profiles!project_documents_uploaded_by_fkey(full_name)').eq('project_id', id).order('created_at', { ascending: false }),
+      supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
       supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
     ])
-    // Log any query errors so silent-failure bugs become visible instead of showing empty lists
-    for (const [name, res] of [['project', projRes], ['subs', subsRes], ['docs', docsRes], ['allSubs', allSubsRes], ['ea', eaRes], ['allEAs', allEARes]]) {
-      if (res?.error) console.error('[ProjectDetail] ' + name + ' query error:', res.error)
-    }
     setProject(projRes.data)
     setDriveFolderId(projRes.data?.drive_folder_id || null)
     setDriveFolderName(projRes.data?.drive_folder_name || null)
     setSubs(subsRes.data || [])
     setDocs(docsRes.data || [])
-    setAllSubs(sortBy(allSubsRes.data || [], 'company_name'))
+    setAllSubs(allSubsRes.data || [])
     setProjectEAs(eaRes.data || [])
     setAllEAs(allEARes.data || [])
     // Load subcontractor files
@@ -316,6 +307,7 @@ export default function ProjectDetail() {
     if (!ps) return
     setSavingEditAssign(true)
     const payload = {
+      trade_on_project: editAssignForm.trade_on_project || null,
       start_date: editAssignForm.start_date || null,
       end_date: editAssignForm.end_date || null,
       contract_value: editAssignForm.contract_value ? parseFloat(editAssignForm.contract_value) : null,
@@ -327,189 +319,8 @@ export default function ProjectDetail() {
     load()
   }
 
-  // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
-  // Landscape A4, single 5-column table, with company letterhead + logo on every page.
-  async function exportDirectoryPDF(category) {
-    console.log('[exportDirectoryPDF] clicked', category)
-    try {
-      const isDesignTeam = category === 'design_team'
-      const title = isDesignTeam ? 'Project Directory' : 'Packages Procured'
-
-      // Filter assigned companies for this category
-      const catSubs = subs.filter(ps => {
-        const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
-        return c === category
-      })
-
-      // Build entries. EAs always appear first (pinned), then alphabetical subs/design team.
-      const eaEntries = []
-      const subEntries = []
-      if (isDesignTeam) {
-        for (const pea of (projectEAs || [])) {
-          const ea = pea.employer_agents || {}
-          eaEntries.push({
-            role: "Employer\u2019s Agent",
-            company: ea.company_name || '',
-            contact: ea.contact_name || '',
-            phone: ea.phone || '',
-            email: ea.email || '',
-          })
-        }
-      }
-      for (const ps of catSubs) {
-        const s = ps.subcontractors || {}
-        subEntries.push({
-          role: s.trade || ps.trade_on_project || '',
-          company: s.company_name || '',
-          contact: s.contact_name || '',
-          phone: s.phone || '',
-          email: s.email || '',
-        })
-      }
-      // Sort EAs and subs each alphabetically by company name (case-insensitive),
-      // then combine: EAs always come first in the final list.
-      const alphaSort = (a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true })
-      eaEntries.sort(alphaSort)
-      subEntries.sort(alphaSort)
-      const entries = [...eaEntries, ...subEntries]
-      console.log('[exportDirectoryPDF] entries:', entries.length, '(EAs:', eaEntries.length, ')')
-
-      // Load jsPDF + autoTable from CDN
-      const loadScript = (src) => new Promise((resolve, reject) => {
-        const s = document.createElement('script'); s.src = src
-        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load ' + src))
-        document.head.appendChild(s)
-      })
-      if (!window.jspdf) {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
-      }
-      if (!window.jspdf?.jsPDF?.API?.autoTable) {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
-      }
-      const { jsPDF } = window.jspdf
-
-      // Load logo as base64 data URL (from /cltd-logo.jpg in public folder)
-      let logoDataUrl = null
-      try {
-        const resp = await fetch('/cltd-logo.jpg')
-        if (resp.ok) {
-          const blob = await resp.blob()
-          logoDataUrl = await new Promise((resolve) => {
-            const reader = new FileReader()
-            reader.onloadend = () => resolve(reader.result)
-            reader.readAsDataURL(blob)
-          })
-        }
-      } catch (e) { console.warn('[exportDirectoryPDF] logo load failed:', e) }
-
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const pageW = doc.internal.pageSize.getWidth()   // 297mm
-      const pageH = doc.internal.pageSize.getHeight()  // 210mm
-
-      // Draw letterhead on every page via didDrawPage hook
-      const drawLetterhead = () => {
-        // Logo top right (~28 x 28mm, keeps aspect ratio)
-        if (logoDataUrl) {
-          try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) { console.warn('addImage failed', e) }
-        }
-
-        // Company name top left (bold, 16pt)
-        doc.setFont('helvetica', 'bold')
-        doc.setFontSize(14)
-        doc.setTextColor(45, 45, 45)
-        doc.text('City Construction Group', 15, 16)
-
-        // Address line (7.5pt grey)
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(7.5)
-        doc.setTextColor(90, 90, 90)
-        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
-        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
-
-        // Thin divider under letterhead — below the logo which ends at ~y=36
-        doc.setDrawColor(207, 207, 207)
-        doc.setLineWidth(0.2)
-        doc.line(15, 40, pageW - 15, 40)
-      }
-
-      // Initial letterhead + title
-      drawLetterhead()
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(16)
-      doc.setTextColor(45, 45, 45)
-      doc.text(title, 15, 50)
-
-      if (entries.length === 0) {
-        doc.setFont('helvetica', 'italic')
-        doc.setFontSize(11)
-        doc.setTextColor(150, 150, 150)
-        doc.text(isDesignTeam ? 'No design team members assigned to this project yet.' : 'No subcontractors assigned to this project yet.', pageW / 2, 70, { align: 'center' })
-      } else {
-        const body = entries.map(e => [e.role, e.company, e.contact, e.phone, e.email])
-        doc.autoTable({
-          startY: 56,
-          head: [['Role', 'Company', 'Contact Name', 'Telephone', 'Email']],
-          body,
-          theme: 'plain',
-          styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 3.5, textColor: [45, 45, 45], lineWidth: 0, overflow: 'linebreak' },
-          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: { top: 2, bottom: 2, left: 4, right: 4 }, minCellHeight: 7 },
-          alternateRowStyles: { fillColor: [249, 249, 249] },
-          columnStyles: {
-            0: { cellWidth: 53 },  // Role
-            1: { cellWidth: 56 },  // Company
-            2: { cellWidth: 46 },  // Contact
-            3: { cellWidth: 45 },  // Telephone
-            4: { cellWidth: 'auto' }, // Email
-          },
-          margin: { left: 15, right: 15, top: 46 },
-          didDrawPage: (data) => {
-            // On any new page, re-draw the letterhead
-            if (data.pageNumber > 1) {
-              drawLetterhead()
-            }
-          },
-        })
-      }
-
-      // Footer on every page
-      const pageCount = doc.internal.getNumberOfPages()
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i)
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(8)
-        doc.setTextColor(160, 160, 160)
-        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
-        doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
-      }
-
-      const filename = `${project?.project_name || 'Project'} - ${title}.pdf`
-      doc.save(filename)
-      console.log('[exportDirectoryPDF] saved:', filename)
-    } catch (err) {
-      console.error('[exportDirectoryPDF] error:', err)
-      alert('PDF export failed: ' + (err?.message || err))
-    }
-  }
-
   async function assignSub() {
-    if (!assignForm.subcontractor_id) return
-    const payload = {
-      project_id: id,
-      subcontractor_id: assignForm.subcontractor_id,
-      trade_on_project: assignForm.trade_on_project || null,
-      category: assignForm.category || 'contractual_work',
-      start_date: assignForm.start_date || null,
-      end_date: assignForm.end_date || null,
-      contract_value: assignForm.contract_value ? parseFloat(assignForm.contract_value) : null,
-      variation_amount: assignForm.variation_amount || 0,
-      variation_notes: assignForm.variation_notes || null,
-    }
-    const { error } = await supabase.from('project_subcontractors').insert(payload)
-    if (error) {
-      console.error('[ProjectDetail] assignSub error:', error)
-      alert('Could not assign: ' + error.message)
-      return
-    }
+    await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: assignForm.contract_value || null })
     setShowAssignSub(false)
     setAssignForm({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
     load()
@@ -518,6 +329,13 @@ export default function ProjectDetail() {
   async function removeSub(psId) {
     await supabase.from('project_subcontractors').delete().eq('id', psId)
     setConfirmRemove(null)
+    load()
+  }
+
+  async function addDoc() {
+    await supabase.from('project_documents').insert({ project_id: id, ...docForm })
+    setShowAddDoc(false)
+    setDocForm({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
     load()
   }
 
@@ -674,20 +492,20 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
         </div>
-        {can('view_hs_handover') && project?.status !== 'tender' && (
+        {can('view_hs_handover') && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           H&S Handover
         </div>
         )}
-        {can('view_photos') && project?.status !== 'tender' && (
+        {can('view_photos') && (
         <div className={`filter-tab ${activeTab === 'photos' ? 'active' : ''}`} onClick={() => { setActiveTab('photos'); localStorage.setItem(_tabKey, 'photos') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           Photos<span className="tab-badge">{photos.length}</span>
         </div>
         )}
 
-        {can('view_case_study') && project?.status !== 'tender' && (
+        {can('view_case_study') && (
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => { setActiveTab('casestudy'); localStorage.setItem(_tabKey, 'casestudy') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Case Study
@@ -729,7 +547,7 @@ export default function ProjectDetail() {
 
 
 
-      {activeTab === 'photos' && can('view_photos') && project?.status !== 'tender' && (
+      {activeTab === 'photos' && can('view_photos') && (
         <div>
           <div className="section-header" style={{ marginBottom: 16 }}>
             <div className="section-title">Project Photos</div>
@@ -767,7 +585,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === 'casestudy' && can('view_case_study') && project?.status !== 'tender' && (
+      {activeTab === 'casestudy' && can('view_case_study') && (
         <CaseStudy project={project} subs={subs} docs={docs} photos={photos} />
       )}
 
@@ -786,16 +604,6 @@ export default function ProjectDetail() {
           <div className="section-header">
             <div className="section-title">Assigned {catLabel}</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-sm" onClick={() => exportDirectoryPDF(categoryKey)}
-                disabled={catSubs.length === 0 && (!isDesignTeam || (projectEAs || []).length === 0)}
-                title={catSubs.length === 0 && (!isDesignTeam || (projectEAs || []).length === 0) ? 'Nothing to export yet' : 'Export as PDF'}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                {isDesignTeam ? 'Export Project Directory PDF' : 'Export Packages Procured PDF'}
-              </button>
               {(can('manage_projects') || can('manage_subcontractors')) && (
                 <button className="btn btn-primary btn-sm" onClick={() => { setAssignForm(f => ({ ...f, category: categoryKey })); setShowAssignSub(true) }}>
                   <IconPlus size={13} /> Assign {catLabel === 'Subcontractors' ? 'Subcontractor' : 'Design Team'}
@@ -840,7 +648,7 @@ export default function ProjectDetail() {
                               </span>
                             </div>
                           </td>
-                          <td>{ps.subcontractors?.trade ? <Pill cls="pill-blue">{ps.subcontractors.trade}</Pill> : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+                          <td>{ps.subcontractors?.trade || ps.trade_on_project}</td>
                           <td className="td-muted">{formatDate(ps.start_date)}</td>
                           <td className="td-muted">{formatDate(ps.end_date)}</td>
                           {can('view_project_value') && (
@@ -936,7 +744,56 @@ export default function ProjectDetail() {
       {activeTab === 'documents' && (
         <div>
           {/* Project Documentation folder system */}
-          <ProjectDocumentation projectId={id} projectName={project?.project_name} projectStatus={project?.status} />
+          <ProjectDocumentation projectId={id} projectName={project?.project_name} />
+
+          {/* Divider */}
+          <div style={{ margin: '24px 0', borderTop: '1px solid var(--border)' }} />
+
+          {/* RAMS / Certs / project-linked docs */}
+          <div className="section-header">
+            <div className="section-title">RAMS & Compliance Documents</div>
+            {can('manage_documents') && <button className="btn btn-primary btn-sm" onClick={() => setShowAddDoc(true)}><IconPlus size={13}/> Add Document</button>}
+          </div>
+          {docs.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No project documents uploaded yet.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Document</th><th>Type</th><th>Subcontractor</th><th>Expiry</th><th>Status</th><th>Approved</th></tr></thead>
+                <tbody>
+                  {docs.map(d => {
+                    const info = docStatusInfo(d.expiry_date)
+                    return (
+                      <tr key={d.id}>
+                        <td style={{ fontWeight: 500 }}>{d.document_name}</td>
+                        <td className="td-muted">{DOCUMENT_TYPES[d.document_type] || d.document_type}</td>
+                        <td>{d.subcontractors?.company_name || '—'}</td>
+                        <td className="td-muted">{formatDate(d.expiry_date)}</td>
+                        <td>{info && <Pill cls={info.cls}>{info.label}</Pill>}</td>
+                        <td>{d.approved ? <Pill cls="pill-green">Approved</Pill> : <Pill cls="pill-gray">Pending</Pill>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                {subs.length > 1 && (() => {
+                  const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
+                  const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
+                  const totalAll = totalOrder + totalVar
+                  return (
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
+                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>Total</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{formatCurrency(totalOrder)}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--amber)' }}>{totalVar > 0 ? '+' + formatCurrency(totalVar) : '—'}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--green)' }}>{formatCurrency(totalAll)}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  )
+                })()}
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -1018,6 +875,11 @@ export default function ProjectDetail() {
           </button>
         </>}>
         <div className="form-grid">
+          <div className="full">
+            <Field label="Trade on Project">
+              <input value={editAssignForm.trade_on_project} onChange={e => setEditAssignForm(f => ({ ...f, trade_on_project: e.target.value }))} placeholder="e.g. Electrical" />
+            </Field>
+          </div>
           <Field label="Start Date">
             <input type="date" value={editAssignForm.start_date} onChange={e => setEditAssignForm(f => ({ ...f, start_date: e.target.value }))} />
           </Field>
@@ -1050,7 +912,7 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
-      {activeTab === 'hs' && can('view_hs_handover') && project?.status !== 'tender' && (
+      {activeTab === 'hs' && can('view_hs_handover') && (
         <HSHandover projectId={id} projectName={project?.project_name} />
       )}
 
@@ -1062,20 +924,25 @@ export default function ProjectDetail() {
           <div className="full"><Field label="Subcontractor *"><select value={assignForm.subcontractor_id} onChange={e => {
             const selected = allSubs.find(s => s.id === e.target.value)
             setAssignForm(f => ({ ...f, subcontractor_id: e.target.value, trade_on_project: selected?.trade || '' }))
-          }}><option value="">Select…</option>{allSubs.filter(s => !s.blacklisted && !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
+          }}><option value="">Select…</option>{allSubs.filter(s => !subs.find(ps => ps.subcontractors?.id === s.id)).map(s => <option key={s.id} value={s.id}>{s.company_name} – {s.trade}</option>)}</select></Field></div>
           <div className="full"><Field label="Category *"><select value={assignForm.category} onChange={e => setAssignForm(f => ({ ...f, category: e.target.value }))}>
             <option value="design_team">Design Team</option>
             <option value="contractual_work">Contractual Work</option>
           </select></Field></div>
-          <div className="full"><Field label="Trade on Project">
-            <select value={assignForm.trade_on_project} onChange={e => setAssignForm(f => ({ ...f, trade_on_project: e.target.value }))}>
-              <option value="">— Select trade —</option>
-              {TRADES.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </Field></div>
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
           <div className="full"><Field label="Order Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" /></Field></div>
+        </div>
+      </Modal>
+
+      <Modal open={showAddDoc} onClose={() => setShowAddDoc(false)} title="Add Project Document" size="sm"
+        footer={<><button className="btn" onClick={() => setShowAddDoc(false)}>Cancel</button><button className="btn btn-primary" onClick={addDoc}>Save</button></>}>
+        <div className="form-grid">
+          <div className="full"><Field label="Document Name *"><input value={docForm.document_name} onChange={e => setDocForm(f => ({ ...f, document_name: e.target.value }))} placeholder="e.g. RAMS for groundworks" /></Field></div>
+          <div className="full"><Field label="Document Type"><select value={docForm.document_type} onChange={e => setDocForm(f => ({ ...f, document_type: e.target.value }))}>{Object.entries(DOCUMENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field></div>
+          <div className="full"><Field label="Linked Subcontractor"><select value={docForm.subcontractor_id} onChange={e => setDocForm(f => ({ ...f, subcontractor_id: e.target.value || null }))}><option value="">None (project-wide)</option>{subs.map(ps => <option key={ps.id} value={ps.subcontractors?.id}>{ps.subcontractors?.company_name}</option>)}</select></Field></div>
+          <Field label="Expiry Date"><input type="date" value={docForm.expiry_date} onChange={e => setDocForm(f => ({ ...f, expiry_date: e.target.value }))} /></Field>
+          <div className="full"><Field label="Notes"><input value={docForm.notes} onChange={e => setDocForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></Field></div>
         </div>
       </Modal>
 
@@ -1152,7 +1019,7 @@ function CaseStudy({ project, subs, docs, photos }) {
     setGeneratingAI(true)
     try {
       const duration = calcDuration(project.start_date, project.end_date)
-      const trades = subs.map(s => s.subcontractors?.trade).filter(Boolean).join(', ')
+      const trades = subs.map(s => s.subcontractors?.trade || s.trade_on_project).filter(Boolean).join(', ')
       const prompt = `You are writing a professional project case study for City Construction Ltd, a UK construction company. 
 Rewrite the following project description into a compelling, professional 2-3 paragraph overview suitable for a client-facing case study PDF.
 Use professional construction industry language. Highlight the scope, complexity and value delivered. Do not invent facts.
@@ -1182,23 +1049,172 @@ Write only the overview text, no headings or labels.`
     setGeneratingAI(false)
   }
 
-
-  function exportPDF() {
-    const el = document.getElementById('case-study-content')
-    if (!el) return
+  async function exportPDF() {
     setExporting(true)
-    const script = document.createElement('script')
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
-    script.onload = () => {
-      window.html2pdf().set({
-        margin: 0,
-        filename: `${project.project_name} - Case Study.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      }).from(el).save().then(() => setExporting(false))
+    try {
+      // Lazy-load pdf-lib
+      if (!window.PDFLib) {
+        const script = document.createElement('script')
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js'
+        document.head.appendChild(script)
+        await new Promise(r => { script.onload = r })
+      }
+      const { PDFDocument, StandardFonts, PageSizes } = window.PDFLib
+
+      const pdf = await PDFDocument.create()
+      const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold)
+      const regFont = await pdf.embedFont(StandardFonts.Helvetica)
+      const fonts = { boldFont, regFont }
+      const logo = await loadLogo(pdf)
+
+      const A4 = PageSizes.A4   // [595, 842]
+      const A4_W = A4[0], A4_H = A4[1]
+
+      const addressLines = [
+        project.site_address || '',
+        project.city || '',
+        project.postcode || '',
+      ].filter(Boolean)
+
+      // ── Page 1: Branded cover ──
+      const cover = pdf.addPage(A4)
+      drawCover(cover, fonts, logo, {
+        eyebrow: 'PROJECT CASE STUDY',
+        title: project.project_name || 'Project',
+        projectName: project.client_name ? `Client: ${project.client_name}` : undefined,
+        addressLines,
+      })
+
+      // ── Page 2: Project details + overview ──
+      const detailPage = pdf.addPage(A4)
+      let y = drawLetterhead(detailPage, fonts, logo)
+
+      detailPage.drawText('Project overview', { x: 32, y: y - 4, size: 20, font: boldFont, color: BRAND.text })
+      y -= 30
+
+      // Key facts grid
+      const facts = [
+        ['Client', project.client_name || '—'],
+        ['Duration', duration || '—'],
+        ['Value', project.value ? `£${Number(project.value).toLocaleString()}` : '—'],
+        ['Status', (project.status?.charAt(0).toUpperCase() + project.status?.slice(1)) || '—'],
+        ['Reference', project.project_ref || '—'],
+        ['Project Manager', project.profiles?.full_name || '—'],
+      ]
+      const colW = (A4_W - 64) / 2
+      for (let i = 0; i < facts.length; i++) {
+        const [k, v] = facts[i]
+        const col = i % 2
+        const row = Math.floor(i / 2)
+        const fx = 32 + col * colW
+        const fy = y - row * 38
+        // Light fill background for each fact
+        detailPage.drawRectangle({ x: fx, y: fy - 28, width: colW - 8, height: 32, color: { r: 0.965, g: 0.961, b: 0.94 } })
+        detailPage.drawText(k.toUpperCase(), { x: fx + 8, y: fy - 12, size: 8, font: regFont, color: BRAND.muted })
+        detailPage.drawText(String(v), { x: fx + 8, y: fy - 24, size: 11, font: boldFont, color: BRAND.text })
+      }
+      y -= Math.ceil(facts.length / 2) * 38 + 16
+
+      // Overview text
+      const overview = aiOverview || project.description
+      if (overview && overview.trim()) {
+        if (y < 200) { /* fits */ }
+        detailPage.drawText('Project description', { x: 32, y: y - 4, size: 14, font: boldFont, color: BRAND.green })
+        y -= 18
+        // Word-wrap helper
+        const wrap = (text, maxW, size) => {
+          const words = text.split(/\s+/)
+          const lines = []
+          let cur = ''
+          for (const w of words) {
+            const test = cur ? cur + ' ' + w : w
+            if (regFont.widthOfTextAtSize(test, size) > maxW) {
+              if (cur) lines.push(cur); cur = w
+            } else { cur = test }
+          }
+          if (cur) lines.push(cur)
+          return lines
+        }
+        const paras = overview.split(/\n\n+/)
+        for (const para of paras) {
+          const lines = wrap(para.replace(/\n/g, ' '), A4_W - 64, 11)
+          for (const line of lines) {
+            if (y < 80) break
+            detailPage.drawText(line, { x: 32, y, size: 11, font: regFont, color: BRAND.text, lineHeight: 14 })
+            y -= 16
+          }
+          y -= 8
+          if (y < 80) break
+        }
+      }
+
+      // ── Photos page (if any) ──
+      const photoEntries = photos.slice(0, 6).filter(p => photoUrls[p.id])
+      if (photoEntries.length > 0) {
+        const photoPage = pdf.addPage(A4)
+        let py = drawLetterhead(photoPage, fonts, logo)
+        photoPage.drawText('Project photography', { x: 32, y: py - 4, size: 20, font: boldFont, color: BRAND.text })
+        py -= 30
+
+        // Embed each photo
+        const photoW = (A4_W - 64 - 12) / 2  // 2 columns
+        const photoH = photoW * 0.75
+        let col = 0
+        let cy = py
+        for (const ph of photoEntries) {
+          try {
+            const r = await fetch(photoUrls[ph.id])
+            const blob = await r.blob()
+            const ab = await blob.arrayBuffer()
+            let img = null
+            try { img = await pdf.embedJpg(ab) } catch { img = await pdf.embedPng(ab) }
+            const px = 32 + col * (photoW + 12)
+            if (cy - photoH < 60) break  // ran out of room
+            photoPage.drawImage(img, { x: px, y: cy - photoH, width: photoW, height: photoH })
+            col++
+            if (col >= 2) { col = 0; cy -= photoH + 12 }
+          } catch (e) { console.warn('photo skip', ph.id, e) }
+        }
+      }
+
+      // ── Team page (if any subs) ──
+      if (subs && subs.length > 0) {
+        const teamPage = pdf.addPage(A4)
+        let ty = drawLetterhead(teamPage, fonts, logo)
+        teamPage.drawText('Project team', { x: 32, y: ty - 4, size: 20, font: boldFont, color: BRAND.text })
+        ty -= 30
+
+        for (const ps of subs) {
+          if (ty < 80) break
+          const name = ps.subcontractors?.company_name || '—'
+          const trade = ps.subcontractors?.trade || ps.trade_on_project || ''
+          // Card
+          teamPage.drawRectangle({ x: 32, y: ty - 36, width: A4_W - 64, height: 32, color: { r: 0.965, g: 0.961, b: 0.94 } })
+          teamPage.drawText(name, { x: 44, y: ty - 18, size: 12, font: boldFont, color: BRAND.text })
+          teamPage.drawText(trade, { x: 44, y: ty - 30, size: 10, font: regFont, color: BRAND.muted })
+          ty -= 40
+        }
+      }
+
+      // ── Footer page numbers on every content page ──
+      const allPages = pdf.getPages()
+      const total = allPages.length
+      for (let i = 1; i < total; i++) {
+        drawFooter(allPages[i], fonts, project.project_name || '', i + 1, total)
+      }
+
+      const bytes = await pdf.save()
+      const blob = new Blob([bytes], { type: 'application/pdf' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${project.project_name || 'Project'} - Case Study.pdf`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    } catch (e) {
+      console.error('[CaseStudy.exportPDF]', e)
+      alert('Export failed: ' + (e?.message || e))
     }
-    document.head.appendChild(script)
+    setExporting(false)
   }
 
   const duration = calcDuration(project.start_date, project.end_date)
@@ -1312,7 +1328,7 @@ Write only the overview text, no headings or labels.`
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>{ps.subcontractors?.company_name}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || '—'}</div>
+                      <div style={{ fontSize: 11, color: '#888' }}>{ps.subcontractors?.trade || ps.trade_on_project}</div>
                     </div>
                   </div>
                 ))}
