@@ -809,7 +809,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
 }
 
 
-function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor, viewMode = 'grid', setViewMode, onPreview, onDeleteNode, onRenameNode, treeVersion, refreshTree }) {
+function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor, viewMode = 'grid', setViewMode, onPreview, onDeleteNode, onRenameNode }) {
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
@@ -836,11 +836,6 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   useEffect(() => {
     if (open) loadFiles()
   }, [open])
-  // Refetch on any tree move — clears ghost copies
-  useEffect(() => {
-    if (!treeVersion) return
-    if (open) loadFiles()
-  }, [treeVersion])
 
   async function loadFiles() {
     const { data } = await supabase.from('hs_files').select('*')
@@ -1061,7 +1056,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addCustomFolder(); if (e.key === 'Escape') { setShowAddFolder(false); setNewFolderName('') } }}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
               <button onClick={addCustomFolder} disabled={!newFolderName.trim()} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
               <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
             </>
@@ -1113,8 +1108,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
               fileCounts={fileCounts} canManage={canManage} canAddFolders={canAddFolders}
               customFolders={customFolders} onCustomFolderAdded={onCustomFolderAdded}
               sectionColor={color} viewMode={viewMode} setViewMode={setViewMode} onPreview={onPreview}
-              onDeleteNode={onDeleteNode} onRenameNode={onRenameNode}
-              treeVersion={treeVersion} refreshTree={refreshTree} />
+              onDeleteNode={onDeleteNode} onRenameNode={onRenameNode} />
           ))}
 
           {/* Custom sub-folders */}
@@ -1125,8 +1119,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
               fileCounts={fileCounts} canManage={canManage} canAddFolders={canAddFolders}
               customFolders={customFolders} onCustomFolderAdded={onCustomFolderAdded}
               sectionColor={color} viewMode={viewMode} setViewMode={setViewMode} onPreview={onPreview}
-              onDeleteNode={onDeleteNode} onRenameNode={onRenameNode}
-              treeVersion={treeVersion} refreshTree={refreshTree} />
+              onDeleteNode={onDeleteNode} onRenameNode={onRenameNode} />
           ))}
 
           {/* Files grid */}
@@ -1134,7 +1127,6 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             onMove={async (targetKey) => {
               for (const id of selected) await supabase.from('hs_files').update({ folder_key: targetKey }).eq('id', id)
               setSelected(new Set()); loadFiles()
-              refreshTree?.()
             }}
             moveTargets={[
               ...(node.children || []).map(c => ({ key: c.key, label: c.label })),
@@ -1202,9 +1194,6 @@ export default function HSHandover({ projectId, projectName }) {
   const [previewFile, setPreviewFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('hsView_' + projectId) || 'grid' } catch { return 'grid' } })
-  // Bumped after any move; nodes watch it and refetch to drop ghost copies
-  const [treeVersion, setTreeVersion] = useState(0)
-  const refreshTree = () => setTreeVersion(v => v + 1)
   function setView(mode) { setViewMode(mode); try { localStorage.setItem('hsView_' + projectId, mode) } catch {} }
   function openPreview(file, url) {
     setPreviewFile(file); setPreviewUrl(url || null)
@@ -1415,7 +1404,7 @@ export default function HSHandover({ projectId, projectName }) {
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             {compilingOm ? 'Compiling...' : 'Export Section 8 O&M PDF'}
           </button>
-          <button onClick={compileFullHandover} disabled={compilingFull} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: '#448a40', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <button onClick={compileFullHandover} disabled={compilingFull} style={{ fontSize: 12, padding: '7px 14px', borderRadius: 6, background: '#448a40', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             {compilingFull ? 'Compiling...' : 'Compile Full H&S Handover PDF'}
           </button>
@@ -1437,13 +1426,11 @@ export default function HSHandover({ projectId, projectName }) {
             onCustomFolderAdded={() => { loadCustomFolders(); loadFileCounts() }}
             sectionColor={section.color}
             viewMode={viewMode} setViewMode={setView} onPreview={openPreview}
-            treeVersion={treeVersion} refreshTree={refreshTree}
             onDeleteNode={async (key) => {
               if (!window.confirm('Delete this folder and ALL its files?')) return
               await supabase.from('hs_files').delete().eq('project_id', projectId).eq('folder_key', key)
               await supabase.from('hs_folders').delete().eq('folder_key', key).eq('project_id', projectId)
               setCustomFolders(prev => prev.filter(f => f.folder_key !== key))
-              refreshTree()
             }}
             onRenameNode={async (key, label) => {
               await supabase.from('hs_folders').update({ label }).eq('folder_key', key).eq('project_id', projectId)
