@@ -338,7 +338,7 @@ function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
 }
 
 // ── File Card (grid / compact view) ──────────────────────────────────────────
-function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
+function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, onGenerateGantt }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -404,6 +404,14 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
             {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
             {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
           </div>
+          {onGenerateGantt && isPdf && (
+            <button onClick={e => { e.stopPropagation(); onGenerateGantt(file) }}
+              title="Use AI to extract tasks from this PDF and load them into the Live Gantt editor"
+              style={{ marginTop: 4, width: '100%', fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid #534AB7', borderRadius: 4, background: '#534AB7', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              Generate Gantt
+            </button>
+          )}
         </div>
       </div>
       {confirmDel && <ConfirmDlg message={'Delete "' + file.file_name + '"?'} onOk={() => { setConfirmDel(false); onDelete(file) }} onCancel={() => setConfirmDel(false)} />}
@@ -485,7 +493,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
 }
 
 // ── Files Grid (shared renderer) ─────────────────────────────────────────────
-function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, onSelect, onDrop, onUpload }) {
+function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, onSelect, onDrop, onUpload, onGenerateGantt }) {
   if (!files.length) return null
   if (viewMode === 'list') {
     return (
@@ -501,7 +509,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
     <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8 }}>
       {files.map(f => (
         <FileCard key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete}
-          selected={selected.has(f.id)} onSelect={onSelect} />
+          selected={selected.has(f.id)} onSelect={onSelect} onGenerateGantt={onGenerateGantt} />
       ))}
       {canManage && (
         <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
@@ -817,6 +825,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [renamingFolder, setRenamingFolder] = useState(false)
   const [renameFolderVal, setRenameFolderVal] = useState('')
   const [showGantt, setShowGantt] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [generatePreview, setGeneratePreview] = useState(null) // { tasks, confidence, notes, filename, raw } when shown
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('pdView_' + folder.key) || 'grid' } catch { return 'grid' }
   })
@@ -998,6 +1008,41 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     }
   }
 
+  async function generateGanttFromPdf(file) {
+    if (!file?.storage_path) return
+    setGenerating(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) { alert('Not signed in'); setGenerating(false); return }
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/parse-programme-pdf`
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ storage_path: file.storage_path }),
+      })
+      const result = await resp.json()
+      if (!resp.ok || !result.ok) {
+        throw new Error(result.error || result.parse_error || `HTTP ${resp.status}`)
+      }
+      // Show preview to user
+      setGeneratePreview({
+        filename: file.file_name,
+        tasks: result.tasks || [],
+        confidence: result.confidence,
+        notes: result.notes,
+        raw: result.raw_response,
+      })
+    } catch (err) {
+      console.error('[generateGantt]', err)
+      alert('Could not parse PDF: ' + (err?.message || err) + '\n\nThe AI parser may struggle with hand-drawn or low-quality PDFs. You can still build the Gantt manually.')
+    }
+    setGenerating(false)
+  }
+
   async function onDropBody(e) {
     e.preventDefault(); e.stopPropagation()
     const subKey = e.dataTransfer.getData('subfolder')
@@ -1161,7 +1206,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                 <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>
               )}
               <FilesGrid files={files} viewMode={viewMode} onPreview={openPreview} canManage={canManage}
-                onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDropBody} onUpload={uploadToFolder} />
+                onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDropBody} onUpload={uploadToFolder}
+                onGenerateGantt={folder.key === '06-project-programme' ? generateGanttFromPdf : null} />
             </div>
           )}
 
@@ -1206,9 +1252,87 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         <GanttEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
-          onClose={() => setShowGantt(false)}
+          onClose={() => { setShowGantt(false); setGeneratePreview(null) }}
           canEdit={canManage}
+          initialTasks={generatePreview?._approved || null}
         />
+      )}
+
+      {/* AI generation spinner */}
+      {generating && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 8, padding: 32, textAlign: 'center', maxWidth: 380 }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Reading your programme PDF…</div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 16 }}>
+              AI is extracting tasks, dates, and groups. This typically takes 10–30 seconds.
+            </div>
+            <div style={{ display: 'inline-block', width: 24, height: 24, border: '3px solid var(--border)', borderTopColor: '#534AB7', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        </div>
+      )}
+
+      {/* Preview modal — show parsed tasks before committing */}
+      {generatePreview && !generating && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setGeneratePreview(null)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--surface)', borderRadius: 8, maxWidth: 720, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>AI Extracted Tasks</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>From: {generatePreview.filename}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: generatePreview.confidence === 'high' ? '#e8f5e7' : generatePreview.confidence === 'medium' ? '#fef4e0' : '#fee', color: generatePreview.confidence === 'high' ? '#448a40' : generatePreview.confidence === 'medium' ? '#b87a00' : '#c00', textTransform: 'uppercase' }}>
+                  {generatePreview.confidence || 'unknown'} confidence
+                </span>
+              </div>
+            </div>
+            <div style={{ padding: 14, fontSize: 12, color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
+              <strong>{generatePreview.tasks.length}</strong> tasks extracted.
+              {generatePreview.notes && <div style={{ marginTop: 6, fontStyle: 'italic', color: 'var(--text3)' }}>{generatePreview.notes}</div>}
+              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text3)' }}>
+                Review the list below. If it looks good, click <strong>Open in Gantt Editor</strong> to load these tasks for editing — they won't be saved until you click Save in the editor.
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', padding: 14 }}>
+              {generatePreview.tasks.length === 0 ? (
+                <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 30, fontSize: 12 }}>
+                  No tasks were extracted. The PDF may not contain a recognisable Gantt chart, or the AI struggled to read it.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {generatePreview.tasks.map((t, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px', gap: 10, padding: '6px 10px', background: t.parent_name ? 'var(--surface2)' : undefined, borderRadius: 4, fontSize: 12 }}>
+                      <div style={{ paddingLeft: t.parent_name ? 16 : 0 }}>
+                        {t.parent_name && <span style={{ color: 'var(--text3)', marginRight: 4 }}>↳</span>}
+                        {t.is_milestone && <span style={{ marginRight: 4 }}>◆</span>}
+                        <span style={{ fontWeight: t.parent_name ? 400 : 500 }}>{t.name}</span>
+                      </div>
+                      <div style={{ color: 'var(--text3)', fontSize: 11 }}>{t.start_date || '—'}</div>
+                      <div style={{ color: 'var(--text3)', fontSize: 11 }}>{t.end_date || '—'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ padding: 14, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn" onClick={() => setGeneratePreview(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={generatePreview.tasks.length === 0}
+                onClick={async () => {
+                  // Convert AI shape -> editor shape
+                  const { tasksFromAiResponse } = await import('./Gantt/ganttUtils')
+                  const editorTasks = tasksFromAiResponse(generatePreview.tasks)
+                  setGeneratePreview(prev => ({ ...prev, _approved: editorTasks }))
+                  setShowGantt(true)
+                }}>
+                Open in Gantt Editor →
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
