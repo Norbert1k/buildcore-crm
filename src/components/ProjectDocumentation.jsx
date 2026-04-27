@@ -791,7 +791,12 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
       })
-      if (dbErr) console.error('DB insert failed:', dbErr.message)
+      if (dbErr) {
+        console.error('DB insert failed:', dbErr.message)
+        errors.push(file.name)
+        // Clean up the orphaned storage object so we don't leak space.
+        await supabase.storage.from('project-docs').remove([path]).catch(() => {})
+      }
     }
     setUploading(false)
     setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
@@ -888,6 +893,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     if (id) { moveFile(id); return }
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
+      const dropErrors = []
       const keyMap = {}
       for (const fp of drop.folders.sort()) {
         const parts = fp.split('/')
@@ -902,8 +908,15 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         const sfKey = path ? keyMap[path] : subfolder.key
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (error) { console.error('Upload failed:', error.message); dropErrors.push(file.name); continue }
+        const { error: dbErr } = await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (dbErr) {
+          console.error('DB insert failed:', dbErr.message)
+          dropErrors.push(file.name)
+          await supabase.storage.from('project-docs').remove([storagePath]).catch(() => {})
+        }
       }
+      if (dropErrors.length) alert(`${dropErrors.length} file${dropErrors.length === 1 ? '' : 's'} could not be saved:\n\n${dropErrors.join('\n')}\n\nThis is usually a permissions issue — check with your admin.`)
       loadChildFolders(); loadFiles()
     } else {
       const f = drop.files.map(x => x.file)
@@ -1200,7 +1213,11 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         project_id: projectId, folder_key: folder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
       })
-      if (dbErr) console.error('DB insert failed:', dbErr.message)
+      if (dbErr) {
+        console.error('DB insert failed:', dbErr.message)
+        errors.push(file.name)
+        await supabase.storage.from('project-docs').remove([path]).catch(() => {})
+      }
     }
     setUploading(false)
     setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
@@ -1318,6 +1335,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     if (subKey) { moveSubfolderToRoot(subKey); return }
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
+      const dropErrors = []
       const keyMap = {}
       for (const fp of drop.folders.sort()) {
         const parts = fp.split('/')
@@ -1332,8 +1350,15 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (error) { console.error('Upload failed:', error.message); dropErrors.push(file.name); continue }
+        const { error: dbErr } = await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (dbErr) {
+          console.error('DB insert failed:', dbErr.message)
+          dropErrors.push(file.name)
+          await supabase.storage.from('project-docs').remove([storagePath]).catch(() => {})
+        }
       }
+      if (dropErrors.length) alert(`${dropErrors.length} file${dropErrors.length === 1 ? '' : 's'} could not be saved:\n\n${dropErrors.join('\n')}\n\nThis is usually a permissions issue — check with your admin.`)
       loadCustomSubfolders(); loadRootFiles()
     } else {
       const f = drop.files.map(x => x.file)
@@ -1398,6 +1423,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     if (id) { moveFileToRoot(id); return }
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
+      const dropErrors = []
       const keyMap = {}
       for (const fp of drop.folders.sort()) {
         const parts = fp.split('/')
@@ -1412,8 +1438,15 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (error) { console.error('Upload failed:', error.message); dropErrors.push(file.name); continue }
+        const { error: dbErr } = await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (dbErr) {
+          console.error('DB insert failed:', dbErr.message)
+          dropErrors.push(file.name)
+          await supabase.storage.from('project-docs').remove([storagePath]).catch(() => {})
+        }
       }
+      if (dropErrors.length) alert(`${dropErrors.length} file${dropErrors.length === 1 ? '' : 's'} could not be saved:\n\n${dropErrors.join('\n')}\n\nThis is usually a permissions issue — check with your admin.`)
       loadCustomSubfolders(); loadRootFiles()
     } else {
       const f = drop.files.map(x => x.file)
