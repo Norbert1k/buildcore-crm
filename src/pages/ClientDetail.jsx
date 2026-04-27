@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
 import { ConfirmDialog } from '../components/ui'
+import PortalAccessTab from '../components/PortalAccessTab'
 
 function initials(name) {
   if (!name) return '?'
@@ -126,13 +127,19 @@ export default function ClientDetail() {
         {[
           { key: 'projects', label: 'Projects', count: projects.length },
           { key: 'contacts', label: 'Contacts', count: contacts.length },
+          { key: 'portal', label: 'Portal Access' },
         ].map(t => (
           <div key={t.key} className={`filter-tab ${activeTab === t.key ? 'active' : ''}`}
             onClick={() => setTab(t.key)}>
-            {t.label}<span className="tab-badge">{t.count}</span>
+            {t.label}{t.count !== undefined && <span className="tab-badge">{t.count}</span>}
           </div>
         ))}
       </div>
+
+      {/* Portal Access tab */}
+      {activeTab === 'portal' && (
+        <PortalAccessTab client={client} onClientUpdate={(c) => setClient(c)} />
+      )}
 
       {/* Projects tab */}
       {activeTab === 'projects' && (
