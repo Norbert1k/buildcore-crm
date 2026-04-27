@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
 import GanttEditor from './Gantt/GanttEditor'
 import ProgressReportEditor, { generateProgressReportPdf } from './ProgressReportEditor'
+import ProjectPhotos from './ProjectPhotos'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -24,6 +25,7 @@ const TEMPLATE_FOLDERS = [
       { key: 'planning', label: '09. Planning' },
       { key: 'utilities', label: '10. Utilities' },
       { key: 'meetings', label: '11. Meetings' },
+      { key: '12-project-photos', label: '12. Project Photos', special: 'photos' },
     ]
   },
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
@@ -791,12 +793,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         project_id: projectId, folder_key: folder.key, subfolder_key: subfolder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
       })
-      if (dbErr) {
-        console.error('DB insert failed:', dbErr.message)
-        errors.push(file.name)
-        // Clean up the orphaned storage object so we don't leak space.
-        await supabase.storage.from('project-docs').remove([path]).catch(() => {})
-      }
+      if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
     setUploading(false)
     setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
@@ -893,7 +890,6 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     if (id) { moveFile(id); return }
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
-      const dropErrors = []
       const keyMap = {}
       for (const fp of drop.folders.sort()) {
         const parts = fp.split('/')
@@ -908,15 +904,8 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         const sfKey = path ? keyMap[path] : subfolder.key
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (error) { console.error('Upload failed:', error.message); dropErrors.push(file.name); continue }
-        const { error: dbErr } = await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
-        if (dbErr) {
-          console.error('DB insert failed:', dbErr.message)
-          dropErrors.push(file.name)
-          await supabase.storage.from('project-docs').remove([storagePath]).catch(() => {})
-        }
+        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
-      if (dropErrors.length) alert(`${dropErrors.length} file${dropErrors.length === 1 ? '' : 's'} could not be saved:\n\n${dropErrors.join('\n')}\n\nThis is usually a permissions issue — check with your admin.`)
       loadChildFolders(); loadFiles()
     } else {
       const f = drop.files.map(x => x.file)
@@ -1213,11 +1202,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         project_id: projectId, folder_key: folder.key,
         file_name: file.name, file_size: file.size, storage_path: path,
       })
-      if (dbErr) {
-        console.error('DB insert failed:', dbErr.message)
-        errors.push(file.name)
-        await supabase.storage.from('project-docs').remove([path]).catch(() => {})
-      }
+      if (dbErr) console.error('DB insert failed:', dbErr.message)
     }
     setUploading(false)
     setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
@@ -1335,7 +1320,6 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     if (subKey) { moveSubfolderToRoot(subKey); return }
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
-      const dropErrors = []
       const keyMap = {}
       for (const fp of drop.folders.sort()) {
         const parts = fp.split('/')
@@ -1350,15 +1334,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (error) { console.error('Upload failed:', error.message); dropErrors.push(file.name); continue }
-        const { error: dbErr } = await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
-        if (dbErr) {
-          console.error('DB insert failed:', dbErr.message)
-          dropErrors.push(file.name)
-          await supabase.storage.from('project-docs').remove([storagePath]).catch(() => {})
-        }
+        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
-      if (dropErrors.length) alert(`${dropErrors.length} file${dropErrors.length === 1 ? '' : 's'} could not be saved:\n\n${dropErrors.join('\n')}\n\nThis is usually a permissions issue — check with your admin.`)
       loadCustomSubfolders(); loadRootFiles()
     } else {
       const f = drop.files.map(x => x.file)
@@ -1423,7 +1400,6 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     if (id) { moveFileToRoot(id); return }
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
-      const dropErrors = []
       const keyMap = {}
       for (const fp of drop.folders.sort()) {
         const parts = fp.split('/')
@@ -1438,15 +1414,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (error) { console.error('Upload failed:', error.message); dropErrors.push(file.name); continue }
-        const { error: dbErr } = await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
-        if (dbErr) {
-          console.error('DB insert failed:', dbErr.message)
-          dropErrors.push(file.name)
-          await supabase.storage.from('project-docs').remove([storagePath]).catch(() => {})
-        }
+        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
-      if (dropErrors.length) alert(`${dropErrors.length} file${dropErrors.length === 1 ? '' : 's'} could not be saved:\n\n${dropErrors.join('\n')}\n\nThis is usually a permissions issue — check with your admin.`)
       loadCustomSubfolders(); loadRootFiles()
     } else {
       const f = drop.files.map(x => x.file)
@@ -1646,18 +1615,25 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           {subfolders.map(sf => (
             <div key={sf.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}
               onDragOver={e => e.preventDefault()}>
-              <div onClick={() => toggleSub(sf.key)}
-                style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-              </div>
+              {sf.special !== 'photos' && (
+                <div onClick={() => toggleSub(sf.key)}
+                  style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                  {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                </div>
+              )}
+              {sf.special === 'photos' && <div style={{ width: 16, flexShrink: 0 }} />}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <SubfolderSection projectId={projectId} folder={folder} subfolder={sf}
-                  canManage={canManage} viewMode={viewMode} onPreview={openPreview}
-                  onReload={id => {
-                    if (id === '__folder_deleted__') loadCustomSubfolders()
-                    else loadRootFiles()
-                  }}
-                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
+                {sf.special === 'photos' ? (
+                  <PhotosSubfolderCard projectId={projectId} subfolder={sf} folder={folder} canManage={canManage} />
+                ) : (
+                  <SubfolderSection projectId={projectId} folder={folder} subfolder={sf}
+                    canManage={canManage} viewMode={viewMode} onPreview={openPreview}
+                    onReload={id => {
+                      if (id === '__folder_deleted__') loadCustomSubfolders()
+                      else loadRootFiles()
+                    }}
+                    depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
+                )}
               </div>
             </div>
           ))}
@@ -2007,3 +1983,59 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
     </div>
   )
 }
+
+// ── PhotosSubfolderCard ────────────────────────────────────────────────────
+// Renders the "12. Project Photos" entry inside Project Information.
+// Collapsible header that mirrors SubfolderSection's chrome — when expanded,
+// hosts the ProjectPhotos component (folder grid, Connect Telegram, etc).
+function PhotosSubfolderCard({ projectId, subfolder, folder }) {
+  const [open, setOpen] = useState(false)
+  const [photoCount, setPhotoCount] = useState(null)
+
+  // Quick count for the header — doesn't load thumbnails until expanded
+  useEffect(() => {
+    let cancelled = false
+    async function loadCount() {
+      const { count } = await supabase
+        .from('project_photos')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+      if (!cancelled) setPhotoCount(count || 0)
+    }
+    loadCount()
+    return () => { cancelled = true }
+  }, [projectId, open])
+
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+      borderRadius: 6,
+      overflow: 'hidden',
+      marginBottom: 4,
+    }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 12px',
+          cursor: 'pointer',
+          background: open ? 'var(--surface2)' : 'transparent',
+          borderBottom: open ? '1px solid var(--border)' : 'none',
+        }}>
+        <span style={{ fontSize: 13, transform: open ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', color: 'var(--text3)' }}>›</span>
+        <span style={{ fontSize: 14 }}>📷</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
+        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>
+          {photoCount === null ? '…' : `${photoCount} photo${photoCount === 1 ? '' : 's'}`}
+        </span>
+      </div>
+      {open && (
+        <div style={{ background: 'var(--bg, var(--surface))' }}>
+          <ProjectPhotos projectId={projectId} />
+        </div>
+      )}
+    </div>
+  )
+}
+
