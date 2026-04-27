@@ -180,10 +180,17 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       const versionLabel = activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'Working draft'
       doc.text(`${versionLabel} · Generated: ${new Date().toLocaleString('en-GB')}`, 15, 40)
 
+      // Build a versioned filename: '<Project> - Programme - v3 - 2026-04-27.pdf' or '... - draft - ...'
+      const verPart = activeVersion ? `v${activeVersion.version_number}` : 'draft'
+      const datePart = new Date().toISOString().slice(0, 10)
+      const rawFileName = `${projectName} - Programme - ${verPart} - ${datePart}.pdf`
+      // Strip filesystem-unsafe characters for both download and storage paths
+      const safeFileName = rawFileName.replace(/[\/\\<>:"|?*]+/g, '').replace(/\s+/g, ' ').trim() || 'Programme.pdf'
+
       if (flat.length === 0) {
         doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150)
         doc.text('No tasks in this programme yet.', pageW / 2, 80, { align: 'center' })
-        doc.save(`${projectName} - Programme.pdf`)
+        doc.save(safeFileName)
         return
       }
 
@@ -207,7 +214,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       const todayInRange = todayDt >= minDate && todayDt <= maxDate
       const todayXmm = todayInRange ? timelineX0 + diffDays(minDate, todayDt) * mmPerDay : null
 
-      // Draw header row (axis labels)
+      // Draw header row (axis labels) — zoom-aware: matches the screen view's day/week/month setting
       const drawAxis = (yTop) => {
         // Box around axis row
         doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.2)
@@ -217,21 +224,53 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         doc.line(timelineX0 - 4, yTop, timelineX0 - 4, yTop + headerH)
         doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(45, 45, 45)
         doc.text('Task', 17, yTop + 7.5)
-        // Month labels along the timeline
-        doc.setFontSize(7); doc.setTextColor(90, 90, 90)
-        let lastMonthX = -100
+        // Tick + label spacing per zoom level (mm of horizontal room each label needs to avoid overlap)
+        const minLabelGapMm = 8
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
+        let lastLabelX = -100
         for (let i = 0; i < totalD; i++) {
           const d = addDays(minDate, i)
-          if (d.getUTCDate() === 1) {
-            const x = timelineX0 + i * mmPerDay
-            // Tick line
-            doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1)
-            doc.line(x, yTop, x, yTop + headerH)
-            // Label, but only if there's room since last
-            if (x - lastMonthX > 14) {
-              doc.text(d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' }), x + 1, yTop + 7.5)
-              lastMonthX = x
+          const dow = d.getUTCDay()
+          const dayOfMonth = d.getUTCDate()
+          const x = timelineX0 + i * mmPerDay
+
+          // Decide whether THIS day is a tick under the active zoom
+          let isTick = false
+          let label = null
+          if (zoom === 'day') {
+            // Tick every day; label every day if there's room
+            isTick = true
+            label = String(dayOfMonth)
+            // Bold + month name on day-1 to give context
+            if (dayOfMonth === 1) {
+              label = d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', timeZone: 'UTC' })
             }
+          } else if (zoom === 'week') {
+            // Tick on every Monday (and the very first day, in case range starts mid-week)
+            if (dow === 1 || i === 0) {
+              isTick = true
+              label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+            }
+          } else {
+            // month — tick on 1st of each month
+            if (dayOfMonth === 1) {
+              isTick = true
+              label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+            }
+          }
+
+          if (!isTick) continue
+
+          // Draw the tick line
+          doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1)
+          doc.line(x, yTop, x, yTop + headerH)
+
+          // Draw the label only if there's room since the last label (avoids overlap when range is large)
+          if (label && (x - lastLabelX) > minLabelGapMm) {
+            doc.setDrawColor(220, 220, 220)  // keep tick colour
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
+            doc.text(label, x + 1, yTop + 7.5)
+            lastLabelX = x
           }
         }
       }
@@ -315,7 +354,34 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
       }
 
-      doc.save(`${projectName} - Programme.pdf`)
+      doc.save(safeFileName)
+
+      // Auto-save the same PDF into the project's '06. Project Programme' folder.
+      // Failures are swallowed quietly — the user already has the download in hand.
+      try {
+        const arrayBuffer = doc.output('arraybuffer')
+        const fileSize = arrayBuffer.byteLength
+        const storagePath = `projects/${projectId}/06-project-programme/${Date.now()}-${safeFileName}`
+        const blob = new Blob([arrayBuffer], { type: 'application/pdf' })
+        const { error: upErr } = await supabase.storage.from('project-docs').upload(storagePath, blob, {
+          contentType: 'application/pdf',
+          upsert: false,
+        })
+        if (upErr) {
+          console.warn('[Gantt] PDF auto-upload to storage failed:', upErr.message || upErr)
+        } else {
+          const { error: dbErr } = await supabase.from('project_doc_files').insert({
+            project_id: projectId,
+            folder_key: '06-project-programme',
+            file_name: safeFileName,
+            file_size: fileSize,
+            storage_path: storagePath,
+          })
+          if (dbErr) console.warn('[Gantt] PDF auto-upload DB insert failed:', dbErr.message || dbErr)
+        }
+      } catch (e) {
+        console.warn('[Gantt] PDF auto-upload threw:', e?.message || e)
+      }
     } catch (err) {
       console.error('[Gantt] export PDF failed:', err)
       alert('Export failed: ' + (err?.message || err))
