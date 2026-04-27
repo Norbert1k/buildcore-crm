@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
 import GanttEditor from './Gantt/GanttEditor'
 import ProgressReportEditor, { generateProgressReportPdf } from './ProgressReportEditor'
+import ProjectPhotos from './ProjectPhotos'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -24,6 +25,7 @@ const TEMPLATE_FOLDERS = [
       { key: 'planning', label: '09. Planning' },
       { key: 'utilities', label: '10. Utilities' },
       { key: 'meetings', label: '11. Meetings' },
+      { key: 'photos',   label: '12. Project Photos' },
     ]
   },
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
@@ -916,6 +918,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   }
 
   const isCustom = subfolder.custom === true
+  const isPhotos = subfolder.key === 'photos'
 
   return (
     <div style={{ marginBottom: 2 }}>
@@ -945,7 +948,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         }
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
         {!open && <CountBadge count={fileCount} />}
-        {!isCustom && canManage && (
+        {!isCustom && !isPhotos && canManage && (
           <button
             onClick={toggleSubfolderVisibility}
             disabled={togglingVisible}
@@ -971,7 +974,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
             {clientVisible ? 'Visible to client' : 'Hidden'}
           </button>
         )}
-        {canManage && (
+        {canManage && !isPhotos && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
             {!renaming && (
               <>
@@ -1015,8 +1018,12 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         </svg>
       </div>
       {open && (
-        <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
+        <div onDragOver={e => e.preventDefault()} onDrop={isPhotos ? undefined : onDrop}
           style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
+          {isPhotos ? (
+            <ProjectPhotos projectId={projectId} />
+          ) : (
+            <>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
             onMove={async (targetKey) => {
               for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey || subfolder.key }).eq('id', id)
@@ -1041,6 +1048,8 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
           ) : (
             <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage}
               onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles} />
+          )}
+            </>
           )}
         </div>
       )}
