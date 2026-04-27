@@ -82,11 +82,12 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       end_date: form.end_date || null,
     }
     let result
+    const oldStatus = editing ? project?.status : null
     if (editing) {
       result = await supabase.from('projects').update(payload).eq('id', project.id)
     } else {
       payload.created_by = profile?.id
-      result = await supabase.from('projects').insert(payload)
+      result = await supabase.from('projects').insert(payload).select('id').single()
     }
     setSaving(false)
     if (result.error) {
@@ -97,6 +98,18 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         setErrors({ _global: msg })
       }
       return
+    }
+    // Trigger 1: New project → auto-generate CSA file in 03. CSA folder
+    if (!editing && result.data?.id) {
+      supabase.functions
+        .invoke('generate-project-csa-file', { body: { project_id: result.data.id } })
+        .catch(err => console.warn('CSA generation failed:', err))
+    }
+    // Trigger 2: Status transitions to 'active' → snapshot CSA into Payment Application
+    if (editing && oldStatus !== 'active' && form.status === 'active' && project?.id) {
+      supabase.functions
+        .invoke('activate-project-pa-file', { body: { project_id: project.id } })
+        .catch(err => console.warn('PA generation failed:', err))
     }
     onSaved()
   }

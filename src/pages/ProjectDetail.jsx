@@ -11,6 +11,7 @@ import ProjectDocumentation from '../components/ProjectDocumentation'
 import CaseStudyEditor from '../components/CaseStudyEditor'
 import HSHandover from '../components/HSHandover'
 import SubcontractorDocs from '../components/SubcontractorDocs'
+import GeneratePAButton from '../components/GeneratePAButton'
 
 function calcDuration(start, end) {
   if (!start || !end) return null
@@ -407,7 +408,12 @@ export default function ProjectDetail() {
             </div>
 
           </div>
-          {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
+          {can('manage_projects') && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+              <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>
+              <GeneratePAButton project={project} onGenerated={load} />
+            </div>
+          )}
         </div>
       </div>
 
