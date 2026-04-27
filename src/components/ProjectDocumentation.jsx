@@ -697,6 +697,8 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   const [subLabel, setSubLabel] = useState(subfolder.label)
   const [fileCount, setFileCount] = useState(0)
   const [zipProgress, setZipProgress] = useState(null)
+  const [clientVisible, setClientVisible] = useState(false)
+  const [togglingVisible, setTogglingVisible] = useState(false)
 
   useEffect(() => { loadFileCount() }, [])
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
@@ -706,6 +708,45 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     loadFileCount()
     if (open) { loadFiles(); loadChildFolders() }
   }, [treeVersion])
+
+  // Template subfolders track per-(project, parent_folder, subfolder) visibility.
+  // Custom subfolders inherit from their parent template — no per-row toggle.
+  useEffect(() => {
+    if (subfolder.custom) return
+    let cancelled = false
+    async function loadVis() {
+      const { data } = await supabase.from('project_template_folder_visibility')
+        .select('client_visible')
+        .eq('project_id', projectId)
+        .eq('folder_key', folder.key)
+        .eq('subfolder_key', subfolder.key)
+        .maybeSingle()
+      if (!cancelled) setClientVisible(data?.client_visible || false)
+    }
+    loadVis()
+    return () => { cancelled = true }
+  }, [])
+
+  async function toggleSubfolderVisibility(e) {
+    if (e) e.stopPropagation()
+    if (togglingVisible || subfolder.custom) return
+    setTogglingVisible(true)
+    const newValue = !clientVisible
+    setClientVisible(newValue)  // optimistic
+    try {
+      const { error } = await supabase.from('project_template_folder_visibility').upsert({
+        project_id: projectId,
+        folder_key: folder.key,
+        subfolder_key: subfolder.key,
+        client_visible: newValue,
+      }, { onConflict: 'project_id,folder_key,subfolder_key' })
+      if (error) throw error
+    } catch (err) {
+      setClientVisible(!newValue)  // revert
+      alert('Could not update visibility: ' + err.message)
+    }
+    setTogglingVisible(false)
+  }
 
   async function loadFileCount() {
     const { count } = await supabase.from('project_doc_files').select('id', { count: 'exact', head: true })
@@ -904,6 +945,32 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         }
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
         {!open && <CountBadge count={fileCount} />}
+        {!isCustom && canManage && (
+          <button
+            onClick={toggleSubfolderVisibility}
+            disabled={togglingVisible}
+            title={clientVisible ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
+            style={{
+              fontSize: 10,
+              padding: '3px 8px',
+              borderRadius: 12,
+              border: '0.5px solid var(--border)',
+              background: clientVisible ? '#448a4020' : 'transparent',
+              color: clientVisible ? '#448a40' : 'var(--text3)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: clientVisible ? '#448a40' : 'var(--text3)',
+            }} />
+            {clientVisible ? 'Visible to client' : 'Hidden'}
+          </button>
+        )}
         {canManage && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
             {!renaming && (
@@ -1051,6 +1118,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         .select('client_visible')
         .eq('project_id', projectId)
         .eq('folder_key', folder.key)
+        .eq('subfolder_key', '')
         .maybeSingle()
       setClientVisible(data?.client_visible || false)
     }
@@ -1075,8 +1143,9 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           .upsert({
             project_id: projectId,
             folder_key: folder.key,
+            subfolder_key: '',
             client_visible: newValue,
-          }, { onConflict: 'project_id,folder_key' })
+          }, { onConflict: 'project_id,folder_key,subfolder_key' })
         if (error) throw error
       }
     } catch (e) {
