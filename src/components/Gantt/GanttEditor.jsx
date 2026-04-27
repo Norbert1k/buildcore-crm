@@ -159,27 +159,26 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         }
       } catch (e) { /* ignore */ }
 
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-      const pageW = doc.internal.pageSize.getWidth()   // 297mm
-      const pageH = doc.internal.pageSize.getHeight()  // 210mm
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' })
+      const pageW = doc.internal.pageSize.getWidth()   // 420mm
+      const pageH = doc.internal.pageSize.getHeight()  // 297mm
 
       const drawLetterhead = () => {
-        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) {} }
+        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 28, 8, 18, 18) } catch (e) {} }
         doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(45, 45, 45)
         doc.text('City Construction Group', 15, 16)
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90)
-        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
-        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
+        doc.text('One Canada Square · Canary Wharf · London E14 5AA · 0203 948 1930 · info@cltd.co.uk · www.cltd.co.uk', 15, 22)
         doc.setDrawColor(207, 207, 207); doc.setLineWidth(0.2)
-        doc.line(15, 40, pageW - 15, 40)
+        doc.line(15, 26, pageW - 15, 26)
       }
 
       drawLetterhead()
       doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(45, 45, 45)
-      doc.text(`Programme — ${projectName}`, 15, 50)
+      doc.text(`Programme — ${projectName}`, 15, 34)
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 100, 100)
       const versionLabel = activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'Working draft'
-      doc.text(`${versionLabel} · Generated: ${new Date().toLocaleString('en-GB')}`, 15, 55)
+      doc.text(`${versionLabel} · Generated: ${new Date().toLocaleString('en-GB')}`, 15, 40)
 
       if (flat.length === 0) {
         doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150)
@@ -190,12 +189,12 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
       // Layout: PDF table-list-with-bars approach.
       // Left column: task names (~70mm). Right: timeline drawn as vector bars.
-      const startY = 62
+      const startY = 46
       const bottomY = pageH - 14
-      const taskColW = 70  // mm, task name column
+      const taskColW = 80  // mm, task name column
       const timelineX0 = 15 + taskColW + 4
       const timelineW = pageW - timelineX0 - 15
-      const rowH = 6  // mm per task row
+      const rowH = 5.5  // mm per task row
       const headerH = 12
 
       // Compute date range for the bars
@@ -246,7 +245,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         if (cursorY + rowH > bottomY) {
           doc.addPage()
           drawLetterhead()
-          cursorY = 50
+          cursorY = 34
           drawAxis(cursorY)
           cursorY += headerH
         }
