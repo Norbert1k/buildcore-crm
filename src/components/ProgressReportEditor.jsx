@@ -92,6 +92,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
   const [report, setReport] = useState(null)
   const [photos, setPhotos] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -113,6 +114,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         if (rRes.error) throw rRes.error
         setReport(rRes.data)
         setPhotos(pRes.data || [])
+        setDirty(false)
       } else {
         // New report — pre-fill from latest previous report for this project (if any)
         const { data: prev } = await supabase.from('progress_reports').select('*')
@@ -155,12 +157,13 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           aob: prev?.aob || '',
         })
         setPhotos([])
+        setDirty(true)
       }
     } catch (e) { console.error('[ProgressReport] load error:', e); alert('Load failed: ' + e.message) }
     setLoading(false)
   }
 
-  function patch(field, value) { setReport(r => ({ ...r, [field]: value })) }
+  function patch(field, value) { setReport(r => ({ ...r, [field]: value })); setDirty(true) }
 
   async function save() {
     if (!report) return
@@ -180,6 +183,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         setReport(r => ({ ...r, id: savedId }))
       }
       if (onSaved) onSaved(savedId)
+      setDirty(false)
     } catch (e) {
       console.error('[ProgressReport] save error:', e)
       alert('Save failed: ' + e.message)
@@ -266,8 +270,8 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
             {report.id ? 'Editing existing report' : 'New report (not yet saved)'}
           </div>
         </div>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>
-          {saving ? 'Saving…' : (report.id ? 'Save changes' : 'Create report')}
+        <button className={'btn btn-sm' + (dirty ? ' btn-primary' : '')} onClick={save} disabled={saving || !dirty}>
+          {saving ? 'Saving…' : dirty ? (report.id ? 'Save changes' : 'Create report') : '✓ Saved'}
         </button>
         {report.id && (
           <button className="btn btn-sm" onClick={exportPDF} disabled={saving}>
