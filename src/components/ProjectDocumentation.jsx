@@ -4,7 +4,6 @@ import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
 import GanttEditor from './Gantt/GanttEditor'
 import ProgressReportEditor, { generateProgressReportPdf } from './ProgressReportEditor'
-import ProjectPhotos from './ProjectPhotos'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -25,7 +24,6 @@ const TEMPLATE_FOLDERS = [
       { key: 'planning', label: '09. Planning' },
       { key: 'utilities', label: '10. Utilities' },
       { key: 'meetings', label: '11. Meetings' },
-      { key: '12-project-photos', label: '12. Project Photos', special: 'photos' },
     ]
   },
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
@@ -1059,6 +1057,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [savingFolder, setSavingFolder] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
+  const [generatingPa, setGeneratingPa] = useState(false)
+  const [paError, setPaError] = useState('')
   const [files, setFiles] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [selectedSubs, setSelectedSubs] = useState(new Set())
@@ -1524,6 +1524,34 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   Open Live Gantt
                 </button>
               )}
+              {folder.key === '02-payment-application' && canManage && files.length === 0 && (
+                <button onClick={async (e) => {
+                  e.stopPropagation()
+                  if (generatingPa) return
+                  setGeneratingPa(true)
+                  setPaError('')
+                  try {
+                    const { data, error: fnErr } = await supabase.functions.invoke(
+                      'activate-project-pa-file',
+                      { body: { project_id: projectId } }
+                    )
+                    if (fnErr) throw fnErr
+                    if (data?.error) throw new Error(data.error)
+                    refreshTree?.()
+                    loadRootFiles?.()
+                  } catch (err) {
+                    setPaError(err.message || 'Failed to generate Payment Application')
+                  } finally {
+                    setGeneratingPa(false)
+                  }
+                }}
+                  disabled={generatingPa}
+                  style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#448a40', color: 'white', border: '0.5px solid #448a40' }}
+                  title="Snapshot the project's CSA file into a new Payment Application">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  {generatingPa ? 'Generating…' : 'Generate Payment Application'}
+                </button>
+              )}
               <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
                 Zip all
@@ -1615,25 +1643,18 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           {subfolders.map(sf => (
             <div key={sf.key} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}
               onDragOver={e => e.preventDefault()}>
-              {sf.special !== 'photos' && (
-                <div onClick={() => toggleSub(sf.key)}
-                  style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                  {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-                </div>
-              )}
-              {sf.special === 'photos' && <div style={{ width: 16, flexShrink: 0 }} />}
+              <div onClick={() => toggleSub(sf.key)}
+                style={{ width: 16, height: 16, borderRadius: 3, border: '1.5px solid ' + (selectedSubs.has(sf.key) ? 'var(--accent)' : 'rgba(255,255,255,0.25)'), background: selectedSubs.has(sf.key) ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                {sf.special === 'photos' ? (
-                  <PhotosSubfolderCard projectId={projectId} subfolder={sf} folder={folder} canManage={canManage} />
-                ) : (
-                  <SubfolderSection projectId={projectId} folder={folder} subfolder={sf}
-                    canManage={canManage} viewMode={viewMode} onPreview={openPreview}
-                    onReload={id => {
-                      if (id === '__folder_deleted__') loadCustomSubfolders()
-                      else loadRootFiles()
-                    }}
-                    depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
-                )}
+                <SubfolderSection projectId={projectId} folder={folder} subfolder={sf}
+                  canManage={canManage} viewMode={viewMode} onPreview={openPreview}
+                  onReload={id => {
+                    if (id === '__folder_deleted__') loadCustomSubfolders()
+                    else loadRootFiles()
+                  }}
+                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
               </div>
             </div>
           ))}
@@ -1983,59 +2004,3 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
     </div>
   )
 }
-
-// ── PhotosSubfolderCard ────────────────────────────────────────────────────
-// Renders the "12. Project Photos" entry inside Project Information.
-// Collapsible header that mirrors SubfolderSection's chrome — when expanded,
-// hosts the ProjectPhotos component (folder grid, Connect Telegram, etc).
-function PhotosSubfolderCard({ projectId, subfolder, folder }) {
-  const [open, setOpen] = useState(false)
-  const [photoCount, setPhotoCount] = useState(null)
-
-  // Quick count for the header — doesn't load thumbnails until expanded
-  useEffect(() => {
-    let cancelled = false
-    async function loadCount() {
-      const { count } = await supabase
-        .from('project_photos')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-      if (!cancelled) setPhotoCount(count || 0)
-    }
-    loadCount()
-    return () => { cancelled = true }
-  }, [projectId, open])
-
-  return (
-    <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 6,
-      overflow: 'hidden',
-      marginBottom: 4,
-    }}>
-      <div
-        onClick={() => setOpen(o => !o)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 12px',
-          cursor: 'pointer',
-          background: open ? 'var(--surface2)' : 'transparent',
-          borderBottom: open ? '1px solid var(--border)' : 'none',
-        }}>
-        <span style={{ fontSize: 13, transform: open ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', color: 'var(--text3)' }}>›</span>
-        <span style={{ fontSize: 14 }}>📷</span>
-        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{subfolder.label}</span>
-        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>
-          {photoCount === null ? '…' : `${photoCount} photo${photoCount === 1 ? '' : 's'}`}
-        </span>
-      </div>
-      {open && (
-        <div style={{ background: 'var(--bg, var(--surface))' }}>
-          <ProjectPhotos projectId={projectId} />
-        </div>
-      )}
-    </div>
-  )
-}
-
