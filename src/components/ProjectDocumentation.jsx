@@ -224,7 +224,7 @@ function safeName(s) {
 // live only in the TEMPLATE_FOLDERS constant — not in the database.
 async function buildFolderPathMap(projectId, rootKey) {
   const { data: allRows } = await supabase.from('project_doc_folders')
-    .select('folder_key, parent_key, label')
+    .select('folder_key, parent_key, label, client_visible')
     .eq('project_id', projectId)
   const rows = allRows || []
 
@@ -1005,6 +1005,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [progressReports, setProgressReports] = useState([])
   const [confirmDeleteReport, setConfirmDeleteReport] = useState(null)
   const [zipProgress, setZipProgress] = useState(null)
+  const [clientVisible, setClientVisible] = useState(false)
+  const [togglingVisible, setTogglingVisible] = useState(false)
   const [viewMode, setViewMode] = useState(() => {
     try { return localStorage.getItem('pdView_' + folder.key) || 'grid' } catch { return 'grid' }
   })
@@ -1026,12 +1028,59 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
 
   useEffect(() => { loadCustomSubfolders() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
+  useEffect(() => { loadClientVisible() }, [])
   // Re-fetch when any move happens anywhere in the tree (kills ghost copies)
   useEffect(() => {
     if (treeVersion === 0) return
     loadCustomSubfolders()
     if (open) loadRootFiles()
   }, [treeVersion])
+
+  async function loadClientVisible() {
+    // Look up the visibility flag for this folder. Templates may not have a row yet.
+    const { data } = await supabase.from('project_doc_folders')
+      .select('client_visible')
+      .eq('project_id', projectId)
+      .eq('folder_key', folder.key)
+      .maybeSingle()
+    setClientVisible(data?.client_visible || false)
+  }
+
+  async function toggleClientVisible() {
+    if (togglingVisible) return
+    setTogglingVisible(true)
+    const newValue = !clientVisible
+    setClientVisible(newValue)  // optimistic
+    try {
+      // Try update first (works for existing folders + custom folders)
+      const { data: existing } = await supabase.from('project_doc_folders')
+        .select('folder_key')
+        .eq('project_id', projectId)
+        .eq('folder_key', folder.key)
+        .maybeSingle()
+      if (existing) {
+        const { error } = await supabase.from('project_doc_folders')
+          .update({ client_visible: newValue })
+          .eq('project_id', projectId)
+          .eq('folder_key', folder.key)
+        if (error) throw error
+      } else {
+        // Template folder — insert a row so we can persist visibility
+        const { error } = await supabase.from('project_doc_folders').insert({
+          project_id: projectId,
+          folder_key: folder.key,
+          parent_key: null,
+          label: folder.label || folder.key,
+          client_visible: newValue,
+        })
+        if (error) throw error
+      }
+    } catch (e) {
+      setClientVisible(!newValue)  // revert
+      alert('Could not update visibility: ' + e.message)
+    }
+    setTogglingVisible(false)
+  }
 
   async function loadCustomSubfolders() {
     const { data } = await supabase.from('project_doc_folders').select('*')
@@ -1336,6 +1385,32 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+          {canManage && (
+            <button
+              onClick={e => { e.stopPropagation(); toggleClientVisible() }}
+              disabled={togglingVisible}
+              title={clientVisible ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
+              style={{
+                fontSize: 10,
+                padding: '3px 8px',
+                borderRadius: 12,
+                border: '0.5px solid var(--border)',
+                background: clientVisible ? '#448a4020' : 'transparent',
+                color: clientVisible ? '#448a40' : 'var(--text3)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: clientVisible ? '#448a40' : 'var(--text3)',
+              }} />
+              {clientVisible ? 'Visible to client' : 'Hidden'}
+            </button>
+          )}
           {showAddFolder ? (
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
