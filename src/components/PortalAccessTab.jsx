@@ -146,7 +146,7 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
 
       {/* Modals */}
       {showInvite && (
-        <InviteModal client={client} invitedBy={profile?.id} onClose={() => { setShowInvite(false); load() }} />
+        <InviteModal client={client} invitedBy={profile?.id} inviterName={profile?.full_name} onClose={() => { setShowInvite(false); load() }} />
       )}
 
       {showBranding && (
@@ -165,13 +165,15 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
 }
 
 // ─── Invite modal ─────────────────────────────────────────────
-function InviteModal({ client, invitedBy, onClose }) {
+function InviteModal({ client, invitedBy, inviterName, onClose }) {
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [role, setRole] = useState('viewer')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [emailSent, setEmailSent] = useState(false)
+  const [emailWarning, setEmailWarning] = useState('')
 
   async function submit(e) {
     e.preventDefault()
@@ -224,6 +226,25 @@ function InviteModal({ client, invitedBy, onClose }) {
       })
       if (cuErr) throw cuErr
 
+      // Send the branded invite email via the edge function. If sending fails
+      // we still consider the invite "created" — staff can fall back to
+      // emailing the portal URL manually.
+      try {
+        const { error: fnErr } = await supabase.functions.invoke('send-portal-invite', {
+          body: {
+            email: cleanEmail,
+            full_name: fullName.trim() || null,
+            client_id: client.id,
+            inviter_name: inviterName || null,
+          },
+        })
+        if (fnErr) throw fnErr
+        setEmailSent(true)
+      } catch (e) {
+        console.warn('Invite email send failed:', e)
+        setEmailWarning(e?.message || 'Email failed to send — please email the portal link manually.')
+      }
+
       setSuccess(true)
     } catch (e) {
       setError(e.message)
@@ -236,12 +257,30 @@ function InviteModal({ client, invitedBy, onClose }) {
       <div style={{ padding: 24, maxWidth: 440 }}>
         {success ? (
           <>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Invitation created</div>
-            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
-              Send <strong>{email}</strong> the portal URL: <code style={{ fontSize: 12, background: 'var(--surface2)', padding: '2px 6px', borderRadius: 3 }}>{PORTAL_URL}</code>
-              <br /><br />
-              On their first visit, they enter their email and click the magic link. Their account will be linked to {client.name} automatically.
-            </p>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+              {emailSent ? 'Invitation sent' : 'Invitation created'}
+            </div>
+            {emailSent ? (
+              <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
+                We&apos;ve emailed <strong>{email}</strong> a secure sign-in link from
+                <code style={{ fontSize: 12, background: 'var(--surface2)', padding: '2px 6px', borderRadius: 3, marginLeft: 4 }}>noreply@cltd.co.uk</code>.
+                <br /><br />
+                Their account will be linked to {client.name} automatically when they sign in.
+              </p>
+            ) : (
+              <>
+                {emailWarning && (
+                  <div style={{ fontSize: 12, color: '#854F0B', background: '#FAEEDA', border: '1px solid #FAC775', borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>
+                    Invitation saved, but the email didn&apos;t go out: {emailWarning}
+                  </div>
+                )}
+                <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
+                  Send <strong>{email}</strong> the portal URL: <code style={{ fontSize: 12, background: 'var(--surface2)', padding: '2px 6px', borderRadius: 3 }}>{PORTAL_URL}</code>
+                  <br /><br />
+                  On their first visit, they enter their email and click the magic link. Their account will be linked to {client.name} automatically.
+                </p>
+              </>
+            )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
             </div>
