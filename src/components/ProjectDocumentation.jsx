@@ -1037,13 +1037,23 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   }, [treeVersion])
 
   async function loadClientVisible() {
-    // Look up the visibility flag for this folder. Templates may not have a row yet.
-    const { data } = await supabase.from('project_doc_folders')
-      .select('client_visible')
-      .eq('project_id', projectId)
-      .eq('folder_key', folder.key)
-      .maybeSingle()
-    setClientVisible(data?.client_visible || false)
+    // Template folders use the project_template_folder_visibility table.
+    // Custom (DB-backed) folders use project_doc_folders.client_visible.
+    if (folder.custom) {
+      const { data } = await supabase.from('project_doc_folders')
+        .select('client_visible')
+        .eq('project_id', projectId)
+        .eq('folder_key', folder.key)
+        .maybeSingle()
+      setClientVisible(data?.client_visible || false)
+    } else {
+      const { data } = await supabase.from('project_template_folder_visibility')
+        .select('client_visible')
+        .eq('project_id', projectId)
+        .eq('folder_key', folder.key)
+        .maybeSingle()
+      setClientVisible(data?.client_visible || false)
+    }
   }
 
   async function toggleClientVisible() {
@@ -1052,27 +1062,21 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     const newValue = !clientVisible
     setClientVisible(newValue)  // optimistic
     try {
-      // Try update first (works for existing folders + custom folders)
-      const { data: existing } = await supabase.from('project_doc_folders')
-        .select('folder_key')
-        .eq('project_id', projectId)
-        .eq('folder_key', folder.key)
-        .maybeSingle()
-      if (existing) {
+      if (folder.custom) {
+        // Custom folder — update the existing project_doc_folders row
         const { error } = await supabase.from('project_doc_folders')
           .update({ client_visible: newValue })
           .eq('project_id', projectId)
           .eq('folder_key', folder.key)
         if (error) throw error
       } else {
-        // Template folder — insert a row so we can persist visibility
-        const { error } = await supabase.from('project_doc_folders').insert({
-          project_id: projectId,
-          folder_key: folder.key,
-          parent_key: null,
-          label: folder.label || folder.key,
-          client_visible: newValue,
-        })
+        // Template folder — upsert into project_template_folder_visibility
+        const { error } = await supabase.from('project_template_folder_visibility')
+          .upsert({
+            project_id: projectId,
+            folder_key: folder.key,
+            client_visible: newValue,
+          }, { onConflict: 'project_id,folder_key' })
         if (error) throw error
       }
     } catch (e) {
