@@ -100,10 +100,15 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       return
     }
     // Trigger 1: New project → auto-generate CSA file in 03. CSA folder
+    console.log('[CSA-DIAG] Reached trigger area. editing=', editing, 'result=', result)
     if (!editing && result.data?.id) {
+      console.log('[CSA-DIAG] Trigger condition passed. Calling generate-project-csa-file with project_id=', result.data.id)
       supabase.functions
         .invoke('generate-project-csa-file', { body: { project_id: result.data.id } })
-        .catch(err => console.warn('CSA generation failed:', err))
+        .then(res => console.log('[CSA-DIAG] Invoke returned:', res))
+        .catch(err => console.warn('[CSA-DIAG] CSA generation failed:', err))
+    } else {
+      console.log('[CSA-DIAG] Trigger SKIPPED. editing=', editing, 'result.data=', result.data)
     }
     // Trigger 2: Status transitions to 'active' → snapshot CSA into Payment Application
     if (editing && oldStatus !== 'active' && form.status === 'active' && project?.id) {
