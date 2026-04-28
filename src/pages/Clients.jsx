@@ -10,6 +10,18 @@ function initials(name) {
   return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 3)
 }
 
+// Convert a client name to a URL-safe slug. Examples: 'PMP Ltd' → 'pmp-ltd', 'D.F.L Developers' → 'd-f-l-developers'.
+// If the input is empty, returns 'client' as a fallback so the NOT NULL DB constraint is satisfied.
+function slugify(name) {
+  const s = String(name || '')
+    .toLowerCase()
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '') // strip accents
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+  return s || 'client'
+}
+
 function getDomain(website) {
   if (!website) return null
   try {
@@ -202,7 +214,8 @@ function AddClientModal({ onClose, onSaved }) {
   async function save() {
     if (!form.name.trim()) { setError('Client name is required'); return }
     setSaving(true)
-    const { error: err } = await supabase.from('clients').insert({ ...form, name: form.name.trim() })
+    const cleanName = form.name.trim()
+    const { error: err } = await supabase.from('clients').insert({ ...form, name: cleanName, slug: slugify(cleanName) })
     setSaving(false)
     if (err) { setError(err.message); return }
     onSaved()
