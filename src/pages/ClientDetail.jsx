@@ -11,6 +11,17 @@ function initials(name) {
   return name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 3)
 }
 
+// Convert a client name to a URL-safe slug. Mirrors the helper in Clients.jsx.
+function slugify(name) {
+  const s = String(name || '')
+    .toLowerCase()
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+  return s || 'client'
+}
+
 const AVATAR_COLORS = [
   { bg: '#448a4025', color: '#6dc468' },
   { bg: '#378ADD25', color: '#378ADD' },
@@ -266,7 +277,12 @@ function EditClientModal({ client, onClose, onSaved }) {
   function set(k, v) { setForm(f => ({ ...f, [k]: v })) }
   async function save() {
     setSaving(true)
-    await supabase.from('clients').update(form).eq('id', client.id)
+    const cleanName = (form.name || '').trim()
+    // Regenerate slug only if the name actually changed — avoids breaking existing URLs/bookmarks.
+    const payload = (cleanName && cleanName !== client.name)
+      ? { ...form, name: cleanName, slug: slugify(cleanName) }
+      : { ...form, name: cleanName }
+    await supabase.from('clients').update(payload).eq('id', client.id)
     setSaving(false)
     onSaved()
   }
