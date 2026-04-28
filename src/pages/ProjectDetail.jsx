@@ -159,6 +159,17 @@ export default function ProjectDetail() {
 
   useEffect(() => { load() }, [id])
 
+  // When project loads (or status changes), make sure the active tab is still
+  // visible — tender projects hide H&S Handover and Case Study, so if a user
+  // last viewed one of those tabs and the project is in tender stage, fall
+  // back to Documents to avoid a blank screen.
+  useEffect(() => {
+    if (project?.status === 'tender' && (activeTab === 'hs' || activeTab === 'casestudy')) {
+      setActiveTab('documents')
+      localStorage.setItem(_tabKey, 'documents')
+    }
+  }, [project?.status, activeTab, _tabKey])
+
   async function load() {
     setLoading(true)
     const [projRes, subsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
@@ -439,13 +450,13 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
         </div>
-        {can('view_hs_handover') && (
+        {can('view_hs_handover') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           H&S Handover
         </div>
         )}
-        {can('view_case_study') && (
+        {can('view_case_study') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => { setActiveTab('casestudy'); localStorage.setItem(_tabKey, 'casestudy') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Case Study
@@ -487,7 +498,7 @@ export default function ProjectDetail() {
 
 
 
-      {activeTab === 'casestudy' && can('view_case_study') && (
+      {activeTab === 'casestudy' && can('view_case_study') && project?.status !== 'tender' && (
         <CaseStudyPanel projectId={id} projectName={project?.project_name} canManage={can('manage_projects')} />
       )}
 
@@ -646,7 +657,7 @@ export default function ProjectDetail() {
       {activeTab === 'documents' && (
         <div>
           {/* Project Documentation folder system */}
-          <ProjectDocumentation projectId={id} projectName={project?.project_name} />
+          <ProjectDocumentation projectId={id} projectName={project?.project_name} projectStatus={project?.status} />
         </div>
       )}
 
@@ -765,7 +776,7 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
-      {activeTab === 'hs' && can('view_hs_handover') && (
+      {activeTab === 'hs' && can('view_hs_handover') && project?.status !== 'tender' && (
         <HSHandover projectId={id} projectName={project?.project_name} />
       )}
 
