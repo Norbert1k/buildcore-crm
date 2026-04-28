@@ -100,21 +100,41 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       return
     }
     // Trigger 1: New project → auto-generate CSA file in 03. CSA folder
-    console.warn('[CSA-DIAG] Reached trigger area. editing=', editing, 'result=', result)
     if (!editing && result.data?.id) {
-      console.warn('[CSA-DIAG] Trigger condition passed. Calling generate-project-csa-file with project_id=', result.data.id)
       supabase.functions
         .invoke('generate-project-csa-file', { body: { project_id: result.data.id } })
-        .then(res => console.warn('[CSA-DIAG] Invoke returned:', res))
-        .catch(err => console.warn('[CSA-DIAG] CSA generation failed:', err))
-    } else {
-      console.warn('[CSA-DIAG] Trigger SKIPPED. editing=', editing, 'result.data=', result.data)
+        .then(({ data, error }) => {
+          if (error) {
+            // FunctionsHttpError carries the response; try to read its body for the actual message
+            const ctx = error.context
+            if (ctx?.body) {
+              ctx.body.text?.().then((text) => console.warn('[CSA] generation failed:', error.message, '— body:', text))
+            } else {
+              console.warn('[CSA] generation failed:', error.message, error)
+            }
+          } else if (data?.success === false || data?.error) {
+            console.warn('[CSA] generation reported failure:', data)
+          }
+        })
+        .catch(err => console.warn('[CSA] generation threw:', err))
     }
     // Trigger 2: Status transitions to 'active' → snapshot CSA into Payment Application
     if (editing && oldStatus !== 'active' && form.status === 'active' && project?.id) {
       supabase.functions
         .invoke('activate-project-pa-file', { body: { project_id: project.id } })
-        .catch(err => console.warn('PA generation failed:', err))
+        .then(({ data, error }) => {
+          if (error) {
+            const ctx = error.context
+            if (ctx?.body) {
+              ctx.body.text?.().then((text) => console.warn('[PA] generation failed:', error.message, '— body:', text))
+            } else {
+              console.warn('[PA] generation failed:', error.message, error)
+            }
+          } else if (data?.success === false || data?.error) {
+            console.warn('[PA] generation reported failure:', data)
+          }
+        })
+        .catch(err => console.warn('[PA] generation threw:', err))
     }
     onSaved()
   }
