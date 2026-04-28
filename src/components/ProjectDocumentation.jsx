@@ -4,7 +4,6 @@ import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
 import GanttEditor from './Gantt/GanttEditor'
 import ProgressReportEditor, { generateProgressReportPdf } from './ProgressReportEditor'
-import ProjectPhotos from './ProjectPhotos'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -25,7 +24,6 @@ const TEMPLATE_FOLDERS = [
       { key: 'planning', label: '09. Planning' },
       { key: 'utilities', label: '10. Utilities' },
       { key: 'meetings', label: '11. Meetings' },
-      { key: 'photos',   label: '12. Project Photos' },
     ]
   },
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
@@ -918,7 +916,6 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   }
 
   const isCustom = subfolder.custom === true
-  const isPhotos = subfolder.key === 'photos'
 
   return (
     <div style={{ marginBottom: 2 }}>
@@ -948,7 +945,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         }
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
         {!open && <CountBadge count={fileCount} />}
-        {!isCustom && !isPhotos && canManage && (
+        {!isCustom && canManage && (
           <button
             onClick={toggleSubfolderVisibility}
             disabled={togglingVisible}
@@ -974,7 +971,7 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
             {clientVisible ? 'Visible to client' : 'Hidden'}
           </button>
         )}
-        {canManage && !isPhotos && (
+        {canManage && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
             {!renaming && (
               <>
@@ -1018,12 +1015,8 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
         </svg>
       </div>
       {open && (
-        <div onDragOver={e => e.preventDefault()} onDrop={isPhotos ? undefined : onDrop}
+        <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
           style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
-          {isPhotos ? (
-            <ProjectPhotos projectId={projectId} />
-          ) : (
-            <>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
             onMove={async (targetKey) => {
               for (const id of selected) await supabase.from('project_doc_files').update({ subfolder_key: targetKey || subfolder.key }).eq('id', id)
@@ -1048,8 +1041,6 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
           ) : (
             <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage}
               onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles} />
-          )}
-            </>
           )}
         </div>
       )}
@@ -1078,6 +1069,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [showGantt, setShowGantt] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatePreview, setGeneratePreview] = useState(null)
+  const [pendingGanttTasks, setPendingGanttTasks] = useState(null)
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -1737,9 +1729,9 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         <GanttEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
-          onClose={() => { setShowGantt(false); setGeneratePreview(null) }}
+          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null) }}
           canEdit={canManage}
-          initialTasks={generatePreview?._approved || null}
+          initialTasks={pendingGanttTasks}
         />
       )}
 
@@ -1750,7 +1742,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
             <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Reading your programme PDF…</div>
             <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 16 }}>
-              AI is extracting tasks, dates, and groups. This typically takes 10–30 seconds.
+              AI is extracting tasks, dates, and groups. Small PDFs take 10–30 seconds; larger or multi-page programmes can take up to 90 seconds.
             </div>
             <div style={{ display: 'inline-block', width: 24, height: 24, border: '3px solid var(--border)', borderTopColor: '#534AB7', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -1810,7 +1802,9 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   // Convert AI shape -> editor shape
                   const { tasksFromAiResponse } = await import('./Gantt/ganttUtils')
                   const editorTasks = tasksFromAiResponse(generatePreview.tasks)
-                  setGeneratePreview(prev => ({ ...prev, _approved: editorTasks }))
+                  // Hand the tasks to the Gantt editor and dismiss this preview modal.
+                  setPendingGanttTasks(editorTasks)
+                  setGeneratePreview(null)
                   setShowGantt(true)
                 }}>
                 Open in Gantt Editor →
