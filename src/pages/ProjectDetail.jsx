@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
+import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
@@ -121,6 +121,7 @@ export default function ProjectDetail() {
   const { can } = useAuth()
   const [project, setProject] = useState(null)
   const [subs, setSubs] = useState([])
+  const [docs, setDocs] = useState([])
   const [allSubs, setAllSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const _tabKey = 'tab:' + window.location.pathname
@@ -132,12 +133,8 @@ export default function ProjectDetail() {
   const [driveFolderId, setDriveFolderId] = useState(null)
   const [driveFolderName, setDriveFolderName] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
-  const [photos, setPhotos] = useState([])
   const [programmes, setProgrammes] = useState([])
   const [uploadingProgramme, setUploadingProgramme] = useState(false)
-  const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [photoCaption, setPhotoCaption] = useState('')
-  const [previewPhoto, setPreviewPhoto] = useState(null)
   const [showAssignSub, setShowAssignSub] = useState(false)
   const [showVariation, setShowVariation] = useState(null)
   const [variationForm, setVariationForm] = useState({ amount: '', notes: '' })
@@ -148,8 +145,10 @@ export default function ProjectDetail() {
   const [showEditAssign, setShowEditAssign] = useState(null)
   const [editAssignForm, setEditAssignForm] = useState({ trade_on_project: '', start_date: '', end_date: '', contract_value: '', status: 'active' })
   const [savingEditAssign, setSavingEditAssign] = useState(false)
+  const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
+  const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
   // EA state
   const [projectEAs, setProjectEAs] = useState([])
   const [allEAs, setAllEAs] = useState([])
@@ -163,20 +162,12 @@ export default function ProjectDetail() {
 
   useEffect(() => { load() }, [id])
 
-  // Tender projects only show Documents / Subcontractors / Design Team tabs.
-  // If a saved/active tab is now hidden, fall back to Documents.
-  useEffect(() => {
-    if (project?.status === 'tender' && (activeTab === 'hs' || activeTab === 'casestudy')) {
-      setActiveTab('documents')
-      localStorage.setItem(_tabKey, 'documents')
-    }
-  }, [project?.status])
-
   async function load() {
     setLoading(true)
-    const [projRes, subsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
+    const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
+      supabase.from('project_documents').select('*, subcontractors(company_name), profiles!project_documents_uploaded_by_fkey(full_name)').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
       supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
@@ -185,15 +176,13 @@ export default function ProjectDetail() {
     setDriveFolderId(projRes.data?.drive_folder_id || null)
     setDriveFolderName(projRes.data?.drive_folder_name || null)
     setSubs(subsRes.data || [])
+    setDocs(docsRes.data || [])
     setAllSubs(allSubsRes.data || [])
     setProjectEAs(eaRes.data || [])
     setAllEAs(allEARes.data || [])
     // Load subcontractor files
     const { data: sfData } = await supabase.from('project_sub_files').select('*').eq('project_id', id).order('created_at', { ascending: false })
     setSubFiles(sfData || [])
-    // Load project photos
-    const { data: photosData } = await supabase.from('project_photos').select('*').eq('project_id', id).order('created_at', { ascending: false })
-    setPhotos(photosData || [])
     const { data: progData } = await supabase.from('project_programmes').select('*').eq('project_id', id).order('created_at', { ascending: false })
     setProgrammes(progData || [])
     setLoading(false)
@@ -236,44 +225,6 @@ export default function ProjectDetail() {
       a.download = prog.file_name
       a.click()
     }
-  }
-
-  async function uploadPhoto(files) {
-    if (!files.length) return
-    setUploadingPhoto(true)
-    for (const file of files) {
-      const path = `projects/${id}/${Date.now()}-${file.name}`
-      const { error } = await supabase.storage.from('company-docs').upload(path, file)
-      if (!error) {
-        await supabase.from('project_photos').insert({
-          project_id: id,
-          storage_path: path,
-          file_name: file.name,
-          file_size: file.size,
-          caption: photoCaption || '',
-        })
-      }
-    }
-    setPhotoCaption('')
-    setUploadingPhoto(false)
-    const { data } = await supabase.from('project_photos').select('*').eq('project_id', id).order('created_at', { ascending: false })
-    setPhotos(data || [])
-  }
-
-  async function deletePhoto(photo) {
-    await supabase.storage.from('company-docs').remove([photo.storage_path])
-    await supabase.from('project_photos').delete().eq('id', photo.id)
-    setPhotos(p => p.filter(x => x.id !== photo.id))
-  }
-
-  async function getPhotoUrl(path) {
-    const { data } = await supabase.storage.from('company-docs').createSignedUrl(path, 3600)
-    return data?.signedUrl
-  }
-
-  async function openPhotoPreview(photo) {
-    const url = await getPhotoUrl(photo.storage_path)
-    setPreviewPhoto({ ...photo, url })
   }
 
   async function saveVariation() {
@@ -337,6 +288,13 @@ export default function ProjectDetail() {
   async function removeSub(psId) {
     await supabase.from('project_subcontractors').delete().eq('id', psId)
     setConfirmRemove(null)
+    load()
+  }
+
+  async function addDoc() {
+    await supabase.from('project_documents').insert({ project_id: id, ...docForm })
+    setShowAddDoc(false)
+    setDocForm({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
     load()
   }
 
@@ -493,13 +451,13 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
         </div>
-        {can('view_hs_handover') && project?.status !== 'tender' && (
+        {can('view_hs_handover') && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           H&S Handover
         </div>
         )}
-        {can('view_case_study') && project?.status !== 'tender' && (
+        {can('view_case_study') && (
         <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => { setActiveTab('casestudy'); localStorage.setItem(_tabKey, 'casestudy') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           Case Study
@@ -700,7 +658,56 @@ export default function ProjectDetail() {
       {activeTab === 'documents' && (
         <div>
           {/* Project Documentation folder system */}
-          <ProjectDocumentation projectId={id} projectName={project?.project_name} projectStatus={project?.status} />
+          <ProjectDocumentation projectId={id} projectName={project?.project_name} />
+
+          {/* Divider */}
+          <div style={{ margin: '24px 0', borderTop: '1px solid var(--border)' }} />
+
+          {/* RAMS / Certs / project-linked docs */}
+          <div className="section-header">
+            <div className="section-title">RAMS & Compliance Documents</div>
+            {can('manage_documents') && <button className="btn btn-primary btn-sm" onClick={() => setShowAddDoc(true)}><IconPlus size={13}/> Add Document</button>}
+          </div>
+          {docs.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No project documents uploaded yet.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Document</th><th>Type</th><th>Subcontractor</th><th>Expiry</th><th>Status</th><th>Approved</th></tr></thead>
+                <tbody>
+                  {docs.map(d => {
+                    const info = docStatusInfo(d.expiry_date)
+                    return (
+                      <tr key={d.id}>
+                        <td style={{ fontWeight: 500 }}>{d.document_name}</td>
+                        <td className="td-muted">{DOCUMENT_TYPES[d.document_type] || d.document_type}</td>
+                        <td>{d.subcontractors?.company_name || '—'}</td>
+                        <td className="td-muted">{formatDate(d.expiry_date)}</td>
+                        <td>{info && <Pill cls={info.cls}>{info.label}</Pill>}</td>
+                        <td>{d.approved ? <Pill cls="pill-green">Approved</Pill> : <Pill cls="pill-gray">Pending</Pill>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                {subs.length > 1 && (() => {
+                  const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
+                  const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
+                  const totalAll = totalOrder + totalVar
+                  return (
+                    <tfoot>
+                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
+                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>Total</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{formatCurrency(totalOrder)}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--amber)' }}>{totalVar > 0 ? '+' + formatCurrency(totalVar) : '—'}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--green)' }}>{formatCurrency(totalAll)}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  )
+                })()}
+              </table>
+            </div>
+          )}
         </div>
       )}
 
@@ -842,6 +849,17 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
+      <Modal open={showAddDoc} onClose={() => setShowAddDoc(false)} title="Add Project Document" size="sm"
+        footer={<><button className="btn" onClick={() => setShowAddDoc(false)}>Cancel</button><button className="btn btn-primary" onClick={addDoc}>Save</button></>}>
+        <div className="form-grid">
+          <div className="full"><Field label="Document Name *"><input value={docForm.document_name} onChange={e => setDocForm(f => ({ ...f, document_name: e.target.value }))} placeholder="e.g. RAMS for groundworks" /></Field></div>
+          <div className="full"><Field label="Document Type"><select value={docForm.document_type} onChange={e => setDocForm(f => ({ ...f, document_type: e.target.value }))}>{Object.entries(DOCUMENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field></div>
+          <div className="full"><Field label="Linked Subcontractor"><select value={docForm.subcontractor_id} onChange={e => setDocForm(f => ({ ...f, subcontractor_id: e.target.value || null }))}><option value="">None (project-wide)</option>{subs.map(ps => <option key={ps.id} value={ps.subcontractors?.id}>{ps.subcontractors?.company_name}</option>)}</select></Field></div>
+          <Field label="Expiry Date"><input type="date" value={docForm.expiry_date} onChange={e => setDocForm(f => ({ ...f, expiry_date: e.target.value }))} /></Field>
+          <div className="full"><Field label="Notes"><input value={docForm.notes} onChange={e => setDocForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></Field></div>
+        </div>
+      </Modal>
+
       <ConfirmDialog open={!!confirmRemove} onClose={() => setConfirmRemove(null)} onConfirm={() => removeSub(confirmRemove)} title="Remove subcontractor" message="Remove this subcontractor from the project? Their profile and documents are not affected." danger />
 
       {/* Assign EA Modal */}
@@ -865,37 +883,6 @@ export default function ProjectDetail() {
     </div>
   )
 }
-
-// ── Photo Card Component ─────────────────────────────────────
-function PhotoCard({ photo, onPreview, onDelete, canDelete }) {
-  const [url, setUrl] = useState(null)
-
-  useEffect(() => {
-    supabase.storage.from('company-docs').createSignedUrl(photo.storage_path, 3600)
-      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
-  }, [photo.storage_path])
-
-  return (
-    <div style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', background: 'var(--surface)' }}>
-      <div style={{ height: 160, background: 'var(--surface2)', overflow: 'hidden', cursor: 'pointer', position: 'relative' }} onClick={onPreview}>
-        {url ? (
-          <img src={url} alt={photo.caption || photo.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)' }}>Loading...</div>
-        )}
-      </div>
-      <div style={{ padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <div style={{ flex: 1, fontSize: 12, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {photo.caption || photo.file_name}
-        </div>
-        {canDelete && (
-          <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '2px 6px', flexShrink: 0 }} onClick={onDelete}>✕</button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 
 // ── Case Study Panel ─────────────────────────────────────────
 // Lightweight wrapper shown in the Case Study tab. Detects if a case
