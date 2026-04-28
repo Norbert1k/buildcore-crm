@@ -97,6 +97,45 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
     setShowVersionsMenu(false)
   }
 
+  async function deleteVersion(versionId) {
+    // Safety rail: keep at least one version
+    if (versions.length <= 1) {
+      alert("Can't delete the only saved version.")
+      return
+    }
+    const v = versions.find(x => x.id === versionId)
+    if (!v) return
+    if (!window.confirm(`Permanently delete Version ${v.version_number}? This cannot be undone.`)) return
+    try {
+      const { error } = await supabase.from('programme_versions').delete().eq('id', versionId)
+      if (error) throw error
+      const remaining = versions.filter(x => x.id !== versionId)
+      setVersions(remaining)
+      // If the deleted version was the active one, auto-load the next most recent
+      if (activeVersion?.id === versionId) {
+        const next = remaining[0] // versions are sorted DESC by version_number
+        if (next) {
+          // Reuse loadVersion logic but skip the dirty-check (we just deleted, so 'dirty' state is irrelevant)
+          setLoading(true)
+          const { data } = await supabase.from('programme_versions').select('*').eq('id', next.id).single()
+          if (data) {
+            setActiveVersion(next)
+            setTasks(data.tasks || [])
+            setOriginalTasks(data.tasks || [])
+            setSelectedTaskId(null)
+          }
+          setLoading(false)
+        } else {
+          // No remaining versions — fall back to working-draft mode
+          setActiveVersion(null)
+        }
+      }
+    } catch (err) {
+      console.error('[Gantt] delete version failed:', err)
+      alert('Delete failed: ' + (err?.message || err))
+    }
+  }
+
   async function saveAsNewVersion() {
     if (!programme) return
     setSaving(true)
@@ -535,10 +574,21 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
               {versions.length === 0 && <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>No versions saved yet.</div>}
               {versions.map(v => (
                 <div key={v.id} onClick={() => loadVersion(v.id)}
-                  style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid var(--border)', background: activeVersion?.id === v.id ? 'var(--surface2)' : undefined }}>
-                  <div style={{ fontSize: 12, fontWeight: 600 }}>Version {v.version_number}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>{fmtDateUK(v.created_at)} · {v.profiles?.full_name || 'Unknown'}</div>
-                  {v.notes && <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, fontStyle: 'italic' }}>"{v.notes}"</div>}
+                  style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid var(--border)', background: activeVersion?.id === v.id ? 'var(--surface2)' : undefined, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>Version {v.version_number}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text3)' }}>{fmtDateUK(v.created_at)} · {v.profiles?.full_name || 'Unknown'}</div>
+                    {v.notes && <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, fontStyle: 'italic' }}>"{v.notes}"</div>}
+                  </div>
+                  {canEdit && versions.length > 1 && (
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteVersion(v.id) }}
+                      title={`Delete Version ${v.version_number}`}
+                      style={{ flexShrink: 0, background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: '2px 6px', borderRadius: 4 }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--danger-bg, #ffe5e5)'; e.currentTarget.style.color = 'var(--danger, #d33)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text3)' }}
+                    >×</button>
+                  )}
                 </div>
               ))}
             </div>
