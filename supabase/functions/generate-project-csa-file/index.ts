@@ -17,7 +17,7 @@ import JSZip from 'https://esm.sh/jszip@3.10.1'
 
 const STAFF_ROLES = ['admin', 'project_manager', 'operations_manager']
 const MASTER_BUCKET = 'company-docs'
-const MASTER_PATH = 'templates/CCG_CSA_Master.xlsx'
+const MASTER_PATH = 'templates/CSA_APPLICATION_TEMPLATE.xlsx'
 const TARGET_BUCKET = 'project-docs'
 const TARGET_FOLDER_KEY = '00-project-information'
 const TARGET_SUBFOLDER_KEY = 'csa'
@@ -127,20 +127,35 @@ serve(async (req) => {
     }
     const masterBytes = new Uint8Array(await masterBlob.arrayBuffer())
 
-    // 5. Unzip, replace placeholders, re-zip
+    // 5. Unzip, replace placeholders in sharedStrings.xml, re-zip
+    // The new template stores text in xl/sharedStrings.xml (not inline in sheet1.xml).
+    // Placeholders to replace:
+    //   "[PROJECT NAME] - "  → "{projectName} - "  (preserves the " - " separator before Ref)
+    //   "Ref: xxxx-xxx"      → "Ref: {projectRef}"
+    //   "CSA No: "           → "CSA No: 1"         (sequential — only one CSA per project)
     const zip = await JSZip.loadAsync(masterBytes)
-    const sheetEntry = zip.file('xl/worksheets/sheet1.xml')
-    if (!sheetEntry) throw new Error('Master template missing sheet1.xml')
+    const stringsEntry = zip.file('xl/sharedStrings.xml')
+    if (!stringsEntry) throw new Error('Master template missing sharedStrings.xml')
 
-    let sheetXml: string = await sheetEntry.async('string')
+    let stringsXml: string = await stringsEntry.async('string')
     const safeName = escapeXml(projectName)
-    const safeRef = escapeXml(projectRef || '____')
+    const safeRef = escapeXml(projectRef || 'xxxx-xxx')
 
-    sheetXml = sheetXml
-      .replaceAll('<is><t>[Project Name]</t></is>', `<is><t>${safeName}</t></is>`)
-      .replaceAll('<is><t>Ref: ____</t></is>', `<is><t>Ref: ${safeRef}</t></is>`)
+    stringsXml = stringsXml
+      .replace(
+        /<t xml:space="preserve">\[PROJECT NAME\] - <\/t>/g,
+        `<t xml:space="preserve">${safeName} - </t>`,
+      )
+      .replace(
+        /<t>Ref: xxxx-xxx<\/t>/g,
+        `<t>Ref: ${safeRef}</t>`,
+      )
+      .replace(
+        /<t xml:space="preserve">CSA No: <\/t>/g,
+        `<t xml:space="preserve">CSA No: 1</t>`,
+      )
 
-    zip.file('xl/worksheets/sheet1.xml', sheetXml)
+    zip.file('xl/sharedStrings.xml', stringsXml)
     const outBytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' })
 
     // 6. Upload to project storage
