@@ -174,7 +174,7 @@ export default function ProjectDetail() {
     setLoading(true)
     const [projRes, subsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
-      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
+      supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name)').eq('project_id', id),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
       supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
@@ -282,6 +282,170 @@ export default function ProjectDetail() {
     setSavingEditAssign(false)
     setShowEditAssign(null)
     load()
+  }
+
+  // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
+  // Landscape A4, single 5-column table, with company letterhead + logo on every page.
+  async function exportDirectoryPDF(category) {
+    console.log('[exportDirectoryPDF] clicked', category)
+    try {
+      const isDesignTeam = category === 'design_team'
+      const title = isDesignTeam ? 'Project Directory' : 'Packages Procured'
+
+      // Filter assigned companies for this category
+      const catSubs = subs.filter(ps => {
+        const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'
+        return c === category
+      })
+
+      // Build entries. EAs always appear first (pinned), then alphabetical subs/design team.
+      const eaEntries = []
+      const subEntries = []
+      if (isDesignTeam) {
+        for (const pea of (projectEAs || [])) {
+          const ea = pea.employer_agents || {}
+          eaEntries.push({
+            role: "Employer\u2019s Agent",
+            company: ea.company_name || '',
+            contact: ea.contact_name || '',
+            phone: ea.phone || '',
+            email: ea.email || '',
+          })
+        }
+      }
+      for (const ps of catSubs) {
+        const s = ps.subcontractors || {}
+        subEntries.push({
+          role: s.trade || ps.trade_on_project || '',
+          company: s.company_name || '',
+          contact: s.contact_name || '',
+          phone: s.phone || '',
+          email: s.email || '',
+        })
+      }
+      // Sort EAs and subs each alphabetically by company name (case-insensitive),
+      // then combine: EAs always come first in the final list.
+      const alphaSort = (a, b) => String(a.company).localeCompare(String(b.company), undefined, { sensitivity: 'base', numeric: true })
+      eaEntries.sort(alphaSort)
+      subEntries.sort(alphaSort)
+      const entries = [...eaEntries, ...subEntries]
+      console.log('[exportDirectoryPDF] entries:', entries.length, '(EAs:', eaEntries.length, ')')
+
+      // Load jsPDF + autoTable from CDN
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        const s = document.createElement('script'); s.src = src
+        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load ' + src))
+        document.head.appendChild(s)
+      })
+      if (!window.jspdf) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
+      }
+      const { jsPDF } = window.jspdf
+
+      // Load logo as base64 data URL (from /cltd-logo.jpg in public folder)
+      let logoDataUrl = null
+      try {
+        const resp = await fetch('/cltd-logo.jpg')
+        if (resp.ok) {
+          const blob = await resp.blob()
+          logoDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result)
+            reader.readAsDataURL(blob)
+          })
+        }
+      } catch (e) { console.warn('[exportDirectoryPDF] logo load failed:', e) }
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()   // 297mm
+      const pageH = doc.internal.pageSize.getHeight()  // 210mm
+
+      // Draw letterhead on every page via didDrawPage hook
+      const drawLetterhead = () => {
+        // Logo top right (~28 x 28mm, keeps aspect ratio)
+        if (logoDataUrl) {
+          try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) { console.warn('addImage failed', e) }
+        }
+
+        // Company name top left (bold, 16pt)
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(14)
+        doc.setTextColor(45, 45, 45)
+        doc.text('City Construction Group', 15, 16)
+
+        // Address line (7.5pt grey)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7.5)
+        doc.setTextColor(90, 90, 90)
+        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
+        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
+
+        // Thin divider under letterhead — below the logo which ends at ~y=36
+        doc.setDrawColor(207, 207, 207)
+        doc.setLineWidth(0.2)
+        doc.line(15, 40, pageW - 15, 40)
+      }
+
+      // Initial letterhead + title
+      drawLetterhead()
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(16)
+      doc.setTextColor(45, 45, 45)
+      doc.text(title, 15, 50)
+
+      if (entries.length === 0) {
+        doc.setFont('helvetica', 'italic')
+        doc.setFontSize(11)
+        doc.setTextColor(150, 150, 150)
+        doc.text(isDesignTeam ? 'No design team members assigned to this project yet.' : 'No subcontractors assigned to this project yet.', pageW / 2, 70, { align: 'center' })
+      } else {
+        const body = entries.map(e => [e.role, e.company, e.contact, e.phone, e.email])
+        doc.autoTable({
+          startY: 56,
+          head: [['Role', 'Company', 'Contact Name', 'Telephone', 'Email']],
+          body,
+          theme: 'plain',
+          styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 3.5, textColor: [45, 45, 45], lineWidth: 0, overflow: 'linebreak' },
+          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: { top: 2, bottom: 2, left: 4, right: 4 }, minCellHeight: 7 },
+          alternateRowStyles: { fillColor: [249, 249, 249] },
+          columnStyles: {
+            0: { cellWidth: 53 },  // Role
+            1: { cellWidth: 56 },  // Company
+            2: { cellWidth: 46 },  // Contact
+            3: { cellWidth: 45 },  // Telephone
+            4: { cellWidth: 'auto' }, // Email
+          },
+          margin: { left: 15, right: 15, top: 46 },
+          didDrawPage: (data) => {
+            // On any new page, re-draw the letterhead
+            if (data.pageNumber > 1) {
+              drawLetterhead()
+            }
+          },
+        })
+      }
+
+      // Footer on every page
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(160, 160, 160)
+        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
+        doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
+      }
+
+      const filename = `${project?.project_name || 'Project'} - ${title}.pdf`
+      doc.save(filename)
+      console.log('[exportDirectoryPDF] saved:', filename)
+    } catch (err) {
+      console.error('[exportDirectoryPDF] error:', err)
+      alert('PDF export failed: ' + (err?.message || err))
+    }
   }
 
   async function assignSub() {
@@ -517,6 +681,16 @@ export default function ProjectDetail() {
           <div className="section-header">
             <div className="section-title">Assigned {catLabel}</div>
             <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-sm" onClick={() => exportDirectoryPDF(categoryKey)}
+                disabled={catSubs.length === 0 && (!isDesignTeam || (projectEAs || []).length === 0)}
+                title={catSubs.length === 0 && (!isDesignTeam || (projectEAs || []).length === 0) ? 'Nothing to export yet' : 'Export as PDF'}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                {isDesignTeam ? 'Export Project Directory PDF' : 'Export Packages Procured PDF'}
+              </button>
               {(can('manage_projects') || can('manage_subcontractors')) && (
                 <button className="btn btn-primary btn-sm" onClick={() => { setAssignForm(f => ({ ...f, category: categoryKey })); setShowAssignSub(true) }}>
                   <IconPlus size={13} /> Assign {catLabel === 'Subcontractors' ? 'Subcontractor' : 'Design Team'}
