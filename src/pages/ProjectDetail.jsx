@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, DOCUMENT_TYPES, formatDate, formatCurrency, docStatusInfo } from '../lib/utils'
+import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import GoogleDriveBrowser from '../components/GoogleDrivePicker'
@@ -121,7 +121,6 @@ export default function ProjectDetail() {
   const { can } = useAuth()
   const [project, setProject] = useState(null)
   const [subs, setSubs] = useState([])
-  const [docs, setDocs] = useState([])
   const [allSubs, setAllSubs] = useState([])
   const [loading, setLoading] = useState(true)
   const _tabKey = 'tab:' + window.location.pathname
@@ -145,10 +144,8 @@ export default function ProjectDetail() {
   const [showEditAssign, setShowEditAssign] = useState(null)
   const [editAssignForm, setEditAssignForm] = useState({ trade_on_project: '', start_date: '', end_date: '', contract_value: '', status: 'active' })
   const [savingEditAssign, setSavingEditAssign] = useState(false)
-  const [showAddDoc, setShowAddDoc] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
-  const [docForm, setDocForm] = useState({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
   // EA state
   const [projectEAs, setProjectEAs] = useState([])
   const [allEAs, setAllEAs] = useState([])
@@ -164,10 +161,9 @@ export default function ProjectDetail() {
 
   async function load() {
     setLoading(true)
-    const [projRes, subsRes, docsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
+    const [projRes, subsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone)').eq('project_id', id),
-      supabase.from('project_documents').select('*, subcontractors(company_name), profiles!project_documents_uploaded_by_fkey(full_name)').eq('project_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
       supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
@@ -176,7 +172,6 @@ export default function ProjectDetail() {
     setDriveFolderId(projRes.data?.drive_folder_id || null)
     setDriveFolderName(projRes.data?.drive_folder_name || null)
     setSubs(subsRes.data || [])
-    setDocs(docsRes.data || [])
     setAllSubs(allSubsRes.data || [])
     setProjectEAs(eaRes.data || [])
     setAllEAs(allEARes.data || [])
@@ -288,13 +283,6 @@ export default function ProjectDetail() {
   async function removeSub(psId) {
     await supabase.from('project_subcontractors').delete().eq('id', psId)
     setConfirmRemove(null)
-    load()
-  }
-
-  async function addDoc() {
-    await supabase.from('project_documents').insert({ project_id: id, ...docForm })
-    setShowAddDoc(false)
-    setDocForm({ document_name: '', document_type: 'rams', expiry_date: '', notes: '', subcontractor_id: '' })
     load()
   }
 
@@ -659,55 +647,6 @@ export default function ProjectDetail() {
         <div>
           {/* Project Documentation folder system */}
           <ProjectDocumentation projectId={id} projectName={project?.project_name} />
-
-          {/* Divider */}
-          <div style={{ margin: '24px 0', borderTop: '1px solid var(--border)' }} />
-
-          {/* RAMS / Certs / project-linked docs */}
-          <div className="section-header">
-            <div className="section-title">RAMS & Compliance Documents</div>
-            {can('manage_documents') && <button className="btn btn-primary btn-sm" onClick={() => setShowAddDoc(true)}><IconPlus size={13}/> Add Document</button>}
-          </div>
-          {docs.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No project documents uploaded yet.</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead><tr><th>Document</th><th>Type</th><th>Subcontractor</th><th>Expiry</th><th>Status</th><th>Approved</th></tr></thead>
-                <tbody>
-                  {docs.map(d => {
-                    const info = docStatusInfo(d.expiry_date)
-                    return (
-                      <tr key={d.id}>
-                        <td style={{ fontWeight: 500 }}>{d.document_name}</td>
-                        <td className="td-muted">{DOCUMENT_TYPES[d.document_type] || d.document_type}</td>
-                        <td>{d.subcontractors?.company_name || '—'}</td>
-                        <td className="td-muted">{formatDate(d.expiry_date)}</td>
-                        <td>{info && <Pill cls={info.cls}>{info.label}</Pill>}</td>
-                        <td>{d.approved ? <Pill cls="pill-green">Approved</Pill> : <Pill cls="pill-gray">Pending</Pill>}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                {subs.length > 1 && (() => {
-                  const totalOrder = subs.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
-                  const totalVar = subs.reduce((s, ps) => s + (parseFloat(ps.variation_amount)||0), 0)
-                  const totalAll = totalOrder + totalVar
-                  return (
-                    <tfoot>
-                      <tr style={{ borderTop: '2px solid var(--border)', background: 'var(--surface2)' }}>
-                        <td colSpan={4} style={{ padding: '8px 12px', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>Total</td>
-                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{formatCurrency(totalOrder)}</td>
-                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--amber)' }}>{totalVar > 0 ? '+' + formatCurrency(totalVar) : '—'}</td>
-                        <td style={{ padding: '8px 12px', fontWeight: 700, color: 'var(--green)' }}>{formatCurrency(totalAll)}</td>
-                        <td colSpan={2}></td>
-                      </tr>
-                    </tfoot>
-                  )
-                })()}
-              </table>
-            </div>
-          )}
         </div>
       )}
 
@@ -846,17 +785,6 @@ export default function ProjectDetail() {
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
           <div className="full"><Field label="Order Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" /></Field></div>
-        </div>
-      </Modal>
-
-      <Modal open={showAddDoc} onClose={() => setShowAddDoc(false)} title="Add Project Document" size="sm"
-        footer={<><button className="btn" onClick={() => setShowAddDoc(false)}>Cancel</button><button className="btn btn-primary" onClick={addDoc}>Save</button></>}>
-        <div className="form-grid">
-          <div className="full"><Field label="Document Name *"><input value={docForm.document_name} onChange={e => setDocForm(f => ({ ...f, document_name: e.target.value }))} placeholder="e.g. RAMS for groundworks" /></Field></div>
-          <div className="full"><Field label="Document Type"><select value={docForm.document_type} onChange={e => setDocForm(f => ({ ...f, document_type: e.target.value }))}>{Object.entries(DOCUMENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field></div>
-          <div className="full"><Field label="Linked Subcontractor"><select value={docForm.subcontractor_id} onChange={e => setDocForm(f => ({ ...f, subcontractor_id: e.target.value || null }))}><option value="">None (project-wide)</option>{subs.map(ps => <option key={ps.id} value={ps.subcontractors?.id}>{ps.subcontractors?.company_name}</option>)}</select></Field></div>
-          <Field label="Expiry Date"><input type="date" value={docForm.expiry_date} onChange={e => setDocForm(f => ({ ...f, expiry_date: e.target.value }))} /></Field>
-          <div className="full"><Field label="Notes"><input value={docForm.notes} onChange={e => setDocForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" /></Field></div>
         </div>
       </Modal>
 
