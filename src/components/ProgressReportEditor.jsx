@@ -676,7 +676,14 @@ export async function generateProgressReportPdf(report, photos, projectName) {
       // ─ Letterhead drawn on every page after the cover ─
       // 28mm logo standard (matches TaskTracker, Project Directory/Procurement export).
       const drawLetterhead = () => {
-        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) {} }
+        if (logoDataUrl) {
+          try {
+            const p = doc.getImageProperties(logoDataUrl)
+            const h = 28
+            const w = (p.width / p.height) * h
+            doc.addImage(logoDataUrl, 'JPEG', pageW - 12 - w, 8, w, h)
+          } catch (e) {}
+        }
         doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(45, 45, 45)
         doc.text('City Construction Group', 15, 16)
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90)
@@ -691,7 +698,14 @@ export async function generateProgressReportPdf(report, photos, projectName) {
       const { data: projData } = await supabase.from('projects').select('project_name, project_ref, address, postcode, town').eq('id', report.project_id).maybeSingle()
 
       if (logoDataUrl) {
-        try { doc.addImage(logoDataUrl, 'JPEG', pageW / 2 - 40, 60, 80, 80) } catch (e) {}
+        try {
+          // Cover logo: fix width at 80mm so the visual footprint matches the
+          // previous square layout; height auto-derives from source aspect.
+          const p = doc.getImageProperties(logoDataUrl)
+          const w = 80
+          const h = (p.height / p.width) * w
+          doc.addImage(logoDataUrl, 'JPEG', pageW / 2 - w / 2, 60, w, h)
+        } catch (e) {}
       }
       doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(45, 45, 45)
       doc.text("MAIN CONTRACTOR'S PROGRESS REPORT", pageW / 2, 175, { align: 'center' })
