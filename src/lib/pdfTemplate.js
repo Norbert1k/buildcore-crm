@@ -122,39 +122,51 @@ export function drawCover(page, fonts, logo, opts) {
 // Top-right: CCG logo
 // Below: thin divider line
 //
+// 28mm logo standard (matches TaskTracker, Progress Report content pages,
+// Project Directory/Procurement export).
+//
+// Conversion notes (jsPDF mm-spec → pdf-lib points, 1mm = 2.835pt):
+//   logo 28×28mm → 79×79pt
+//   logo right margin 12mm → 34pt; top margin 8mm → 23pt
+//   name baseline at jsPDF y=16mm → pdf-lib y = height - 45
+//   addr1 at jsPDF y=22mm → height - 62
+//   addr2 at jsPDF y=26mm → height - 74
+//   divider at jsPDF y=40mm → height - 113
+//   content start at jsPDF y=46mm → height - 130
+//
 // Returns Y coordinate where content can start (below the letterhead)
 export function drawLetterhead(page, fonts, logo) {
   const { width, height } = page.getSize()
   const { boldFont, regFont } = fonts
 
-  // Logo top-right (22x22 mm equivalent — pdf-lib uses points: 22mm ≈ 62pt)
+  // Logo top-right (~28mm = 79pt)
   if (logo?.img) {
-    const sz = 56  // points (~20mm)
+    const sz = 79
     page.drawImage(logo.img, {
-      x: width - 32 - sz, y: height - 30 - sz,
+      x: width - 34 - sz, y: height - 23 - sz,
       width: sz, height: sz,
     })
   }
 
   // Company info top-left
   page.drawText('City Construction Group', {
-    x: 32, y: height - 38, size: 13, font: boldFont, color: c(BRAND.text),
+    x: 32, y: height - 45, size: 14, font: boldFont, color: c(BRAND.text),
   })
   page.drawText('One Canada Square, Canary Wharf, London E14 5AA', {
-    x: 32, y: height - 52, size: 7.5, font: regFont, color: c(BRAND.muted),
+    x: 32, y: height - 62, size: 7.5, font: regFont, color: c(BRAND.muted),
   })
   page.drawText('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', {
-    x: 32, y: height - 62, size: 7.5, font: regFont, color: c(BRAND.muted),
+    x: 32, y: height - 74, size: 7.5, font: regFont, color: c(BRAND.muted),
   })
 
   // Divider line
   page.drawRectangle({
-    x: 32, y: height - 96, width: width - 64, height: 0.4,
+    x: 32, y: height - 113, width: width - 64, height: 0.4,
     color: c(BRAND.divider),
   })
 
   // Return Y where content can start (below divider with breathing room)
-  return height - 110
+  return height - 130
 }
 
 // ─────────────────────────────────────────────────────────
