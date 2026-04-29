@@ -1,14 +1,14 @@
 import { differenceInDays, format, parseISO } from 'date-fns'
 
 export const TRADES = [
-  'Architects','Asbestos Surveys','Borehole Investigations','Brickwork','Building Control','Carpentry','Civil Engineers',
-  'Consultant','Core Drilling & Sawing','Demolition','Drainage','Ecologist','Electrical',
-  'Fire Consultants','Fire Engineer','Fire Protection','Flood Risk Consultants','Flooring','Glazing','Ground Investigation','Groundworks',
+  'Agency','Architects','Asbestos Surveys','Balcony Specialists','Bike Storage','Borehole Investigations','Brickwork','Building Control','Carpentry','Civil Engineers','Cladding',
+  'Consultant','Core Drilling & Sawing','Demolition','Drainage','Dryliners','Ecologist','Electrical',
+  'Fire Consultants','Fire Engineer','Fire Protection','Flood Risk Consultants','Flooring','General Builders','Glazing','Ground Investigation','Groundworks',
   'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','Mastic Man','MEP Consultants',
   'Noise Consultants','Nurse Call System','Painting & Decorating','Piling','Planning Consultants','Plastering','Plumbing','Precast Concrete B&B','Principle Designers',
   'Roofing','Roofing & Cladding','Roofing Trusses','Scaffolding','Screeding',
-  'Setting Out Engineer','SFS Engineers','Sprinkler System','Steel Erection',
-  'Structural Engineers','Underfloor Heating','Wardrobes','Warranty Providers','Other'
+  'Setting Out Engineer','SFS Engineers','Solar Panels','Sprinkler System','Steel Erection','Stone Masonry',
+  'Structural Engineers','Surfacing & Tarmac','Underfloor Heating','Wardrobes','Warranty Providers','Other'
 ]
 
 // Trades that default to Design Team when assigning to a project
