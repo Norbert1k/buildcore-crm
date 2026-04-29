@@ -163,7 +163,14 @@ export default function TaskTracker() {
       const pageH = doc.internal.pageSize.getHeight()
 
       const drawLetterhead = () => {
-        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) {} }
+        if (logoDataUrl) {
+          try {
+            const p = doc.getImageProperties(logoDataUrl)
+            const h = 28
+            const w = (p.width / p.height) * h
+            doc.addImage(logoDataUrl, 'JPEG', pageW - 12 - w, 8, w, h)
+          } catch (e) {}
+        }
         doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(45, 45, 45)
         doc.text('City Construction Group', 15, 16)
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90)
