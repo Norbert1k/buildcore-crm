@@ -123,10 +123,11 @@ export function drawCover(page, fonts, logo, opts) {
 // Below: thin divider line
 //
 // 28mm logo standard (matches TaskTracker, Progress Report content pages,
-// Project Directory/Procurement export).
+// Project Directory/Procurement export). Logo height fixed; width auto-derives
+// from source aspect ratio so the chevron/text are not stretched.
 //
 // Conversion notes (jsPDF mm-spec → pdf-lib points, 1mm = 2.835pt):
-//   logo 28×28mm → 79×79pt
+//   logo height 28mm → 79pt
 //   logo right margin 12mm → 34pt; top margin 8mm → 23pt
 //   name baseline at jsPDF y=16mm → pdf-lib y = height - 45
 //   addr1 at jsPDF y=22mm → height - 62
@@ -139,12 +140,13 @@ export function drawLetterhead(page, fonts, logo) {
   const { width, height } = page.getSize()
   const { boldFont, regFont } = fonts
 
-  // Logo top-right (~28mm = 79pt)
+  // Logo top-right (~28mm = 79pt height; width preserves source aspect)
   if (logo?.img) {
-    const sz = 79
+    const h = 79
+    const w = (logo.w / logo.h) * h
     page.drawImage(logo.img, {
-      x: width - 34 - sz, y: height - 23 - sz,
-      width: sz, height: sz,
+      x: width - 34 - w, y: height - 23 - h,
+      width: w, height: h,
     })
   }
 
