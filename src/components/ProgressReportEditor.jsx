@@ -674,17 +674,16 @@ export async function generateProgressReportPdf(report, photos, projectName) {
       const pageH = doc.internal.pageSize.getHeight()  // 297mm
 
       // ─ Letterhead drawn on every page after the cover ─
+      // 28mm logo standard (matches TaskTracker, Project Directory/Procurement export).
       const drawLetterhead = () => {
-        // Logo top-right — sized so its bottom aligns with the divider at y=36
-        // Logo image is roughly square, so 22x22mm starting at y=11 ends at y=33 (just above divider with breathing room)
-        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 32, 11, 22, 22) } catch (e) {} }
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(45, 45, 45)
-        doc.text('City Construction Group', 15, 15)
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
-        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 20)
-        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 24)
+        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) {} }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(45, 45, 45)
+        doc.text('City Construction Group', 15, 16)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90)
+        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
+        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
         doc.setDrawColor(207, 207, 207); doc.setLineWidth(0.2)
-        doc.line(15, 36, pageW - 15, 36)
+        doc.line(15, 40, pageW - 15, 40)
       }
 
       // ─ PAGE 1: Cover page (centered logo + title + project address) ─
