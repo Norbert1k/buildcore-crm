@@ -365,9 +365,14 @@ export default function ProjectDetail() {
 
       // Draw letterhead on every page via didDrawPage hook
       const drawLetterhead = () => {
-        // Logo top right (~28 x 28mm, keeps aspect ratio)
+        // Logo top-right (28mm tall, width preserves source aspect ratio)
         if (logoDataUrl) {
-          try { doc.addImage(logoDataUrl, 'JPEG', pageW - 40, 8, 28, 28) } catch (e) { console.warn('addImage failed', e) }
+          try {
+            const p = doc.getImageProperties(logoDataUrl)
+            const h = 28
+            const w = (p.width / p.height) * h
+            doc.addImage(logoDataUrl, 'JPEG', pageW - 12 - w, 8, w, h)
+          } catch (e) { console.warn('addImage failed', e) }
         }
 
         // Company name top left (bold, 16pt)
