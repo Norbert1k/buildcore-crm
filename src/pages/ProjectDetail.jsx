@@ -11,6 +11,7 @@ import ProjectDocumentation from '../components/ProjectDocumentation'
 import CaseStudyEditor from '../components/CaseStudyEditor'
 import HSHandover from '../components/HSHandover'
 import SubcontractorDocs from '../components/SubcontractorDocs'
+import { fetchAllProjectPas, aggregateFinancials } from '../lib/paExtractor'
 
 function calcDuration(start, end) {
   if (!start || !end) return null
@@ -169,6 +170,11 @@ export default function ProjectDetail() {
   const [teamForm, setTeamForm] = useState({ name: '', role: 'Site Manager', email: '', phone: '' })
   const [savingTeam, setSavingTeam] = useState(false)
   const [confirmRemoveTeam, setConfirmRemoveTeam] = useState(null)
+  // PA financial summary (read live from latest PA xlsx in each PA subfolder).
+  // Loads in background after the main project data so the header renders
+  // immediately and updates when PA parsing completes.
+  // Shape: { loading, breakdown: [{label, original, variations_total, variations_count}], totals: {original, variations_total, variations_count, total_value} }
+  const [paFinancials, setPaFinancials] = useState({ loading: true, breakdown: [], totals: null })
   // EA state
   const [projectEAs, setProjectEAs] = useState([])
   const [allEAs, setAllEAs] = useState([])
@@ -181,6 +187,34 @@ export default function ProjectDetail() {
   const [subFiles, setSubFiles] = useState([])
 
   useEffect(() => { load() }, [id])
+
+  // Background load: fetch + parse the latest PA xlsx in each PA subfolder
+  // (or root) to compute the financial summary card. Runs separately from
+  // the main load() because xlsx parsing is heavy and we want the header to
+  // render immediately. Re-runs if `id` changes.
+  useEffect(() => {
+    let cancelled = false
+    async function loadPaFinancials() {
+      setPaFinancials({ loading: true, breakdown: [], totals: null })
+      const paList = await fetchAllProjectPas(supabase, id)
+      if (cancelled) return
+      // Per-building breakdown — useful for tooltip / future expansion
+      const breakdown = paList.map(pa => {
+        const variations_total = (pa.extract.variations || [])
+          .reduce((s, v) => s + (parseFloat(v.cost_impact) || 0), 0)
+        return {
+          label: pa.subfolder_label || 'Whole project',
+          original: pa.extract.totals?.total || 0,
+          variations_total,
+          variations_count: (pa.extract.variations || []).length,
+        }
+      })
+      const totals = aggregateFinancials(paList)
+      setPaFinancials({ loading: false, breakdown, totals })
+    }
+    if (id) loadPaFinancials()
+    return () => { cancelled = true }
+  }, [id])
 
   // When project loads (or status changes), make sure the active tab is still
   // visible — tender projects hide H&S Handover and Case Study, so if a user
@@ -695,62 +729,134 @@ export default function ProjectDetail() {
         <IconChevron size={13} dir="left" /> Back
       </button>
 
-      <div className="card card-pad" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-              <h2 style={{ fontSize: 20, fontWeight: 600 }}>{project.project_name}</h2>
-              {project.project_ref && <span style={{ color: 'var(--text3)', fontSize: 13 }}>#{project.project_ref}</span>}
-              <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px', fontSize: 13 }}>
-              {project.client_name && (
-                <div>
-                  <span style={{ color: 'var(--text3)', marginRight: 6 }}>Client:</span>
-                  {project.client_id ? (
-                    <span
-                      onClick={() => navigate(`/clients/${project.client_id}`)}
-                      style={{ fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}
-                      onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                      onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
-                    >{project.client_name}</span>
-                  ) : (
-                    <span style={{ fontWeight: 700, color: 'var(--text)' }}>{project.client_name}</span>
-                  )}
-                </div>
-              )}
-              {[
-                ['Project Assigned To', project.profiles?.full_name],
-                ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
-                ['Start Date', formatDate(project.start_date)],
-                ['End Date', formatDate(project.end_date)],
-                ['Duration', calcDuration(project.start_date, project.end_date)],
-                can('view_project_value') ? ['Contract Value', formatCurrency(project.value)] : null,
-              ].filter(x => x && x[1] && x[1] !== '—').map(([k, v]) => (
-                <div key={k}>
-                  <span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span>
-                  {k === 'Location' ? (
-                    // Open the address in Google Maps (web → maps.google.com,
-                    // mobile devices auto-launch the native Maps app).
-                    // The api=1 endpoint is the documented, stable URL format.
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`}
-                      target="_blank" rel="noopener noreferrer"
-                      style={{ color: 'var(--text)', fontWeight: 600, textDecoration: 'none' }}
-                      onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                      onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
-                      title="Open in Google Maps"
-                    >{v}</a>
-                  ) : (
-                    <span>{v}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+      {/* Header row — project info card + financial summary card side by side.
+          Stacks vertically on narrower screens via flex-wrap. */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div className="card card-pad" style={{ flex: '1 1 420px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: 20, fontWeight: 600 }}>{project.project_name}</h2>
+                {project.project_ref && <span style={{ color: 'var(--text3)', fontSize: 13 }}>#{project.project_ref}</span>}
+                <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px', fontSize: 13 }}>
+                {project.client_name && (
+                  <div>
+                    <span style={{ color: 'var(--text3)', marginRight: 6 }}>Client:</span>
+                    {project.client_id ? (
+                      <span
+                        onClick={() => navigate(`/clients/${project.client_id}`)}
+                        style={{ fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}
+                        onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                        onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                      >{project.client_name}</span>
+                    ) : (
+                      <span style={{ fontWeight: 700, color: 'var(--text)' }}>{project.client_name}</span>
+                    )}
+                  </div>
+                )}
+                {[
+                  ['Project Assigned To', project.profiles?.full_name],
+                  ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
+                  ['Start Date', formatDate(project.start_date)],
+                  ['End Date', formatDate(project.end_date)],
+                  ['Duration', calcDuration(project.start_date, project.end_date)],
+                ].filter(x => x && x[1] && x[1] !== '—').map(([k, v]) => (
+                  <div key={k}>
+                    <span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span>
+                    {k === 'Location' ? (
+                      // Open the address in Google Maps (web → maps.google.com,
+                      // mobile devices auto-launch the native Maps app).
+                      // The api=1 endpoint is the documented, stable URL format.
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ color: 'var(--text)', fontWeight: 600, textDecoration: 'none' }}
+                        onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                        onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                        title="Open in Google Maps"
+                      >{v}</a>
+                    ) : (
+                      <span>{v}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
 
+            </div>
+            {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
           </div>
-          {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
         </div>
+
+        {/* Financial Summary card — reads variations and original contract sum
+            from the latest PA xlsx in each PA subfolder. For multi-building
+            projects (Merton-style) sums across all sub-buildings.
+            Only visible to users who can view project value. */}
+        {can('view_project_value') && (
+          <div className="card card-pad" style={{ flex: '1 1 320px', minWidth: 0 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
+              Financial Summary
+            </div>
+            {paFinancials.loading ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 100 }}>
+                <Spinner size={20} />
+              </div>
+            ) : (() => {
+              // Resolve original contract: prefer PA-derived value (real line
+              // items from the xlsx), fall back to projects.value if no PA
+              // exists yet (e.g. tender stage before any PA upload).
+              const t = paFinancials.totals
+              const hasPaData = t && t.original > 0
+              const original = hasPaData ? t.original : (project.value || 0)
+              const variations_total = hasPaData ? t.variations_total : 0
+              const variations_count = hasPaData ? t.variations_count : 0
+              const total_value = original + variations_total
+              const buildings = paFinancials.breakdown
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text3)' }}>Original contract</span>
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>{formatCurrency(original)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text3)' }}>
+                      Variations
+                      {variations_count > 0 && <span style={{ color: 'var(--text3)', opacity: 0.7 }}> ({variations_count})</span>}
+                    </span>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: variations_total > 0 ? 'var(--green, #448a40)' : 'var(--text)' }}>
+                      {variations_total > 0 ? '+ ' : ''}{formatCurrency(variations_total)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>Total order value</span>
+                    <span style={{ fontSize: 18, fontWeight: 700 }}>{formatCurrency(total_value)}</span>
+                  </div>
+                  {buildings.length > 1 && (
+                    <div style={{ marginTop: 8, paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                        By Sub-building
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {buildings.map((b, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                            <span style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 8 }}>{b.label}</span>
+                            <span style={{ color: 'var(--text2)' }}>{formatCurrency(b.original + b.variations_total)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!hasPaData && (
+                    <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', marginTop: 4 }}>
+                      No Payment Application uploaded yet — showing project's manually entered value.
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+        )}
       </div>
 
       {project.description && (
