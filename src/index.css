@@ -213,7 +213,7 @@ tbody tr:hover td { background: var(--surface2); }
   --border2:     rgba(255,255,255,0.15);
   --text:        #e8e9f0;
   --text2:       #9a9db0;
-  --text3:       #5c6080;
+  --text3:       #7a7d92;
   --green:       #5cb85c;
   --green-bg:    rgba(68,138,64,0.15);
   --green-border:rgba(68,138,64,0.3);
