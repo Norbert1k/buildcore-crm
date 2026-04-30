@@ -681,7 +681,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 }
 
 // ── Subfolder Section (recursive — supports nested sub-subfolders) ────────────
-function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree }) {
+function SubfolderSection({ projectId, projectName, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -699,6 +699,16 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
   const [zipProgress, setZipProgress] = useState(null)
   const [clientVisible, setClientVisible] = useState(false)
   const [togglingVisible, setTogglingVisible] = useState(false)
+
+  // Progress Report support — only relevant when this subfolder lives inside
+  // 05-progress-report (e.g. Merton's Sports Hall). Allows users to create and
+  // open progress reports scoped to this specific sub-building. Inactive in
+  // every other subfolder context.
+  const isPrSubfolder = folder.key === '05-progress-report'
+  const [showProgressEditor, setShowProgressEditor] = useState(false)
+  const [editingReportId, setEditingReportId] = useState(null)
+  const [progressReports, setProgressReports] = useState([])
+  const [confirmDeleteReport, setConfirmDeleteReport] = useState(null)
 
   useEffect(() => { loadFileCount() }, [])
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
@@ -766,6 +776,37 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
     const { data } = await supabase.from('project_doc_folders').select('*')
       .eq('project_id', projectId).eq('parent_key', subfolder.key).order('created_at')
     setChildFolders(data || [])
+  }
+
+  // Load this sub-building's progress reports. Filter is exact match on the
+  // subfolder_key column, so each sub-building has its own independent
+  // sequence/list of reports.
+  async function loadProgressReports() {
+    if (!isPrSubfolder) return
+    const { data } = await supabase.from('progress_reports')
+      .select('id, report_number, report_date, created_at, updated_at, profiles:created_by(full_name)')
+      .eq('project_id', projectId)
+      .eq('subfolder_key', subfolder.key)
+      .order('created_at', { ascending: false })
+    setProgressReports(data || [])
+  }
+  // Re-fetch reports list whenever the subfolder is opened or any external
+  // tree change might have created/deleted reports.
+  useEffect(() => { if (open && isPrSubfolder) loadProgressReports() }, [open, isPrSubfolder, treeVersion])
+
+  async function deleteProgressReport(reportId) {
+    // Best-effort: delete photo storage rows first, then the photos table rows,
+    // then the report itself. RLS handles authorisation. Mirrors the parent
+    // PrimeFolderSection logic so subfolder reports behave identically.
+    const { data: photos } = await supabase.from('progress_report_photos')
+      .select('storage_path').eq('report_id', reportId)
+    if (photos?.length) {
+      await supabase.storage.from('project-docs').remove(photos.map(p => p.storage_path))
+    }
+    await supabase.from('progress_report_photos').delete().eq('report_id', reportId)
+    await supabase.from('progress_reports').delete().eq('id', reportId)
+    setConfirmDeleteReport(null)
+    loadProgressReports()
   }
 
   async function moveFile(docId) {
@@ -1025,25 +1066,101 @@ function SubfolderSection({ projectId, folder, subfolder, canManage, viewMode, o
             }}
             moveTargets={childFolders.map(cf => ({ key: cf.folder_key, label: cf.label }))} />
           {childFolders.map(cf => (
-            <SubfolderSection key={cf.folder_key} projectId={projectId} folder={folder}
+            <SubfolderSection key={cf.folder_key} projectId={projectId} projectName={projectName} folder={folder}
               subfolder={{ key: cf.folder_key, label: cf.label, custom: true }}
               canManage={canManage} viewMode={viewMode} onPreview={onPreview}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
               depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree} />
           ))}
-          {files.length === 0 && childFolders.length === 0 ? (
+
+          {/* Progress Reports (only inside 05-progress-report subfolders, e.g. Merton's Sports Hall) */}
+          {isPrSubfolder && canManage && (
+            <div style={{ marginBottom: 8 }}>
+              <button onClick={(e) => { e.stopPropagation(); setEditingReportId(null); setShowProgressEditor(true) }}
+                style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#448a40', color: 'white', border: '0.5px solid #448a40' }}
+                title={`Create a new monthly progress report for ${subLabel}`}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                New Progress Report
+              </button>
+            </div>
+          )}
+          {isPrSubfolder && progressReports.length > 0 && (
+            <div style={{ marginBottom: 10, padding: 10, border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)' }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                {subLabel} — Progress Reports ({progressReports.length})
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {progressReports.map(r => (
+                  <div key={r.id}
+                    onClick={() => { setEditingReportId(r.id); setShowProgressEditor(true) }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: 'var(--surface)', borderRadius: 4, cursor: 'pointer', border: '0.5px solid var(--border)' }}>
+                    <span style={{ fontSize: 14 }}>📋</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600 }}>{r.report_number}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                        Last updated {new Date(r.updated_at).toLocaleDateString('en-GB')} · {r.profiles?.full_name || 'Unknown'}
+                      </div>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setEditingReportId(r.id); setShowProgressEditor(true) }}
+                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
+                      Open
+                    </button>
+                    <button onClick={async (e) => {
+                        e.stopPropagation()
+                        const [{ data: full }, { data: pics }] = await Promise.all([
+                          supabase.from('progress_reports').select('*').eq('id', r.id).single(),
+                          supabase.from('progress_report_photos').select('*').eq('report_id', r.id).order('display_order'),
+                        ])
+                        if (!full) { alert('Report not found'); return }
+                        await generateProgressReportPdf(full, pics || [], `${projectName} — ${subLabel}`)
+                      }}
+                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
+                      📄 Export PDF
+                    </button>
+                    {canManage && (
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
+                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {files.length === 0 && childFolders.length === 0 && !isPrSubfolder ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
               style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
             </label>
-          ) : (
+          ) : files.length > 0 ? (
             <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage}
               onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles} />
-          )}
+          ) : null}
         </div>
       )}
+
+      {/* Progress Report editor — scoped to this sub-building. Mirror of the
+          one in PrimeFolderSection but with subfolderKey set so reports save
+          and load against this sub-building specifically. */}
+      {showProgressEditor && isPrSubfolder && (
+        <ProgressReportEditor
+          projectId={projectId}
+          projectName={projectName ? `${projectName} — ${subLabel}` : subLabel}
+          reportId={editingReportId}
+          subfolderKey={subfolder.key}
+          onClose={() => { setShowProgressEditor(false); setEditingReportId(null); loadProgressReports() }}
+          onSaved={() => { loadProgressReports() }}
+        />
+      )}
+
+      {confirmDeleteReport && <ConfirmDlg
+        message="Permanently delete this progress report and all its photos? This cannot be undone."
+        onOk={() => deleteProgressReport(confirmDeleteReport)}
+        onCancel={() => setConfirmDeleteReport(null)} />}
     </div>
   )
 }
@@ -1346,9 +1463,13 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
 
   async function loadProgressReports() {
     if (folder.key !== '05-progress-report') return
+    // Only show root-level reports here. Reports living inside sub-building
+    // subfolders (e.g. Merton's Sports Hall) are shown by their respective
+    // SubfolderSection instances. PostgREST: use .is(null) for IS NULL.
     const { data } = await supabase.from('progress_reports')
       .select('id, report_number, report_date, created_at, updated_at, profiles:created_by(full_name)')
       .eq('project_id', projectId)
+      .is('subfolder_key', null)
       .order('created_at', { ascending: false })
     setProgressReports(data || [])
   }
@@ -1649,7 +1770,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                 {selectedSubs.has(sf.key) && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <SubfolderSection projectId={projectId} folder={folder} subfolder={sf}
+                <SubfolderSection projectId={projectId} projectName={projectName} folder={folder} subfolder={sf}
                   canManage={canManage} viewMode={viewMode} onPreview={openPreview}
                   onReload={id => {
                     if (id === '__folder_deleted__') loadCustomSubfolders()
@@ -1709,12 +1830,13 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
       )}
 
       {/* Live Gantt editor (programme folder only) */}
-      {/* Progress Report editor */}
+      {/* Progress Report editor — root-level reports (subfolderKey=null) */}
       {showProgressEditor && folder.key === '05-progress-report' && (
         <ProgressReportEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
           reportId={editingReportId}
+          subfolderKey={null}
           onClose={() => { setShowProgressEditor(false); setEditingReportId(null); loadProgressReports() }}
           onSaved={() => { loadProgressReports() }}
         />
