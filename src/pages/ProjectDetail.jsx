@@ -23,6 +23,22 @@ function calcDuration(start, end) {
   return yrs + ' year' + (yrs !== 1 ? 's' : '')
 }
 
+// CCG Project Team — role hierarchy. Lower position_order = higher in the
+// list. Multiple people allowed per role (no caps). 'Other' for free-text.
+const CCG_TEAM_ROLES = [
+  { value: 'Project Director',       order: 1 },
+  { value: 'Operations Manager',     order: 2 },
+  { value: 'Project Manager',        order: 3 },
+  { value: 'Site Manager',           order: 4 },
+  { value: 'Assistant Site Manager', order: 5 },
+  { value: 'Quantity Surveyor',      order: 6 },
+  { value: 'Design Manager',         order: 7 },
+  { value: 'H&S Officer',            order: 8 },
+  { value: 'Document Controller',    order: 9 },
+  { value: 'Other',                  order: 99 },
+]
+const CCG_ROLE_ORDER = Object.fromEntries(CCG_TEAM_ROLES.map(r => [r.value, r.order]))
+
 // ── Project File Search ───────────────────────────────────────────────────────
 function ProjectFileSearch({ projectId }) {
   const [query, setQuery] = useState('')
@@ -146,6 +162,13 @@ export default function ProjectDetail() {
   const [savingEditAssign, setSavingEditAssign] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState(null)
   const [assignForm, setAssignForm] = useState({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
+  // CCG Team state — internal team members assigned to the project
+  const [team, setTeam] = useState([])
+  const [showTeamModal, setShowTeamModal] = useState(false)
+  const [editingTeamMember, setEditingTeamMember] = useState(null)
+  const [teamForm, setTeamForm] = useState({ name: '', role: 'Site Manager', email: '', phone: '' })
+  const [savingTeam, setSavingTeam] = useState(false)
+  const [confirmRemoveTeam, setConfirmRemoveTeam] = useState(null)
   // EA state
   const [projectEAs, setProjectEAs] = useState([])
   const [allEAs, setAllEAs] = useState([])
@@ -172,12 +195,13 @@ export default function ProjectDetail() {
 
   async function load() {
     setLoading(true)
-    const [projRes, subsRes, allSubsRes, eaRes, allEARes] = await Promise.all([
+    const [projRes, subsRes, allSubsRes, eaRes, allEARes, teamRes] = await Promise.all([
       supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name)').eq('project_id', id),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
       supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
+      supabase.from('project_team_members').select('*').eq('project_id', id).order('position_order').order('created_at'),
     ])
     setProject(projRes.data)
     setDriveFolderId(projRes.data?.drive_folder_id || null)
@@ -186,6 +210,7 @@ export default function ProjectDetail() {
     setAllSubs(allSubsRes.data || [])
     setProjectEAs(eaRes.data || [])
     setAllEAs(allEARes.data || [])
+    setTeam(teamRes.data || [])
     // Load subcontractor files
     const { data: sfData } = await supabase.from('project_sub_files').select('*').eq('project_id', id).order('created_at', { ascending: false })
     setSubFiles(sfData || [])
@@ -466,6 +491,183 @@ export default function ProjectDetail() {
     load()
   }
 
+  // ─── CCG Team helpers ───────────────────────────────────────────────────
+  // Open the modal for either a new team member (member=null) or to edit an
+  // existing one. Pre-populates the form from the existing row when editing.
+  function openTeamModal(member) {
+    if (member) {
+      setEditingTeamMember(member)
+      setTeamForm({ name: member.name || '', role: member.role || 'Site Manager', email: member.email || '', phone: member.phone || '' })
+    } else {
+      setEditingTeamMember(null)
+      setTeamForm({ name: '', role: 'Site Manager', email: '', phone: '' })
+    }
+    setShowTeamModal(true)
+  }
+
+  async function saveTeamMember() {
+    if (!teamForm.name.trim() || !teamForm.role.trim()) return
+    setSavingTeam(true)
+    try {
+      // Map role to its hierarchy position. Unknown/custom roles fall back to
+      // 99 so they sort to the end of the list.
+      const order = CCG_ROLE_ORDER[teamForm.role] ?? 99
+      const payload = {
+        project_id: id,
+        name: teamForm.name.trim(),
+        role: teamForm.role.trim(),
+        email: teamForm.email.trim() || null,
+        phone: teamForm.phone.trim() || null,
+        position_order: order,
+      }
+      if (editingTeamMember) {
+        await supabase.from('project_team_members').update(payload).eq('id', editingTeamMember.id)
+      } else {
+        payload.created_by = profile?.id
+        await supabase.from('project_team_members').insert(payload)
+      }
+      setShowTeamModal(false)
+      setEditingTeamMember(null)
+      load()
+    } catch (e) {
+      alert('Could not save: ' + (e?.message || e))
+    }
+    setSavingTeam(false)
+  }
+
+  async function removeTeamMember(memberId) {
+    await supabase.from('project_team_members').delete().eq('id', memberId)
+    setConfirmRemoveTeam(null)
+    load()
+  }
+
+  // Export CCG Team as PDF — uses the same letterhead/styling as
+  // exportDirectoryPDF. Lives in its own function to keep the PDF code
+  // self-contained and reuse-friendly.
+  async function exportCCGTeamPDF() {
+    try {
+      // Sort by hierarchy position, then by created_at within same role
+      const sorted = [...team].sort((a, b) => {
+        if (a.position_order !== b.position_order) return a.position_order - b.position_order
+        return new Date(a.created_at) - new Date(b.created_at)
+      })
+
+      const loadScript = (src) => new Promise((resolve, reject) => {
+        const s = document.createElement('script'); s.src = src
+        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load ' + src))
+        document.head.appendChild(s)
+      })
+      if (!window.jspdf) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      }
+      if (!window.jspdf?.jsPDF?.API?.autoTable) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
+      }
+      const { jsPDF } = window.jspdf
+
+      // Reuse the company logo from /cltd-logo.jpg
+      let logoDataUrl = null
+      try {
+        const resp = await fetch('/cltd-logo.jpg')
+        if (resp.ok) {
+          const blob = await resp.blob()
+          logoDataUrl = await new Promise((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(reader.result)
+            reader.readAsDataURL(blob)
+          })
+        }
+      } catch (e) { console.warn('[exportCCGTeamPDF] logo load failed:', e) }
+
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()
+      const pageH = doc.internal.pageSize.getHeight()
+
+      // Same letterhead used by the Project Directory PDF — keeps both
+      // documents looking like part of the same family.
+      const drawLetterhead = () => {
+        if (logoDataUrl) {
+          try {
+            const p = doc.getImageProperties(logoDataUrl)
+            const h = 28
+            const w = (p.width / p.height) * h
+            doc.addImage(logoDataUrl, 'JPEG', pageW - 12 - w, 8, w, h)
+          } catch (e) { console.warn('addImage failed', e) }
+        }
+        doc.setFont('helvetica', 'bold')
+        doc.setFontSize(14)
+        doc.setTextColor(45, 45, 45)
+        doc.text('City Construction Group', 15, 16)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(7.5)
+        doc.setTextColor(90, 90, 90)
+        doc.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
+        doc.text('T: 0203 948 1930   E: info@cltd.co.uk   W: www.cltd.co.uk', 15, 26)
+        doc.setDrawColor(207, 207, 207)
+        doc.setLineWidth(0.2)
+        doc.line(15, 40, pageW - 15, 40)
+      }
+
+      drawLetterhead()
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(16)
+      doc.setTextColor(45, 45, 45)
+      doc.text('CCG Project Team', 15, 50)
+
+      // Project context line under the title (project name + ref)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      doc.setTextColor(90, 90, 90)
+      const ctx = [project?.project_name, project?.project_ref].filter(Boolean).join(' — ')
+      if (ctx) doc.text(ctx, 15, 56)
+
+      if (sorted.length === 0) {
+        doc.setFont('helvetica', 'italic')
+        doc.setFontSize(11)
+        doc.setTextColor(150, 150, 150)
+        doc.text('No team members assigned to this project yet.', pageW / 2, 76, { align: 'center' })
+      } else {
+        const body = sorted.map(m => [m.role, m.name, m.email || '', m.phone || ''])
+        doc.autoTable({
+          startY: 62,
+          head: [['Role', 'Name', 'Email', 'Telephone']],
+          body,
+          theme: 'plain',
+          styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 3.5, textColor: [45, 45, 45], lineWidth: 0, overflow: 'linebreak' },
+          headStyles: { fillColor: [45, 45, 45], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10, cellPadding: { top: 2, bottom: 2, left: 4, right: 4 }, minCellHeight: 7 },
+          alternateRowStyles: { fillColor: [249, 249, 249] },
+          columnStyles: {
+            0: { cellWidth: 60 },  // Role
+            1: { cellWidth: 65 },  // Name
+            2: { cellWidth: 'auto' }, // Email
+            3: { cellWidth: 50 },  // Phone
+          },
+          margin: { left: 15, right: 15, top: 46 },
+          didDrawPage: (data) => {
+            if (data.pageNumber > 1) drawLetterhead()
+          },
+        })
+      }
+
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(160, 160, 160)
+        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
+        doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
+      }
+
+      const filename = `${project?.project_name || 'Project'} - CCG Project Team.pdf`
+      doc.save(filename)
+    } catch (err) {
+      console.error('[exportCCGTeamPDF] error:', err)
+      alert('PDF export failed: ' + (err?.message || err))
+    }
+  }
+
+
   async function assignEA() {
     if (!eaAssignForm.ea_id) return
     await supabase.from('project_employer_agents').insert({
@@ -618,6 +820,10 @@ export default function ProjectDetail() {
         <div className={`filter-tab ${activeTab === 'design_team' ? 'active' : ''}`} onClick={() => { setActiveTab('design_team'); localStorage.setItem(_tabKey, 'design_team') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
+        </div>
+        <div className={`filter-tab ${activeTab === 'ccg_team' ? 'active' : ''}`} onClick={() => { setActiveTab('ccg_team'); localStorage.setItem(_tabKey, 'ccg_team') }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          CCG Team<span className="tab-badge">{team.length}</span>
         </div>
         {can('view_hs_handover') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
@@ -840,6 +1046,111 @@ export default function ProjectDetail() {
         </div>
       )}
 
+      {activeTab === 'ccg_team' && (() => {
+        // Group team members by role for display. Roles render in hierarchy
+        // order; multiple people per role appear as cards within each role
+        // section. 'Other' / unknown roles drop to the bottom.
+        const sorted = [...team].sort((a, b) => {
+          if (a.position_order !== b.position_order) return a.position_order - b.position_order
+          return new Date(a.created_at) - new Date(b.created_at)
+        })
+        const grouped = []
+        const seenOrders = new Set()
+        for (const m of sorted) {
+          if (!seenOrders.has(m.role)) {
+            grouped.push({ role: m.role, members: [m] })
+            seenOrders.add(m.role)
+          } else {
+            grouped.find(g => g.role === m.role).members.push(m)
+          }
+        }
+        return (
+        <div>
+          <div className="section-header">
+            <div className="section-title">CCG Project Team</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-sm" onClick={exportCCGTeamPDF}
+                disabled={team.length === 0}
+                title={team.length === 0 ? 'Nothing to export yet' : 'Export team as PDF'}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}>
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Export Team PDF
+              </button>
+              {can('manage_projects') && (
+                <button className="btn btn-primary btn-sm" onClick={() => openTeamModal(null)}>
+                  <IconPlus size={13} /> Add Team Member
+                </button>
+              )}
+            </div>
+          </div>
+
+          {team.length === 0 ? (
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+              No team members assigned yet. Click <strong>Add Team Member</strong> to get started.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {grouped.map(g => (
+                <div key={g.role} className="card card-pad">
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {g.role}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                      {g.members.length} {g.members.length === 1 ? 'person' : 'people'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                    {g.members.map(m => (
+                      <div key={m.id} style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          <Avatar name={m.name} size={36} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {m.name}
+                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{m.role}</div>
+                          </div>
+                        </div>
+                        {m.email && (
+                          <div style={{ fontSize: 11, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                            <a href={`mailto:${m.email}`} style={{ color: 'var(--text2)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {m.email}
+                            </a>
+                          </div>
+                        )}
+                        {m.phone && (
+                          <div style={{ fontSize: 11, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                            {m.phone}
+                          </div>
+                        )}
+                        {can('manage_projects') && (
+                          <div style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '0.5px solid var(--border)' }}>
+                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '3px 8px', flex: 1 }} onClick={() => openTeamModal(m)}>
+                              <IconEdit size={11} /> Edit
+                            </button>
+                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '3px 8px', color: 'var(--red)' }} onClick={() => setConfirmRemoveTeam(m.id)}>
+                              <IconTrash size={11} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        )
+      })()}
+
+
       {/* Variation Modal */}
       {showVariation && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
@@ -998,6 +1309,42 @@ export default function ProjectDetail() {
       <ConfirmDialog open={!!confirmRemoveEA} onClose={() => setConfirmRemoveEA(null)} onConfirm={() => removeEA(confirmRemoveEA)} title="Remove Employers Agent" message="Remove this EA from the project?" danger />
 
       {showEAProfile && <EAModal ea={showEAProfile} onClose={() => setShowEAProfile(null)} onSaved={() => { setShowEAProfile(null); load() }} />}
+
+      {/* CCG Team — Add / Edit Team Member modal */}
+      <Modal open={showTeamModal} onClose={() => { setShowTeamModal(false); setEditingTeamMember(null) }}
+        title={editingTeamMember ? 'Edit Team Member' : 'Add Team Member'} size="sm"
+        footer={
+          <>
+            <button className="btn" onClick={() => { setShowTeamModal(false); setEditingTeamMember(null) }}>Cancel</button>
+            <button className="btn btn-primary" onClick={saveTeamMember} disabled={savingTeam || !teamForm.name.trim()}>
+              {savingTeam ? 'Saving…' : (editingTeamMember ? 'Save' : 'Add')}
+            </button>
+          </>
+        }>
+        <div className="form-grid">
+          <div className="full"><Field label="Full Name *">
+            <input value={teamForm.name} onChange={e => setTeamForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. John Smith" autoFocus />
+          </Field></div>
+          <div className="full"><Field label="Role *">
+            <select value={teamForm.role} onChange={e => setTeamForm(f => ({ ...f, role: e.target.value }))}>
+              {CCG_TEAM_ROLES.map(r => <option key={r.value} value={r.value}>{r.value}</option>)}
+            </select>
+          </Field></div>
+          <Field label="Email">
+            <input type="email" value={teamForm.email} onChange={e => setTeamForm(f => ({ ...f, email: e.target.value }))}
+              placeholder="john@cltd.co.uk" />
+          </Field>
+          <Field label="Telephone">
+            <input value={teamForm.phone} onChange={e => setTeamForm(f => ({ ...f, phone: e.target.value }))}
+              placeholder="07xxx xxxxxx" />
+          </Field>
+        </div>
+      </Modal>
+
+      <ConfirmDialog open={!!confirmRemoveTeam} onClose={() => setConfirmRemoveTeam(null)}
+        onConfirm={() => removeTeamMember(confirmRemoveTeam)}
+        title="Remove team member" message="Remove this team member from the project?" danger />
     </div>
   )
 }
