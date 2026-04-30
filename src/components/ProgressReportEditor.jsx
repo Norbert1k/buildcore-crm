@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Spinner, Field, IconPlus, IconTrash, ConfirmDialog } from './ui'
+import { extractFromPa, fetchLatestPaForProject } from '../lib/paExtractor'
 
 // Default % groups so first-time users have a sensible starting point — based on a typical CCG report
 const DEFAULT_GROUPS = [
@@ -117,14 +118,61 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         setDirty(false)
       } else {
         // New report — pre-fill from latest previous report for this project (if any)
-        const { data: prev } = await supabase.from('progress_reports').select('*')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        // AND, if a Payment Application exists, auto-extract progress %, variations
+        // and the latest valuation amount so the user starts with current data.
+        // Both queries run in parallel — extractor returns null if no PA exists,
+        // in which case we fall back to the existing default behaviour.
+        const [prevRes, projRes, paBuf] = await Promise.all([
+          supabase.from('progress_reports').select('*')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase.from('projects').select('project_name, project_ref, address, postcode, employer_name').eq('id', projectId).maybeSingle(),
+          fetchLatestPaForProject(supabase, projectId),
+        ])
+        const prev = prevRes.data
+        const proj = projRes.data
         const number = await nextReportNumber(projectId)
-        // Get project info for sensible defaults
-        const { data: proj } = await supabase.from('projects').select('project_name, project_ref, address, postcode, employer_name').eq('id', projectId).maybeSingle()
+
+        // Run extraction if we got a PA file. Convert PA groups → editor groups
+        // shape: [{ name, items: [{ label, percent }] }]. One group per PA group,
+        // with a single summary item showing the average % (option A in user picker).
+        let paGroups = null
+        let paVariations = null
+        let paValuationRow = null
+        if (paBuf) {
+          const extract = await extractFromPa(paBuf)
+          if (extract) {
+            paGroups = extract.groups.map(g => ({
+              name: g.name,
+              items: [{ label: `Avg progress (${g.item_count} item${g.item_count === 1 ? '' : 's'})`, percent: g.avg_pct }],
+            }))
+            // Variations: convert to the editor's shape. Numeric cost from PA goes
+            // into cost_impact; user can fill the rest (SI ref, dates, etc) later.
+            paVariations = extract.variations.map(v => ({
+              instruction_no: v.instruction_no,
+              si_ref: '',
+              issue_date: '',
+              instruction_details: v.instruction_details,
+              scope_impact: '',
+              cost_impact: v.cost_impact,
+              time_impact: '',
+              agreed_cost: '',
+            }))
+            // Single valuation row: latest application's cumulative claim
+            if (extract.totals && extract.totals.cumulative > 0) {
+              const today = new Date().toISOString().slice(0, 10)
+              paValuationRow = {
+                no: String((prev?.valuations?.length || 0) + 1),
+                date_submitted: today,
+                amount_claimed: String(Math.round(extract.totals.cumulative)),
+                amount_agreed: '',
+              }
+            }
+          }
+        }
+
         setReport({
           id: null,
           project_id: projectId,
@@ -146,12 +194,20 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           overall_progress: prev?.overall_progress || '',
           delays_text: prev?.delays_text || '',
           delays_reason: prev?.delays_reason || '',
-          // Carry forward % values + sub items per user spec
-          programme_groups: prev?.programme_groups || DEFAULT_GROUPS,
+          // PA extract (when available) overrides programme_groups so the
+          // Programme tab opens with the actual project's progress structure.
+          // Otherwise carry forward last report's groups, otherwise defaults.
+          programme_groups: paGroups || prev?.programme_groups || DEFAULT_GROUPS,
           pm_statement: prev?.pm_statement || '',
           hs_text: prev?.hs_text || 'Zero health and safety incidents have occurred during this reporting period.',
-          valuations: prev?.valuations || [],
-          variations: prev?.variations || [],
+          // Valuations: append the latest PA cumulative as a fresh row to the
+          // history carried over from the previous report.
+          valuations: paValuationRow
+            ? [...(prev?.valuations || []), paValuationRow]
+            : (prev?.valuations || []),
+          // Variations: PA's variation list is authoritative for new reports.
+          // Falls back to previous report's list if no PA was found.
+          variations: paVariations || prev?.variations || [],
           risks: prev?.risks || [],
           rfis: prev?.rfis || [],
           aob: prev?.aob || '',
