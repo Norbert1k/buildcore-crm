@@ -1646,7 +1646,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   Open Live Gantt
                 </button>
               )}
-              {folder.key === '02-payment-application' && canManage && files.length === 0 && (
+              {folder.key === '02-payment-application' && canManage && fileCount === 0 && (
                 <button onClick={async (e) => {
                   e.stopPropagation()
                   if (generatingPa) return
