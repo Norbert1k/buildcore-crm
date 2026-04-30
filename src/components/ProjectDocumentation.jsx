@@ -1575,7 +1575,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                 style={{ fontSize: 13, fontWeight: 600, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
             : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
           }
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
+          <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 1 }}>
             {subfolders.length > 0 ? `${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}
             {fileCount > 0 ? `${subfolders.length > 0 ? ' · ' : ''}${fileCount} file${fileCount !== 1 ? 's' : ''}` : ''}
             {subfolders.length === 0 && fileCount === 0 ? 'Empty' : ''}
