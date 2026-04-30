@@ -234,7 +234,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       }
 
       // Layout: PDF table-list-with-bars approach.
-      // Left column: task names (~70mm). Right: timeline drawn as vector bars.
+      // Left column: task names (80mm). Right: timeline drawn as vector bars.
       const startY = 46
       const bottomY = pageH - 14
       const taskColW = 80  // mm, task name column
