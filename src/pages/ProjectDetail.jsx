@@ -736,7 +736,7 @@ export default function ProjectDetail() {
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`}
                       target="_blank" rel="noopener noreferrer"
-                      style={{ color: 'var(--accent, #4a90e2)', textDecoration: 'none' }}
+                      style={{ color: 'var(--text)', fontWeight: 600, textDecoration: 'none' }}
                       onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
                       onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
                       title="Open in Google Maps"
