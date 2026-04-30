@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Spinner, Field, IconPlus, IconTrash, ConfirmDialog } from './ui'
-import { extractFromPa, fetchLatestPaForProject } from '../lib/paExtractor'
+import { extractFromPa, fetchLatestPaForSubfolder } from '../lib/paExtractor'
 
 // Default % groups so first-time users have a sensible starting point — based on a typical CCG report
 const DEFAULT_GROUPS = [
@@ -89,7 +89,7 @@ async function nextReportNumber(projectId) {
   return `${baseNumber}-${String(suffix).padStart(2, '0')}`
 }
 
-export default function ProgressReportEditor({ projectId, projectName, reportId, onClose, onSaved }) {
+export default function ProgressReportEditor({ projectId, projectName, reportId, subfolderKey = null, onClose, onSaved }) {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -117,19 +117,26 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         setPhotos(pRes.data || [])
         setDirty(false)
       } else {
-        // New report — pre-fill from latest previous report for this project (if any)
-        // AND, if a Payment Application exists, auto-extract progress %, variations
-        // and the latest valuation amount so the user starts with current data.
-        // Both queries run in parallel — extractor returns null if no PA exists,
-        // in which case we fall back to the existing default behaviour.
+        // New report — pre-fill from latest previous report for this project
+        // SCOPED to the same sub-building (subfolderKey === null = whole project / root).
+        // AND, if a Payment Application exists in the same sub-building's PA folder,
+        // auto-extract progress %, variations and the latest valuation amount so
+        // the user starts with current data. Both queries run in parallel —
+        // extractor returns null if no PA exists, in which case we fall back to
+        // the existing default behaviour.
+        let prevQuery = supabase.from('progress_reports').select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+        // PostgREST: .eq() doesn't match NULL — use .is(null) for root-level reports.
+        prevQuery = subfolderKey == null
+          ? prevQuery.is('subfolder_key', null)
+          : prevQuery.eq('subfolder_key', subfolderKey)
+
         const [prevRes, projRes, paBuf] = await Promise.all([
-          supabase.from('progress_reports').select('*')
-            .eq('project_id', projectId)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+          prevQuery.maybeSingle(),
           supabase.from('projects').select('project_name, project_ref, address, postcode, employer_name').eq('id', projectId).maybeSingle(),
-          fetchLatestPaForProject(supabase, projectId),
+          fetchLatestPaForSubfolder(supabase, projectId, subfolderKey),
         ])
         const prev = prevRes.data
         const proj = projRes.data
@@ -176,6 +183,10 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         setReport({
           id: null,
           project_id: projectId,
+          // Sub-building scope (null = whole project / root level). Persisted so
+          // that the report list query can filter by sub-building, and so PA
+          // re-extraction on subsequent edits uses the right PA folder.
+          subfolder_key: subfolderKey,
           report_number: number,
           report_date: new Date().toISOString().slice(0, 10),
           job_no: prev?.job_no || (proj?.project_ref ? `${projectName} – ${proj.project_ref}` : projectName || ''),
