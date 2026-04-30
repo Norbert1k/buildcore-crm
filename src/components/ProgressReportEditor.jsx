@@ -698,8 +698,14 @@ const S = {
 }
 
 // ─── Standalone PDF export (callable from outside the editor) ───
-export async function generateProgressReportPdf(report, photos, projectName) {
+//
+// `options.asBlob` — when true, returns the rendered PDF as a Blob instead of
+// triggering a download. Used by the "Publish to client" flow which needs the
+// raw bytes to upload into Supabase storage. When false/omitted, behaves as
+// before (downloads via doc.save).
+export async function generateProgressReportPdf(report, photos, projectName, options = {}) {
   if (!report?.id) { alert('Report not saved'); return }
+  const asBlob = options?.asBlob === true
   try {
       // Lazy-load jsPDF + autoTable from CDN
       const loadScript = (src) => new Promise((resolve, reject) => {
@@ -1070,9 +1076,18 @@ export async function generateProgressReportPdf(report, photos, projectName) {
       }
 
       const projName = (projData?.project_name || projectName || 'Project').replace(/[/\\]/g, '-')
-      doc.save(`${projName} - ${report.report_number}.pdf`)
+      const fileName = `${projName} - ${report.report_number}.pdf`
+      if (asBlob) {
+        // Return the PDF as a Blob along with the suggested filename, so the
+        // caller (e.g. Publish-to-client) can upload it to storage instead of
+        // triggering a browser download.
+        const blob = doc.output('blob')
+        return { blob, fileName }
+      }
+      doc.save(fileName)
     } catch (err) {
       console.error('[exportPDF]', err)
       alert('PDF export failed: ' + (err?.message || err))
+      if (asBlob) return null
     }
   }
