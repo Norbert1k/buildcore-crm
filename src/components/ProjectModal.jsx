@@ -191,7 +191,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
             {Object.entries(PROJECT_STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </Field>
-        <Field label="Project Manager">
+        <Field label="Project Assigned To">
           <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
             <option value="">— Unassigned —</option>
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
