@@ -203,6 +203,12 @@ export default function ProjectDetail() {
   const [showEAProfile, setShowEAProfile] = useState(null)
   const [eaAssignForm, setEaAssignForm] = useState({ ea_id: '', submission_email: '' })
   const [confirmRemoveEA, setConfirmRemoveEA] = useState(null)
+  // Edit-EA-assignment state — lets user change the per-project submission
+  // email list after the EA was first assigned. The EA company itself is
+  // not editable here (use remove + re-assign for that).
+  const [showEditEA, setShowEditEA] = useState(null)
+  const [editEAForm, setEditEAForm] = useState({ submission_email: '' })
+  const [savingEditEA, setSavingEditEA] = useState(false)
   // Inline sub docs state
   const [expandedSubId, setExpandedSubId] = useState(null)
   const [subFiles, setSubFiles] = useState([])
@@ -754,6 +760,41 @@ export default function ProjectDetail() {
     load()
   }
 
+  // Open the edit-EA modal and pre-fill with the current per-project email
+  // override (or, if the override is empty, the EA's own default email so
+  // the user can see what's currently active and edit from there).
+  function openEditEAModal(pea) {
+    const current = pea.submission_email || pea.employer_agents?.payment_submission_email || ''
+    setEditEAForm({ submission_email: current })
+    setShowEditEA(pea)
+  }
+
+  // Save edits to a single EA assignment. Mirrors assignEA validation —
+  // optional, but if provided every entry must look like an email.
+  async function saveEditEA() {
+    if (!showEditEA) return
+    const invalid = findInvalidEmail(editEAForm.submission_email)
+    if (invalid) {
+      alert(`"${invalid}" is not a valid email address. Please separate multiple emails with commas.`)
+      return
+    }
+    const list = parseSubmissionEmails(editEAForm.submission_email)
+    const canonical = list.length > 0 ? list.join(', ') : null
+    setSavingEditEA(true)
+    try {
+      const { error } = await supabase.from('project_employer_agents')
+        .update({ submission_email: canonical })
+        .eq('id', showEditEA.id)
+      if (error) throw error
+      setShowEditEA(null)
+      setEditEAForm({ submission_email: '' })
+      load()
+    } catch (e) {
+      alert('Could not save: ' + (e?.message || e))
+    }
+    setSavingEditEA(false)
+  }
+
   if (loading) return <Spinner />
   if (!project) return <div style={{ padding: 40, color: 'var(--text2)' }}>Project not found.</div>
 
@@ -1001,7 +1042,14 @@ export default function ProjectDetail() {
                     </td>
                     <td>
                       {can('manage_projects') && (
-                        <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemoveEA(pea.id)}><IconTrash size={12}/></button>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-sm" onClick={() => openEditEAModal(pea)} title="Edit submission emails for this project">
+                            <IconEdit size={12}/>
+                          </button>
+                          <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemoveEA(pea.id)} title="Remove EA from this project">
+                            <IconTrash size={12}/>
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -1515,6 +1563,34 @@ export default function ProjectDetail() {
       </Modal>
 
       <ConfirmDialog open={!!confirmRemoveEA} onClose={() => setConfirmRemoveEA(null)} onConfirm={() => removeEA(confirmRemoveEA)} title="Remove Employers Agent" message="Remove this EA from the project?" danger />
+
+      {/* Edit EA assignment — change the per-project submission email list.
+          The EA company itself is not editable here (use remove + re-assign
+          for that). Modal shows the EA name in the title for context. */}
+      <Modal open={!!showEditEA} onClose={() => { setShowEditEA(null); setEditEAForm({ submission_email: '' }) }}
+        title={showEditEA ? `Edit: ${showEditEA.employer_agents?.company_name || 'EA'}` : 'Edit EA'} size="sm"
+        footer={
+          <>
+            <button className="btn" onClick={() => { setShowEditEA(null); setEditEAForm({ submission_email: '' }) }}>Cancel</button>
+            <button className="btn btn-primary" onClick={saveEditEA} disabled={savingEditEA}>
+              {savingEditEA ? 'Saving…' : 'Save'}
+            </button>
+          </>
+        }>
+        <div className="form-grid">
+          <div className="full"><Field label="Submission Email(s) for this project">
+            <input type="text" value={editEAForm.submission_email}
+              onChange={e => setEditEAForm(f => ({ ...f, submission_email: e.target.value }))}
+              placeholder="e.g. john@ea.co.uk, sarah@ea.co.uk" autoFocus />
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+              Separate multiple emails with commas. Leave blank to use the EA's default submission email
+              {showEditEA?.employer_agents?.payment_submission_email && (
+                <> (<span style={{ fontFamily: 'monospace' }}>{showEditEA.employer_agents.payment_submission_email}</span>)</>
+              )}.
+            </div>
+          </Field></div>
+        </div>
+      </Modal>
 
       {showEAProfile && <EAModal ea={showEAProfile} onClose={() => setShowEAProfile(null)} onSaved={() => { setShowEAProfile(null); load() }} />}
 
