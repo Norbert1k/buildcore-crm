@@ -40,6 +40,39 @@ const TEMPLATE_FOLDERS = [
   { key: '06-project-programme',    label: '06. Project Programme',       color: '#534AB7', bg: '#EEEDFE', subfolders: [] },
 ]
 
+// ── Portal tile whitelist ─────────────────────────────────────────────────────
+//
+// The Visible/Hidden toggle is only shown on folders/subfolders that
+// correspond to a tile in the client portal Overview. Everything else hides
+// the toggle (data is preserved either way — RLS just doesn't expose it
+// because no portal route reads from those folders).
+//
+// Format: each entry is (folderKey, subfolderKey-or-null).
+//   • null subfolderKey means "the top-level template folder itself"
+//   • named subfolderKey means "this specific template subfolder of 00"
+//
+// Custom (user-created) child folders are NEVER given a toggle directly —
+// their visibility is implied by their template parent.
+const PORTAL_TILE_TARGETS = [
+  // Top-level template folders that map to portal tiles
+  ['02-payment-application', null],
+  ['04-variations',          null],
+  ['05-progress-report',     null],
+  ['06-project-programme',   null],
+  // Subfolders inside 00-project-information that map to portal tiles
+  ['00-project-information', 'csa'],
+  ['00-project-information', 'cff'],
+  ['00-project-information', 'reports'],   // → "Surveys & Reports" tile
+  ['00-project-information', 'photos'],
+]
+
+function showsClientVisibilityToggle(folderKey, subfolderKey) {
+  // subfolderKey may be undefined (top-level folder context) or a string.
+  // Normalize undefined → null for comparison.
+  const sk = subfolderKey == null ? null : subfolderKey
+  return PORTAL_TILE_TARGETS.some(([fk, esk]) => fk === folderKey && esk === sk)
+}
+
 // ── Folder icons (per folder key) ─────────────────────────────────────────────
 const FOLDER_ICONS = {
   '00-project-information': ({ color, size }) => (
@@ -1082,7 +1115,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         }
         <span style={{ fontSize: 10, color: 'var(--text3)' }}>{!isPhotosSubfolder && open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
         {!open && !isPhotosSubfolder && <CountBadge count={fileCount} />}
-        {!isCustom && canManage && (
+        {!isCustom && canManage && showsClientVisibilityToggle(folder.key, subfolder.key) && (
           <button
             onClick={toggleSubfolderVisibility}
             disabled={togglingVisible}
@@ -1712,7 +1745,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-          {canManage && (
+          {canManage && showsClientVisibilityToggle(folder.key, null) && (
             <button
               onClick={e => { e.stopPropagation(); toggleClientVisible() }}
               disabled={togglingVisible}
