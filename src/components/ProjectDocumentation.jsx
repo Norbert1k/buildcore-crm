@@ -135,6 +135,90 @@ async function triggerDownload(signedUrl, fileName) {
   }
 }
 
+// ── Publish a saved Progress Report to the 05 folder ──────────────────────────
+//
+// Generates the report PDF, uploads it to the project-docs storage bucket,
+// then inserts (or replaces) a project_doc_files row so the file appears in
+// the "05. Project Progress Report" folder. This is what makes the report
+// visible to clients in the portal.
+//
+// Overwrite behaviour: if a previously-published file with the same
+// report_number already exists in the same folder/subfolder, both the
+// storage object and the project_doc_files row are removed before the new
+// one is uploaded. Each saved report therefore maps to exactly one published
+// file, regardless of how many times it's republished.
+//
+// Returns true on success, false on failure (caller should refresh the file
+// list either way).
+async function publishProgressReportToFolder({ reportId, projectId, projectName, subfolderKey }) {
+  // Fetch report + photos in parallel — same pattern as Export PDF
+  const [{ data: full }, { data: pics }] = await Promise.all([
+    supabase.from('progress_reports').select('*').eq('id', reportId).single(),
+    supabase.from('progress_report_photos').select('*').eq('report_id', reportId).order('display_order'),
+  ])
+  if (!full) {
+    alert('Report not found')
+    return false
+  }
+
+  // Generate PDF as Blob (not download)
+  const result = await generateProgressReportPdf(full, pics || [], projectName, { asBlob: true })
+  if (!result?.blob) {
+    alert('PDF generation failed')
+    return false
+  }
+  const { blob, fileName } = result
+
+  // OVERWRITE step: find any existing published file with the same name in
+  // this folder/subfolder and remove it (storage + db row) so the new upload
+  // is clean.
+  const folderKey = '05-progress-report'
+  const existingQuery = supabase.from('project_doc_files').select('id, storage_path')
+    .eq('project_id', projectId)
+    .eq('folder_key', folderKey)
+    .eq('file_name', fileName)
+  const { data: existing } = subfolderKey == null
+    ? await existingQuery.is('subfolder_key', null)
+    : await existingQuery.eq('subfolder_key', subfolderKey)
+  if (existing?.length) {
+    const paths = existing.map(e => e.storage_path).filter(Boolean)
+    if (paths.length) await supabase.storage.from('project-docs').remove(paths)
+    await supabase.from('project_doc_files').delete().in('id', existing.map(e => e.id))
+  }
+
+  // Upload new PDF. Storage path follows the same convention as uploadFiles().
+  // Subfolder segment is `${subfolderKey}` for sub-buildings, or omitted for
+  // root-level (single-building) projects.
+  const ts = Date.now()
+  const path = subfolderKey
+    ? `projects/${projectId}/${folderKey}/${subfolderKey}/${ts}-${fileName}`
+    : `projects/${projectId}/${folderKey}/${ts}-${fileName}`
+  const { error: upErr } = await supabase.storage.from('project-docs').upload(path, blob, {
+    contentType: 'application/pdf',
+    upsert: false,
+  })
+  if (upErr) {
+    alert('Upload failed: ' + upErr.message)
+    return false
+  }
+
+  // Insert the project_doc_files row that makes the file appear in the folder.
+  const { error: dbErr } = await supabase.from('project_doc_files').insert({
+    project_id: projectId,
+    folder_key: folderKey,
+    subfolder_key: subfolderKey || null,
+    file_name: fileName,
+    file_size: blob.size,
+    storage_path: path,
+  })
+  if (dbErr) {
+    alert('Could not save file metadata: ' + dbErr.message)
+    return false
+  }
+
+  return true
+}
+
 // ── Folder drop reader (reads dropped folders recursively via webkitGetAsEntry) ─
 async function readDropEntries(e) {
   const items = e.dataTransfer?.items
@@ -720,6 +804,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
   const [confirmDeleteReport, setConfirmDeleteReport] = useState(null)
+  const [publishingReportId, setPublishingReportId] = useState(null)
 
   useEffect(() => { loadFileCount() }, [])
   useEffect(() => { if (open) { loadFiles(); loadChildFolders() } }, [open])
@@ -1138,6 +1223,30 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                       📄 Export PDF
                     </button>
                     {canManage && (
+                      <button
+                        disabled={publishingReportId === r.id}
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (publishingReportId) return
+                          setPublishingReportId(r.id)
+                          const ok = await publishProgressReportToFolder({
+                            reportId: r.id,
+                            projectId,
+                            projectName: `${projectName} — ${subLabel}`,
+                            subfolderKey: subfolder.key,
+                          })
+                          setPublishingReportId(null)
+                          if (ok) {
+                            await loadFiles()
+                            alert('Published to client portal')
+                          }
+                        }}
+                        title="Generate the PDF and save it into the 05 folder so the client portal can view it"
+                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #378ADD', borderRadius: 4, background: publishingReportId === r.id ? 'var(--surface2)' : '#378ADD', cursor: publishingReportId === r.id ? 'wait' : 'pointer', color: publishingReportId === r.id ? 'var(--text2)' : 'white', opacity: publishingReportId && publishingReportId !== r.id ? 0.5 : 1 }}>
+                        {publishingReportId === r.id ? 'Publishing…' : '📤 Publish to client'}
+                      </button>
+                    )}
+                    {canManage && (
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
                         style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
                         Delete
@@ -1211,6 +1320,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
   const [confirmDeleteReport, setConfirmDeleteReport] = useState(null)
+  const [publishingReportId, setPublishingReportId] = useState(null)
   const [zipProgress, setZipProgress] = useState(null)
   const [clientVisible, setClientVisible] = useState(false)
   const [togglingVisible, setTogglingVisible] = useState(false)
@@ -1761,6 +1871,30 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                       style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
                       📄 Export PDF
                     </button>
+                    {canManage && (
+                      <button
+                        disabled={publishingReportId === r.id}
+                        onClick={async (e) => {
+                          e.stopPropagation()
+                          if (publishingReportId) return
+                          setPublishingReportId(r.id)
+                          const ok = await publishProgressReportToFolder({
+                            reportId: r.id,
+                            projectId,
+                            projectName,
+                            subfolderKey: null,  // PrimeFolderSection = single-building / root level
+                          })
+                          setPublishingReportId(null)
+                          if (ok) {
+                            await loadRootFiles()
+                            alert('Published to client portal')
+                          }
+                        }}
+                        title="Generate the PDF and save it into the 05 folder so the client portal can view it"
+                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #378ADD', borderRadius: 4, background: publishingReportId === r.id ? 'var(--surface2)' : '#378ADD', cursor: publishingReportId === r.id ? 'wait' : 'pointer', color: publishingReportId === r.id ? 'var(--text2)' : 'white', opacity: publishingReportId && publishingReportId !== r.id ? 0.5 : 1 }}>
+                        {publishingReportId === r.id ? 'Publishing…' : '📤 Publish to client'}
+                      </button>
+                    )}
                     {canManage && (
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
                         style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
