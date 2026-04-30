@@ -727,7 +727,24 @@ export default function ProjectDetail() {
                 ['Duration', calcDuration(project.start_date, project.end_date)],
                 can('view_project_value') ? ['Contract Value', formatCurrency(project.value)] : null,
               ].filter(x => x && x[1] && x[1] !== '—').map(([k, v]) => (
-                <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span>{v}</span></div>
+                <div key={k}>
+                  <span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span>
+                  {k === 'Location' ? (
+                    // Open the address in Google Maps (web → maps.google.com,
+                    // mobile devices auto-launch the native Maps app).
+                    // The api=1 endpoint is the documented, stable URL format.
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ color: 'var(--accent, #4a90e2)', textDecoration: 'none' }}
+                      onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                      title="Open in Google Maps"
+                    >{v}</a>
+                  ) : (
+                    <span>{v}</span>
+                  )}
+                </div>
               ))}
             </div>
 
