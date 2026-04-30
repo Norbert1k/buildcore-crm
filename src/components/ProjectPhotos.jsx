@@ -463,7 +463,31 @@ function ConnectTelegramModal({ projectId, profileId, onClose, onConnected }) {
       added_by: profileId || null,
     })
     setSaving(false)
-    if (insErr) { setError(insErr.message); return }
+    if (insErr) {
+      // Postgres unique-violation = 23505. The chat_id column has a UNIQUE
+      // constraint so a single Telegram chat can only be linked to one
+      // project at a time. Give the user a useful hint instead of the raw
+      // SQL error string.
+      if (insErr.code === '23505') {
+        // Try to look up which project the chat is already linked to so we
+        // can name it. Best-effort — if the lookup fails we still show a
+        // friendly message.
+        const { data: existing } = await supabase
+          .from('project_telegram_groups')
+          .select('project_id, chat_title, projects!inner(project_name)')
+          .eq('chat_id', id)
+          .maybeSingle()
+        const otherProject = existing?.projects?.project_name
+        setError(
+          otherProject
+            ? `This Telegram chat is already connected to project "${otherProject}". Each chat can only be linked to one project at a time — disconnect it there first.`
+            : 'This Telegram chat is already connected to another project. Each chat can only be linked to one project at a time — disconnect it there first.'
+        )
+        return
+      }
+      setError(insErr.message)
+      return
+    }
 
     onConnected({ chat_id: id, chat_title: chatTitle.trim() || null })
   }
