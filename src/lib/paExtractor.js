@@ -175,24 +175,35 @@ function toTitleCase(s) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// fetchLatestPaForProject(supabase, projectId) → ArrayBuffer | null
+// fetchLatestPaForSubfolder(supabase, projectId, paSubfolderKey) → ArrayBuffer | null
 //
-// Looks up the most recent Payment Application file for a project
-// (folder_key='02-payment-application', subfolder_key=null, sorted by
-// created_at). Downloads it from storage and returns the raw bytes for
-// extractFromPa to parse. Returns null if no PA exists yet — the caller
-// should fall back to default empty groups in that case.
+// Looks up the most recent Payment Application file in the given location:
+//   • paSubfolderKey === null      → the root of 02-payment-application
+//   • paSubfolderKey === <string>  → a specific PA subfolder (e.g. Sports Hall)
+//
+// For multi-building projects (Merton-style), each sub-building has its own
+// PA subfolder containing PA01, PA02, etc. — and the corresponding Progress
+// Report should auto-extract from the LATEST PA in THAT subfolder, not from
+// other sub-buildings' PAs.
+//
+// Returns the raw bytes for extractFromPa to parse, or null if no PA exists
+// in that location. Caller falls back to default empty groups.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function fetchLatestPaForProject(supabase, projectId) {
+export async function fetchLatestPaForSubfolder(supabase, projectId, paSubfolderKey) {
   try {
-    const { data: rows, error } = await supabase
+    let q = supabase
       .from('project_doc_files')
       .select('storage_path, file_name, created_at')
       .eq('project_id', projectId)
       .eq('folder_key', '02-payment-application')
-      .is('subfolder_key', null)
       .order('created_at', { ascending: false })
       .limit(1)
+    // NULL vs string handling: PostgREST treats .eq(null) and .is(null)
+    // differently. Use .is() for null, .eq() for an actual key.
+    if (paSubfolderKey == null) q = q.is('subfolder_key', null)
+    else q = q.eq('subfolder_key', paSubfolderKey)
+
+    const { data: rows, error } = await q
     if (error) throw error
     if (!rows || rows.length === 0) return null
 
@@ -205,7 +216,14 @@ export async function fetchLatestPaForProject(supabase, projectId) {
     if (!res.ok) return null
     return await res.arrayBuffer()
   } catch (err) {
-    console.warn('[paExtractor] fetchLatestPaForProject failed:', err)
+    console.warn('[paExtractor] fetchLatestPaForSubfolder failed:', err)
     return null
   }
+}
+
+// Backwards-compat alias — earlier code passed no subfolder so behaviour
+// was "root only". Existing callers continue to work via this delegating
+// wrapper which always queries the root.
+export async function fetchLatestPaForProject(supabase, projectId) {
+  return fetchLatestPaForSubfolder(supabase, projectId, null)
 }
