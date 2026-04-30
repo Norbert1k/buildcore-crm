@@ -134,7 +134,7 @@ function ProjectFileSearch({ projectId }) {
 export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { can } = useAuth()
+  const { can, profile } = useAuth()
   const [project, setProject] = useState(null)
   const [subs, setSubs] = useState([])
   const [allSubs, setAllSubs] = useState([])
