@@ -81,19 +81,31 @@ export async function extractFromPa(arrayBuffer) {
     const groups = []   // [{ name, items: [{ progress_pct }] }]
     const variations = []
 
-    // Line-item sums — used as a fallback ONLY if no section-total row is
-    // found below. The fallback is needed for older PA xlsx files that
-    // don't yet declare their own totals.
+    // ── Total resolution strategy ────────────────────────────────────────────
+    //
+    // PA spreadsheets typically have multiple subtotal rows before VARIATIONS
+    // (e.g. one for MAIN WORKS, another for PROVISIONAL SUMS), then a single
+    // CONTRACT SUM grand-total row that equals their sum.
+    //
+    // Resolution order, most reliable first:
+    //   1. CONTRACT SUM row (col A == 'CONTRACT SUM') — the author's
+    //      explicit grand total. Use its F directly. (H/I prefer subtotals
+    //      because the QS sometimes leaves CONTRACT SUM's H/I blank even
+    //      when subtotals have progress data.)
+    //   2. Sum of all subtotal rows before VARIATIONS — fallback when no
+    //      explicit CONTRACT SUM exists.
+    //   3. Line-item sum — last-resort fallback for files without subtotal
+    //      rows at all (uncommon).
+    //
+    // Older versions of this parser used "the LAST section-total before
+    // VARIATIONS" which silently dropped earlier subtotals (e.g. MAIN WORKS
+    // £1,228,000) when a smaller PROVISIONAL SUMS subtotal (£117,000)
+    // followed them — yielding £117,000 as the project total instead of
+    // £1,345,000.
+    let contractSumF = null, contractSumH = null, contractSumI = null
+    let subtotalsF = 0, subtotalsH = 0, subtotalsI = 0
+    let subtotalCount = 0
     let fallbackTotalSum = 0, fallbackCumulativeSum = 0, fallbackPrevCertSum = 0
-
-    // Declared section-total values. PA xlsx files put a "subtotal" row at
-    // the end of each section (col A and B empty, col F has the section
-    // total) — we use the LAST non-VARIATIONS section total row as the
-    // authoritative original_contract / claimed values. This avoids the
-    // bug where the line-item sum would silently miss any items where
-    // progress% (col G) was empty (e.g. work not yet started).
-    let lastMainTotalF = 0, lastMainTotalH = 0, lastMainTotalI = 0
-    let foundSectionTotal = false
 
     let currentSection = null   // 'PRELIMINARIES', 'MAIN WORKS', 'VARIATIONS', etc.
     let currentGroup = null     // pointer into groups array
@@ -106,6 +118,18 @@ export async function extractFromPa(arrayBuffer) {
       const g = row[6]   // Progress %
       const h = row[7]   // Cumulative (£)
       const i = row[8]   // Previously Certified (£)
+
+      // ── CONTRACT SUM grand-total row — capture and continue ──
+      // Must be checked BEFORE the generic isSection branch because
+      // 'CONTRACT SUM' is uppercase and would otherwise be classed as a
+      // section header.
+      if (typeof a === 'string' && a.trim().toUpperCase() === 'CONTRACT SUM') {
+        if (typeof f === 'number') contractSumF = f
+        if (typeof h === 'number') contractSumH = h
+        if (typeof i === 'number') contractSumI = i
+        currentGroup = null
+        continue
+      }
 
       // ── Section header: col A is UPPERCASE multi-character string ──
       const aStr = (typeof a === 'string') ? a.trim() : ''
@@ -135,18 +159,17 @@ export async function extractFromPa(arrayBuffer) {
         continue
       }
 
-      // ── Section-total row: col A AND col B empty, col F is a positive
-      //    number. PA xlsx authors use these as subtotals at the end of
-      //    each section (e.g. row 110 in Hopton Road PA02 has col F =
-      //    £2,174,965.11, col H = £908,077.81). The LAST non-VARIATIONS
-      //    section total row is the project's main contract figure.
+      // ── Subtotal row: col A AND col B empty, col F is a positive number,
+      //    not in VARIATIONS. Sum ALL subtotals before VARIATIONS rather
+      //    than just the last (which would miss MAIN WORKS when followed by
+      //    PROVISIONAL SUMS, etc.).
       const aEmpty = a === undefined || a === null || a === ''
       const bEmpty = b === undefined || b === null || b === ''
       if (aEmpty && bEmpty && typeof f === 'number' && f > 0 && currentSection !== 'VARIATIONS') {
-        lastMainTotalF = f
-        lastMainTotalH = typeof h === 'number' ? h : 0
-        lastMainTotalI = typeof i === 'number' ? i : 0
-        foundSectionTotal = true
+        subtotalsF += f
+        if (typeof h === 'number') subtotalsH += h
+        if (typeof i === 'number') subtotalsI += i
+        subtotalCount += 1
         continue
       }
 
@@ -179,12 +202,37 @@ export async function extractFromPa(arrayBuffer) {
       }
     }
 
-    // Resolve the final totals: prefer the file's declared section-total row
-    // if we found one; otherwise fall back to the line-item sum so older
-    // files (without explicit subtotal rows) still produce a number.
-    const totalSum = foundSectionTotal ? lastMainTotalF : fallbackTotalSum
-    const cumulativeSum = foundSectionTotal ? lastMainTotalH : fallbackCumulativeSum
-    const prevCertSum = foundSectionTotal ? lastMainTotalI : fallbackPrevCertSum
+    // ── Resolve totals ────────────────────────────────────────────────────
+    //
+    // `totals.total` is the ORIGINAL CONTRACT amount (excluding variations).
+    // The caller's aggregateFinancials() adds variations on top — so this
+    // value must NOT include variations or they'll be double-counted.
+    //
+    // Resolution order:
+    //   1. Sum of all subtotal rows before VARIATIONS — most reliable.
+    //   2. CONTRACT SUM row's F minus variations_total — fallback only when
+    //      subtotals are absent. (CONTRACT SUM INCLUDES variations so we
+    //      have to subtract them.)
+    //   3. Line-item sum — last-resort fallback.
+    let totalSum, cumulativeSum, prevCertSum
+    if (subtotalCount > 0) {
+      totalSum = subtotalsF
+      cumulativeSum = subtotalsH
+      prevCertSum = subtotalsI
+    } else if (contractSumF !== null) {
+      let varSum = 0
+      for (const v of variations) {
+        const n = parseFloat(v.cost_impact)
+        if (!Number.isNaN(n)) varSum += n
+      }
+      totalSum = contractSumF - varSum
+      cumulativeSum = contractSumH ?? 0
+      prevCertSum = contractSumI ?? 0
+    } else {
+      totalSum = fallbackTotalSum
+      cumulativeSum = fallbackCumulativeSum
+      prevCertSum = fallbackPrevCertSum
+    }
 
     // Reduce groups to summary form. Drop groups with no data rows.
     const resultGroups = groups
