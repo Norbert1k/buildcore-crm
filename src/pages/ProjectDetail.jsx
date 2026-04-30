@@ -733,59 +733,89 @@ export default function ProjectDetail() {
           Stacks vertically on narrower screens via flex-wrap. */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div className="card card-pad" style={{ flex: '1 1 420px', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
-                <h2 style={{ fontSize: 20, fontWeight: 600 }}>{project.project_name}</h2>
-                {project.project_ref && <span style={{ color: 'var(--text3)', fontSize: 13 }}>#{project.project_ref}</span>}
-                <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '4px 20px', fontSize: 13 }}>
-                {project.client_name && (
-                  <div>
-                    <span style={{ color: 'var(--text3)', marginRight: 6 }}>Client:</span>
-                    {project.client_id ? (
-                      <span
-                        onClick={() => navigate(`/clients/${project.client_id}`)}
-                        style={{ fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}
-                        onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                        onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
-                      >{project.client_name}</span>
-                    ) : (
-                      <span style={{ fontWeight: 700, color: 'var(--text)' }}>{project.client_name}</span>
-                    )}
-                  </div>
-                )}
-                {[
-                  ['Project Assigned To', project.profiles?.full_name],
-                  ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
-                  ['Start Date', formatDate(project.start_date)],
-                  ['End Date', formatDate(project.end_date)],
-                  ['Duration', calcDuration(project.start_date, project.end_date)],
-                ].filter(x => x && x[1] && x[1] !== '—').map(([k, v]) => (
-                  <div key={k}>
-                    <span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span>
-                    {k === 'Location' ? (
-                      // Open the address in Google Maps (web → maps.google.com,
-                      // mobile devices auto-launch the native Maps app).
-                      // The api=1 endpoint is the documented, stable URL format.
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`}
-                        target="_blank" rel="noopener noreferrer"
-                        style={{ color: 'var(--text)', fontWeight: 600, textDecoration: 'none' }}
-                        onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
-                        onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
-                        title="Open in Google Maps"
-                      >{v}</a>
-                    ) : (
-                      <span>{v}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 600 }}>{project.project_name}</h2>
+              {project.project_ref && <span style={{ color: 'var(--text2)', fontSize: 13 }}>#{project.project_ref}</span>}
+              <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>
             </div>
             {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
+          </div>
+
+          {/* 2-column layout with vertical divider in the middle.
+              Left: client / assignee / location.
+              Right: schedule (start/end/duration).
+              Field labels use --text2 (brighter than the old --text3) so they
+              stay readable against the dark surface. Stacked label-above-value
+              style — the left column's location can wrap to multiple lines
+              without disrupting the right column. */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 22, fontSize: 13 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+              {project.client_name && (
+                <div>
+                  <div style={{ color: 'var(--text2)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Client</div>
+                  {project.client_id ? (
+                    <span
+                      onClick={() => navigate(`/clients/${project.client_id}`)}
+                      style={{ fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                    >{project.client_name}</span>
+                  ) : (
+                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>{project.client_name}</span>
+                  )}
+                </div>
+              )}
+              {project.profiles?.full_name && (
+                <div>
+                  <div style={{ color: 'var(--text2)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Project Assigned To</div>
+                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{project.profiles.full_name}</span>
+                </div>
+              )}
+              {(() => {
+                const addr = [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')
+                return addr ? (
+                  <div>
+                    <div style={{ color: 'var(--text2)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Location</div>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`}
+                      target="_blank" rel="noopener noreferrer"
+                      style={{ color: 'var(--text)', fontWeight: 600, textDecoration: 'none' }}
+                      onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                      title="Open in Google Maps"
+                    >{addr}</a>
+                  </div>
+                ) : null
+              })()}
+            </div>
+
+            {/* Vertical divider — uses border colour so it inherits theme */}
+            <div style={{ background: 'var(--border)', width: 1 }}></div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+              {project.start_date && (
+                <div>
+                  <div style={{ color: 'var(--text2)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Start Date</div>
+                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{formatDate(project.start_date)}</span>
+                </div>
+              )}
+              {project.end_date && (
+                <div>
+                  <div style={{ color: 'var(--text2)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>End Date</div>
+                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{formatDate(project.end_date)}</span>
+                </div>
+              )}
+              {(() => {
+                const dur = calcDuration(project.start_date, project.end_date)
+                return dur ? (
+                  <div>
+                    <div style={{ color: 'var(--text2)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Duration</div>
+                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>{dur}</span>
+                  </div>
+                ) : null
+              })()}
+            </div>
           </div>
         </div>
 
@@ -795,7 +825,7 @@ export default function ProjectDetail() {
             Only visible to users who can view project value. */}
         {can('view_project_value') && (
           <div className="card card-pad" style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
               Financial Summary
             </div>
             {paFinancials.loading ? (
@@ -816,13 +846,13 @@ export default function ProjectDetail() {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text3)' }}>Original contract</span>
+                    <span style={{ fontSize: 13, color: 'var(--text2)' }}>Original contract</span>
                     <span style={{ fontSize: 16, fontWeight: 600 }}>{formatCurrency(original)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text3)' }}>
+                    <span style={{ fontSize: 13, color: 'var(--text2)' }}>
                       Variations
-                      {variations_count > 0 && <span style={{ color: 'var(--text3)', opacity: 0.7 }}> ({variations_count})</span>}
+                      {variations_count > 0 && <span style={{ color: 'var(--text3)' }}> ({variations_count})</span>}
                     </span>
                     <span style={{ fontSize: 16, fontWeight: 600, color: variations_total > 0 ? 'var(--green, #448a40)' : 'var(--text)' }}>
                       {variations_total > 0 ? '+ ' : ''}{formatCurrency(variations_total)}
@@ -834,21 +864,21 @@ export default function ProjectDetail() {
                   </div>
                   {buildings.length > 1 && (
                     <div style={{ marginTop: 8, paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
                         By Sub-building
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {buildings.map((b, i) => (
                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                            <span style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 8 }}>{b.label}</span>
-                            <span style={{ color: 'var(--text2)' }}>{formatCurrency(b.original + b.variations_total)}</span>
+                            <span style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 8 }}>{b.label}</span>
+                            <span style={{ color: 'var(--text)' }}>{formatCurrency(b.original + b.variations_total)}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
                   {!hasPaData && (
-                    <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text2)', fontStyle: 'italic', marginTop: 4 }}>
                       No Payment Application uploaded yet — showing project's manually entered value.
                     </div>
                   )}
