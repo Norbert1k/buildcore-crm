@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
 import GanttEditor from './Gantt/GanttEditor'
 import ProgressReportEditor, { generateProgressReportPdf } from './ProgressReportEditor'
+import ProjectPhotos from './ProjectPhotos'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -24,6 +25,11 @@ const TEMPLATE_FOLDERS = [
       { key: 'planning', label: '09. Planning' },
       { key: 'utilities', label: '10. Utilities' },
       { key: 'meetings', label: '11. Meetings' },
+      // Photos subfolder is special — it doesn't store files in
+      // project_doc_files. The SubfolderSection detects this key and renders
+      // <ProjectPhotos> (Telegram-bot-fed photos with their own internal
+      // folder structure) instead of the normal files grid.
+      { key: 'photos',   label: '12. Project Photos' },
     ]
   },
   { key: '01-project-order',        label: '01. Project Order',           color: '#378ADD', bg: '#E6F1FB', subfolders: [] },
@@ -705,6 +711,11 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
   // open progress reports scoped to this specific sub-building. Inactive in
   // every other subfolder context.
   const isPrSubfolder = folder.key === '05-progress-report'
+  // Photos subfolder — only the single key 'photos' under '00-project-information'.
+  // When this subfolder is opened we replace the standard files grid with
+  // <ProjectPhotos>, which has its own internal folder structure and reads
+  // from the project_photos / project_telegram_groups tables.
+  const isPhotosSubfolder = folder.key === '00-project-information' && subfolder.key === 'photos'
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -965,7 +976,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
       <div
         draggable={isCustom && !renaming}
         onDragStart={e => { if (!isCustom) return; e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.effectAllowed = 'move' }}
-        onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
+        onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={isPhotosSubfolder ? undefined : onDrop}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
@@ -984,8 +995,8 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
               style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
           : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subLabel}</span>
         }
-        <span style={{ fontSize: 10, color: 'var(--text3)' }}>{open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
-        {!open && <CountBadge count={fileCount} />}
+        <span style={{ fontSize: 10, color: 'var(--text3)' }}>{!isPhotosSubfolder && open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
+        {!open && !isPhotosSubfolder && <CountBadge count={fileCount} />}
         {!isCustom && canManage && (
           <button
             onClick={toggleSubfolderVisibility}
@@ -1012,7 +1023,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             {clientVisible ? 'Visible to client' : 'Hidden'}
           </button>
         )}
-        {canManage && (
+        {canManage && !isPhotosSubfolder && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
             {!renaming && (
               <>
@@ -1055,7 +1066,16 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </div>
-      {open && (
+      {open && isPhotosSubfolder && (
+        <div style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 10, paddingBottom: 10 }}>
+          {/* Photos subfolder is fed by Telegram — renders its own folder grid,
+              connection banner, lightbox, etc. No file uploads, no drag/drop,
+              no bulk-bar — those are all about project_doc_files which photos
+              don't use. */}
+          <ProjectPhotos projectId={projectId} />
+        </div>
+      )}
+      {open && !isPhotosSubfolder && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
           style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())}
