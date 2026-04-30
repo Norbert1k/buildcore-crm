@@ -720,7 +720,7 @@ export default function ProjectDetail() {
                 </div>
               )}
               {[
-                ['Project Manager', project.profiles?.full_name],
+                ['Project Assigned To', project.profiles?.full_name],
                 ['Location', [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')],
                 ['Start Date', formatDate(project.start_date)],
                 ['End Date', formatDate(project.end_date)],
@@ -813,6 +813,10 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Documents
         </div>
+        <div className={`filter-tab ${activeTab === 'ccg_team' ? 'active' : ''}`} onClick={() => { setActiveTab('ccg_team'); localStorage.setItem(_tabKey, 'ccg_team') }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          CCG Team<span className="tab-badge">{team.length}</span>
+        </div>
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => { setActiveTab('subcontractors'); localStorage.setItem(_tabKey, 'subcontractors') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Subcontractors<span className="tab-badge">{subs.filter(ps => { const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'; return c === 'contractual_work' }).length}</span>
@@ -820,10 +824,6 @@ export default function ProjectDetail() {
         <div className={`filter-tab ${activeTab === 'design_team' ? 'active' : ''}`} onClick={() => { setActiveTab('design_team'); localStorage.setItem(_tabKey, 'design_team') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
-        </div>
-        <div className={`filter-tab ${activeTab === 'ccg_team' ? 'active' : ''}`} onClick={() => { setActiveTab('ccg_team'); localStorage.setItem(_tabKey, 'ccg_team') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          CCG Team<span className="tab-badge">{team.length}</span>
         </div>
         {can('view_hs_handover') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
