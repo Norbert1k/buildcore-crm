@@ -40,6 +40,27 @@ const CCG_TEAM_ROLES = [
 ]
 const CCG_ROLE_ORDER = Object.fromEntries(CCG_TEAM_ROLES.map(r => [r.value, r.order]))
 
+// EA per-project submission emails are stored as a single delimited string in
+// project_employer_agents.submission_email. Split on commas / semicolons /
+// whitespace so the user can be loose about how they type them. Returns an
+// array of trimmed non-empty addresses.
+function parseSubmissionEmails(raw) {
+  if (!raw) return []
+  return String(raw)
+    .split(/[,;\s]+/)
+    .map(s => s.trim())
+    .filter(Boolean)
+}
+// Validate every entry looks like an email. Returns the first invalid
+// address (or null if all are valid). Empty input is valid (= no override).
+function findInvalidEmail(raw) {
+  const list = parseSubmissionEmails(raw)
+  for (const e of list) {
+    if (!/^\S+@\S+\.\S+$/.test(e)) return e
+  }
+  return null
+}
+
 // ── Project File Search ───────────────────────────────────────────────────────
 function ProjectFileSearch({ projectId }) {
   const [query, setQuery] = useState('')
@@ -704,10 +725,23 @@ export default function ProjectDetail() {
 
   async function assignEA() {
     if (!eaAssignForm.ea_id) return
+    // Validate the per-project override list. Stays optional — empty means
+    // "use the EA's own default email". When non-empty, every comma/semicolon
+    // separated entry must look like an email.
+    const invalid = findInvalidEmail(eaAssignForm.submission_email)
+    if (invalid) {
+      alert(`"${invalid}" is not a valid email address. Please separate multiple emails with commas.`)
+      return
+    }
+    // Canonicalize: trim + comma-join so the stored format is consistent
+    // regardless of whether the user typed semicolons or extra whitespace.
+    const list = parseSubmissionEmails(eaAssignForm.submission_email)
+    const canonical = list.length > 0 ? list.join(', ') : null
+
     await supabase.from('project_employer_agents').insert({
       project_id: id,
       ea_id: eaAssignForm.ea_id,
-      submission_email: eaAssignForm.submission_email || null,
+      submission_email: canonical,
     })
     setShowAssignEA(false)
     setEaAssignForm({ ea_id: '', submission_email: '' })
@@ -942,9 +976,28 @@ export default function ProjectDetail() {
                     </td>
                     <td className="td-muted">{pea.employer_agents?.email || '—'}</td>
                     <td>
-                      <span style={{ fontWeight: 500, color: 'var(--blue)' }}>
-                        {pea.submission_email || pea.employer_agents?.payment_submission_email || <span style={{ color: 'var(--text3)', fontWeight: 400 }}>—</span>}
-                      </span>
+                      {(() => {
+                        // Resolve effective email: per-project override → EA's default → none.
+                        // Per-project value can be a comma-separated list of emails (multiple
+                        // recipients at the EA company); render each as its own mailto link.
+                        const raw = pea.submission_email || pea.employer_agents?.payment_submission_email || ''
+                        const list = parseSubmissionEmails(raw)
+                        if (list.length === 0) {
+                          return <span style={{ color: 'var(--text3)', fontWeight: 400 }}>—</span>
+                        }
+                        return (
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {list.map((e, i) => (
+                              <a key={i} href={`mailto:${e}`}
+                                style={{ fontWeight: 500, color: 'var(--blue)', textDecoration: 'none' }}
+                                onMouseEnter={ev => ev.currentTarget.style.textDecoration = 'underline'}
+                                onMouseLeave={ev => ev.currentTarget.style.textDecoration = 'none'}>
+                                {e}
+                              </a>
+                            ))}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td>
                       {can('manage_projects') && (
@@ -1452,9 +1505,11 @@ export default function ProjectDetail() {
             const sel = allEAs.find(ea => ea.id === e.target.value)
             setEaAssignForm(f => ({ ...f, ea_id: e.target.value, submission_email: sel?.payment_submission_email || '' }))
           }}><option value="">Select EA…</option>{allEAs.filter(ea => !projectEAs.find(p => p.ea_id === ea.id)).map(ea => <option key={ea.id} value={ea.id}>{ea.company_name}</option>)}</select></Field></div>
-          <div className="full"><Field label="Submission Email for this project">
-            <input type="email" value={eaAssignForm.submission_email} onChange={e => setEaAssignForm(f => ({ ...f, submission_email: e.target.value }))} placeholder="Override default submission email (optional)" />
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Leave blank to use the EA's default submission email.</div>
+          <div className="full"><Field label="Submission Email(s) for this project">
+            <input type="text" value={eaAssignForm.submission_email} onChange={e => setEaAssignForm(f => ({ ...f, submission_email: e.target.value }))} placeholder="e.g. john@ea.co.uk, sarah@ea.co.uk" />
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+              Separate multiple emails with commas. Leave blank to use the EA's default submission email.
+            </div>
           </Field></div>
         </div>
       </Modal>
