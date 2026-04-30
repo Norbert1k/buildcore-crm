@@ -35,10 +35,13 @@ async function loadSheetJs() {
   return window.XLSX
 }
 
-// Headers we treat as project-wide totals / footers — never groups.
+// Headers we treat as project-wide totals / footers — never groups, never
+// section-totals. The parser explicitly skips these rows.
 const TOTAL_ROW_LABELS = new Set([
   'CONTRACT TOTAL',
+  'CONTRACT SUM',
   'TOTAL DUE',
+  'TOTAL DUE THIS APPLICATION',
   'GRAND TOTAL',
   'LESS RETENTION',
   'RETENTION',
@@ -77,7 +80,20 @@ export async function extractFromPa(arrayBuffer) {
     // Now walk rows looking for sections, groups, data rows, variations.
     const groups = []   // [{ name, items: [{ progress_pct }] }]
     const variations = []
-    let totalSum = 0, cumulativeSum = 0, prevCertSum = 0
+
+    // Line-item sums — used as a fallback ONLY if no section-total row is
+    // found below. The fallback is needed for older PA xlsx files that
+    // don't yet declare their own totals.
+    let fallbackTotalSum = 0, fallbackCumulativeSum = 0, fallbackPrevCertSum = 0
+
+    // Declared section-total values. PA xlsx files put a "subtotal" row at
+    // the end of each section (col A and B empty, col F has the section
+    // total) — we use the LAST non-VARIATIONS section total row as the
+    // authoritative original_contract / claimed values. This avoids the
+    // bug where the line-item sum would silently miss any items where
+    // progress% (col G) was empty (e.g. work not yet started).
+    let lastMainTotalF = 0, lastMainTotalH = 0, lastMainTotalI = 0
+    let foundSectionTotal = false
 
     let currentSection = null   // 'PRELIMINARIES', 'MAIN WORKS', 'VARIATIONS', etc.
     let currentGroup = null     // pointer into groups array
@@ -119,6 +135,21 @@ export async function extractFromPa(arrayBuffer) {
         continue
       }
 
+      // ── Section-total row: col A AND col B empty, col F is a positive
+      //    number. PA xlsx authors use these as subtotals at the end of
+      //    each section (e.g. row 110 in Hopton Road PA02 has col F =
+      //    £2,174,965.11, col H = £908,077.81). The LAST non-VARIATIONS
+      //    section total row is the project's main contract figure.
+      const aEmpty = a === undefined || a === null || a === ''
+      const bEmpty = b === undefined || b === null || b === ''
+      if (aEmpty && bEmpty && typeof f === 'number' && f > 0 && currentSection !== 'VARIATIONS') {
+        lastMainTotalF = f
+        lastMainTotalH = typeof h === 'number' ? h : 0
+        lastMainTotalI = typeof i === 'number' ? i : 0
+        foundSectionTotal = true
+        continue
+      }
+
       // ── Group/plot header: col A has text (not a Ref like 1.1), col F empty ──
       if (aStr && !/^\d/.test(aStr) && (f == null || f === 0 || f === '')) {
         // It's a plot header (e.g. "Plot 1, 2, 13, 14, 15, 23 - Detached 4 Bed")
@@ -129,6 +160,9 @@ export async function extractFromPa(arrayBuffer) {
       }
 
       // ── Data row: numeric Progress% in col G ──
+      // Used to populate per-plot groups for the Progress Report editor,
+      // AND to maintain a fallback line-item sum in case no section-total
+      // row exists in the file (older PA xlsx layouts).
       if (typeof g === 'number') {
         if (!currentGroup) {
           // No group set yet — fall back to using the section as group name
@@ -139,11 +173,18 @@ export async function extractFromPa(arrayBuffer) {
           groups.push(currentGroup)
         }
         currentGroup.items.push({ progress_pct: g * 100 })
-        if (typeof f === 'number') totalSum += f
-        if (typeof h === 'number') cumulativeSum += h
-        if (typeof i === 'number') prevCertSum += i
+        if (typeof f === 'number') fallbackTotalSum += f
+        if (typeof h === 'number') fallbackCumulativeSum += h
+        if (typeof i === 'number') fallbackPrevCertSum += i
       }
     }
+
+    // Resolve the final totals: prefer the file's declared section-total row
+    // if we found one; otherwise fall back to the line-item sum so older
+    // files (without explicit subtotal rows) still produce a number.
+    const totalSum = foundSectionTotal ? lastMainTotalF : fallbackTotalSum
+    const cumulativeSum = foundSectionTotal ? lastMainTotalH : fallbackCumulativeSum
+    const prevCertSum = foundSectionTotal ? lastMainTotalI : fallbackPrevCertSum
 
     // Reduce groups to summary form. Drop groups with no data rows.
     const resultGroups = groups
