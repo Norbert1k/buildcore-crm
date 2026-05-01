@@ -240,18 +240,52 @@ export async function generateCff(csaExtract, settings) {
     monthsBetween(settings.start_date, settings.end_date) ||
     1
 
-  // Compute distributions per group
+  // Compute distributions per group. For each row we either use the curve-
+  // derived distribution OR a user-supplied manual array (settings.row_manual).
+  // Manual arrays must be exactly numMonths long; otherwise they're ignored.
   const groupsWithCurves = csaExtract.groups.map(g => ({
     ...g,
     curve: (settings.row_curves && settings.row_curves[g.id]) || settings.default_curve || 'even',
   }))
   const distribution = distributeGroups(groupsWithCurves, numMonths, settings.default_curve || 'even')
 
+  // Apply manual overrides
+  const rowManual = settings.row_manual || {}
+  const resolvedRows = distribution.rows.map(r => {
+    const manual = rowManual[r.id]
+    if (Array.isArray(manual) && manual.length === numMonths) {
+      return { ...r, monthly: manual.slice() }
+    }
+    return r
+  })
+
+  // Recompute totals + cumulative from the resolved (post-override) rows so
+  // the fallback `v` values written into the xlsx match what Excel will show
+  // once formulas evaluate. Otherwise Excel-on-open is right but anyone
+  // reading raw cell `.v` (e.g. our portal parser before formulas evaluate)
+  // would see stale curve-only numbers.
+  const resolvedTotals = Array.from({ length: numMonths }, (_, m) =>
+    Math.round(resolvedRows.reduce((s, r) => s + (r.monthly[m] || 0), 0) * 100) / 100
+  )
+  const resolvedCumulative = []
+  let running = 0
+  for (const t of resolvedTotals) {
+    running = Math.round((running + t) * 100) / 100
+    resolvedCumulative.push(running)
+  }
+  // Repackage as a distribution-shaped object so the rest of the generator
+  // can reference it under the same name.
+  const finalDist = {
+    rows: resolvedRows,
+    totals: resolvedTotals,
+    cumulative: resolvedCumulative,
+  }
+
   // Merge distribution back into groups for rendering
   const groupsForRender = assignRefs(
     groupsWithCurves.map(g => {
-      const dist = distribution.rows.find(r => r.id === g.id)
-      return { ...g, monthly: dist ? dist.monthly : Array(numMonths).fill(0) }
+      const row = finalDist.rows.find(r => r.id === g.id)
+      return { ...g, monthly: row ? row.monthly : Array(numMonths).fill(0) }
     })
   )
 
@@ -392,7 +426,7 @@ export async function generateCff(csaExtract, settings) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      v: distribution.totals[m],
+      v: finalDist.totals[m],
       f: `SUM(${colLetter}${dataFirstRow1Indexed}:${colLetter}${dataLastRow1Indexed})`,
       s: STYLES.summaryNum,
     })
@@ -422,7 +456,7 @@ export async function generateCff(csaExtract, settings) {
     }
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      v: distribution.cumulative[m],
+      v: finalDist.cumulative[m],
       f: formula,
       s: STYLES.summaryNum,
     })
@@ -440,7 +474,7 @@ export async function generateCff(csaExtract, settings) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      v: distribution.cumulative[m] / contractSum,
+      v: finalDist.cumulative[m] / contractSum,
       f: `IFERROR(${colLetter}${cumulativeRowIdx + 1}/${totalForecastColLetter}${monthlyGrossRowIdx + 1},0)`,
       s: STYLES.summaryPct,
     })
@@ -463,7 +497,7 @@ export async function generateCff(csaExtract, settings) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      v: -distribution.totals[m] * 0.03,
+      v: -finalDist.totals[m] * 0.03,
       f: `-${colLetter}${monthlyGrossRowIdx + 1}*0.03`,
       s: STYLES.dataNum,
     })
@@ -511,7 +545,7 @@ export async function generateCff(csaExtract, settings) {
   for (let m = 0; m < numMonths; m++) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     const isLast = m === numMonths - 1
-    const monthly = distribution.totals[m]
+    const monthly = finalDist.totals[m]
     const retention = monthly * 0.03
     const release = isLast ? contractSum * 0.015 : 0
     setCell(rc(rowIdx, 3 + m), {
