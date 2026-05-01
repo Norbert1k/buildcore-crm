@@ -54,13 +54,19 @@ export default function CffGeneratorModal({
   // navigation so user doesn't lose edits when going back to Step 1.
   const [manualOverrides, setManualOverrides] = useState({})  // { [groupId]: number[] }
 
-  // PA-aware regenerate state. paList is auto-fetched at mount; usePaActuals
-  // is the user's toggle (default ON when PAs exist). When ON, the first
-  // paList.length months of every row are replaced with PA-derived values
-  // and the remaining months redistribute the row's leftover via curve.
+  // Past-month actuals — three modes, mutually exclusive:
+  //   'none'   = no actuals overlay (pure curve forecast)
+  //   'pa'     = use parsed PA files (per-row precise)
+  //   'manual' = use user-typed monthly amounts (proportional per-row split)
+  // The user picks the mode in Step 1. Manual entries persist across step
+  // navigation. Switching modes preserves any data entered in the other
+  // mode so the user can flip-flop without losing work.
   const [paList, setPaList] = useState([])              // result of fetchAllProjectPas
   const [paLoadError, setPaLoadError] = useState('')
-  const [usePaActuals, setUsePaActuals] = useState(true)
+  const [actualsMode, setActualsMode] = useState('none') // 'none' | 'pa' | 'manual'
+  // Manual entries: array of { label, amount } in chronological order.
+  // Each entry corresponds to one past month.
+  const [manualActuals, setManualActuals] = useState([]) // [{ label: 'PA01', amount: 345216.59 }, ...]
 
   // Computed: number of months
   const numMonths = useMemo(() => {
@@ -82,33 +88,64 @@ export default function CffGeneratorModal({
     }))
     const auto = distributeGroups(groupsWithCurves, numMonths, defaultCurve)
 
-    // PA-aware overlay (mirrors generator logic — keep in sync)
-    const paMonthCount = (usePaActuals && paList.length > 0)
-      ? Math.min(paList.length, numMonths)
-      : 0
-    const paAware = auto.rows.map(r => {
-      if (paMonthCount === 0) return r
-      const csaGroup = csaExtract.groups.find(g => g.id === r.id)
-      if (!csaGroup || !csaGroup.group_key) return r
-      const cumulatives = paList.slice(0, paMonthCount).map(p =>
-        (p.cumulative_by_group && p.cumulative_by_group[csaGroup.group_key]) || 0
-      )
-      const pastMonthly = []
-      let prev = 0
-      for (const cum of cumulatives) {
-        pastMonthly.push(Math.max(0, cum - prev))
-        prev = cum
-      }
-      const remaining = Math.max(0, csaGroup.value - prev)
-      const futureMonths = numMonths - paMonthCount
-      const futureMonthly = futureMonths > 0
-        ? distributeValue(remaining, futureMonths, r.curve)
-        : []
-      return { ...r, monthly: [...pastMonthly, ...futureMonthly], pa_aware: true }
-    })
+    // Past-month overlay — three modes (mutually exclusive):
+    //   • 'pa'     → use PA file actuals, per-row precise
+    //   • 'manual' → use user-typed monthly amounts, proportional per-row split
+    //   • 'none'   → no overlay, pure curve forecast
+    let actualsMonthCount = 0
+    let actualsRows = auto.rows
 
-    // Manual overrides win over PA-aware
-    const rows = paAware.map(r => {
+    if (actualsMode === 'pa' && paList.length > 0) {
+      actualsMonthCount = Math.min(paList.length, numMonths)
+      actualsRows = auto.rows.map(r => {
+        if (actualsMonthCount === 0) return r
+        const csaGroup = csaExtract.groups.find(g => g.id === r.id)
+        if (!csaGroup || !csaGroup.group_key) return r
+        const cumulatives = paList.slice(0, actualsMonthCount).map(p =>
+          (p.cumulative_by_group && p.cumulative_by_group[csaGroup.group_key]) || 0
+        )
+        const pastMonthly = []
+        let prev = 0
+        for (const cum of cumulatives) {
+          pastMonthly.push(Math.max(0, cum - prev))
+          prev = cum
+        }
+        const remaining = Math.max(0, csaGroup.value - prev)
+        const futureMonths = numMonths - actualsMonthCount
+        const futureMonthly = futureMonths > 0
+          ? distributeValue(remaining, futureMonths, r.curve)
+          : []
+        return { ...r, monthly: [...pastMonthly, ...futureMonthly], pa_aware: true }
+      })
+    } else if (actualsMode === 'manual' && manualActuals.length > 0) {
+      // Filter out blank/invalid entries
+      const validEntries = manualActuals.filter(e =>
+        Number.isFinite(e.amount) && e.amount > 0
+      )
+      actualsMonthCount = Math.min(validEntries.length, numMonths)
+      if (actualsMonthCount > 0) {
+        const totalContract = csaExtract.body_total || csaExtract.contract_sum || 0
+        actualsRows = auto.rows.map(r => {
+          const csaGroup = csaExtract.groups.find(g => g.id === r.id)
+          if (!csaGroup || totalContract === 0) return r
+          // Proportional past months: each month's amount × (g.value / totalContract)
+          const ratio = csaGroup.value / totalContract
+          const pastMonthly = validEntries.slice(0, actualsMonthCount).map(e =>
+            Math.round(e.amount * ratio * 100) / 100
+          )
+          const pastSum = pastMonthly.reduce((s, v) => s + v, 0)
+          const remaining = Math.max(0, csaGroup.value - pastSum)
+          const futureMonths = numMonths - actualsMonthCount
+          const futureMonthly = futureMonths > 0
+            ? distributeValue(remaining, futureMonths, r.curve)
+            : []
+          return { ...r, monthly: [...pastMonthly, ...futureMonthly], pa_aware: true }
+        })
+      }
+    }
+
+    // Per-cell manual overrides (Phase 3a) win over EVERYTHING above
+    const rows = actualsRows.map(r => {
       const manual = manualOverrides[r.id]
       if (Array.isArray(manual) && manual.length === numMonths) {
         return { ...r, monthly: manual.slice(), is_manual: true, pa_aware: false }
@@ -124,8 +161,8 @@ export default function CffGeneratorModal({
       running = Math.round((running + t) * 100) / 100
       cumulative.push(running)
     }
-    return { rows, totals, cumulative, paMonthCount }
-  }, [csaExtract, numMonths, rowCurves, defaultCurve, manualOverrides, paList, usePaActuals])
+    return { rows, totals, cumulative, paMonthCount: actualsMonthCount, actualsMode }
+  }, [csaExtract, numMonths, rowCurves, defaultCurve, manualOverrides, paList, actualsMode, manualActuals])
 
   // Reset manual overrides whenever numMonths changes — old arrays would be
   // wrong length anyway. Done as effect so we don't silently keep stale data.
@@ -201,10 +238,11 @@ export default function CffGeneratorModal({
           ),
         }))
         setPaList(flatPaList)
-        if (flatPaList.length === 0) {
-          // Default the toggle off if there are no PAs (otherwise it's
-          // unlabelled and confusing)
-          setUsePaActuals(false)
+        // Default mode: if PA files are found and parsed cleanly, default
+        // to 'pa' mode. Otherwise stay 'none' (pure forecast). User can
+        // flip to 'manual' at any time in Step 1.
+        if (flatPaList.length > 0) {
+          setActualsMode('pa')
         }
       } catch (err) {
         if (!cancelled) {
@@ -294,6 +332,41 @@ export default function CffGeneratorModal({
     setStep(3)
 
     try {
+      // Build the paList shape that generateCff expects, depending on the
+      // active actualsMode. For 'manual' we synthesize a paList where each
+      // entry's cumulative_by_group is the running sum of proportional
+      // splits — this lets the generator's existing PA-aware logic handle
+      // both modes uniformly.
+      let paActuals = null
+      if (actualsMode === 'pa' && paList.length > 0) {
+        paActuals = { paList }
+      } else if (actualsMode === 'manual' && manualActuals.length > 0) {
+        const validEntries = manualActuals.filter(e =>
+          Number.isFinite(e.amount) && e.amount > 0
+        )
+        if (validEntries.length > 0) {
+          const totalContract = csaExtract.body_total || csaExtract.contract_sum || 0
+          // Build per-PA cumulative_by_group dicts: each "PA" sees a running
+          // total split proportionally by row contract. So for entry index i,
+          // cumulative for group K = sum(entry[0..i].amount) × (K.value / total)
+          let runningTotal = 0
+          const synthList = validEntries.map(entry => {
+            runningTotal += entry.amount
+            const cumulative_by_group = {}
+            for (const g of csaExtract.groups) {
+              if (!g.group_key || totalContract === 0) continue
+              cumulative_by_group[g.group_key] = runningTotal * (g.value / totalContract)
+            }
+            return {
+              pa_label: entry.label || 'Manual',
+              total_cumulative: runningTotal,
+              cumulative_by_group,
+            }
+          })
+          paActuals = { paList: synthList }
+        }
+      }
+
       const result = await generateCff(csaExtract, {
         project_name: projectName || csaExtract.project_name,
         start_date: startDate,
@@ -303,9 +376,7 @@ export default function CffGeneratorModal({
         row_curves: rowCurves,
         default_curve: defaultCurve,
         row_manual: manualOverrides,
-        pa_actuals: usePaActuals && paList.length > 0
-          ? { paList }
-          : null,
+        pa_actuals: paActuals,
       })
 
       // Upload to project-docs bucket — match the CRM upload convention:
@@ -463,8 +534,10 @@ export default function CffGeneratorModal({
           csaParseError={csaParseError}
           paList={paList}
           paLoadError={paLoadError}
-          usePaActuals={usePaActuals}
-          setUsePaActuals={setUsePaActuals}
+          actualsMode={actualsMode}
+          setActualsMode={setActualsMode}
+          manualActuals={manualActuals}
+          setManualActuals={setManualActuals}
         />
       )}
 
@@ -479,7 +552,8 @@ export default function CffGeneratorModal({
           manualOverrides={manualOverrides}
           setManualOverrides={setManualOverrides}
           paList={paList}
-          usePaActuals={usePaActuals}
+          actualsMode={actualsMode}
+          manualActuals={manualActuals}
         />
       )}
 
@@ -507,7 +581,8 @@ function Step1SourceAndProgramme({
   defaultCurve, setDefaultCurve,
   csaParseError,
   paList, paLoadError,
-  usePaActuals, setUsePaActuals,
+  actualsMode, setActualsMode,
+  manualActuals, setManualActuals,
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -598,41 +673,53 @@ function Step1SourceAndProgramme({
         </div>
       </Field>
 
-      {/* PA-aware regenerate toggle. Only visible when PAs were detected. */}
-      {paList.length > 0 && (
-        <Field label="Payment Applications">
-          <label style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-            padding: 10,
-            border: '0.5px solid var(--border)',
-            borderRadius: 6,
-            background: usePaActuals ? 'rgba(80, 102, 188, 0.06)' : 'transparent',
-            cursor: 'pointer',
-          }}>
-            <input
-              type="checkbox"
-              checked={usePaActuals}
-              onChange={e => setUsePaActuals(e.target.checked)}
-              style={{ marginTop: 2, flexShrink: 0 }}
-            />
-            <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-              <strong>Use PA actuals for first {paList.length} month{paList.length === 1 ? '' : 's'}</strong>
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                {paList.map(p => (
-                  <span key={p.pa_label} style={{ marginRight: 12 }}>
-                    {p.pa_label}: £{Math.round(p.total_cumulative).toLocaleString()}
-                  </span>
-                ))}
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                Past months will use the cumulative claimed in each PA. Remaining months will redistribute the leftover using the curve below.
-              </div>
-            </div>
-          </label>
-        </Field>
-      )}
+      {/* Past-month actuals — three modes, mutually exclusive. */}
+      <Field label="Past-month actuals (optional)">
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
+          Override past-month forecasts with real claimed amounts. Future months redistribute remaining contract via the curve below.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <ActualsModeCard
+            mode="none"
+            currentMode={actualsMode}
+            setMode={setActualsMode}
+            title="None — pure forecast"
+            subtitle="Distribute contract value across all months by curve"
+          />
+          <ActualsModeCard
+            mode="pa"
+            currentMode={actualsMode}
+            setMode={setActualsMode}
+            title={
+              paList.length > 0
+                ? `From uploaded PAs (${paList.length} found)`
+                : 'From uploaded PAs (none found in 02-payment-application)'
+            }
+            subtitle={
+              paList.length > 0
+                ? paList.map(p => `${p.pa_label}: £${Math.round(p.total_cumulative).toLocaleString()}`).join(' · ')
+                : 'Upload PA xlsx files to the project to use this mode'
+            }
+            disabled={paList.length === 0}
+          />
+          <ActualsModeCard
+            mode="manual"
+            currentMode={actualsMode}
+            setMode={setActualsMode}
+            title="Type manually"
+            subtitle="Enter applied amounts per past month — useful when PAs aren't uploaded or files don't parse"
+          />
+        </div>
+
+        {/* Manual entry editor — only when mode === 'manual' */}
+        {actualsMode === 'manual' && (
+          <ManualActualsEditor
+            entries={manualActuals}
+            setEntries={setManualActuals}
+            maxMonths={numMonths}
+          />
+        )}
+      </Field>
       {paLoadError && (
         <div style={{ fontSize: 12, color: '#dc2626' }}>
           Could not load payment applications: {paLoadError}
@@ -687,7 +774,7 @@ function Step1SourceAndProgramme({
 function Step2CurvesAndPreview({
   csaExtract, numMonths, rowCurves, setRowCurves, defaultCurve, preview,
   manualOverrides, setManualOverrides,
-  paList, usePaActuals,
+  paList, actualsMode, manualActuals,
 }) {
   function setRowCurve(groupId, curve) {
     setRowCurves(prev => ({ ...prev, [groupId]: curve }))
@@ -739,6 +826,14 @@ function Step2CurvesAndPreview({
   const totalManual = Object.keys(manualOverrides).length
   const paMonthCount = preview.paMonthCount || 0
 
+  // Label for a past-actuals month — handles both PA mode (PA01/PA02 from
+  // file labels) and manual mode (user-typed labels).
+  function labelForPastMonth(i) {
+    if (actualsMode === 'pa') return paList[i]?.pa_label || ''
+    if (actualsMode === 'manual') return manualActuals[i]?.label || ''
+    return ''
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ fontSize: 13, color: 'var(--text2)' }}>
@@ -752,8 +847,8 @@ function Step2CurvesAndPreview({
         )}
       </div>
 
-      {/* PA-aware banner */}
-      {usePaActuals && paList.length > 0 && (
+      {/* Past-actuals banner — different copy depending on mode */}
+      {paMonthCount > 0 && actualsMode === 'pa' && (
         <div style={{
           padding: 10,
           background: 'rgba(80, 102, 188, 0.08)',
@@ -764,6 +859,22 @@ function Step2CurvesAndPreview({
           <strong>Months 1{paMonthCount > 1 ? `–${paMonthCount}` : ''}</strong> use cumulative figures from{' '}
           {paList.slice(0, paMonthCount).map(p => p.pa_label).join(', ')}.
           Remaining months redistribute leftover contract value via the chosen curve.
+        </div>
+      )}
+      {paMonthCount > 0 && actualsMode === 'manual' && (
+        <div style={{
+          padding: 10,
+          background: 'rgba(80, 102, 188, 0.08)',
+          border: '0.5px solid rgba(80, 102, 188, 0.3)',
+          borderRadius: 6,
+          fontSize: 12,
+        }}>
+          <strong>Months 1{paMonthCount > 1 ? `–${paMonthCount}` : ''}</strong> use manually-entered amounts:{' '}
+          {manualActuals.slice(0, paMonthCount).map((e, i) =>
+            `${e.label || 'Manual'}: £${Math.round(e.amount).toLocaleString()}`
+          ).join(' · ')}.
+          Per-row split is proportional by contract value (indicative — not actual progress).
+          Remaining months redistribute leftover via the chosen curve.
         </div>
       )}
 
@@ -786,7 +897,7 @@ function Step2CurvesAndPreview({
                   background: i < paMonthCount ? 'rgba(80, 102, 188, 0.15)' : undefined,
                 }}>
                   {lbl}
-                  {i < paMonthCount && <div style={{ fontSize: 9, fontWeight: 400, color: 'var(--text3)' }}>{paList[i]?.pa_label}</div>}
+                  {i < paMonthCount && <div style={{ fontSize: 9, fontWeight: 400, color: 'var(--text3)' }}>{labelForPastMonth(i)}</div>}
                 </th>
               ))}
               <th style={th('right', 90)}>Row Σ</th>
@@ -872,7 +983,7 @@ function Step2CurvesAndPreview({
                           }}
                           onFocus={e => { e.target.select(); e.target.style.border = '0.5px solid var(--border)' }}
                           onBlur={e => { e.target.style.border = '0.5px solid transparent' }}
-                          title={isPaCell ? `From ${paList[i]?.pa_label} — edit to override` : undefined}
+                          title={isPaCell ? `From ${labelForPastMonth(i)} — edit to override` : undefined}
                         />
                       </td>
                     )
@@ -949,6 +1060,161 @@ function Step2CurvesAndPreview({
           </div>
         )
       })()}
+    </div>
+  )
+}
+
+// ─── Step 1 helper: mode picker card ──────────────────────────────────────
+// Radio-style card. Shows title + subtitle; clicking selects the mode.
+// Disabled mode is greyed out (e.g. "PA files" when no PAs found).
+function ActualsModeCard({ mode, currentMode, setMode, title, subtitle, disabled }) {
+  const selected = currentMode === mode
+  return (
+    <label style={{
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 10,
+      padding: 10,
+      border: '0.5px solid var(--border)',
+      borderRadius: 6,
+      background: selected ? 'rgba(80, 102, 188, 0.08)' : 'transparent',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      opacity: disabled ? 0.55 : 1,
+    }}>
+      <input
+        type="radio"
+        name="actualsMode"
+        checked={selected}
+        disabled={disabled}
+        onChange={() => !disabled && setMode(mode)}
+        style={{ marginTop: 2, flexShrink: 0 }}
+      />
+      <div style={{ fontSize: 13, lineHeight: 1.4 }}>
+        <strong>{title}</strong>
+        {subtitle && (
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
+            {subtitle}
+          </div>
+        )}
+      </div>
+    </label>
+  )
+}
+
+// ─── Step 1 helper: manual past-month amounts editor ──────────────────────
+// Lets the user add/remove rows of { label, amount }. The label defaults to
+// PA01, PA02, ... but is editable. The amount is the project-total for that
+// month — proportionally split across rows in the generator.
+function ManualActualsEditor({ entries, setEntries, maxMonths }) {
+  function addEntry() {
+    if (entries.length >= maxMonths) return    // can't have more entries than CFF months
+    const nextLabel = `PA${String(entries.length + 1).padStart(2, '0')}`
+    setEntries(prev => [...prev, { label: nextLabel, amount: 0 }])
+  }
+  function removeEntry(idx) {
+    setEntries(prev => prev.filter((_, i) => i !== idx))
+  }
+  function updateEntry(idx, field, value) {
+    setEntries(prev => prev.map((e, i) =>
+      i === idx ? { ...e, [field]: value } : e
+    ))
+  }
+  function parseAmount(rawValue) {
+    const cleaned = String(rawValue).replace(/[£,\s]/g, '')
+    const v = cleaned === '' ? 0 : Number(cleaned)
+    return Number.isFinite(v) ? v : 0
+  }
+
+  return (
+    <div style={{
+      marginTop: 10,
+      padding: 10,
+      border: '0.5px solid var(--border)',
+      borderRadius: 6,
+      background: 'var(--surface2)',
+    }}>
+      {entries.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+          No entries yet. Each entry will fill one past month in order.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          {entries.map((entry, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 11, color: 'var(--text3)', width: 28, textAlign: 'right' }}>
+                M{idx + 1}
+              </span>
+              <input
+                type="text"
+                value={entry.label}
+                onChange={e => updateEntry(idx, 'label', e.target.value)}
+                placeholder="PA01"
+                style={{
+                  width: 80,
+                  padding: '4px 8px',
+                  fontSize: 12,
+                  border: '0.5px solid var(--border)',
+                  borderRadius: 4,
+                  background: 'var(--surface)',
+                }}
+              />
+              <span style={{ fontSize: 12, color: 'var(--text3)' }}>£</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={entry.amount === 0 ? '' : entry.amount.toLocaleString()}
+                onChange={e => updateEntry(idx, 'amount', parseAmount(e.target.value))}
+                placeholder="0.00"
+                style={{
+                  flex: 1,
+                  padding: '4px 8px',
+                  fontSize: 12,
+                  textAlign: 'right',
+                  fontVariantNumeric: 'tabular-nums',
+                  border: '0.5px solid var(--border)',
+                  borderRadius: 4,
+                  background: 'var(--surface)',
+                }}
+              />
+              <button
+                onClick={() => removeEntry(idx)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: 11,
+                  border: '0.5px solid var(--border)',
+                  borderRadius: 4,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  color: 'var(--text3)',
+                }}
+                title="Remove this entry"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        onClick={addEntry}
+        disabled={entries.length >= maxMonths}
+        style={{
+          padding: '6px 10px',
+          fontSize: 12,
+          border: '0.5px solid var(--border)',
+          borderRadius: 4,
+          background: 'transparent',
+          cursor: entries.length >= maxMonths ? 'not-allowed' : 'pointer',
+          opacity: entries.length >= maxMonths ? 0.5 : 1,
+        }}
+      >
+        + Add applied amount
+      </button>
+      {entries.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
+          Total applied: £{entries.reduce((s, e) => s + (Number.isFinite(e.amount) ? e.amount : 0), 0).toLocaleString()}
+        </div>
+      )}
     </div>
   )
 }
