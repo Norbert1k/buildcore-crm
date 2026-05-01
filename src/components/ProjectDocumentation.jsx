@@ -561,6 +561,11 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState('')
+  // Visibility state — `client_visible` defaults to true (a file's column
+  // default at the DB level). We also default true here in case the row
+  // was inserted before the column existed (NULL → treat as visible).
+  const [clientVisible, setClientVisible] = useState(file.client_visible ?? true)
+  const [togglingVisible, setTogglingVisible] = useState(false)
   const { isImage, isPdf } = fileTypeInfo(file.file_name, file.file_type)
 
   useEffect(() => {
@@ -575,6 +580,27 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
     setRenaming(false)
   }
 
+  // Toggle this file's portal visibility. Optimistic update with revert
+  // on failure. Mirrors the folder/subfolder toggle pattern.
+  async function toggleFileVisibility(e) {
+    if (e) e.stopPropagation()
+    if (togglingVisible) return
+    setTogglingVisible(true)
+    const newValue = !clientVisible
+    setClientVisible(newValue)
+    try {
+      const { error } = await supabase.from('project_doc_files')
+        .update({ client_visible: newValue })
+        .eq('id', file.id)
+      if (error) throw error
+      file.client_visible = newValue  // mutate local prop so reload isn't required
+    } catch (err) {
+      setClientVisible(!newValue)
+      alert('Could not update visibility: ' + err.message)
+    }
+    setTogglingVisible(false)
+  }
+
   function handleDragStart(e) {
     e.dataTransfer.setData('text/plain', file.id)
     e.dataTransfer.setData('file_subfolder', file.subfolder_key || '')
@@ -584,11 +610,29 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
   return (
     <>
       <div draggable={!renaming} onDragStart={handleDragStart}
-        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', position: 'relative', transition: 'border .1s' }}>
+        style={{
+          border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)',
+          borderRadius: 8, overflow: 'hidden', background: 'var(--surface)',
+          cursor: renaming ? 'default' : 'grab', position: 'relative',
+          transition: 'border .1s, opacity .1s',
+          // Reduced opacity makes hidden files visually distinct in CRM
+          // without requiring users to hover or read text.
+          opacity: clientVisible ? 1 : 0.55,
+        }}>
         <div onClick={e => { e.stopPropagation(); onSelect(file.id) }}
           style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
+        {/* "Hidden" badge — overlay on the thumbnail when not visible to client */}
+        {!clientVisible && (
+          <div style={{
+            position: 'absolute', top: 6, right: 28, zIndex: 2,
+            background: 'rgba(0,0,0,0.7)', color: '#fff',
+            fontSize: 9, fontWeight: 600,
+            padding: '2px 6px', borderRadius: 3,
+            letterSpacing: '0.04em',
+          }}>HIDDEN</div>
+        )}
         <div style={{ height: 120, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onPreview(file, url)}>
           {isImage && url
             ? <img src={url} alt={file.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -608,10 +652,33 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
               : <>
                   <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
                   {canDelete && (
-                    <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename"
-                      style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
+                    <>
+                      <button onClick={toggleFileVisibility} disabled={togglingVisible}
+                        title={clientVisible ? 'Visible to client — click to hide' : 'Hidden from client — click to show'}
+                        style={{
+                          flexShrink: 0, cursor: 'pointer',
+                          background: clientVisible ? 'var(--surface2)' : 'transparent',
+                          border: '0.5px solid var(--border)', borderRadius: 4,
+                          padding: '2px 4px', display: 'inline-flex', alignItems: 'center',
+                          opacity: togglingVisible ? 0.5 : 1,
+                        }}>
+                        {clientVisible ? (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        ) : (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          </svg>
+                        )}
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename"
+                        style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                    </>
                   )}
                 </>
             }
@@ -643,6 +710,8 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
   const [confirmDel, setConfirmDel] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameVal, setRenameVal] = useState('')
+  const [clientVisible, setClientVisible] = useState(file.client_visible ?? true)
+  const [togglingVisible, setTogglingVisible] = useState(false)
   const { isWord, isExcel, isPpt, isPdf, isImage } = fileTypeInfo(file.file_name, file.file_type)
   const iconColor = isPdf ? '#E24B4A' : isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : isImage ? '#448a40' : '#888'
   const iconLetter = isPdf ? 'PDF' : isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
@@ -659,6 +728,25 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
     setRenaming(false)
   }
 
+  async function toggleFileVisibility(e) {
+    if (e) e.stopPropagation()
+    if (togglingVisible) return
+    setTogglingVisible(true)
+    const newValue = !clientVisible
+    setClientVisible(newValue)
+    try {
+      const { error } = await supabase.from('project_doc_files')
+        .update({ client_visible: newValue })
+        .eq('id', file.id)
+      if (error) throw error
+      file.client_visible = newValue
+    } catch (err) {
+      setClientVisible(!newValue)
+      alert('Could not update visibility: ' + err.message)
+    }
+    setTogglingVisible(false)
+  }
+
   function handleDragStart(e) {
     e.dataTransfer.setData('text/plain', file.id)
     e.dataTransfer.setData('file_subfolder', file.subfolder_key || '')
@@ -668,7 +756,15 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
   return (
     <>
       <div draggable={!renaming} onDragStart={handleDragStart}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', transition: 'border .1s' }}>
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
+          borderRadius: 6,
+          border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)',
+          background: 'var(--surface)',
+          cursor: renaming ? 'default' : 'grab',
+          transition: 'border .1s, opacity .1s',
+          opacity: clientVisible ? 1 : 0.55,
+        }}>
         <div onClick={e => { e.stopPropagation(); onSelect(file.id) }}
           style={{ width: 16, height: 16, borderRadius: 3, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.3)'), background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -687,11 +783,41 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
               <div onClick={() => onPreview ? onPreview(file, url) : null} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
+                  {!clientVisible && (
+                    <span style={{
+                      fontSize: 9, fontWeight: 600, padding: '1px 5px',
+                      borderRadius: 3, background: 'rgba(0,0,0,0.4)', color: '#fff',
+                      letterSpacing: '0.04em', flexShrink: 0,
+                    }}>HIDDEN</span>
+                  )}
                   {canDelete && (
-                    <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename"
-                      style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
+                    <>
+                      <button onClick={toggleFileVisibility} disabled={togglingVisible}
+                        title={clientVisible ? 'Visible to client — click to hide' : 'Hidden from client — click to show'}
+                        style={{
+                          flexShrink: 0, cursor: 'pointer',
+                          background: clientVisible ? 'var(--surface2)' : 'transparent',
+                          border: '0.5px solid var(--border)', borderRadius: 4,
+                          padding: '2px 4px', display: 'inline-flex', alignItems: 'center',
+                          opacity: togglingVisible ? 0.5 : 1,
+                        }}>
+                        {clientVisible ? (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                          </svg>
+                        ) : (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                            <line x1="1" y1="1" x2="23" y2="23"/>
+                          </svg>
+                        )}
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename"
+                        style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                    </>
                   )}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}</div>
@@ -792,19 +918,31 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
     if (open) { loadFiles(); loadChildFolders() }
   }, [treeVersion])
 
-  // Template subfolders track per-(project, parent_folder, subfolder) visibility.
-  // Custom subfolders inherit from their parent template — no per-row toggle.
+  // Template subfolders track per-(project, parent_folder, subfolder)
+  // visibility via project_template_folder_visibility.
+  // Custom subfolders track their own visibility on project_doc_folders.
+  // Both effects load into the same `clientVisible` state.
   useEffect(() => {
-    if (subfolder.custom) return
     let cancelled = false
     async function loadVis() {
-      const { data } = await supabase.from('project_template_folder_visibility')
-        .select('client_visible')
-        .eq('project_id', projectId)
-        .eq('folder_key', folder.key)
-        .eq('subfolder_key', subfolder.key)
-        .maybeSingle()
-      if (!cancelled) setClientVisible(data?.client_visible || false)
+      if (subfolder.custom) {
+        // Custom subfolder — read from project_doc_folders directly
+        const { data } = await supabase.from('project_doc_folders')
+          .select('client_visible')
+          .eq('project_id', projectId)
+          .eq('folder_key', subfolder.key)
+          .maybeSingle()
+        if (!cancelled) setClientVisible(data?.client_visible ?? true)  // default visible
+      } else {
+        // Template subfolder — read from project_template_folder_visibility
+        const { data } = await supabase.from('project_template_folder_visibility')
+          .select('client_visible')
+          .eq('project_id', projectId)
+          .eq('folder_key', folder.key)
+          .eq('subfolder_key', subfolder.key)
+          .maybeSingle()
+        if (!cancelled) setClientVisible(data?.client_visible || false)
+      }
     }
     loadVis()
     return () => { cancelled = true }
@@ -823,6 +961,27 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         subfolder_key: subfolder.key,
         client_visible: newValue,
       }, { onConflict: 'project_id,folder_key,subfolder_key' })
+      if (error) throw error
+    } catch (err) {
+      setClientVisible(!newValue)  // revert
+      alert('Could not update visibility: ' + err.message)
+    }
+    setTogglingVisible(false)
+  }
+
+  // Toggle for custom subfolders — writes to project_doc_folders.client_visible
+  // (the column already exists; we're just adding the UI to flip it).
+  async function toggleCustomSubfolderVisibility(e) {
+    if (e) e.stopPropagation()
+    if (togglingVisible || !subfolder.custom) return
+    setTogglingVisible(true)
+    const newValue = !clientVisible
+    setClientVisible(newValue)  // optimistic
+    try {
+      const { error } = await supabase.from('project_doc_folders')
+        .update({ client_visible: newValue })
+        .eq('project_id', projectId)
+        .eq('folder_key', subfolder.key)
       if (error) throw error
     } catch (err) {
       setClientVisible(!newValue)  // revert
@@ -1062,6 +1221,39 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         {!isCustom && canManage && showsClientVisibilityToggle(folder.key, subfolder.key) && (
           <button
             onClick={toggleSubfolderVisibility}
+            disabled={togglingVisible}
+            title={clientVisible ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
+            style={{
+              fontSize: 10,
+              padding: '3px 8px',
+              borderRadius: 12,
+              border: '0.5px solid var(--border)',
+              background: clientVisible ? '#448a4020' : 'transparent',
+              color: clientVisible ? '#448a40' : 'var(--text3)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: clientVisible ? '#448a40' : 'var(--text3)',
+            }} />
+            {clientVisible ? 'Visible to client' : 'Hidden'}
+          </button>
+        )}
+        {/* Custom subfolders (user-created child folders) get their OWN
+            visibility toggle. Previously these inherited from their parent
+            template, but you wanted independent control per request:
+            "subfolders + files + template subfolders too" — so each custom
+            subfolder is now toggleable on its own. The portal applies
+            parent-hides-children semantics, so a hidden parent still hides
+            this folder regardless of its own setting. */}
+        {isCustom && canManage && (
+          <button
+            onClick={toggleCustomSubfolderVisibility}
             disabled={togglingVisible}
             title={clientVisible ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
             style={{
