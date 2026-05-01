@@ -673,41 +673,39 @@ function Step1SourceAndProgramme({
         </div>
       </Field>
 
-      {/* Past-month actuals — three modes, mutually exclusive. */}
+      {/* Past-month actuals — three modes, mutually exclusive.
+          Inline radio rows: radio + label + (optional right-aligned metadata).
+          Simple list pattern, no flex tricks needed for layout. */}
       <Field label="Past-month actuals (optional)">
         <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
           Override past-month forecasts with real claimed amounts. Future months redistribute remaining contract via the curve below.
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <ActualsModeCard
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <ActualsRadioRow
             mode="none"
             currentMode={actualsMode}
             setMode={setActualsMode}
-            title="None — pure forecast"
-            subtitle="Distribute contract value across all months by curve"
+            label="Forecast only"
           />
-          <ActualsModeCard
+          <ActualsRadioRow
             mode="pa"
             currentMode={actualsMode}
             setMode={setActualsMode}
-            title={
+            label={
               paList.length > 0
                 ? `From uploaded PAs (${paList.length} found)`
-                : 'From uploaded PAs (none found in 02-payment-application)'
+                : 'From uploaded PAs (none found)'
             }
-            subtitle={
-              paList.length > 0
-                ? paList.map(p => `${p.pa_label}: £${Math.round(p.total_cumulative).toLocaleString()}`).join(' · ')
-                : 'Upload PA xlsx files to the project to use this mode'
-            }
+            metadata={paList.length > 0
+              ? paList.map(p => `${p.pa_label} £${Math.round(p.total_cumulative).toLocaleString()}`).join(' · ')
+              : null}
             disabled={paList.length === 0}
           />
-          <ActualsModeCard
+          <ActualsRadioRow
             mode="manual"
             currentMode={actualsMode}
             setMode={setActualsMode}
-            title="Type manually"
-            subtitle="Enter applied amounts per past month — useful when PAs aren't uploaded or files don't parse"
+            label="Enter applied amounts manually"
           />
         </div>
 
@@ -1064,22 +1062,24 @@ function Step2CurvesAndPreview({
   )
 }
 
-// ─── Step 1 helper: mode picker card ──────────────────────────────────────
-// Radio-style card. Shows title + subtitle; clicking selects the mode.
-// Disabled mode is greyed out (e.g. "PA files" when no PAs found).
-function ActualsModeCard({ mode, currentMode, setMode, title, subtitle, disabled }) {
+// ─── Step 1 helper: single-line radio row ────────────────────────────────
+// Plain horizontal row: radio + label + (optional right-aligned metadata).
+// No flex grow on the label — long metadata wraps below the label rather
+// than stealing space. Avoids the layout problems the earlier card
+// approach had.
+function ActualsRadioRow({ mode, currentMode, setMode, label, metadata, disabled }) {
   const selected = currentMode === mode
   return (
     <label style={{
       display: 'flex',
-      alignItems: 'flex-start',
-      gap: 10,
-      padding: 10,
-      border: '0.5px solid var(--border)',
-      borderRadius: 6,
-      background: selected ? 'rgba(80, 102, 188, 0.08)' : 'transparent',
+      alignItems: 'baseline',
+      gap: 8,
+      padding: '6px 8px',
+      borderRadius: 4,
+      background: selected ? 'rgba(80, 102, 188, 0.10)' : 'transparent',
       cursor: disabled ? 'not-allowed' : 'pointer',
       opacity: disabled ? 0.55 : 1,
+      flexWrap: 'wrap',          // metadata wraps to next line on narrow viewports
     }}>
       <input
         type="radio"
@@ -1087,16 +1087,14 @@ function ActualsModeCard({ mode, currentMode, setMode, title, subtitle, disabled
         checked={selected}
         disabled={disabled}
         onChange={() => !disabled && setMode(mode)}
-        style={{ marginTop: 2, flexShrink: 0 }}
+        style={{ flexShrink: 0 }}
       />
-      <div style={{ fontSize: 13, lineHeight: 1.4 }}>
-        <strong>{title}</strong>
-        {subtitle && (
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
-            {subtitle}
-          </div>
-        )}
-      </div>
+      <span style={{ fontSize: 13 }}>{label}</span>
+      {metadata && (
+        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>
+          {metadata}
+        </span>
+      )}
     </label>
   )
 }
