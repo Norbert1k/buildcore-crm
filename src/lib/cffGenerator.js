@@ -19,7 +19,7 @@
 // loaded by paExtractor cannot write styled cells; this is a separate dep).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { distributeGroups, monthLabels, monthsBetween } from './cffCurves'
+import { distributeGroups, distributeValue, monthLabels, monthsBetween } from './cffCurves'
 
 // ─── CDN loader (xlsx-js-style is separate from the plain xlsx package) ────
 async function loadXlsxStyle() {
@@ -249,12 +249,61 @@ export async function generateCff(csaExtract, settings) {
   }))
   const distribution = distributeGroups(groupsWithCurves, numMonths, settings.default_curve || 'even')
 
-  // Apply manual overrides
+  // ─── PA-aware overlay ──────────────────────────────────────────────────
+  // If `settings.pa_actuals.paList` is provided, replace the FIRST N months
+  // of every row with values derived from the PAs (one PA = one month),
+  // then redistribute the row's remaining contract value across the
+  // remaining months using the row's curve.
+  //
+  // For each row R:
+  //   monthN value = R.cumulative_in_PA_N - R.cumulative_in_PA_(N-1)
+  //   future = distributeValue(R.value - R.cumulative_in_last_PA, future_months, R.curve)
+  //
+  // If a row has no matching group in a PA, that PA contributes 0 (row's
+  // past months show £0 — the work hadn't started). This is the correct
+  // behaviour for plots that started later in the programme.
+  const paList = (settings.pa_actuals && Array.isArray(settings.pa_actuals.paList))
+    ? settings.pa_actuals.paList
+    : []
+  const paMonthCount = Math.min(paList.length, numMonths)
+  const paAwareRows = distribution.rows.map(r => {
+    if (paMonthCount === 0) return r    // no PAs → leave as curve-derived
+    const csaGroup = csaExtract.groups.find(g => g.id === r.id)
+    if (!csaGroup) return r
+    const groupKey = csaGroup.group_key
+    if (!groupKey) return r              // shouldn't happen, but defensive
+
+    // Per-PA cumulative for this row's group
+    const cumulatives = paList
+      .slice(0, paMonthCount)
+      .map(p => (p.cumulative_by_group && p.cumulative_by_group[groupKey]) || 0)
+
+    // Convert cumulative → per-month deltas
+    const pastMonthly = []
+    let prev = 0
+    for (const cum of cumulatives) {
+      pastMonthly.push(Math.max(0, cum - prev))    // clamp ≥0 for sanity
+      prev = cum
+    }
+    const finalCumulative = prev    // = cumulatives[last]
+
+    // Future months: redistribute remaining contract value using curve
+    const remaining = Math.max(0, csaGroup.value - finalCumulative)
+    const futureMonths = numMonths - paMonthCount
+    const futureMonthly = futureMonths > 0
+      ? distributeValue(remaining, futureMonths, r.curve)
+      : []
+
+    return { ...r, monthly: [...pastMonthly, ...futureMonthly], pa_aware: true }
+  })
+
+  // Apply manual overrides — these win over PA-aware values too. User
+  // edits are sticky.
   const rowManual = settings.row_manual || {}
-  const resolvedRows = distribution.rows.map(r => {
+  const resolvedRows = paAwareRows.map(r => {
     const manual = rowManual[r.id]
     if (Array.isArray(manual) && manual.length === numMonths) {
-      return { ...r, monthly: manual.slice() }
+      return { ...r, monthly: manual.slice(), pa_aware: false }
     }
     return r
   })
