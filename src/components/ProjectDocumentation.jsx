@@ -57,6 +57,7 @@ const TEMPLATE_FOLDERS = [
 // their visibility is implied by their template parent.
 const PORTAL_TILE_TARGETS = [
   // Top-level template folders that map to portal tiles
+  ['01-project-order',       null],
   ['02-payment-application', null],
   ['04-variations',          null],
   ['05-progress-report',     null],
