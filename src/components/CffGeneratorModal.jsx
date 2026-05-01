@@ -747,7 +747,17 @@ function Step1SourceAndProgramme({
                 name="defaultCurve"
                 checked={defaultCurve === c}
                 onChange={() => setDefaultCurve(c)}
-                style={{ marginRight: 6 }}
+                style={{
+                  // Override CRM's global input{width:100%;padding;border} rule
+                  // — radios should render as small circles, not full-width pills.
+                  appearance: 'auto',
+                  width: 'auto',
+                  padding: 0,
+                  margin: 0,
+                  marginRight: 6,
+                  border: 'none',
+                  background: 'transparent',
+                }}
               />
               <strong>{CURVE_LABELS[c]}</strong>
               <span style={{ color: 'var(--text3)', fontSize: 11 }}>
@@ -1072,14 +1082,14 @@ function ActualsRadioRow({ mode, currentMode, setMode, label, metadata, disabled
   return (
     <label style={{
       display: 'flex',
-      alignItems: 'baseline',
+      alignItems: 'center',
       gap: 8,
       padding: '6px 8px',
       borderRadius: 4,
       background: selected ? 'rgba(80, 102, 188, 0.10)' : 'transparent',
       cursor: disabled ? 'not-allowed' : 'pointer',
       opacity: disabled ? 0.55 : 1,
-      flexWrap: 'wrap',          // metadata wraps to next line on narrow viewports
+      flexWrap: 'wrap',
     }}>
       <input
         type="radio"
@@ -1087,7 +1097,19 @@ function ActualsRadioRow({ mode, currentMode, setMode, label, metadata, disabled
         checked={selected}
         disabled={disabled}
         onChange={() => !disabled && setMode(mode)}
-        style={{ flexShrink: 0 }}
+        style={{
+          // The CRM has a global `input { width: 100%; padding: 10px 12px; ... }`
+          // rule that doesn't filter by type. Without these overrides the radio
+          // would render as a wide pill, not a small circle. Restore native
+          // radio rendering.
+          appearance: 'auto',
+          width: 'auto',
+          padding: 0,
+          margin: 0,
+          border: 'none',
+          background: 'transparent',
+          flexShrink: 0,
+        }}
       />
       <span style={{ fontSize: 13 }}>{label}</span>
       {metadata && (
