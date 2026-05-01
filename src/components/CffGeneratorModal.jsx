@@ -14,6 +14,11 @@ import {
 // Storage paths within the project's docs bucket
 const CSA_SUBFOLDER = 'csa'
 const CFF_SUBFOLDER = 'cff'
+// Previous CFFs are demoted to this synthetic subfolder so they don't show
+// up in the regular file browser (no folder definition in project_doc_folders
+// = invisible). The portal queries this explicitly when computing the
+// "what changed since last version" diff.
+const CFF_ARCHIVE_SUBFOLDER = 'cff-archive'
 const PRIMARY_FOLDER = '00-project-information'
 
 // ─── Main modal component ──────────────────────────────────────────────────
@@ -40,7 +45,12 @@ export default function CffGeneratorModal({
   const [endDate, setEndDate] = useState('')
   const [numMonthsOverride, setNumMonthsOverride] = useState('')
   const [defaultCurve, setDefaultCurve] = useState('even')
-  const [rowCurves, setRowCurves] = useState({})    // { [groupId]: 'even' | 'front' | ... }
+  const [rowCurves, setRowCurves] = useState({})       // { [groupId]: 'even' | 'front' | ... }
+  // Manual per-row overrides — when present, replaces the curve-derived
+  // distribution for that row. Editing a cell switches the row into manual
+  // mode; "Reset to curve" clears it back to auto. Persists across step
+  // navigation so user doesn't lose edits when going back to Step 1.
+  const [manualOverrides, setManualOverrides] = useState({})  // { [groupId]: number[] }
 
   // Computed: number of months
   const numMonths = useMemo(() => {
@@ -51,15 +61,50 @@ export default function CffGeneratorModal({
     return monthsBetween(startDate, endDate)
   }, [startDate, endDate, numMonthsOverride])
 
-  // Live distribution preview (recomputed when groups, numMonths or curves change)
+  // Live distribution preview. For each row we either use the curve-derived
+  // distribution OR the user's manual override array. Totals + cumulative
+  // are computed from the resolved monthly values either way.
   const preview = useMemo(() => {
     if (!csaExtract || !numMonths) return null
     const groupsWithCurves = csaExtract.groups.map(g => ({
       ...g,
       curve: rowCurves[g.id] || defaultCurve,
     }))
-    return distributeGroups(groupsWithCurves, numMonths, defaultCurve)
-  }, [csaExtract, numMonths, rowCurves, defaultCurve])
+    const auto = distributeGroups(groupsWithCurves, numMonths, defaultCurve)
+    // Overlay manual overrides
+    const rows = auto.rows.map(r => {
+      const manual = manualOverrides[r.id]
+      // Manual array must match numMonths exactly to be applied; otherwise
+      // we silently fall back to the curve-derived distribution (this happens
+      // e.g. if the user set a 4-month manual then changed numMonths to 6).
+      if (Array.isArray(manual) && manual.length === numMonths) {
+        return { ...r, monthly: manual.slice(), is_manual: true }
+      }
+      return { ...r, is_manual: false }
+    })
+    const totals = Array.from({ length: numMonths }, (_, i) =>
+      Math.round(rows.reduce((s, r) => s + (r.monthly[i] || 0), 0) * 100) / 100
+    )
+    const cumulative = []
+    let running = 0
+    for (const t of totals) {
+      running = Math.round((running + t) * 100) / 100
+      cumulative.push(running)
+    }
+    return { rows, totals, cumulative }
+  }, [csaExtract, numMonths, rowCurves, defaultCurve, manualOverrides])
+
+  // Reset manual overrides whenever numMonths changes — old arrays would be
+  // wrong length anyway. Done as effect so we don't silently keep stale data.
+  useEffect(() => {
+    setManualOverrides(prev => {
+      const out = {}
+      for (const [id, arr] of Object.entries(prev)) {
+        if (Array.isArray(arr) && arr.length === numMonths) out[id] = arr
+      }
+      return out
+    })
+  }, [numMonths])
 
   // ─── On mount: load CSA file list AND seed dates from project record ───
   // We fetch the project's start_date / end_date so the modal opens
@@ -196,6 +241,7 @@ export default function CffGeneratorModal({
         csa_no: csaExtract.csa_no,
         row_curves: rowCurves,
         default_curve: defaultCurve,
+        row_manual: manualOverrides,
       })
 
       // Upload to project-docs bucket — match the CRM upload convention:
@@ -216,14 +262,16 @@ export default function CffGeneratorModal({
         })
       if (uploadErr) throw uploadErr
 
-      // Find any existing CFF rows so we can clean them up after insert. We
-      // delete the storage objects too, otherwise old CFFs accumulate forever.
+      // Find existing CFF rows (current + any pre-existing archive). On
+      // regenerate, we KEEP the previous CURRENT version as an archive so
+      // the portal can show "what changed" diffs. We only ever keep one
+      // archive — older archives are deleted to prevent unbounded growth.
       const { data: existing } = await supabase
         .from('project_doc_files')
-        .select('id, storage_path')
+        .select('id, storage_path, subfolder_key')
         .eq('project_id', projectId)
         .eq('folder_key', PRIMARY_FOLDER)
-        .eq('subfolder_key', CFF_SUBFOLDER)
+        .in('subfolder_key', [CFF_SUBFOLDER, CFF_ARCHIVE_SUBFOLDER])
 
       // Insert the new row using the standard column set (matches every
       // other place in the codebase that writes to project_doc_files).
@@ -239,18 +287,37 @@ export default function CffGeneratorModal({
         })
       if (insertErr) throw insertErr
 
-      // Now clean up the OLD CFF rows + storage objects (if any). Skip the
-      // one we just inserted by filtering on storage_path mismatch.
-      const oldRows = (existing || []).filter(r => r.storage_path !== storagePath)
-      if (oldRows.length > 0) {
-        const oldPaths = oldRows.map(r => r.storage_path).filter(Boolean)
+      // Reconcile existing rows:
+      //   • Skip the just-inserted row (matched by storage_path)
+      //   • Pre-existing archive rows → delete (storage + DB)
+      //   • Pre-existing current rows → demote to archive (DB only; storage
+      //     stays put under its original path — only the logical folder
+      //     changes)
+      const previousCurrent = (existing || []).filter(r =>
+        r.subfolder_key === CFF_SUBFOLDER && r.storage_path !== storagePath
+      )
+      const previousArchive = (existing || []).filter(r =>
+        r.subfolder_key === CFF_ARCHIVE_SUBFOLDER
+      )
+
+      // Delete old archive (DB + storage)
+      if (previousArchive.length > 0) {
+        const oldPaths = previousArchive.map(r => r.storage_path).filter(Boolean)
         if (oldPaths.length) {
           await supabase.storage.from('project-docs').remove(oldPaths)
         }
         await supabase
           .from('project_doc_files')
           .delete()
-          .in('id', oldRows.map(r => r.id))
+          .in('id', previousArchive.map(r => r.id))
+      }
+
+      // Demote previous current → archive
+      if (previousCurrent.length > 0) {
+        await supabase
+          .from('project_doc_files')
+          .update({ subfolder_key: CFF_ARCHIVE_SUBFOLDER })
+          .in('id', previousCurrent.map(r => r.id))
       }
 
       if (onGenerated) onGenerated(result.filename)
@@ -341,6 +408,8 @@ export default function CffGeneratorModal({
           setRowCurves={setRowCurves}
           defaultCurve={defaultCurve}
           preview={preview}
+          manualOverrides={manualOverrides}
+          setManualOverrides={setManualOverrides}
         />
       )}
 
@@ -497,23 +566,63 @@ function Step1SourceAndProgramme({
   )
 }
 
-// ─── Step 2: Per-row curves + monthly preview ──────────────────────────────
+// ─── Step 2: Per-row curves + editable monthly preview ────────────────────
+// Each row's monthly cells can be edited directly. Editing puts the row into
+// "manual" mode — the curve dropdown becomes "Reset to curve". A row in
+// manual mode shows a drift badge if its monthly values don't sum to its
+// contract value. Drift is allowed (not blocking), shown for transparency.
 function Step2CurvesAndPreview({
   csaExtract, numMonths, rowCurves, setRowCurves, defaultCurve, preview,
+  manualOverrides, setManualOverrides,
 }) {
   function setRowCurve(groupId, curve) {
     setRowCurves(prev => ({ ...prev, [groupId]: curve }))
+    // Switching curve clears any manual override for that row
+    setManualOverrides(prev => {
+      if (!(groupId in prev)) return prev
+      const out = { ...prev }
+      delete out[groupId]
+      return out
+    })
+  }
+
+  function setRowCellValue(groupId, monthIdx, rawValue) {
+    // Parse user input. Allow blank → 0. Strip £ and commas.
+    const cleaned = String(rawValue).replace(/[£,\s]/g, '')
+    const v = cleaned === '' ? 0 : Number(cleaned)
+    if (!Number.isFinite(v)) return  // ignore non-numeric input
+
+    setManualOverrides(prev => {
+      const existing = prev[groupId]
+      // Initialise from current curve-derived values if not manual yet
+      const previewRow = preview.rows.find(r => r.id === groupId)
+      const baseline = (Array.isArray(existing) && existing.length === numMonths)
+        ? existing.slice()
+        : (previewRow ? previewRow.monthly.slice() : Array(numMonths).fill(0))
+      baseline[monthIdx] = Math.round(v * 100) / 100
+      return { ...prev, [groupId]: baseline }
+    })
+  }
+
+  function resetRowToCurve(groupId) {
+    setManualOverrides(prev => {
+      if (!(groupId in prev)) return prev
+      const out = { ...prev }
+      delete out[groupId]
+      return out
+    })
   }
 
   function fmtMoney(v) {
     return '£' + Math.round(v).toLocaleString()
   }
+  function fmtMoneyShort(v) {
+    return Math.round(v).toLocaleString()
+  }
 
-  // Build month header labels
   const monthLabelsArr = Array.from({ length: numMonths }, (_, i) => `M${i + 1}`)
-
-  // Cumulative as % of contract sum
   const cumulativeAtFinal = preview.cumulative[numMonths - 1] || 0
+  const totalManual = Object.keys(manualOverrides).length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -521,26 +630,45 @@ function Step2CurvesAndPreview({
         <strong>{csaExtract.project_name || 'Project'}</strong>{' '}
         — Contract sum {fmtMoney(csaExtract.contract_sum)} —{' '}
         {csaExtract.groups.length} CFF rows × {numMonths} months
+        {totalManual > 0 && (
+          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text3)' }}>
+            · {totalManual} row{totalManual === 1 ? '' : 's'} manually edited
+          </span>
+        )}
+      </div>
+
+      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+        Tip: click any monthly cell to edit. The row's curve switches to manual mode.
+        Use <strong>Reset</strong> to restore the curve-based distribution.
       </div>
 
       <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
           <thead>
             <tr style={{ background: 'var(--surface2)' }}>
-              <th style={th('left', 36)}>Section</th>
+              <th style={th('left', 60)}>Section</th>
               <th style={th('left', null)}>Description</th>
               <th style={th('right', 100)}>Value</th>
-              <th style={th('center', 130)}>Curve</th>
+              <th style={th('center', 140)}>Curve</th>
               {monthLabelsArr.map(lbl => (
-                <th key={lbl} style={th('right', 80)}>{lbl}</th>
+                <th key={lbl} style={th('right', 90)}>{lbl}</th>
               ))}
+              <th style={th('right', 90)}>Row Σ</th>
             </tr>
           </thead>
           <tbody>
             {csaExtract.groups.map(g => {
               const distRow = preview.rows.find(r => r.id === g.id)
+              if (!distRow) return null
+              const isManual = !!distRow.is_manual
+              const rowSum = distRow.monthly.reduce((s, v) => s + v, 0)
+              const drift = rowSum - g.value
+              const hasDrift = Math.abs(drift) > 0.5
               return (
-                <tr key={g.id} style={{ borderTop: '1px solid var(--border)' }}>
+                <tr key={g.id} style={{
+                  borderTop: '1px solid var(--border)',
+                  background: isManual ? 'rgba(80, 102, 188, 0.05)' : undefined,
+                }}>
                   <td style={td('left')}>
                     <span style={{
                       fontSize: 10,
@@ -555,19 +683,64 @@ function Step2CurvesAndPreview({
                   <td style={td('left')}>{g.label}</td>
                   <td style={td('right')}>{fmtMoney(g.value)}</td>
                   <td style={td('center')}>
-                    <select
-                      value={rowCurves[g.id] || defaultCurve}
-                      onChange={e => setRowCurve(g.id, e.target.value)}
-                      style={{ fontSize: 11, padding: '2px 4px', width: '100%' }}
-                    >
-                      {CURVE_TYPES.map(c => (
-                        <option key={c} value={c}>{CURVE_LABELS[c]}</option>
-                      ))}
-                    </select>
+                    {isManual ? (
+                      <button
+                        onClick={() => resetRowToCurve(g.id)}
+                        style={{
+                          fontSize: 10, padding: '2px 8px',
+                          background: 'var(--surface2)',
+                          border: '0.5px solid var(--border)',
+                          borderRadius: 3,
+                          cursor: 'pointer',
+                          width: '100%',
+                        }}
+                        title="Discard manual edits and recompute from the curve"
+                      >
+                        Reset to curve
+                      </button>
+                    ) : (
+                      <select
+                        value={rowCurves[g.id] || defaultCurve}
+                        onChange={e => setRowCurve(g.id, e.target.value)}
+                        style={{ fontSize: 11, padding: '2px 4px', width: '100%' }}
+                      >
+                        {CURVE_TYPES.map(c => (
+                          <option key={c} value={c}>{CURVE_LABELS[c]}</option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                   {distRow.monthly.map((v, i) => (
-                    <td key={i} style={td('right')}>{fmtMoney(v)}</td>
+                    <td key={i} style={{ ...td('right'), padding: '2px 4px' }}>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={fmtMoneyShort(v)}
+                        onChange={e => setRowCellValue(g.id, i, e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '4px 6px',
+                          fontSize: 12,
+                          textAlign: 'right',
+                          background: 'transparent',
+                          border: '0.5px solid transparent',
+                          borderRadius: 3,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: isManual ? 'var(--text)' : 'var(--text2)',
+                        }}
+                        onFocus={e => { e.target.select(); e.target.style.border = '0.5px solid var(--border)' }}
+                        onBlur={e => { e.target.style.border = '0.5px solid transparent' }}
+                      />
+                    </td>
                   ))}
+                  <td style={{ ...td('right'), color: hasDrift ? '#dc2626' : 'var(--text3)', fontSize: 11 }}>
+                    {fmtMoney(rowSum)}
+                    {hasDrift && (
+                      <div style={{ fontSize: 10 }}>
+                        {drift > 0 ? '+' : ''}{fmtMoney(drift)}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               )
             })}
@@ -581,6 +754,7 @@ function Step2CurvesAndPreview({
               {preview.totals.map((v, i) => (
                 <td key={i} style={td('right')}>{fmtMoney(v)}</td>
               ))}
+              <td style={td('right')}>{fmtMoney(preview.totals.reduce((s, v) => s + v, 0))}</td>
             </tr>
             <tr style={{ fontWeight: 600 }}>
               <td style={td('left')} colSpan={3}>Cumulative</td>
@@ -588,6 +762,7 @@ function Step2CurvesAndPreview({
               {preview.cumulative.map((v, i) => (
                 <td key={i} style={td('right')}>{fmtMoney(v)}</td>
               ))}
+              <td style={td('right')}>—</td>
             </tr>
             <tr style={{ color: 'var(--text3)' }}>
               <td style={td('left')} colSpan={3}>% Programme</td>
@@ -599,6 +774,7 @@ function Step2CurvesAndPreview({
                     : '—'}
                 </td>
               ))}
+              <td style={td('right')}>—</td>
             </tr>
           </tbody>
         </table>
@@ -608,7 +784,8 @@ function Step2CurvesAndPreview({
         Total forecast: <strong>{fmtMoney(cumulativeAtFinal)}</strong>{' '}
         {Math.abs(cumulativeAtFinal - csaExtract.contract_sum) > 1 && (
           <span style={{ color: '#dc2626' }}>
-            (mismatch with contract {fmtMoney(csaExtract.contract_sum)})
+            (mismatch with contract {fmtMoney(csaExtract.contract_sum)} —
+            generation will proceed but the CFF total will differ from the contract)
           </span>
         )}
       </div>
