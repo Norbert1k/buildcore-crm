@@ -3,11 +3,13 @@ import { supabase } from '../lib/supabase'
 import { Modal, Field, Spinner } from './ui'
 import { extractCsa } from '../lib/csaExtractor'
 import { generateCff } from '../lib/cffGenerator'
+import { fetchAllProjectPas } from '../lib/paGroupExtractor'
 import {
   CURVE_TYPES,
   CURVE_LABELS,
   CURVE_DESCRIPTIONS,
   distributeGroups,
+  distributeValue,
   monthsBetween,
 } from '../lib/cffCurves'
 
@@ -52,6 +54,14 @@ export default function CffGeneratorModal({
   // navigation so user doesn't lose edits when going back to Step 1.
   const [manualOverrides, setManualOverrides] = useState({})  // { [groupId]: number[] }
 
+  // PA-aware regenerate state. paList is auto-fetched at mount; usePaActuals
+  // is the user's toggle (default ON when PAs exist). When ON, the first
+  // paList.length months of every row are replaced with PA-derived values
+  // and the remaining months redistribute the row's leftover via curve.
+  const [paList, setPaList] = useState([])              // result of fetchAllProjectPas
+  const [paLoadError, setPaLoadError] = useState('')
+  const [usePaActuals, setUsePaActuals] = useState(true)
+
   // Computed: number of months
   const numMonths = useMemo(() => {
     if (numMonthsOverride && /^\d+$/.test(numMonthsOverride)) {
@@ -62,8 +72,8 @@ export default function CffGeneratorModal({
   }, [startDate, endDate, numMonthsOverride])
 
   // Live distribution preview. For each row we either use the curve-derived
-  // distribution OR the user's manual override array. Totals + cumulative
-  // are computed from the resolved monthly values either way.
+  // distribution OR PA-derived values for past months OR user manual override.
+  // Precedence: manual override > PA-aware > pure curve.
   const preview = useMemo(() => {
     if (!csaExtract || !numMonths) return null
     const groupsWithCurves = csaExtract.groups.map(g => ({
@@ -71,14 +81,37 @@ export default function CffGeneratorModal({
       curve: rowCurves[g.id] || defaultCurve,
     }))
     const auto = distributeGroups(groupsWithCurves, numMonths, defaultCurve)
-    // Overlay manual overrides
-    const rows = auto.rows.map(r => {
+
+    // PA-aware overlay (mirrors generator logic — keep in sync)
+    const paMonthCount = (usePaActuals && paList.length > 0)
+      ? Math.min(paList.length, numMonths)
+      : 0
+    const paAware = auto.rows.map(r => {
+      if (paMonthCount === 0) return r
+      const csaGroup = csaExtract.groups.find(g => g.id === r.id)
+      if (!csaGroup || !csaGroup.group_key) return r
+      const cumulatives = paList.slice(0, paMonthCount).map(p =>
+        (p.cumulative_by_group && p.cumulative_by_group[csaGroup.group_key]) || 0
+      )
+      const pastMonthly = []
+      let prev = 0
+      for (const cum of cumulatives) {
+        pastMonthly.push(Math.max(0, cum - prev))
+        prev = cum
+      }
+      const remaining = Math.max(0, csaGroup.value - prev)
+      const futureMonths = numMonths - paMonthCount
+      const futureMonthly = futureMonths > 0
+        ? distributeValue(remaining, futureMonths, r.curve)
+        : []
+      return { ...r, monthly: [...pastMonthly, ...futureMonthly], pa_aware: true }
+    })
+
+    // Manual overrides win over PA-aware
+    const rows = paAware.map(r => {
       const manual = manualOverrides[r.id]
-      // Manual array must match numMonths exactly to be applied; otherwise
-      // we silently fall back to the curve-derived distribution (this happens
-      // e.g. if the user set a 4-month manual then changed numMonths to 6).
       if (Array.isArray(manual) && manual.length === numMonths) {
-        return { ...r, monthly: manual.slice(), is_manual: true }
+        return { ...r, monthly: manual.slice(), is_manual: true, pa_aware: false }
       }
       return { ...r, is_manual: false }
     })
@@ -91,8 +124,8 @@ export default function CffGeneratorModal({
       running = Math.round((running + t) * 100) / 100
       cumulative.push(running)
     }
-    return { rows, totals, cumulative }
-  }, [csaExtract, numMonths, rowCurves, defaultCurve, manualOverrides])
+    return { rows, totals, cumulative, paMonthCount }
+  }, [csaExtract, numMonths, rowCurves, defaultCurve, manualOverrides, paList, usePaActuals])
 
   // Reset manual overrides whenever numMonths changes — old arrays would be
   // wrong length anyway. Done as effect so we don't silently keep stale data.
@@ -116,7 +149,7 @@ export default function CffGeneratorModal({
     async function loadInitialData() {
       setLoadingCsaList(true)
       try {
-        const [csaRes, projectRes] = await Promise.all([
+        const [csaRes, projectRes, paResult] = await Promise.all([
           supabase
             .from('project_doc_files')
             .select('id, file_name, storage_path, created_at')
@@ -129,11 +162,18 @@ export default function CffGeneratorModal({
             .select('start_date, end_date')
             .eq('id', projectId)
             .maybeSingle(),
+          // PA-aware regenerate: fetch + parse all root-level PAs in parallel
+          // so they're ready by the time the user reaches Step 2. If parsing
+          // any one PA fails, that specific PA is dropped from the list and
+          // a warning is shown — the rest still apply.
+          fetchAllProjectPas(supabase, projectId).catch(err => {
+            console.warn('PA pre-fetch failed:', err)
+            return []
+          }),
         ])
 
         if (cancelled) return
 
-        // CSA list — accept any error gracefully so the modal still opens
         if (csaRes.error) console.warn('CSA list query error:', csaRes.error)
         const xlsxFiles = (csaRes.data || []).filter(f =>
           /\.xlsx$/i.test(f.file_name)
@@ -143,13 +183,34 @@ export default function CffGeneratorModal({
           setSelectedCsaPath(xlsxFiles[0].storage_path)
         }
 
-        // Project dates — only seed if user hasn't typed anything yet
         if (projectRes.data) {
           if (projectRes.data.start_date) setStartDate(prev => prev || projectRes.data.start_date)
           if (projectRes.data.end_date) setEndDate(prev => prev || projectRes.data.end_date)
         }
+
+        // Map PA list into the shape the generator expects.
+        // Each PA's groups dict goes from { [key]: { cumulative, ... } }
+        // to a flat { [key]: number } for the generator + preview.
+        const flatPaList = (paResult || []).map(p => ({
+          pa_label: p.pa_label,
+          file_name: p.file_name,
+          created_at: p.created_at,
+          total_cumulative: p.total_cumulative,
+          cumulative_by_group: Object.fromEntries(
+            Object.entries(p.groups || {}).map(([k, v]) => [k, v.cumulative])
+          ),
+        }))
+        setPaList(flatPaList)
+        if (flatPaList.length === 0) {
+          // Default the toggle off if there are no PAs (otherwise it's
+          // unlabelled and confusing)
+          setUsePaActuals(false)
+        }
       } catch (err) {
-        if (!cancelled) console.warn('Failed to load modal initial data', err)
+        if (!cancelled) {
+          console.warn('Failed to load modal initial data', err)
+          setPaLoadError(err.message || 'Could not load payment applications')
+        }
       } finally {
         if (!cancelled) setLoadingCsaList(false)
       }
@@ -242,6 +303,9 @@ export default function CffGeneratorModal({
         row_curves: rowCurves,
         default_curve: defaultCurve,
         row_manual: manualOverrides,
+        pa_actuals: usePaActuals && paList.length > 0
+          ? { paList }
+          : null,
       })
 
       // Upload to project-docs bucket — match the CRM upload convention:
@@ -397,6 +461,10 @@ export default function CffGeneratorModal({
           defaultCurve={defaultCurve}
           setDefaultCurve={setDefaultCurve}
           csaParseError={csaParseError}
+          paList={paList}
+          paLoadError={paLoadError}
+          usePaActuals={usePaActuals}
+          setUsePaActuals={setUsePaActuals}
         />
       )}
 
@@ -410,6 +478,8 @@ export default function CffGeneratorModal({
           preview={preview}
           manualOverrides={manualOverrides}
           setManualOverrides={setManualOverrides}
+          paList={paList}
+          usePaActuals={usePaActuals}
         />
       )}
 
@@ -436,6 +506,8 @@ function Step1SourceAndProgramme({
   numMonths,
   defaultCurve, setDefaultCurve,
   csaParseError,
+  paList, paLoadError,
+  usePaActuals, setUsePaActuals,
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -526,6 +598,47 @@ function Step1SourceAndProgramme({
         </div>
       </Field>
 
+      {/* PA-aware regenerate toggle. Only visible when PAs were detected. */}
+      {paList.length > 0 && (
+        <Field label="Payment Applications">
+          <label style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            padding: 10,
+            border: '0.5px solid var(--border)',
+            borderRadius: 6,
+            background: usePaActuals ? 'rgba(80, 102, 188, 0.06)' : 'transparent',
+            cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={usePaActuals}
+              onChange={e => setUsePaActuals(e.target.checked)}
+              style={{ marginTop: 2, flexShrink: 0 }}
+            />
+            <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+              <strong>Use PA actuals for first {paList.length} month{paList.length === 1 ? '' : 's'}</strong>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                {paList.map(p => (
+                  <span key={p.pa_label} style={{ marginRight: 12 }}>
+                    {p.pa_label}: £{Math.round(p.total_cumulative).toLocaleString()}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                Past months will use the cumulative claimed in each PA. Remaining months will redistribute the leftover using the curve below.
+              </div>
+            </div>
+          </label>
+        </Field>
+      )}
+      {paLoadError && (
+        <div style={{ fontSize: 12, color: '#dc2626' }}>
+          Could not load payment applications: {paLoadError}
+        </div>
+      )}
+
       {/* Default curve */}
       <Field label="Default distribution curve">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
@@ -574,6 +687,7 @@ function Step1SourceAndProgramme({
 function Step2CurvesAndPreview({
   csaExtract, numMonths, rowCurves, setRowCurves, defaultCurve, preview,
   manualOverrides, setManualOverrides,
+  paList, usePaActuals,
 }) {
   function setRowCurve(groupId, curve) {
     setRowCurves(prev => ({ ...prev, [groupId]: curve }))
@@ -623,19 +737,35 @@ function Step2CurvesAndPreview({
   const monthLabelsArr = Array.from({ length: numMonths }, (_, i) => `M${i + 1}`)
   const cumulativeAtFinal = preview.cumulative[numMonths - 1] || 0
   const totalManual = Object.keys(manualOverrides).length
+  const paMonthCount = preview.paMonthCount || 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ fontSize: 13, color: 'var(--text2)' }}>
         <strong>{csaExtract.project_name || 'Project'}</strong>{' '}
         — Contract sum {fmtMoney(csaExtract.contract_sum)} —{' '}
-        {csaExtract.groups.length} CFF rows × {numMonths} months
+        {csaExtract.groups.length} CFF row{csaExtract.groups.length === 1 ? '' : 's'} × {numMonths} month{numMonths === 1 ? '' : 's'}
         {totalManual > 0 && (
           <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text3)' }}>
             · {totalManual} row{totalManual === 1 ? '' : 's'} manually edited
           </span>
         )}
       </div>
+
+      {/* PA-aware banner */}
+      {usePaActuals && paList.length > 0 && (
+        <div style={{
+          padding: 10,
+          background: 'rgba(80, 102, 188, 0.08)',
+          border: '0.5px solid rgba(80, 102, 188, 0.3)',
+          borderRadius: 6,
+          fontSize: 12,
+        }}>
+          <strong>Months 1{paMonthCount > 1 ? `–${paMonthCount}` : ''}</strong> use cumulative figures from{' '}
+          {paList.slice(0, paMonthCount).map(p => p.pa_label).join(', ')}.
+          Remaining months redistribute leftover contract value via the chosen curve.
+        </div>
+      )}
 
       <div style={{ fontSize: 11, color: 'var(--text3)' }}>
         Tip: click any monthly cell to edit. The row's curve switches to manual mode.
@@ -650,8 +780,14 @@ function Step2CurvesAndPreview({
               <th style={th('left', null)}>Description</th>
               <th style={th('right', 100)}>Value</th>
               <th style={th('center', 140)}>Curve</th>
-              {monthLabelsArr.map(lbl => (
-                <th key={lbl} style={th('right', 90)}>{lbl}</th>
+              {monthLabelsArr.map((lbl, i) => (
+                <th key={lbl} style={{
+                  ...th('right', 90),
+                  background: i < paMonthCount ? 'rgba(80, 102, 188, 0.15)' : undefined,
+                }}>
+                  {lbl}
+                  {i < paMonthCount && <div style={{ fontSize: 9, fontWeight: 400, color: 'var(--text3)' }}>{paList[i]?.pa_label}</div>}
+                </th>
               ))}
               <th style={th('right', 90)}>Row Σ</th>
             </tr>
@@ -710,29 +846,37 @@ function Step2CurvesAndPreview({
                       </select>
                     )}
                   </td>
-                  {distRow.monthly.map((v, i) => (
-                    <td key={i} style={{ ...td('right'), padding: '2px 4px' }}>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={fmtMoneyShort(v)}
-                        onChange={e => setRowCellValue(g.id, i, e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '4px 6px',
-                          fontSize: 12,
-                          textAlign: 'right',
-                          background: 'transparent',
-                          border: '0.5px solid transparent',
-                          borderRadius: 3,
-                          fontVariantNumeric: 'tabular-nums',
-                          color: isManual ? 'var(--text)' : 'var(--text2)',
-                        }}
-                        onFocus={e => { e.target.select(); e.target.style.border = '0.5px solid var(--border)' }}
-                        onBlur={e => { e.target.style.border = '0.5px solid transparent' }}
-                      />
-                    </td>
-                  ))}
+                  {distRow.monthly.map((v, i) => {
+                    const isPaCell = i < paMonthCount && distRow.pa_aware
+                    return (
+                      <td key={i} style={{
+                        ...td('right'),
+                        padding: '2px 4px',
+                        background: isPaCell ? 'rgba(80, 102, 188, 0.06)' : undefined,
+                      }}>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={fmtMoneyShort(v)}
+                          onChange={e => setRowCellValue(g.id, i, e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            fontSize: 12,
+                            textAlign: 'right',
+                            background: 'transparent',
+                            border: '0.5px solid transparent',
+                            borderRadius: 3,
+                            fontVariantNumeric: 'tabular-nums',
+                            color: isManual ? 'var(--text)' : 'var(--text2)',
+                          }}
+                          onFocus={e => { e.target.select(); e.target.style.border = '0.5px solid var(--border)' }}
+                          onBlur={e => { e.target.style.border = '0.5px solid transparent' }}
+                          title={isPaCell ? `From ${paList[i]?.pa_label} — edit to override` : undefined}
+                        />
+                      </td>
+                    )
+                  })}
                   <td style={{ ...td('right'), color: hasDrift ? '#dc2626' : 'var(--text3)', fontSize: 11 }}>
                     {fmtMoney(rowSum)}
                     {hasDrift && (
@@ -780,15 +924,31 @@ function Step2CurvesAndPreview({
         </table>
       </div>
 
-      <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-        Total forecast: <strong>{fmtMoney(cumulativeAtFinal)}</strong>{' '}
-        {Math.abs(cumulativeAtFinal - csaExtract.contract_sum) > 1 && (
-          <span style={{ color: '#dc2626' }}>
-            (mismatch with contract {fmtMoney(csaExtract.contract_sum)} —
-            generation will proceed but the CFF total will differ from the contract)
-          </span>
-        )}
-      </div>
+      {(() => {
+        const gap = cumulativeAtFinal - csaExtract.contract_sum
+        const variationsSum = csaExtract.variations_sum || 0
+        const expectedGap = -variationsSum   // body total = contract − variations
+        // Tolerance: 1p
+        const explainedByVariations = variationsSum > 0 && Math.abs(gap - expectedGap) <= 1
+        const hasUnexplainedGap = Math.abs(gap) > 1 && !explainedByVariations
+        return (
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+            Total forecast: <strong>{fmtMoney(cumulativeAtFinal)}</strong>{' '}
+            of contract {fmtMoney(csaExtract.contract_sum)}
+            {explainedByVariations && (
+              <span style={{ color: 'var(--text3)' }}>
+                {' '}(excludes {fmtMoney(variationsSum)} in variations — these are not distributed in the CFF body)
+              </span>
+            )}
+            {hasUnexplainedGap && (
+              <span style={{ color: '#dc2626' }}>
+                {' '}— mismatch of {fmtMoney(Math.abs(gap))}{gap > 0 ? ' over' : ' under'} contract.
+                Generation will proceed but the CFF total will differ.
+              </span>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }
