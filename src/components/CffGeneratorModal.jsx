@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
 import { Modal, Field, Spinner } from './ui'
 import { extractCsa } from '../lib/csaExtractor'
 import { generateCff } from '../lib/cffGenerator'
@@ -24,7 +23,6 @@ export default function CffGeneratorModal({
   onClose,
   onGenerated,
 }) {
-  const { profile } = useAuth()
   const [step, setStep] = useState(1) // 1 = source & dates, 2 = curves & preview, 3 = generating
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -63,36 +61,55 @@ export default function CffGeneratorModal({
     return distributeGroups(groupsWithCurves, numMonths, defaultCurve)
   }, [csaExtract, numMonths, rowCurves, defaultCurve])
 
-  // ─── Load list of CSA files in the csa subfolder ────────────────────────
+  // ─── On mount: load CSA file list AND seed dates from project record ───
+  // We fetch the project's start_date / end_date so the modal opens
+  // pre-populated — user can override but won't have to re-type what they
+  // already entered when creating the project. Done in parallel with the
+  // CSA list query for one round-trip.
   useEffect(() => {
     let cancelled = false
-    async function loadCsaList() {
+    async function loadInitialData() {
       setLoadingCsaList(true)
       try {
-        const { data, error } = await supabase
-          .from('project_doc_files')
-          .select('id, file_name, storage_path, uploaded_at')
-          .eq('project_id', projectId)
-          .eq('folder_key', PRIMARY_FOLDER)
-          .eq('subfolder_key', CSA_SUBFOLDER)
-          .order('uploaded_at', { ascending: false })
+        const [csaRes, projectRes] = await Promise.all([
+          supabase
+            .from('project_doc_files')
+            .select('id, file_name, storage_path, created_at')
+            .eq('project_id', projectId)
+            .eq('folder_key', PRIMARY_FOLDER)
+            .eq('subfolder_key', CSA_SUBFOLDER)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('projects')
+            .select('start_date, end_date')
+            .eq('id', projectId)
+            .maybeSingle(),
+        ])
 
         if (cancelled) return
-        if (error) throw error
-        const xlsxFiles = (data || []).filter(f =>
+
+        // CSA list — accept any error gracefully so the modal still opens
+        if (csaRes.error) console.warn('CSA list query error:', csaRes.error)
+        const xlsxFiles = (csaRes.data || []).filter(f =>
           /\.xlsx$/i.test(f.file_name)
         )
         setCsaFiles(xlsxFiles)
         if (xlsxFiles.length > 0) {
           setSelectedCsaPath(xlsxFiles[0].storage_path)
         }
+
+        // Project dates — only seed if user hasn't typed anything yet
+        if (projectRes.data) {
+          if (projectRes.data.start_date) setStartDate(prev => prev || projectRes.data.start_date)
+          if (projectRes.data.end_date) setEndDate(prev => prev || projectRes.data.end_date)
+        }
       } catch (err) {
-        if (!cancelled) console.warn('Failed to load CSA file list', err)
+        if (!cancelled) console.warn('Failed to load modal initial data', err)
       } finally {
         if (!cancelled) setLoadingCsaList(false)
       }
     }
-    loadCsaList()
+    loadInitialData()
     return () => {
       cancelled = true
     }
@@ -181,47 +198,59 @@ export default function CffGeneratorModal({
         default_curve: defaultCurve,
       })
 
-      // Upload to project-docs bucket at 00-project-information/cff/
-      const storagePath = `${projectId}/${PRIMARY_FOLDER}/${CFF_SUBFOLDER}/${result.filename}`
+      // Upload to project-docs bucket — match the CRM upload convention:
+      //   projects/<projectId>/<folderKey>/<subfolderKey>/<ts>-<filename>
+      // The timestamp prefix means a re-generate creates a new file rather
+      // than overwriting the previous one in storage. We delete any existing
+      // CFF rows for this subfolder afterwards so the file list shows only
+      // the latest one (matches the publish-PR-to-folder flow used elsewhere).
+      const ts = Date.now()
+      const storagePath = `projects/${projectId}/${PRIMARY_FOLDER}/${CFF_SUBFOLDER}/${ts}-${result.filename}`
       const { error: uploadErr } = await supabase
         .storage
         .from('project-docs')
         .upload(storagePath, result.blob, {
-          upsert: true,
+          upsert: false, // never overwrite — timestamp guarantees uniqueness
           contentType:
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         })
       if (uploadErr) throw uploadErr
 
-      // Insert/update DB row in project_doc_files
-      // First check if a row with this storage_path already exists
+      // Find any existing CFF rows so we can clean them up after insert. We
+      // delete the storage objects too, otherwise old CFFs accumulate forever.
       const { data: existing } = await supabase
         .from('project_doc_files')
-        .select('id')
+        .select('id, storage_path')
         .eq('project_id', projectId)
-        .eq('storage_path', storagePath)
-        .maybeSingle()
+        .eq('folder_key', PRIMARY_FOLDER)
+        .eq('subfolder_key', CFF_SUBFOLDER)
 
-      if (existing) {
+      // Insert the new row using the standard column set (matches every
+      // other place in the codebase that writes to project_doc_files).
+      const { error: insertErr } = await supabase
+        .from('project_doc_files')
+        .insert({
+          project_id: projectId,
+          folder_key: PRIMARY_FOLDER,
+          subfolder_key: CFF_SUBFOLDER,
+          file_name: result.filename,
+          file_size: result.blob.size,
+          storage_path: storagePath,
+        })
+      if (insertErr) throw insertErr
+
+      // Now clean up the OLD CFF rows + storage objects (if any). Skip the
+      // one we just inserted by filtering on storage_path mismatch.
+      const oldRows = (existing || []).filter(r => r.storage_path !== storagePath)
+      if (oldRows.length > 0) {
+        const oldPaths = oldRows.map(r => r.storage_path).filter(Boolean)
+        if (oldPaths.length) {
+          await supabase.storage.from('project-docs').remove(oldPaths)
+        }
         await supabase
           .from('project_doc_files')
-          .update({
-            file_name: result.filename,
-            uploaded_at: new Date().toISOString(),
-            uploaded_by: profile?.id || null,
-          })
-          .eq('id', existing.id)
-      } else {
-        await supabase
-          .from('project_doc_files')
-          .insert({
-            project_id: projectId,
-            folder_key: PRIMARY_FOLDER,
-            subfolder_key: CFF_SUBFOLDER,
-            file_name: result.filename,
-            storage_path: storagePath,
-            uploaded_by: profile?.id || null,
-          })
+          .delete()
+          .in('id', oldRows.map(r => r.id))
       }
 
       if (onGenerated) onGenerated(result.filename)
