@@ -1101,6 +1101,20 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                     }
                   </>
                 )}
+                {/* Generate CFF — only on 00-project-information / cff. Lives
+                    next to Zip / Upload so it's visible without expanding the
+                    folder. Stops propagation so clicking doesn't toggle the
+                    subfolder open/close. */}
+                {isCffSubfolder && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowCffGenerator(true) }}
+                    style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#448a40', borderColor: '#448a40' }}
+                    title="Generate a cashflow forecast from the project CSA"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+                    {fileCount > 0 ? 'Re-generate CFF' : 'Generate CFF'}
+                  </button>
+                )}
                 <button onClick={zipSubfolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3 }} title="Zip">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
                   Zip
@@ -1167,19 +1181,6 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             </div>
           )}
 
-          {/* Cashflow Forecast generator — only inside 00-project-information / cff.
-              Reads CSA from the sibling csa subfolder, applies user-chosen curve,
-              writes a styled xlsx straight back into this subfolder. */}
-          {isCffSubfolder && canManage && (
-            <div style={{ marginBottom: 8 }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowCffGenerator(true) }}
-                style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#448a40', color: 'white', border: '0.5px solid #448a40' }}
-                title="Generate a cashflow forecast from the project CSA">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                {files.length > 0 ? 'Re-generate CFF' : 'Generate CFF'}
-              </button>
-            </div>
-          )}
           {isPrSubfolder && progressReports.length > 0 && (
             <div style={{ marginBottom: 10, padding: 10, border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
