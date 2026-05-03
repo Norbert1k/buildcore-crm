@@ -1977,12 +1977,30 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                 <button onClick={async (e) => {
                   e.stopPropagation()
                   if (generatingPa) return
+                  // Prompt for retention % before generating PA01. Pre-fills 3
+                  // (the most common rate) but the surveyor can type anything
+                  // up to 20%. Cancelling aborts the whole generate. Validates
+                  // here rather than letting the edge function clamp silently
+                  // so the user knows immediately if they typed nonsense.
+                  const raw = window.prompt(
+                    'Retention % for this project?\n\n' +
+                    'Examples: 3, 5, 8. Defaults to 3 if you press OK without changing.\n' +
+                    'You can edit the PA file later if your contract changes.',
+                    '3'
+                  )
+                  if (raw === null) return    // user cancelled — silently abort
+                  const trimmed = raw.trim()
+                  const parsed = trimmed === '' ? 3 : parseFloat(trimmed)
+                  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 20) {
+                    setPaError('Retention must be a number between 0 and 20. Got: "' + raw + '"')
+                    return
+                  }
                   setGeneratingPa(true)
                   setPaError('')
                   try {
                     const { data, error: fnErr } = await supabase.functions.invoke(
                       'activate-project-pa-file',
-                      { body: { project_id: projectId } }
+                      { body: { project_id: projectId, retention_pct: parsed } }
                     )
                     if (fnErr) throw fnErr
                     if (data?.error) throw new Error(data.error)
