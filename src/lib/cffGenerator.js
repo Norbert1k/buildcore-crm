@@ -8,8 +8,11 @@
 //   • Column header band (row 9, dark fill, white text)
 //   • Body: section headers (light-green fill) + data rows for each group
 //   • Summary block: Monthly Gross, Cumulative, % Programme Complete
-//   • Payment block: Less Retention 3%, Plus Retention Release 1.5% at PC,
+//   • Payment block: Less Retention R%, Plus Retention Release (R-1.5)% at PC,
 //     NET PAYMENT DUE Ex VAT
+//     R is settings.retention_pct (default 3). The release at PC is always
+//     the contracted retention minus 1.5%, with the trailing 1.5% held back
+//     through the defects period.
 //
 // All numeric cells use £#,##0 format; percentages use 0.0%; formulas link
 // summary/payment rows back to body so a user editing month columns will
@@ -230,6 +233,9 @@ function assignRefs(groups) {
 //     csa_no: string,
 //     row_curves: { [groupId]: 'even' | 'front' | 'back' | 'mid' },
 //     default_curve: 'even',
+//     retention_pct: number,   // optional, default 3. Drives the
+//                              // "Less Retention R%" deduction and the
+//                              // "Plus Retention Release (R-1.5)%" line.
 //   }
 // Returns: { blob: Blob, filename: string, summary: { totalForecast, retention, release, netPayment } }
 export async function generateCff(csaExtract, settings) {
@@ -239,6 +245,23 @@ export async function generateCff(csaExtract, settings) {
     settings.num_months ||
     monthsBetween(settings.start_date, settings.end_date) ||
     1
+
+  // Retention configuration. The deduction (R%) and release-at-PC ((R-1.5)%)
+  // are driven by settings.retention_pct, defaulting to 3 for backwards
+  // compatibility with all existing CFFs (which were hard-coded to 3% / 1.5%).
+  // A trailing 1.5% is always held through the defects period — that's why
+  // release = R - 1.5. If R is somehow set below 1.5 we clamp release to 0
+  // rather than emit a negative formula.
+  const retentionPct = Number.isFinite(settings.retention_pct) && settings.retention_pct >= 0
+    ? settings.retention_pct
+    : 3
+  const releasePct = Math.max(0, retentionPct - 1.5)
+  const retentionRate = retentionPct / 100
+  const releaseRate = releasePct / 100
+  // Label fragments — strip trailing ".0" so "3%" and "5.5%" both look natural.
+  const fmtPct = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, ''))
+  const retentionPctLabel = fmtPct(retentionPct)
+  const releasePctLabel = fmtPct(releasePct)
 
   // Compute distributions per group. For each row we either use the curve-
   // derived distribution OR a user-supplied manual array (settings.row_manual).
@@ -540,42 +563,42 @@ export async function generateCff(csaExtract, settings) {
   merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx, c: lastColIdx } })
   rowIdx++
 
-  // Less Retention 3%
-  setCell(rc(rowIdx, 1), { v: 'Less Retention 3%', t: 's', s: STYLES.dataDesc })
+  // Less Retention R%
+  setCell(rc(rowIdx, 1), { v: `Less Retention ${retentionPctLabel}%`, t: 's', s: STYLES.dataDesc })
   for (let m = 0; m < numMonths; m++) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      v: -finalDist.totals[m] * 0.03,
-      f: `-${colLetter}${monthlyGrossRowIdx + 1}*0.03`,
+      v: -finalDist.totals[m] * retentionRate,
+      f: `-${colLetter}${monthlyGrossRowIdx + 1}*${retentionRate}`,
       s: STYLES.dataNum,
     })
   }
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: -contractSum * 0.03,
-    f: `-${totalForecastColLetter}${monthlyGrossRowIdx + 1}*0.03`,
+    v: -contractSum * retentionRate,
+    f: `-${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${retentionRate}`,
     s: STYLES.dataNum,
   })
   const retentionRowIdx = rowIdx
   rowIdx++
 
-  // Plus Retention Release 1.5% (at PC) — only last month gets the value
-  setCell(rc(rowIdx, 1), { v: 'Plus Retention Release 1.5% (at PC)', t: 's', s: STYLES.dataDesc })
+  // Plus Retention Release (R-1.5)% (at PC) — only last month gets the value
+  setCell(rc(rowIdx, 1), { v: `Plus Retention Release ${releasePctLabel}% (at PC)`, t: 's', s: STYLES.dataDesc })
   for (let m = 0; m < numMonths; m++) {
     const isLast = m === numMonths - 1
     const cell = {
       t: 'n',
-      v: isLast ? contractSum * 0.015 : 0,
+      v: isLast ? contractSum * releaseRate : 0,
       s: STYLES.dataNum,
     }
-    if (isLast) cell.f = `${totalForecastColLetter}${monthlyGrossRowIdx + 1}*0.015`
+    if (isLast) cell.f = `${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${releaseRate}`
     setCell(rc(rowIdx, 3 + m), cell)
   }
   const releaseRange = `${firstMonthCol}${rowIdx + 1}:${lastMonthColLetter}${rowIdx + 1}`
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: contractSum * 0.015,
+    v: contractSum * releaseRate,
     f: `SUM(${releaseRange})`,
     s: STYLES.dataNum,
   })
@@ -595,8 +618,8 @@ export async function generateCff(csaExtract, settings) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     const isLast = m === numMonths - 1
     const monthly = finalDist.totals[m]
-    const retention = monthly * 0.03
-    const release = isLast ? contractSum * 0.015 : 0
+    const retention = monthly * retentionRate
+    const release = isLast ? contractSum * releaseRate : 0
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
       v: monthly - retention + release,
@@ -604,7 +627,7 @@ export async function generateCff(csaExtract, settings) {
       s: STYLES.netPaymentNum,
     })
   }
-  const netPayment = contractSum - contractSum * 0.03 + contractSum * 0.015
+  const netPayment = contractSum - contractSum * retentionRate + contractSum * releaseRate
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
     v: netPayment,
@@ -654,8 +677,10 @@ export async function generateCff(csaExtract, settings) {
     summary: {
       contractSum,
       totalForecast: contractSum,
-      retention: contractSum * 0.03,
-      release: contractSum * 0.015,
+      retention: contractSum * retentionRate,
+      release: contractSum * releaseRate,
+      retentionPct,
+      releasePct,
       netPayment,
       numMonths,
     },
