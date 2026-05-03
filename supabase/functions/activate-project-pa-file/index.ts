@@ -30,6 +30,7 @@ const corsHeaders = {
 
 interface Body {
   project_id: string
+  retention_pct?: number
 }
 
 function safeFilename(s: string): string {
@@ -72,6 +73,17 @@ serve(async (req) => {
     // 2. Parse + look up project
     const body: Body = await req.json()
     if (!body.project_id) throw new Error('project_id required')
+
+    // Retention configuration. The CRM caller may pass an explicit retention_pct
+    // (e.g. user typed "5" in the prompt before clicking Generate); otherwise
+    // we default to 3 to preserve historical behaviour. Clamp to a sane range
+    // so a malformed body can't write absurd labels.
+    const rawRetention = typeof body.retention_pct === 'number' ? body.retention_pct : 3
+    const retentionPct = Math.max(0, Math.min(20, rawRetention))
+    const retentionRate = retentionPct / 100
+    const retentionPctLabel = Number.isInteger(retentionPct)
+      ? String(retentionPct)
+      : retentionPct.toFixed(1).replace(/\.0$/, '')
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -277,7 +289,7 @@ serve(async (req) => {
     }
 
     if (contractSumRow > 0) {
-      // Add: Less Retention 3% / TOTAL DUE THIS APPLICATION
+      // Add: Less Retention {retentionPct}% / TOTAL DUE THIS APPLICATION
       // Insert two rows after the contract sum row
       const retentionRow = contractSumRow + 1
       const totalDueRow = contractSumRow + 2
@@ -285,15 +297,15 @@ serve(async (req) => {
       sheet.insertRow(retentionRow, [])
       sheet.insertRow(totalDueRow, [])
 
-      // Less Retention 3%
+      // Less Retention {retentionPct}%
       sheet.mergeCells(`A${retentionRow}:F${retentionRow}`)
       const retLabelCell = sheet.getCell(`A${retentionRow}`)
-      retLabelCell.value = 'Less Retention 3% (on This Application)'
+      retLabelCell.value = `Less Retention ${retentionPctLabel}% (on This Application)`
       retLabelCell.font = { name: 'Arial', size: 10, color: { argb: 'FF1C1B18' } }
       retLabelCell.alignment = { horizontal: 'right', vertical: 'middle', indent: 1 }
 
       const retCell = sheet.getCell(`I${retentionRow}`)
-      retCell.value = { formula: `-I${contractSumRow}*0.03` } as any
+      retCell.value = { formula: `-I${contractSumRow}*${retentionRate}` } as any
       retCell.numFmt = '£#,##0.00;(£#,##0.00);"—"'
       retCell.font = { name: 'Arial', size: 10 }
       retCell.alignment = { horizontal: 'right', vertical: 'middle' }
