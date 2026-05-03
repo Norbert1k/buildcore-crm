@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { Modal, Field, Spinner } from './ui'
 import { extractCsa } from '../lib/csaExtractor'
 import { generateCff } from '../lib/cffGenerator'
-import { fetchAllProjectPas } from '../lib/paGroupExtractor'
+import { fetchAllProjectPas, extractRetentionFromPa } from '../lib/paGroupExtractor'
 import {
   CURVE_TYPES,
   CURVE_LABELS,
@@ -47,6 +47,18 @@ export default function CffGeneratorModal({
   const [endDate, setEndDate] = useState('')
   const [numMonthsOverride, setNumMonthsOverride] = useState('')
   const [defaultCurve, setDefaultCurve] = useState('even')
+  // Retention configuration. Drives the "Less Retention R%" / "Plus Retention
+  // Release (R-1.5)% (at PC)" rows in the generated CFF. Auto-detected from
+  // the latest PA's footer when one exists; defaults to 3 otherwise. Always
+  // user-editable — surveyor may know the contract retention before any PA
+  // has been issued, and may override even when auto-detect succeeds.
+  const [retentionPct, setRetentionPct] = useState(3)
+  // 'default'    = no PA / not yet determined, sitting on the 3% default
+  // 'pa'         = pulled cleanly from latest PA's footer
+  // 'pa-failed'  = latest PA had a "retention" row but the % couldn't be parsed
+  // 'user'       = user has typed in this field, ignore further auto-detect
+  const [retentionSource, setRetentionSource] = useState('default')
+  const [retentionRawLabel, setRetentionRawLabel] = useState('')   // for the "Detected from PA03" hint
   const [rowCurves, setRowCurves] = useState({})       // { [groupId]: 'even' | 'front' | ... }
   // Manual per-row overrides — when present, replaces the curve-derived
   // distribution for that row. Editing a cell switches the row into manual
@@ -186,7 +198,7 @@ export default function CffGeneratorModal({
     async function loadInitialData() {
       setLoadingCsaList(true)
       try {
-        const [csaRes, projectRes, paResult] = await Promise.all([
+        const [csaRes, projectRes, paResult, latestPaForRetention] = await Promise.all([
           supabase
             .from('project_doc_files')
             .select('id, file_name, storage_path, created_at')
@@ -207,6 +219,40 @@ export default function CffGeneratorModal({
             console.warn('PA pre-fetch failed:', err)
             return []
           }),
+          // Retention auto-detect: download the latest root-level PA only and
+          // parse its "Less Retention N%" footer row. Runs in parallel with
+          // fetchAllProjectPas (which doesn't read retention) so this adds at
+          // most one round-trip on top of the existing loads. Returns null
+          // when there's no PA, when the download fails, or when the file
+          // can't be opened — handled below.
+          (async () => {
+            try {
+              const { data: latest, error } = await supabase
+                .from('project_doc_files')
+                .select('storage_path, file_name')
+                .eq('project_id', projectId)
+                .eq('folder_key', '02-payment-application')
+                .is('subfolder_key', null)
+                .like('file_name', '%.xlsx')
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle()
+              if (error || !latest) return null
+              const { data: signed } = await supabase
+                .storage
+                .from('project-docs')
+                .createSignedUrl(latest.storage_path, 600)
+              if (!signed?.signedUrl) return null
+              const res = await fetch(signed.signedUrl)
+              if (!res.ok) return null
+              const blob = await res.blob()
+              const ret = await extractRetentionFromPa(blob)
+              return { ...ret, file_name: latest.file_name }
+            } catch (err) {
+              console.warn('Retention pre-fetch failed:', err)
+              return null
+            }
+          })(),
         ])
 
         if (cancelled) return
@@ -244,6 +290,28 @@ export default function CffGeneratorModal({
         if (flatPaList.length > 0) {
           setActualsMode('pa')
         }
+
+        // Apply retention auto-detect from latest PA, but only if the user
+        // hasn't already typed in the field. setRetentionSource is read via
+        // its current state in the setter to avoid a stale closure on the
+        // initial 'default' value.
+        setRetentionSource(prevSource => {
+          if (prevSource === 'user') return prevSource
+          if (!latestPaForRetention) return 'default'
+          if (latestPaForRetention.status === 'ok' &&
+              Number.isFinite(latestPaForRetention.retention_pct)) {
+            setRetentionPct(latestPaForRetention.retention_pct)
+            setRetentionRawLabel(latestPaForRetention.file_name || '')
+            return 'pa'
+          }
+          if (latestPaForRetention.status === 'unparseable') {
+            setRetentionRawLabel(latestPaForRetention.raw_label || '')
+            return 'pa-failed'
+          }
+          // status: 'not_found' — file existed but no retention row visible.
+          // Stay on default; no warning.
+          return 'default'
+        })
       } catch (err) {
         if (!cancelled) {
           console.warn('Failed to load modal initial data', err)
@@ -377,6 +445,7 @@ export default function CffGeneratorModal({
         default_curve: defaultCurve,
         row_manual: manualOverrides,
         pa_actuals: paActuals,
+        retention_pct: retentionPct,
       })
 
       // Upload to project-docs bucket — match the CRM upload convention:
@@ -538,6 +607,11 @@ export default function CffGeneratorModal({
           setActualsMode={setActualsMode}
           manualActuals={manualActuals}
           setManualActuals={setManualActuals}
+          retentionPct={retentionPct}
+          setRetentionPct={setRetentionPct}
+          retentionSource={retentionSource}
+          setRetentionSource={setRetentionSource}
+          retentionRawLabel={retentionRawLabel}
         />
       )}
 
@@ -583,6 +657,9 @@ function Step1SourceAndProgramme({
   paList, paLoadError,
   actualsMode, setActualsMode,
   manualActuals, setManualActuals,
+  retentionPct, setRetentionPct,
+  retentionSource, setRetentionSource,
+  retentionRawLabel,
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -657,6 +734,52 @@ function Step1SourceAndProgramme({
           />
         </Field>
       </div>
+
+      {/* Retention. Auto-detected from latest PA when one exists; defaults to
+          3% otherwise. Always editable — surveyor may override even when the
+          PA value is correct (e.g. they're regenerating before issuing PA01
+          on a renegotiated contract). The release at PC is always (R-1.5)%
+          so we surface that as a calculated hint underneath. */}
+      <Field label="Retention %">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input
+            type="number"
+            min="0"
+            max="20"
+            step="0.5"
+            value={retentionPct}
+            onChange={e => {
+              const v = e.target.value
+              // Allow blank while typing; clamp on commit.
+              if (v === '') { setRetentionPct(0); setRetentionSource('user'); return }
+              const n = parseFloat(v)
+              if (Number.isFinite(n)) {
+                setRetentionPct(Math.max(0, Math.min(20, n)))
+                setRetentionSource('user')
+              }
+            }}
+            style={{ width: 110 }}
+          />
+          <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+            Release at PC: <strong>{Math.max(0, retentionPct - 1.5).toFixed(1).replace(/\.0$/, '')}%</strong>
+            &nbsp;· Held through defects: <strong>1.5%</strong>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, marginTop: 4, color: retentionSource === 'pa-failed' ? '#b87a00' : 'var(--text3)' }}>
+          {retentionSource === 'pa' && (
+            <>Detected from latest PA{retentionRawLabel ? ` (${retentionRawLabel})` : ''}. Edit if your contract differs.</>
+          )}
+          {retentionSource === 'pa-failed' && (
+            <>⚠ Couldn't read retention % from the latest PA — please confirm the value above before generating.</>
+          )}
+          {retentionSource === 'default' && (
+            <>Default 3%. Edit if your contract specifies a different rate.</>
+          )}
+          {retentionSource === 'user' && (
+            <>Set manually.</>
+          )}
+        </div>
+      </Field>
 
       <Field label={`Number of months (${numMonths || '—'} computed from dates)`}>
         <input
