@@ -210,3 +210,79 @@ export async function fetchAllProjectPas(supabase, projectId) {
   }))
   return parsed.filter(p => p !== null)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// extractRetentionFromPa(file) → { retention_pct, status, raw_label? }
+//
+// Reads a PA xlsx looking for the "Less Retention N%" footer row and parses
+// the percentage. Lives separately from extractPaGroups so callers (the CFF
+// modal) can pre-fill the retention field without re-parsing the entire
+// group structure.
+//
+// Returns one of three shapes:
+//   { retention_pct: number, status: 'ok', raw_label: string }
+//   { retention_pct: null,   status: 'not_found' }     // no row matched at all
+//   { retention_pct: null,   status: 'unparseable', raw_label: string }
+//                                                       // row found but no %
+//
+// The status field lets the modal differentiate "no PA template / unusual
+// file" (default to 3, no warning) from "found a retention row but couldn't
+// read the number" (show input + warning so the user notices).
+// ─────────────────────────────────────────────────────────────────────────────
+export async function extractRetentionFromPa(file) {
+  const XLSX = await loadSheetJs()
+  const arrayBuffer = await file.arrayBuffer()
+  const wb = XLSX.read(arrayBuffer, { type: 'array' })
+  if (!wb.SheetNames.length) return { retention_pct: null, status: 'not_found' }
+
+  let ws = wb.Sheets[wb.SheetNames[0]]
+  for (const name of wb.SheetNames) {
+    if (/-\s*PA\s*$/i.test(name)) { ws = wb.Sheets[name]; break }
+  }
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
+
+  // The retention row sits below CONTRACT SUM. Scan the whole sheet rather
+  // than assume a fixed offset — Arcady's template puts it at row 69 but
+  // older / hand-edited PAs may differ.
+  //
+  // Match patterns we've seen in the wild:
+  //   "Less Retention 3% (on This Application)"
+  //   "Less Retention 5% (on This Application)"
+  //   "Less Retention 8%"
+  //   "Less Retention 2.5%"
+  // The regex is intentionally tolerant: any whitespace between words, allows
+  // decimals, allows the % to be glued to the digits or not.
+  const labelRe = /less\s+retention\s+(\d+(?:\.\d+)?)\s*%/i
+  // Looser fallback: row that mentions "retention" but doesn't carry a parseable
+  // percentage. We use this to distinguish 'not_found' from 'unparseable'.
+  const retentionRowRe = /retention/i
+
+  let unparseableLabel = null
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] || []
+    // Retention label can land in col A (Arcady) or col B (some legacy
+    // templates). Check both.
+    for (let c = 0; c < 3; c++) {
+      const v = row[c]
+      if (typeof v !== 'string') continue
+      const m = labelRe.exec(v)
+      if (m) {
+        const pct = parseFloat(m[1])
+        if (Number.isFinite(pct) && pct >= 0 && pct <= 50) {
+          return { retention_pct: pct, status: 'ok', raw_label: v.trim() }
+        }
+      }
+      // Track the first "retention"-mentioning row that didn't parse cleanly
+      // so we can return it as 'unparseable' if no clean match is found.
+      if (!unparseableLabel && retentionRowRe.test(v) && !/release/i.test(v)) {
+        unparseableLabel = v.trim()
+      }
+    }
+  }
+
+  if (unparseableLabel) {
+    return { retention_pct: null, status: 'unparseable', raw_label: unparseableLabel }
+  }
+  return { retention_pct: null, status: 'not_found' }
+}
