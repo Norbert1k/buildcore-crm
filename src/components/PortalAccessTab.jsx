@@ -89,11 +89,11 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Active portal users · {users.length}</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>People with access · {users.length}</div>
             <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Can sign in at {PORTAL_URL}</div>
           </div>
           {isAdmin && (
-            <button className="btn btn-primary btn-sm" onClick={() => setShowInvite(true)}>+ Invite user</button>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowInvite(true)}>+ Give access</button>
           )}
         </div>
 
@@ -101,7 +101,7 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
           <div style={{ fontSize: 12, color: 'var(--text3)', padding: 12 }}>Loading...</div>
         ) : users.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--text3)', padding: 12, textAlign: 'center' }}>
-            No users yet. Click &quot;Invite user&quot; to grant access.
+            No-one yet. Click &quot;Give access&quot; to add someone.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 }}>
@@ -126,8 +126,8 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
       {/* Pending invitations */}
       {invitations.length > 0 && (
         <div className="card card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Pending invitations · {invitations.length}</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>These users have been invited but haven&apos;t signed in yet.</div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Pending access · {invitations.length}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>These people have been given access but haven&apos;t signed in yet.</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {invitations.map(inv => (
               <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderTop: '0.5px solid var(--border)' }}>
@@ -189,7 +189,7 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
         .eq('client_id', client.id)
         .eq('email', cleanEmail)
         .maybeSingle()
-      if (existing) throw new Error('This email already has portal access for this client.')
+      if (existing) throw new Error('This email already has access to this client.')
 
       // Check if there's already a pending invitation
       const { data: existingInv } = await supabase
@@ -258,7 +258,7 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
         {success ? (
           <>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
-              {emailSent ? 'Invitation sent' : 'Invitation created'}
+              {emailSent ? 'Access granted · email sent' : 'Access granted'}
             </div>
             {emailSent ? (
               <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
@@ -271,7 +271,7 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
               <>
                 {emailWarning && (
                   <div style={{ fontSize: 12, color: '#854F0B', background: '#FAEEDA', border: '1px solid #FAC775', borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>
-                    Invitation saved, but the email didn&apos;t go out: {emailWarning}
+                    Access granted, but the email didn&apos;t go out: {emailWarning}
                   </div>
                 )}
                 <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
@@ -287,7 +287,7 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
           </>
         ) : (
           <form onSubmit={submit}>
-            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Invite portal user</div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Give access to portal</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>To {client.name}</div>
 
             <div style={{ marginBottom: 12 }}>
@@ -313,7 +313,7 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button type="button" className="btn btn-sm" onClick={onClose}>Cancel</button>
               <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !email.trim()}>
-                {saving ? 'Sending...' : 'Create invitation'}
+                {saving ? 'Sending...' : 'Give access'}
               </button>
             </div>
           </form>
