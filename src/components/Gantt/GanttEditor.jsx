@@ -134,20 +134,22 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   }
 
   async function deleteVersion(versionId) {
-    // Safety rail: keep at least one version
-    if (versions.length <= 1) {
-      alert("Can't delete the only saved version.")
-      return
-    }
+    // Per Issue 4b, no minimum-version safety rail — user can delete the
+    // only remaining version. When they do, the editor clears the canvas
+    // back to empty (versionsCount=0, tasks=[]) so they truly start over.
     const v = versions.find(x => x.id === versionId)
     if (!v) return
-    if (!window.confirm(`Permanently delete Version ${v.version_number}? This cannot be undone.`)) return
+    const isLastOne = versions.length === 1
+    const confirmMessage = isLastOne
+      ? `Permanently delete Version ${v.version_number}?\n\nThis is the only saved version. Deleting it will clear the Gantt back to empty. This cannot be undone.`
+      : `Permanently delete Version ${v.version_number}? This cannot be undone.`
+    if (!window.confirm(confirmMessage)) return
     try {
       const { error } = await supabase.from('programme_versions').delete().eq('id', versionId)
       if (error) throw error
       const remaining = versions.filter(x => x.id !== versionId)
       setVersions(remaining)
-      // If the deleted version was the active one, auto-load the next most recent
+      // If the deleted version was the active one, decide what to show next.
       if (activeVersion?.id === versionId) {
         const next = remaining[0] // versions are sorted DESC by version_number
         if (next) {
@@ -162,8 +164,13 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           }
           setLoading(false)
         } else {
-          // No remaining versions — fall back to working-draft mode
+          // No remaining versions — clear the canvas back to empty (Issue 4b).
+          // The user explicitly asked to start over rather than keep the
+          // deleted tasks as a working draft.
           setActiveVersion(null)
+          setTasks([])
+          setOriginalTasks([])
+          setSelectedTaskId(null)
         }
       }
     } catch (err) {
@@ -648,7 +655,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                     <div style={{ fontSize: 10, color: 'var(--text3)' }}>{fmtDateUK(v.created_at)} · {v.profiles?.full_name || 'Unknown'}</div>
                     {v.notes && <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, fontStyle: 'italic' }}>"{v.notes}"</div>}
                   </div>
-                  {canEdit && versions.length > 1 && (
+                  {canEdit && (
                     <button
                       onClick={e => { e.stopPropagation(); deleteVersion(v.id) }}
                       title={`Delete Version ${v.version_number}`}
