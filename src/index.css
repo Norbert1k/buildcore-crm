@@ -485,50 +485,27 @@ tbody tr:hover td { background: var(--surface2); }
 [data-theme="slate"] .nav-user { border-color: var(--border); background: rgba(133,183,235,0.04); }
 
 /* ─── Pearl White ─────────────────────────────────────────────────────────
-   Pure neutral white theme. Page bg = absolute white, surfaces = very faint
-   off-white, borders are silvery hairlines. Both amber (warning) and red
-   (danger) get replaced with shades of light-blue — three distinct blues
-   total (info / warning / danger) so they remain distinguishable at a
-   glance. Delete buttons (.btn-danger) keep red because destructive
-   actions need a visual brake regardless of the theme.
+   Minimal variant of Light. Inherits everything from :root (sidebar, cards,
+   text colours, green accent, focus rings, primary button, etc.). Only
+   THREE things change:
+     1. Page background → pure white (#FFFFFF) instead of Light's #F5F4F0
+     2. Warnings (amber) → light-blue
+     3. Danger pills (red) → slightly darker light-blue
+   Delete buttons (.btn-danger) explicitly override back to red because
+   destructive actions need a visual brake regardless of theme.
    ──────────────────────────────────────────────────────────────────────── */
 [data-theme="pearl"] {
   --bg:          #FFFFFF;
-  --surface:     #FAFAFA;
-  --surface2:    #F4F4F4;
-  --border:      #EAEAEA;
-  --border2:     #D0D0D0;
-  --text:        #1A1A1A;
-  --text2:       #555555;
-  --text3:       #888888;
-  --accent:      #185FA5;
-  --accent-dark: #0C447C;
-  --accent-light:#E6F1FB;
-  --green:       #639922;       --green-bg:    #EAF3DE;       --green-border:#C0DD97;
-  /* Warning (was amber) → mid-blue, friendliest of the three */
+  /* Warning (was amber) → mid light-blue */
   --amber:       #5B9BD5;       --amber-bg:    #EFF6FB;       --amber-border:#C5DEF0;
-  /* Danger (was red) → darker blue. Note .btn-danger explicitly overrides
-     this back to red below — those buttons stay red for safety. */
+  /* Danger pills (was red) → darker light-blue. Note .btn-danger overrides
+     this back to hardcoded red below — destructive buttons stay red. */
   --red:         #0C447C;       --red-bg:      #DCE9F5;       --red-border: #B5D4F4;
-  --blue:        #185FA5;       --blue-bg:     #E6F1FB;       --blue-border:#B5D4F4;
-  --purple:      #3C3489;       --purple-bg:   #EEEDFE;       --purple-border:#AFA9EC;
 }
-[data-theme="pearl"] body { background: var(--bg); color: var(--text); }
-[data-theme="pearl"] .sidebar { background: #FAFAFA; border-color: var(--border); }
-[data-theme="pearl"] .nav-item:hover,
-[data-theme="pearl"] .nav-item.active { background: rgba(24,95,165,0.08); }
-[data-theme="pearl"] .btn-primary { background: var(--accent) !important; border-color: var(--accent) !important; color: white !important; }
-[data-theme="pearl"] .btn-primary:hover { background: var(--accent-dark) !important; border-color: var(--accent-dark) !important; }
-/* Delete/destructive buttons explicitly stay red even though --red has been
-   repurposed for danger pills. Hardcoded values match the original Light
-   theme's red so behaviour is identical to other themes. */
+[data-theme="pearl"] body { background: var(--bg); }
+/* Delete/destructive buttons keep red even though --red has been
+   repurposed for danger pills. Hardcoded values match :root's red so
+   visual behaviour is identical to other themes. */
 [data-theme="pearl"] .btn-danger { background: #FCEBEB !important; border-color: #F7C1C1 !important; color: #A32D2D !important; }
-[data-theme="pearl"] input:focus,
-[data-theme="pearl"] select:focus,
-[data-theme="pearl"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(24,95,165,.12); }
-[data-theme="pearl"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-[data-theme="pearl"] .filter-tab .tab-badge { background: var(--surface2); color: var(--text3); }
-[data-theme="pearl"] .filter-tab.active .tab-badge { background: rgba(24,95,165,0.12); color: var(--accent); }
-[data-theme="pearl"] .topbar { background: #FAFAFA; border-color: var(--border); }
 
 html { transition: background-color 0.2s, color 0.2s; }
