@@ -7,6 +7,7 @@ import ProgressReportEditor, { generateProgressReportPdf } from './ProgressRepor
 import ProjectPhotos from './ProjectPhotos'
 import FileLightbox from './FileLightbox'
 import CffGeneratorModal from './CffGeneratorModal'
+import ClientCffConvertModal from './ClientCffConvertModal'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -322,33 +323,6 @@ function ConfirmDlg({ message, onOk, onCancel }) {
         </div>
       </div>
     </div>
-  )
-}
-
-// One row in the per-building programme picker. Used only by the picker
-// modal in PrimeFolderSection; lives here for proximity with other small
-// shared visual helpers.
-function PickerOption({ label, hint, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'block',
-        width: '100%',
-        textAlign: 'left',
-        padding: '10px 12px',
-        borderRadius: 6,
-        border: 'none',
-        background: 'transparent',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)' }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
-    >
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{label}</div>
-      {hint && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{hint}</div>}
-    </button>
   )
 }
 
@@ -931,6 +905,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
   // styled xlsx straight back into this subfolder.
   const isCffSubfolder = folder.key === '00-project-information' && subfolder.key === 'cff'
   const [showCffGenerator, setShowCffGenerator] = useState(false)
+  const [showClientCffConverter, setShowClientCffConverter] = useState(false)
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -1335,6 +1310,16 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                     {fileCount > 0 ? 'Re-generate CFF' : 'Generate CFF'}
                   </button>
                 )}
+                {isCffSubfolder && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowClientCffConverter(true) }}
+                    style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#5066BC', borderColor: '#5066BC' }}
+                    title="Render a client-supplied CFF in BuildCore's template"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Convert client CFF
+                  </button>
+                )}
                 <button onClick={zipSubfolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3 }} title="Zip">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
                   Zip
@@ -1510,6 +1495,17 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         />
       )}
 
+      {/* Client CFF converter — same lifecycle as Generate CFF, but takes a
+          client-supplied CFF file as input rather than the CSA + curves. */}
+      {showClientCffConverter && isCffSubfolder && (
+        <ClientCffConvertModal
+          projectId={projectId}
+          projectName={projectName}
+          onClose={() => setShowClientCffConverter(false)}
+          onGenerated={() => { setShowClientCffConverter(false); loadFiles(); loadFileCount(); refreshTree?.() }}
+        />
+      )}
+
       {confirmDeleteReport && <ConfirmDlg
         message="Permanently delete this progress report and all its photos? This cannot be undone."
         onOk={() => deleteProgressReport(confirmDeleteReport)}
@@ -1540,16 +1536,6 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [generating, setGenerating] = useState(false)
   const [generatePreview, setGeneratePreview] = useState(null)
   const [pendingGanttTasks, setPendingGanttTasks] = useState(null)
-  // ─── Per-building programme support (Stage 2 of Chunk 2c-programme) ──
-  // For multi-building projects, the user picks which programme they want
-  // to edit before the Gantt opens. `buildings` holds the resolved list
-  // (empty = single-building, no picker shown). `ganttPickerVisible` is
-  // the modal toggle; `ganttScope` holds the chosen ordinal once picked
-  // (null = project-wide programme, number = per-building) and is what
-  // actually gets handed to GanttEditor.
-  const [buildings, setBuildings] = useState([])
-  const [ganttPickerVisible, setGanttPickerVisible] = useState(false)
-  const [ganttScope, setGanttScope] = useState(null)
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -1580,26 +1566,6 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   useEffect(() => { loadCustomSubfolders() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
   useEffect(() => { loadClientVisible() }, [])
-  // Resolve the per-building structure for this project — but ONLY for the
-  // programme folder section. Other folder sections (PA, variations, etc.)
-  // don't need this and the cost would compound across many rows. The
-  // programme folder is also the only place we open GanttEditor from.
-  useEffect(() => {
-    if (folder.key !== '06-project-programme') return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const { resolveBuildings } = await import('../lib/buildings')
-        const result = await resolveBuildings(supabase, projectId)
-        if (!cancelled) setBuildings(result || [])
-      } catch (err) {
-        // Non-fatal: if resolveBuildings fails, fall back to single-building
-        // behaviour (no picker, opens project-wide programme directly).
-        console.warn('[PrimeFolderSection] resolveBuildings failed:', err)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [folder.key, projectId])
   // Re-fetch when any move happens anywhere in the tree (kills ghost copies)
   useEffect(() => {
     if (treeVersion === 0) return
@@ -2023,17 +1989,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                 </button>
               )}
               {folder.key === '06-project-programme' && (
-                <button onClick={(e) => {
-                  e.stopPropagation()
-                  // Multi-building: ask which programme to open. Single-
-                  // building: skip the picker, open project-wide directly.
-                  if (buildings.length > 0) {
-                    setGanttPickerVisible(true)
-                  } else {
-                    setGanttScope(null)
-                    setShowGantt(true)
-                  }
-                }}
+                <button onClick={(e) => { e.stopPropagation(); setShowGantt(true) }}
                   style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
                   title="Open the live editable Gantt chart for this project">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -2255,74 +2211,10 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         <GanttEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
-          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null); setGanttScope(null) }}
+          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null) }}
           canEdit={canManage}
           initialTasks={pendingGanttTasks}
-          buildingOrdinal={ganttScope}
-          buildingLabel={
-            ganttScope != null
-              ? (buildings.find(b => b.ordinal === ganttScope)?.name || null)
-              : null
-          }
         />
-      )}
-
-      {/* Per-building programme picker (Stage 2 of Chunk 2c-programme).
-          Shown when the user clicks "Open Live Gantt" on a multi-building
-          project. Lets them pick whether they're editing the project-wide
-          master programme or a specific building's programme.
-          Single-building projects never see this — the picker is gated by
-          buildings.length > 0 at the trigger sites. */}
-      {ganttPickerVisible && (
-        <div
-          onClick={() => setGanttPickerVisible(false)}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
-            zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: 'var(--surface)', borderRadius: 8, padding: 0,
-              minWidth: 360, maxWidth: 460, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
-              border: '0.5px solid var(--border)',
-            }}
-          >
-            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-                Edit programme for…
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                Each scope has its own version history.
-              </div>
-            </div>
-            <div style={{ padding: '6px 8px' }}>
-              <PickerOption
-                label="Project-wide"
-                hint="Master programme covering all buildings (and the fallback)"
-                onClick={() => { setGanttScope(null); setGanttPickerVisible(false); setShowGantt(true) }}
-              />
-              {buildings.map(b => (
-                <PickerOption
-                  key={b.ordinal}
-                  label={`${String(b.ordinal).padStart(2, '0')} ${b.name}`}
-                  hint={`Building-specific programme${b.hasMissing ? ' (some folders missing)' : ''}`}
-                  onClick={() => { setGanttScope(b.ordinal); setGanttPickerVisible(false); setShowGantt(true) }}
-                />
-              ))}
-            </div>
-            <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn" onClick={() => {
-                setGanttPickerVisible(false)
-                // If the user opened the picker via the AI flow, dismiss the
-                // pending tasks too — they shouldn't carry over to the next
-                // attempt without an explicit re-confirmation.
-                setPendingGanttTasks(null)
-              }}>Cancel</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* AI generation spinner */}
@@ -2395,15 +2287,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   // Hand the tasks to the Gantt editor and dismiss this preview modal.
                   setPendingGanttTasks(editorTasks)
                   setGeneratePreview(null)
-                  // Multi-building projects: route through the same picker
-                  // the manual "Open Live Gantt" button uses, so AI-generated
-                  // tasks get associated with the user's chosen scope.
-                  if (buildings.length > 0) {
-                    setGanttPickerVisible(true)
-                  } else {
-                    setGanttScope(null)
-                    setShowGantt(true)
-                  }
+                  setShowGantt(true)
                 }}>
                 Open in Gantt Editor →
               </button>
