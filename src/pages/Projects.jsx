@@ -328,7 +328,7 @@ function ProjectsDashboard({ counts, dashFin, canViewValue, onProjectClick }) {
     total_contract: 0, claimed_to_date: 0,
     variations_total: 0, variations_count: 0, remaining: 0,
   }
-  const billings = dashFin?.billings || { d30: 0, d60: 0, d90: 0 }
+  const billings = dashFin?.billings || []
   const monthlyForecast = dashFin?.monthly_forecast || []
   const projects = dashFin?.projects || []
   const isLoading = dashFin && !dashFin.loaded
@@ -525,8 +525,24 @@ function CashflowChartCard({ data }) {
   )
 }
 
-// Billings windows panel — next 30/60/90 days of expected forecast.
+// Upcoming valuations panel — next 3 PA submissions across the portfolio,
+// sourced from each project's CFF monthly forecast. Each row represents
+// one calendar month. The first row (current month) gets the green accent
+// since that's the PA you're about to submit; the next two are upcoming.
 function BillingsCard({ billings }) {
+  // Defensive: if data layer hasn't populated yet billings might be missing
+  // or the wrong shape. Fall back to 3 zero entries dated to current/+1/+2.
+  const rows = Array.isArray(billings) && billings.length === 3
+    ? billings
+    : [0, 1, 2].map(offset => {
+        const today = new Date()
+        const target = new Date(today.getFullYear(), today.getMonth() + offset, 1)
+        const targetKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-01`
+        return { date: targetKey, amount: 0 }
+      })
+
+  const labels = ['Next valuation', 'Following', 'Third upcoming']
+
   return (
     <div style={{
       background: 'var(--surface)',
@@ -534,27 +550,39 @@ function BillingsCard({ billings }) {
       borderRadius: 8,
       padding: '12px 14px',
     }}>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Expected billings</div>
-      <BillingsRow label="Next 30 days" value={billings.d30} accent="green" />
-      <BillingsRow label="Next 60 days" value={billings.d60} />
-      <BillingsRow label="Next 90 days" value={billings.d90} />
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Upcoming valuations</div>
+      {rows.map((row, idx) => (
+        <BillingsRow
+          key={row.date}
+          label={labels[idx]}
+          subtitle={fmtMonth(row.date)}
+          value={row.amount}
+          accent={idx === 0 ? 'green' : null}
+          isLast={idx === rows.length - 1}
+        />
+      ))}
     </div>
   )
 }
 
-function BillingsRow({ label, value, accent }) {
+function BillingsRow({ label, subtitle, value, accent, isLast }) {
   return (
     <div style={{
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'baseline',
-      padding: '5px 0',
-      borderBottom: '0.5px solid var(--border)',
+      alignItems: 'center',
+      padding: '6px 0',
+      borderBottom: isLast ? 'none' : '0.5px solid var(--border)',
     }}>
-      <span style={{ fontSize: 11, color: 'var(--text2)' }}>{label}</span>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <span style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 500 }}>{label}</span>
+        {subtitle && (
+          <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{subtitle}</span>
+        )}
+      </div>
       <span style={{
         fontSize: 13,
-        fontWeight: 500,
+        fontWeight: 600,
         color: accent === 'green' ? 'var(--green)' : 'var(--text)',
       }}>
         {fmtMoney(value)}
