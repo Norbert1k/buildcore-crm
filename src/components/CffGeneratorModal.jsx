@@ -1563,7 +1563,19 @@ function Step2CurvesAndPreview({
         Use <strong>Reset</strong> to restore the curve-based distribution.
       </div>
 
-      <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 6 }}>
+      {/* Table viewport — bounded height so the horizontal scrollbar at the
+          BOTTOM of this div stays visible while the user scrolls vertically
+          within the table. Without maxHeight, the scrollbar sits at the very
+          bottom of the entire modal scroll, hidden until you reach the
+          footer. The viewport's vertical scroll is independent from the
+          modal's outer scroll, so the surrounding banners + footer remain
+          accessible regardless of where the user is in the table. */}
+      <div style={{
+        overflow: 'auto',
+        maxHeight: '60vh',
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+      }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
           <thead>
             <tr style={{ background: 'var(--surface2)' }}>
@@ -1574,7 +1586,10 @@ function Step2CurvesAndPreview({
               {monthLabelsArr.map((lbl, i) => (
                 <th key={lbl} style={{
                   ...th('right', 90),
-                  background: i < paMonthCount ? 'rgba(80, 102, 188, 0.15)' : undefined,
+                  // Past-month tint — opaque so sticky-scroll doesn't bleed
+                  // table content through. Layered: surface2 + tint
+                  // approximates the original 0.15 blue overlay look.
+                  ...(i < paMonthCount ? { background: 'linear-gradient(rgba(80,102,188,0.2), rgba(80,102,188,0.2)), var(--surface2)' } : {}),
                 }}>
                   {lbl}
                   {i < paMonthCount && <div style={{ fontSize: 9, fontWeight: 400, color: 'var(--text3)' }}>{labelForPastMonth(i)}</div>}
@@ -1920,6 +1935,14 @@ const th = (align, width) => ({
   borderBottom: '1px solid var(--border)',
   whiteSpace: 'nowrap',
   width: width != null ? width : 'auto',
+  // Sticky header — stays visible at the top of the table's scroll
+  // viewport (the bounded-height div around the table). Background
+  // matches the row to mask scrolled content underneath. zIndex keeps
+  // it above the body cells during overlap.
+  position: 'sticky',
+  top: 0,
+  background: 'var(--surface2)',
+  zIndex: 2,
 })
 const td = (align) => ({
   textAlign: align,
