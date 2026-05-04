@@ -654,6 +654,8 @@ export default function CffGeneratorModal({
           setActualsMode={setActualsMode}
           manualActuals={manualActuals}
           setManualActuals={setManualActuals}
+          buildings={buildings}
+          selectedBuilding={selectedBuilding}
         />
       )}
 
@@ -699,6 +701,7 @@ function Step1SourceAndProgramme({
   paList, paLoadError,
   actualsMode, setActualsMode,
   manualActuals, setManualActuals,
+  buildings, selectedBuilding,
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
