@@ -615,7 +615,7 @@ export default function CffGeneratorModal({
   )
 
   return (
-    <Modal open={true} onClose={onClose} title={title} size="lg" footer={footer}>
+    <Modal open={true} onClose={onClose} title={title} size="xl" footer={footer}>
       {error && (
         <div style={{
           background: 'rgba(220, 38, 38, 0.08)',
