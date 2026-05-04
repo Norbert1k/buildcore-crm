@@ -181,6 +181,18 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         const proj = projRes.data
         const number = await nextReportNumber(projectId)
 
+        // TEMP DIAGNOSTIC — confirms what the projects query returned. Tag
+        // 'JOB-NO-DEBUG' for easy console filtering. Remove once Job No
+        // populates correctly.
+        console.warn('[JOB-NO-DEBUG] new report seeding', {
+          projectId,
+          projectName_param: projectName,
+          projRes_error: projRes.error,
+          proj_data: proj,
+          proj_project_ref: proj?.project_ref,
+          proj_project_name: proj?.project_name,
+        })
+
         // Comma-join helpers — multi-value fields show all assigned people /
         // companies separated by ", ". Falls back to empty string so the
         // input renders cleanly when nothing is assigned. User can always
