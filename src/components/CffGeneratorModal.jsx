@@ -24,12 +24,51 @@ const CFF_ARCHIVE_SUBFOLDER = 'cff-archive'
 const PRIMARY_FOLDER = '00-project-information'
 
 // ─── Main modal component ──────────────────────────────────────────────────
+// Props:
+//   projectId         — required, the project to generate against
+//   projectName       — display name (used in title)
+//   onClose           — modal close callback
+//   onGenerated       — fired after successful upload + project_doc_files row write
+//   scopedToBuilding  — optional Building object (from src/lib/buildings.js).
+//                       When set, the modal is scoped to ONE sub-building of a
+//                       multi-building project (Merton-style). Effects:
+//                         1. CSA picker only lists files inside that building's
+//                            CSA subfolder, not the master CSA folder
+//                         2. PA actuals + retention auto-detect read from that
+//                            building's PA subfolder, not project-wide
+//                         3. Generated CFF uploads to that building's CFF
+//                            subfolder, not the master 'cff' subfolder
+//                         4. Modal title shows the building name
+//                       When null (default), behaves as the existing single-
+//                       building modal — picks from master csa/, uploads to
+//                       master cff/, reads project-wide PAs.
 export default function CffGeneratorModal({
   projectId,
   projectName,
   onClose,
   onGenerated,
+  scopedToBuilding = null,
 }) {
+  // ─── Effective scope (multi-building support) ──────────────────────────
+  // When scopedToBuilding is set, all reads/writes route through that
+  // building's per-building subfolders instead of the project-wide csa/cff
+  // template subfolders. We compute these once at the top so every query
+  // below uses the same scope without re-checking everywhere.
+  //
+  // Single-building (scopedToBuilding=null):
+  //   csaFolderKey = '00-project-information', csaSubfolderKey = 'csa'
+  //   cffFolderKey = '00-project-information', cffSubfolderKey = 'cff'
+  //   paFolderKey  = '02-payment-application', paSubfolderKey  = null (root)
+  //
+  // Multi-building (e.g. Merton's Sports Hall):
+  //   csaSubfolderKey = '<building's csa subfolder key>'
+  //   cffSubfolderKey = '<building's cff subfolder key>'
+  //   paSubfolderKey  = '<building's pa subfolder key>'
+  //   (folderKey stays the same — scoping happens at subfolder level)
+  const csaSubfolderKey = scopedToBuilding?.subfolders?.csa || CSA_SUBFOLDER
+  const cffSubfolderKey = scopedToBuilding?.subfolders?.cff || CFF_SUBFOLDER
+  const paSubfolderKey = scopedToBuilding?.subfolders?.pa || null
+
   const [step, setStep] = useState(1) // 1 = source & dates, 2 = curves & preview, 3 = generating
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -199,45 +238,67 @@ export default function CffGeneratorModal({
       setLoadingCsaList(true)
       try {
         const [csaRes, projectRes, paResult, latestPaForRetention] = await Promise.all([
+          // CSA file list — scoped to the building's CSA subfolder when in
+          // building-scope mode, master csa subfolder otherwise. csaSubfolderKey
+          // is computed at component mount (top of function).
           supabase
             .from('project_doc_files')
             .select('id, file_name, storage_path, created_at')
             .eq('project_id', projectId)
             .eq('folder_key', PRIMARY_FOLDER)
-            .eq('subfolder_key', CSA_SUBFOLDER)
+            .eq('subfolder_key', csaSubfolderKey)
             .order('created_at', { ascending: false }),
           supabase
             .from('projects')
             .select('start_date, end_date')
             .eq('id', projectId)
             .maybeSingle(),
-          // PA-aware regenerate: fetch + parse all root-level PAs in parallel
-          // so they're ready by the time the user reaches Step 2. If parsing
-          // any one PA fails, that specific PA is dropped from the list and
-          // a warning is shown — the rest still apply.
-          fetchAllProjectPas(supabase, projectId).catch(err => {
+          // PA-aware regenerate: fetch + parse the PAs at this scope. For
+          // single-building projects that's root-level PAs (paSubfolderKey =
+          // null). For per-building modal scope it's the building's own PA
+          // subfolder. If parsing any one PA fails, that PA is dropped from
+          // the list and a warning is shown — the rest still apply.
+          fetchAllProjectPas(supabase, projectId, paSubfolderKey).catch(err => {
             console.warn('PA pre-fetch failed:', err)
             return []
           }),
-          // Retention auto-detect: download the latest root-level PA only and
-          // parse its "Less Retention N%" footer row. Runs in parallel with
-          // fetchAllProjectPas (which doesn't read retention) so this adds at
-          // most one round-trip on top of the existing loads. Returns null
-          // when there's no PA, when the download fails, or when the file
-          // can't be opened — handled below.
+          // Retention auto-detect: download the latest PA at this scope and
+          // parse its "Less Retention N%" footer row. Single-building reads
+          // root-level PAs; building-scoped reads that building's PAs.
+          //
+          // Multi-building fallback: if the building has no PAs of its own
+          // yet (e.g. user is generating Changing Rooms CFF before issuing
+          // PA01 for Changing Rooms), fall back to ANY PA in the project.
+          // Retention is a project-level decision in practice, so reading
+          // it from a sibling building's PA is correct.
           (async () => {
             try {
-              const { data: latest, error } = await supabase
-                .from('project_doc_files')
-                .select('storage_path, file_name')
-                .eq('project_id', projectId)
-                .eq('folder_key', '02-payment-application')
-                .is('subfolder_key', null)
-                .like('file_name', '%.xlsx')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle()
-              if (error || !latest) return null
+              // Helper: try one query, return latest row or null
+              async function tryFetchLatest(scopeFilter) {
+                let q = supabase
+                  .from('project_doc_files')
+                  .select('storage_path, file_name')
+                  .eq('project_id', projectId)
+                  .eq('folder_key', '02-payment-application')
+                  .like('file_name', '%.xlsx')
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                q = scopeFilter(q)
+                const { data, error } = await q.maybeSingle()
+                if (error) return null
+                return data
+              }
+              // 1st preference: this scope's own PAs.
+              let latest = paSubfolderKey == null
+                ? await tryFetchLatest(q => q.is('subfolder_key', null))
+                : await tryFetchLatest(q => q.eq('subfolder_key', paSubfolderKey))
+              // Fallback (building-scoped only): any PA in the project.
+              // Skip the fallback for single-building case — there's no
+              // sibling scope to fall back to.
+              if (!latest && paSubfolderKey != null) {
+                latest = await tryFetchLatest(q => q)   // no scope filter at all
+              }
+              if (!latest) return null
               const { data: signed } = await supabase
                 .storage
                 .from('project-docs')
@@ -325,7 +386,10 @@ export default function CffGeneratorModal({
     return () => {
       cancelled = true
     }
-  }, [projectId])
+    // csaSubfolderKey + paSubfolderKey are derived from scopedToBuilding so
+    // they implicitly capture that prop. Listing them explicitly keeps
+    // exhaustive-deps lint happy without forcing the consumer to memoise.
+  }, [projectId, csaSubfolderKey, paSubfolderKey])
 
   // ─── Parse CSA when source changes ──────────────────────────────────────
   async function loadAndParseCsa() {
@@ -454,8 +518,19 @@ export default function CffGeneratorModal({
       // than overwriting the previous one in storage. We delete any existing
       // CFF rows for this subfolder afterwards so the file list shows only
       // the latest one (matches the publish-PR-to-folder flow used elsewhere).
+      //
+      // Archive subfolder key: for the master CFF folder we use the global
+      // CFF_ARCHIVE_SUBFOLDER ('cff-archive'). For per-building CFFs we
+      // synthesise a per-building archive key by suffixing the building's
+      // CFF subfolder key. Both are synthetic — no folder definition exists
+      // in project_doc_folders for either — so they never appear in the file
+      // browser, only the portal's diff query reads them.
+      const archiveSubfolderKey = cffSubfolderKey === CFF_SUBFOLDER
+        ? CFF_ARCHIVE_SUBFOLDER
+        : `${cffSubfolderKey}-archive`
+
       const ts = Date.now()
-      const storagePath = `projects/${projectId}/${PRIMARY_FOLDER}/${CFF_SUBFOLDER}/${ts}-${result.filename}`
+      const storagePath = `projects/${projectId}/${PRIMARY_FOLDER}/${cffSubfolderKey}/${ts}-${result.filename}`
       const { error: uploadErr } = await supabase
         .storage
         .from('project-docs')
@@ -466,16 +541,15 @@ export default function CffGeneratorModal({
         })
       if (uploadErr) throw uploadErr
 
-      // Find existing CFF rows (current + any pre-existing archive). On
-      // regenerate, we KEEP the previous CURRENT version as an archive so
-      // the portal can show "what changed" diffs. We only ever keep one
-      // archive — older archives are deleted to prevent unbounded growth.
+      // Find existing CFF rows (current + any pre-existing archive) — scoped
+      // to this building's subfolder pair, NOT the master cff/cff-archive.
+      // Cross-building "current" CFFs from siblings are left alone.
       const { data: existing } = await supabase
         .from('project_doc_files')
         .select('id, storage_path, subfolder_key')
         .eq('project_id', projectId)
         .eq('folder_key', PRIMARY_FOLDER)
-        .in('subfolder_key', [CFF_SUBFOLDER, CFF_ARCHIVE_SUBFOLDER])
+        .in('subfolder_key', [cffSubfolderKey, archiveSubfolderKey])
 
       // Insert the new row using the standard column set (matches every
       // other place in the codebase that writes to project_doc_files).
@@ -484,7 +558,7 @@ export default function CffGeneratorModal({
         .insert({
           project_id: projectId,
           folder_key: PRIMARY_FOLDER,
-          subfolder_key: CFF_SUBFOLDER,
+          subfolder_key: cffSubfolderKey,
           file_name: result.filename,
           file_size: result.blob.size,
           storage_path: storagePath,
@@ -498,10 +572,10 @@ export default function CffGeneratorModal({
       //     stays put under its original path — only the logical folder
       //     changes)
       const previousCurrent = (existing || []).filter(r =>
-        r.subfolder_key === CFF_SUBFOLDER && r.storage_path !== storagePath
+        r.subfolder_key === cffSubfolderKey && r.storage_path !== storagePath
       )
       const previousArchive = (existing || []).filter(r =>
-        r.subfolder_key === CFF_ARCHIVE_SUBFOLDER
+        r.subfolder_key === archiveSubfolderKey
       )
 
       // Delete old archive (DB + storage)
@@ -520,7 +594,7 @@ export default function CffGeneratorModal({
       if (previousCurrent.length > 0) {
         await supabase
           .from('project_doc_files')
-          .update({ subfolder_key: CFF_ARCHIVE_SUBFOLDER })
+          .update({ subfolder_key: archiveSubfolderKey })
           .in('id', previousCurrent.map(r => r.id))
       }
 
@@ -536,12 +610,15 @@ export default function CffGeneratorModal({
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────
+  // Building suffix appears on every step's title when the modal is scoped
+  // to a specific sub-building (Merton-style multi-building project).
+  const buildingSuffix = scopedToBuilding?.name ? ` — ${scopedToBuilding.name}` : ''
   const title =
     step === 1
-      ? 'Generate Cashflow Forecast — Source & Programme'
+      ? `Generate Cashflow Forecast${buildingSuffix} — Source & Programme`
       : step === 2
-      ? 'Generate Cashflow Forecast — Curves & Preview'
-      : 'Generating Cashflow Forecast…'
+      ? `Generate Cashflow Forecast${buildingSuffix} — Curves & Preview`
+      : `Generating Cashflow Forecast${buildingSuffix}…`
 
   const footer = (
     <>
@@ -612,6 +689,8 @@ export default function CffGeneratorModal({
           retentionSource={retentionSource}
           setRetentionSource={setRetentionSource}
           retentionRawLabel={retentionRawLabel}
+          csaSubfolderKey={csaSubfolderKey}
+          scopedToBuilding={scopedToBuilding}
         />
       )}
 
@@ -660,6 +739,8 @@ function Step1SourceAndProgramme({
   retentionPct, setRetentionPct,
   retentionSource, setRetentionSource,
   retentionRawLabel,
+  csaSubfolderKey,         // 'csa' for master, building's csa key when scoped
+  scopedToBuilding,        // null for master, Building object when scoped
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -677,8 +758,13 @@ function Step1SourceAndProgramme({
             </div>
           ) : csaFiles.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
-              No CSA files found in <code>{PRIMARY_FOLDER} / {CSA_SUBFOLDER}</code>.
-              Upload one below to continue.
+              {scopedToBuilding ? (
+                <>No CSA files found in <code>{scopedToBuilding.label}</code>.
+                Upload one below to continue.</>
+              ) : (
+                <>No CSA files found in <code>{PRIMARY_FOLDER} / {csaSubfolderKey}</code>.
+                Upload one below to continue.</>
+              )}
             </div>
           ) : (
             <select
