@@ -320,16 +320,74 @@ export async function generateCff(csaExtract, settings) {
     return { ...r, monthly: [...pastMonthly, ...futureMonthly], pa_aware: true }
   })
 
+  // ─── Variations overlay ────────────────────────────────────────────────
+  // Variations (VOs) live OUTSIDE the CSA — there's no contract row, no
+  // curve, no future forecast. They appear in the cashflow only where an
+  // actual PA recorded them. Computed from per-PA `variations_cumulative`
+  // values: monthN delta = PA_N.variations_cumulative - PA_(N-1).variations_cumulative.
+  //
+  // We render a dedicated "Variations" data row at the bottom of the body
+  // section, but only when at least one PA has variations > 0. A perpetual
+  // empty row would clutter every CFF on every project, the vast majority
+  // of which have no VOs.
+  //
+  // Why this matters: previously variations were silently dropped from the
+  // CFF entirely. Bishops PA02 and PA03 each contained £17,500 of variation
+  // work that didn't appear in the cashflow's MONTHLY GROSS, leaving a
+  // £17,500 gap between what the CFF said the contractor was owed and what
+  // the PAs actually paid out. This row closes that gap.
+  let variationsRow = null
+  if (paMonthCount > 0) {
+    const variationsCums = paList
+      .slice(0, paMonthCount)
+      .map(p => (typeof p.variations_cumulative === 'number' ? p.variations_cumulative : 0))
+    const totalVariations = variationsCums[variationsCums.length - 1] || 0
+    if (totalVariations > 0) {
+      const variationsMonthly = []
+      let prev = 0
+      for (const cum of variationsCums) {
+        variationsMonthly.push(Math.max(0, cum - prev))
+        prev = cum
+      }
+      // Pad future months with 0 — variations after the last PA are unknown
+      // until the next PA is issued. This is the correct cashflow behaviour:
+      // future variations ≠ forecast variations.
+      while (variationsMonthly.length < numMonths) variationsMonthly.push(0)
+
+      variationsRow = {
+        // Synthetic row — not derived from any CSA group. Doesn't get a
+        // curve, doesn't get an id-based manual override, doesn't appear
+        // in row_curves / row_manual settings. It's a leaf attached to
+        // the body for SUM-formula purposes.
+        id: '__variations__',
+        ref: 'V',
+        section: 'VARIATIONS',
+        label: 'Variations',
+        value: totalVariations,
+        monthly: variationsMonthly,
+        item_count: 1,
+        pa_aware: true,
+        is_variations: true,
+      }
+    }
+  }
+
   // Apply manual overrides — these win over PA-aware values too. User
   // edits are sticky.
   const rowManual = settings.row_manual || {}
-  const resolvedRows = paAwareRows.map(r => {
+  const csaResolvedRows = paAwareRows.map(r => {
     const manual = rowManual[r.id]
     if (Array.isArray(manual) && manual.length === numMonths) {
       return { ...r, monthly: manual.slice(), pa_aware: false }
     }
     return r
   })
+  // Append the variations row (if any) AFTER manual overrides apply.
+  // Variations are not user-editable through the manual-override path
+  // because they have no CSA id; they live or die with the source PAs.
+  const resolvedRows = variationsRow
+    ? [...csaResolvedRows, variationsRow]
+    : csaResolvedRows
 
   // Recompute totals + cumulative from the resolved (post-override) rows so
   // the fallback `v` values written into the xlsx match what Excel will show
@@ -481,16 +539,62 @@ export async function generateCff(csaExtract, settings) {
     }
   }
 
+  // Variations row — appended at the end of the body, only when at least
+  // one PA has variations > 0. Sits inside the data range so the existing
+  // SUM(D{first}:D{last}) formula on MONTHLY GROSS picks it up automatically.
+  // Has its own short header above it ("VARIATIONS") so the row is clearly
+  // distinct from CSA sections — that header is also styled like a section
+  // header, just to keep visual rhythm consistent.
+  if (variationsRow) {
+    // Mini section header for visual clarity
+    for (let c = 0; c <= lastColIdx; c++) {
+      setCell(rc(rowIdx, c), {
+        v: c === 0 ? 'VARIATIONS' : '',
+        t: 's',
+        s: STYLES.sectionHeader,
+      })
+    }
+    rowIdx++
+
+    // The variation row itself
+    setCell(rc(rowIdx, 0), { v: variationsRow.ref, t: 's', s: STYLES.dataRef })
+    setCell(rc(rowIdx, 1), { v: variationsRow.label, t: 's', s: STYLES.dataDesc })
+    setCell(rc(rowIdx, 2), { v: variationsRow.value, t: 'n', s: STYLES.dataNum })
+    for (let m = 0; m < numMonths; m++) {
+      setCell(rc(rowIdx, 3 + m), { v: variationsRow.monthly[m], t: 'n', s: STYLES.dataNum })
+    }
+    const monthRange = `${firstMonthCol}${rowIdx + 1}:${lastMonthColLetter}${rowIdx + 1}`
+    setCell(rc(rowIdx, totalForecastColIdx), {
+      t: 'n',
+      v: variationsRow.value,
+      f: `SUM(${monthRange})`,
+      s: STYLES.dataNum,
+    })
+    setCell(rc(rowIdx, lastColIdx), {
+      v: 'PA-derived — not in CSA',
+      t: 's',
+      s: STYLES.dataNote,
+    })
+    rowIdx++
+  }
+
   const dataLastRowIdx = rowIdx - 1
   const dataLastRow1Indexed = dataLastRowIdx + 1
   const dataFirstRow1Indexed = dataFirstRowIdx + 1
 
   // Summary: MONTHLY GROSS VALUATION
+  // Column C ("Total") and the rightmost "Total Forecast" column both sum
+  // the entire data range, which now includes the variations row when one
+  // is present. Static `v:` fallbacks are pre-computed to match what the
+  // SUM formula will evaluate to, so portal-side parsers that read raw
+  // cell values (without evaluating formulas) still get the right number.
+  const variationsTotal = variationsRow ? variationsRow.value : 0
+  const grossTotal = contractSum + variationsTotal
   setCell(rc(rowIdx, 0), { v: '', t: 's', s: STYLES.summaryLabel })
   setCell(rc(rowIdx, 1), { v: 'MONTHLY GROSS VALUATION', t: 's', s: STYLES.summaryLabel })
   setCell(rc(rowIdx, 2), {
     t: 'n',
-    v: contractSum,
+    v: grossTotal,
     f: `SUM(C${dataFirstRow1Indexed}:C${dataLastRow1Indexed})`,
     s: STYLES.summaryNum,
   })
@@ -505,7 +609,7 @@ export async function generateCff(csaExtract, settings) {
   }
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: contractSum,
+    v: grossTotal,
     f: `SUM(${totalForecastColLetter}${dataFirstRow1Indexed}:${totalForecastColLetter}${dataLastRow1Indexed})`,
     s: STYLES.summaryNum,
   })
@@ -546,7 +650,9 @@ export async function generateCff(csaExtract, settings) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      v: finalDist.cumulative[m] / contractSum,
+      // grossTotal includes variations so the static fallback agrees with
+      // the formula's divisor (the gross row's total-forecast cell).
+      v: grossTotal > 0 ? finalDist.cumulative[m] / grossTotal : 0,
       f: `IFERROR(${colLetter}${cumulativeRowIdx + 1}/${totalForecastColLetter}${monthlyGrossRowIdx + 1},0)`,
       s: STYLES.summaryPct,
     })
@@ -576,7 +682,7 @@ export async function generateCff(csaExtract, settings) {
   }
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: -contractSum * retentionRate,
+    v: -grossTotal * retentionRate,
     f: `-${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${retentionRate}`,
     s: STYLES.dataNum,
   })
@@ -589,7 +695,7 @@ export async function generateCff(csaExtract, settings) {
     const isLast = m === numMonths - 1
     const cell = {
       t: 'n',
-      v: isLast ? contractSum * releaseRate : 0,
+      v: isLast ? grossTotal * releaseRate : 0,
       s: STYLES.dataNum,
     }
     if (isLast) cell.f = `${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${releaseRate}`
@@ -598,7 +704,7 @@ export async function generateCff(csaExtract, settings) {
   const releaseRange = `${firstMonthCol}${rowIdx + 1}:${lastMonthColLetter}${rowIdx + 1}`
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: contractSum * releaseRate,
+    v: grossTotal * releaseRate,
     f: `SUM(${releaseRange})`,
     s: STYLES.dataNum,
   })
@@ -619,7 +725,7 @@ export async function generateCff(csaExtract, settings) {
     const isLast = m === numMonths - 1
     const monthly = finalDist.totals[m]
     const retention = monthly * retentionRate
-    const release = isLast ? contractSum * releaseRate : 0
+    const release = isLast ? grossTotal * releaseRate : 0
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
       v: monthly - retention + release,
@@ -627,7 +733,7 @@ export async function generateCff(csaExtract, settings) {
       s: STYLES.netPaymentNum,
     })
   }
-  const netPayment = contractSum - contractSum * retentionRate + contractSum * releaseRate
+  const netPayment = grossTotal - grossTotal * retentionRate + grossTotal * releaseRate
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
     v: netPayment,
@@ -676,9 +782,13 @@ export async function generateCff(csaExtract, settings) {
     filename,
     summary: {
       contractSum,
-      totalForecast: contractSum,
-      retention: contractSum * retentionRate,
-      release: contractSum * releaseRate,
+      // Total forecast includes variations approved through PAs. For projects
+      // with no PAs or no VOs, this equals contractSum.
+      totalForecast: grossTotal,
+      // Variations cumulative across all PAs (zero when no PAs / no VOs).
+      variationsTotal,
+      retention: grossTotal * retentionRate,
+      release: grossTotal * releaseRate,
       retentionPct,
       releasePct,
       netPayment,
