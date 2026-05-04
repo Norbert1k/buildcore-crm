@@ -4,6 +4,7 @@ import { Modal, Field, Spinner } from './ui'
 import { extractCsa } from '../lib/csaExtractor'
 import { generateCff } from '../lib/cffGenerator'
 import { fetchAllProjectPas } from '../lib/paGroupExtractor'
+import { resolveBuildings, findBuildingByCsaSubfolder } from '../lib/buildings'
 import {
   CURVE_TYPES,
   CURVE_LABELS,
@@ -41,6 +42,28 @@ export default function CffGeneratorModal({
   const [uploadedCsaFile, setUploadedCsaFile] = useState(null)
   const [csaExtract, setCsaExtract] = useState(null)
   const [csaParseError, setCsaParseError] = useState('')
+
+  // Multi-building state — derived from project_doc_folders. Empty array
+  // means single-building (Bishops-style) → all behaviour falls back to
+  // the existing global cff/csa flow. Non-empty means we offer per-building
+  // CSA picking + per-building CFF output.
+  const [buildings, setBuildings] = useState([])
+
+  // The currently selected building, derived from the selected CSA file.
+  // null = global CSA was picked (or upload mode) → save to global cff,
+  //        use root-level PAs.
+  // Building obj = per-building CSA picked → save to building.subfolders.cff,
+  //        scope PAs to building.subfolders.pa.
+  const selectedBuilding = useMemo(() => {
+    if (uploadedCsaFile) return null   // uploads always go to global cff
+    if (!selectedCsaPath) return null
+    // Find the csaFile by storage_path to learn its subfolder_key
+    const file = csaFiles.find(f => f.storage_path === selectedCsaPath)
+    if (!file) return null
+    const sub = file.subfolder_key
+    if (!sub || sub === CSA_SUBFOLDER) return null  // global CSA
+    return findBuildingByCsaSubfolder(buildings, sub)
+  }, [uploadedCsaFile, selectedCsaPath, csaFiles, buildings])
 
   // Settings state
   const [startDate, setStartDate] = useState('')
@@ -164,56 +187,6 @@ export default function CffGeneratorModal({
     return { rows, totals, cumulative, paMonthCount: actualsMonthCount, actualsMode }
   }, [csaExtract, numMonths, rowCurves, defaultCurve, manualOverrides, paList, actualsMode, manualActuals])
 
-  // ─── Reconciliation check ────────────────────────────────────────────────
-  // Verifies the generated MONTHLY GROSS row (preview.totals) matches the
-  // sum of "TOTAL DUE THIS APPLICATION" across the PAs used as past-actuals.
-  // For each past month m: expected = paList[m].total_cumulative -
-  // paList[m-1].total_cumulative (or 0 for m=0). Mismatch if |expected -
-  // actual| > £1.
-  //
-  // This catches a class of generator bugs we've previously hit:
-  //   • PA parser dropped variations rows → MONTHLY GROSS short by VO total
-  //   • Cumulative_by_group missed sections → row sums didn't reconcile
-  //
-  // Only runs in PA mode. Manual mode lets the user type any numbers — by
-  // definition those reconcile to themselves. None mode has no past-actuals
-  // to reconcile against.
-  const reconciliation = useMemo(() => {
-    const TOLERANCE = 1  // £1 — generous for floating-point but tight enough to catch real errors
-    if (!preview || actualsMode !== 'pa') return { status: 'no_check' }
-    const paMonthCount = preview.paMonthCount || 0
-    if (paMonthCount === 0 || paList.length === 0) return { status: 'no_check' }
-
-    const mismatches = []
-    let totalExpected = 0
-    let totalActual = 0
-    for (let m = 0; m < paMonthCount; m++) {
-      const pa = paList[m]
-      if (!pa) continue
-      const prev = m === 0 ? 0 : (paList[m - 1]?.total_cumulative || 0)
-      const expected = (pa.total_cumulative || 0) - prev
-      const actual = preview.totals[m] || 0
-      const diff = actual - expected
-      totalExpected += expected
-      totalActual += actual
-      if (Math.abs(diff) > TOLERANCE) {
-        mismatches.push({
-          month: m + 1,
-          pa_label: pa.pa_label || `PA${String(m + 1).padStart(2, '0')}`,
-          expected,
-          actual,
-          diff,
-        })
-      }
-    }
-    return {
-      status: mismatches.length === 0 ? 'ok' : 'warning',
-      mismatches,
-      totalExpected,
-      totalActual,
-    }
-  }, [preview, paList, actualsMode])
-
   // Reset manual overrides whenever numMonths changes — old arrays would be
   // wrong length anyway. Done as effect so we don't silently keep stale data.
   useEffect(() => {
@@ -236,27 +209,39 @@ export default function CffGeneratorModal({
     async function loadInitialData() {
       setLoadingCsaList(true)
       try {
-        const [csaRes, projectRes, paResult] = await Promise.all([
+        // Resolve buildings first (returns [] for single-building projects).
+        // We need this before the CSA query so we know which csa-sub-*
+        // subfolders exist for this project.
+        const resolvedBuildings = await resolveBuildings(supabase, projectId).catch(err => {
+          console.warn('[CffGen] resolveBuildings failed:', err)
+          return []
+        })
+        if (cancelled) return
+        setBuildings(resolvedBuildings)
+
+        // Build the list of subfolder keys to query for CSA files. Always
+        // include the global 'csa' key. For multi-building projects, also
+        // include each building's csa-sub-* key.
+        const csaSubfolderKeys = [CSA_SUBFOLDER]
+        for (const b of resolvedBuildings) {
+          if (b.subfolders.csa && b.subfolders.csa !== CSA_SUBFOLDER) {
+            csaSubfolderKeys.push(b.subfolders.csa)
+          }
+        }
+
+        const [csaRes, projectRes] = await Promise.all([
           supabase
             .from('project_doc_files')
-            .select('id, file_name, storage_path, created_at')
+            .select('id, file_name, storage_path, subfolder_key, created_at')
             .eq('project_id', projectId)
             .eq('folder_key', PRIMARY_FOLDER)
-            .eq('subfolder_key', CSA_SUBFOLDER)
+            .in('subfolder_key', csaSubfolderKeys)
             .order('created_at', { ascending: false }),
           supabase
             .from('projects')
             .select('start_date, end_date')
             .eq('id', projectId)
             .maybeSingle(),
-          // PA-aware regenerate: fetch + parse all root-level PAs in parallel
-          // so they're ready by the time the user reaches Step 2. If parsing
-          // any one PA fails, that specific PA is dropped from the list and
-          // a warning is shown — the rest still apply.
-          fetchAllProjectPas(supabase, projectId).catch(err => {
-            console.warn('PA pre-fetch failed:', err)
-            return []
-          }),
         ])
 
         if (cancelled) return
@@ -266,8 +251,13 @@ export default function CffGeneratorModal({
           /\.xlsx$/i.test(f.file_name)
         )
         setCsaFiles(xlsxFiles)
+        // Default selection: prefer first xlsx in global 'csa' subfolder so
+        // single-building projects (Bishops) behave exactly as before.
+        // If no global CSA exists but per-building CSAs do, fall back to the
+        // first per-building one.
         if (xlsxFiles.length > 0) {
-          setSelectedCsaPath(xlsxFiles[0].storage_path)
+          const firstGlobal = xlsxFiles.find(f => f.subfolder_key === CSA_SUBFOLDER)
+          setSelectedCsaPath((firstGlobal || xlsxFiles[0]).storage_path)
         }
 
         if (projectRes.data) {
@@ -275,29 +265,16 @@ export default function CffGeneratorModal({
           if (projectRes.data.end_date) setEndDate(prev => prev || projectRes.data.end_date)
         }
 
-        // Map PA list into the shape the generator expects.
-        // Each PA's groups dict goes from { [key]: { cumulative, ... } }
-        // to a flat { [key]: number } for the generator + preview.
-        const flatPaList = (paResult || []).map(p => ({
-          pa_label: p.pa_label,
-          file_name: p.file_name,
-          created_at: p.created_at,
-          total_cumulative: p.total_cumulative,
-          cumulative_by_group: Object.fromEntries(
-            Object.entries(p.groups || {}).map(([k, v]) => [k, v.cumulative])
-          ),
-        }))
-        setPaList(flatPaList)
-        // Default mode: if PA files are found and parsed cleanly, default
-        // to 'pa' mode. Otherwise stay 'none' (pure forecast). User can
-        // flip to 'manual' at any time in Step 1.
-        if (flatPaList.length > 0) {
-          setActualsMode('pa')
-        }
+        // PA-aware regenerate: PA fetch is now scoped to the selected
+        // building (or root-level if global CSA picked). Because the
+        // selectedBuilding depends on csaFiles + selectedCsaPath state we
+        // can't compute it here yet — we kick off the PA fetch in a separate
+        // effect that re-runs whenever the selected building changes. See
+        // below.
       } catch (err) {
         if (!cancelled) {
           console.warn('Failed to load modal initial data', err)
-          setPaLoadError(err.message || 'Could not load payment applications')
+          setPaLoadError(err.message || 'Could not load project data')
         }
       } finally {
         if (!cancelled) setLoadingCsaList(false)
@@ -308,6 +285,60 @@ export default function CffGeneratorModal({
       cancelled = true
     }
   }, [projectId])
+
+  // PA fetch — re-runs whenever the selected building changes. For the
+  // global-CSA case (selectedBuilding == null), fetches root-level PAs
+  // (existing Bishops behaviour). For a per-building CSA, fetches PAs
+  // scoped to that building's PA subfolder so cumulatives line up with the
+  // building's CSA values.
+  useEffect(() => {
+    let cancelled = false
+    async function loadPas() {
+      try {
+        const paSubKey = selectedBuilding ? selectedBuilding.subfolders.pa : null
+        const paResult = await fetchAllProjectPas(supabase, projectId, paSubKey).catch(err => {
+          console.warn('PA fetch failed:', err)
+          return []
+        })
+        if (cancelled) return
+        // Map PA list into the shape the generator expects.
+        const flatPaList = (paResult || []).map(p => ({
+          pa_label: p.pa_label,
+          file_name: p.file_name,
+          created_at: p.created_at,
+          total_cumulative: p.total_cumulative,
+          cumulative_by_group: Object.fromEntries(
+            Object.entries(p.groups || {}).map(([k, v]) => [k, v.cumulative])
+          ),
+        }))
+        setPaList(flatPaList)
+        // If switching buildings revealed PA data, default to 'pa' mode.
+        // If no PAs found, leave actualsMode alone (the user may have
+        // already entered manual data).
+        if (flatPaList.length > 0 && actualsMode === 'none') {
+          setActualsMode('pa')
+        } else if (flatPaList.length === 0 && actualsMode === 'pa') {
+          // Building switch made the previously-found PAs disappear —
+          // switch back to 'none' so the preview doesn't show stale data.
+          setActualsMode('none')
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('PA pre-fetch failed:', err)
+          setPaLoadError(err.message || 'Could not load payment applications')
+        }
+      }
+    }
+    // Only run after the buildings query has resolved AND we have a default
+    // selection (or the user hasn't picked one yet but the project has no
+    // CSAs). The empty-projectId guard prevents an early run during mount.
+    if (projectId) loadPas()
+    return () => { cancelled = true }
+    // selectedBuilding is the trigger — it updates when selectedCsaPath
+    // changes. actualsMode is intentionally NOT in deps to avoid loops
+    // (we set it inside this effect).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, selectedBuilding])
 
   // ─── Parse CSA when source changes ──────────────────────────────────────
   async function loadAndParseCsa() {
@@ -431,12 +462,34 @@ export default function CffGeneratorModal({
 
       // Upload to project-docs bucket — match the CRM upload convention:
       //   projects/<projectId>/<folderKey>/<subfolderKey>/<ts>-<filename>
-      // The timestamp prefix means a re-generate creates a new file rather
-      // than overwriting the previous one in storage. We delete any existing
-      // CFF rows for this subfolder afterwards so the file list shows only
-      // the latest one (matches the publish-PR-to-folder flow used elsewhere).
+      //
+      // Multi-building: if a per-building CSA was picked, save to that
+      // building's CFF subfolder (cff-sub-*). Otherwise (global CSA or
+      // upload), save to the global 'cff' subfolder.
+      //
+      // Archive flow: only the global cff subfolder uses the demote-to-
+      // archive pattern (so the portal can show "what changed" diffs for
+      // the project-level CFF). For per-building CFFs we skip archiving —
+      // matches the manual-upload behaviour for those subfolders and avoids
+      // accumulating stale archives for every building.
+      const targetCffSubfolder = selectedBuilding
+        ? selectedBuilding.subfolders.cff
+        : CFF_SUBFOLDER
+
+      if (!targetCffSubfolder) {
+        // Defensive: a building was selected but has no CFF subfolder set.
+        // This shouldn't happen because resolveBuildings only matches by
+        // ordinal, but if a project's CFF subfolder was deleted manually
+        // we'd hit this. Surface a clear error rather than silently writing
+        // to global cff.
+        throw new Error(
+          `Building "${selectedBuilding.name}" has no matching CFF subfolder. ` +
+          `Create a CFF subfolder for this building before regenerating.`
+        )
+      }
+
       const ts = Date.now()
-      const storagePath = `projects/${projectId}/${PRIMARY_FOLDER}/${CFF_SUBFOLDER}/${ts}-${result.filename}`
+      const storagePath = `projects/${projectId}/${PRIMARY_FOLDER}/${targetCffSubfolder}/${ts}-${result.filename}`
       const { error: uploadErr } = await supabase
         .storage
         .from('project-docs')
@@ -447,62 +500,75 @@ export default function CffGeneratorModal({
         })
       if (uploadErr) throw uploadErr
 
-      // Find existing CFF rows (current + any pre-existing archive). On
-      // regenerate, we KEEP the previous CURRENT version as an archive so
-      // the portal can show "what changed" diffs. We only ever keep one
-      // archive — older archives are deleted to prevent unbounded growth.
-      const { data: existing } = await supabase
-        .from('project_doc_files')
-        .select('id, storage_path, subfolder_key')
-        .eq('project_id', projectId)
-        .eq('folder_key', PRIMARY_FOLDER)
-        .in('subfolder_key', [CFF_SUBFOLDER, CFF_ARCHIVE_SUBFOLDER])
+      if (selectedBuilding) {
+        // Per-building: just insert the new row, no archive flow.
+        const { error: insertErr } = await supabase
+          .from('project_doc_files')
+          .insert({
+            project_id: projectId,
+            folder_key: PRIMARY_FOLDER,
+            subfolder_key: targetCffSubfolder,
+            file_name: result.filename,
+            file_size: result.blob.size,
+            storage_path: storagePath,
+          })
+        if (insertErr) throw insertErr
+      } else {
+        // Global cff: archive previous current, delete previous archive,
+        // insert the new row. (Original Bishops-style behaviour.)
+        const { data: existing } = await supabase
+          .from('project_doc_files')
+          .select('id, storage_path, subfolder_key')
+          .eq('project_id', projectId)
+          .eq('folder_key', PRIMARY_FOLDER)
+          .in('subfolder_key', [CFF_SUBFOLDER, CFF_ARCHIVE_SUBFOLDER])
 
-      // Insert the new row using the standard column set (matches every
-      // other place in the codebase that writes to project_doc_files).
-      const { error: insertErr } = await supabase
-        .from('project_doc_files')
-        .insert({
-          project_id: projectId,
-          folder_key: PRIMARY_FOLDER,
-          subfolder_key: CFF_SUBFOLDER,
-          file_name: result.filename,
-          file_size: result.blob.size,
-          storage_path: storagePath,
-        })
-      if (insertErr) throw insertErr
+        // Insert the new row using the standard column set (matches every
+        // other place in the codebase that writes to project_doc_files).
+        const { error: insertErr } = await supabase
+          .from('project_doc_files')
+          .insert({
+            project_id: projectId,
+            folder_key: PRIMARY_FOLDER,
+            subfolder_key: CFF_SUBFOLDER,
+            file_name: result.filename,
+            file_size: result.blob.size,
+            storage_path: storagePath,
+          })
+        if (insertErr) throw insertErr
 
-      // Reconcile existing rows:
-      //   • Skip the just-inserted row (matched by storage_path)
-      //   • Pre-existing archive rows → delete (storage + DB)
-      //   • Pre-existing current rows → demote to archive (DB only; storage
-      //     stays put under its original path — only the logical folder
-      //     changes)
-      const previousCurrent = (existing || []).filter(r =>
-        r.subfolder_key === CFF_SUBFOLDER && r.storage_path !== storagePath
-      )
-      const previousArchive = (existing || []).filter(r =>
-        r.subfolder_key === CFF_ARCHIVE_SUBFOLDER
-      )
+        // Reconcile existing rows:
+        //   • Skip the just-inserted row (matched by storage_path)
+        //   • Pre-existing archive rows → delete (storage + DB)
+        //   • Pre-existing current rows → demote to archive (DB only; storage
+        //     stays put under its original path — only the logical folder
+        //     changes)
+        const previousCurrent = (existing || []).filter(r =>
+          r.subfolder_key === CFF_SUBFOLDER && r.storage_path !== storagePath
+        )
+        const previousArchive = (existing || []).filter(r =>
+          r.subfolder_key === CFF_ARCHIVE_SUBFOLDER
+        )
 
-      // Delete old archive (DB + storage)
-      if (previousArchive.length > 0) {
-        const oldPaths = previousArchive.map(r => r.storage_path).filter(Boolean)
-        if (oldPaths.length) {
-          await supabase.storage.from('project-docs').remove(oldPaths)
+        // Delete old archive (DB + storage)
+        if (previousArchive.length > 0) {
+          const oldPaths = previousArchive.map(r => r.storage_path).filter(Boolean)
+          if (oldPaths.length) {
+            await supabase.storage.from('project-docs').remove(oldPaths)
+          }
+          await supabase
+            .from('project_doc_files')
+            .delete()
+            .in('id', previousArchive.map(r => r.id))
         }
-        await supabase
-          .from('project_doc_files')
-          .delete()
-          .in('id', previousArchive.map(r => r.id))
-      }
 
-      // Demote previous current → archive
-      if (previousCurrent.length > 0) {
-        await supabase
-          .from('project_doc_files')
-          .update({ subfolder_key: CFF_ARCHIVE_SUBFOLDER })
-          .in('id', previousCurrent.map(r => r.id))
+        // Demote previous current → archive
+        if (previousCurrent.length > 0) {
+          await supabase
+            .from('project_doc_files')
+            .update({ subfolder_key: CFF_ARCHIVE_SUBFOLDER })
+            .in('id', previousCurrent.map(r => r.id))
+        }
       }
 
       if (onGenerated) onGenerated(result.filename)
@@ -604,7 +670,6 @@ export default function CffGeneratorModal({
           paList={paList}
           actualsMode={actualsMode}
           manualActuals={manualActuals}
-          reconciliation={reconciliation}
         />
       )}
 
@@ -651,7 +716,7 @@ function Step1SourceAndProgramme({
             </div>
           ) : csaFiles.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
-              No CSA files found in <code>{PRIMARY_FOLDER} / {CSA_SUBFOLDER}</code>.
+              No CSA files found in <code>{PRIMARY_FOLDER} / {CSA_SUBFOLDER}</code>{buildings.length > 0 ? ' or any per-building subfolder' : ''}.
               Upload one below to continue.
             </div>
           ) : (
@@ -663,11 +728,32 @@ function Step1SourceAndProgramme({
               }}
               style={{ width: '100%' }}
             >
-              {csaFiles.map(f => (
-                <option key={f.id} value={f.storage_path}>
-                  {f.file_name}
-                </option>
-              ))}
+              {/* Group files by their subfolder. Global 'csa' first (the
+                  Bishops-style default), then each building in ordinal
+                  order. For single-building projects only the global group
+                  shows — looks identical to the previous flat list. */}
+              {(() => {
+                const globalFiles = csaFiles.filter(f => f.subfolder_key === CSA_SUBFOLDER)
+                const groups = []
+                if (globalFiles.length > 0) {
+                  groups.push({ label: 'Project CSA', files: globalFiles })
+                }
+                for (const b of buildings) {
+                  const bFiles = csaFiles.filter(f => f.subfolder_key === b.subfolders.csa)
+                  if (bFiles.length > 0) {
+                    groups.push({ label: b.name || `Building ${b.ordinal}`, files: bFiles })
+                  }
+                }
+                return groups.map(g => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.files.map(f => (
+                      <option key={f.id} value={f.storage_path}>
+                        {f.file_name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))
+              })()}
               {uploadedCsaFile && (
                 <option value="__uploaded__">
                   Just uploaded: {uploadedCsaFile.name}
@@ -676,6 +762,24 @@ function Step1SourceAndProgramme({
             </select>
           )}
         </Field>
+
+        {/* When a per-building CSA is selected, show what'll happen. This
+            is the only multi-building UI element on Step 1 — keeps the
+            change minimal for single-building projects. */}
+        {selectedBuilding && !uploadedCsaFile && (
+          <div style={{
+            marginTop: 6,
+            padding: 8,
+            background: 'rgba(80, 102, 188, 0.08)',
+            border: '0.5px solid rgba(80, 102, 188, 0.3)',
+            borderRadius: 4,
+            fontSize: 12,
+            color: 'var(--text2)',
+            lineHeight: 1.5,
+          }}>
+            <strong style={{ color: '#5066BC' }}>Building scope: {selectedBuilding.name}</strong> · PAs filtered to this building's payment-application subfolder · CFF will be saved to this building's <code>cff</code> subfolder (no archive).
+          </div>
+        )}
 
         <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
           Or upload a CSA xlsx directly:&nbsp;
@@ -833,7 +937,7 @@ function Step1SourceAndProgramme({
 function Step2CurvesAndPreview({
   csaExtract, numMonths, rowCurves, setRowCurves, defaultCurve, preview,
   manualOverrides, setManualOverrides,
-  paList, actualsMode, manualActuals, reconciliation,
+  paList, actualsMode, manualActuals,
 }) {
   function setRowCurve(groupId, curve) {
     setRowCurves(prev => ({ ...prev, [groupId]: curve }))
@@ -934,61 +1038,6 @@ function Step2CurvesAndPreview({
           ).join(' · ')}.
           Per-row split is proportional by contract value (indicative — not actual progress).
           Remaining months redistribute leftover via the chosen curve.
-        </div>
-      )}
-
-      {/* Reconciliation banner — verifies the generated MONTHLY GROSS row
-          matches the sum of "TOTAL DUE THIS APPLICATION" across the PAs
-          used as past-actuals. Catches generator bugs (e.g. dropped VOs,
-          missed sections) BEFORE the user downloads a wrong CFF. */}
-      {reconciliation?.status === 'ok' && (
-        <div style={{
-          padding: 10,
-          background: 'rgba(15, 110, 86, 0.08)',
-          border: '0.5px solid rgba(15, 110, 86, 0.3)',
-          borderRadius: 6,
-          fontSize: 12,
-          color: 'var(--text2)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}>
-          <span style={{ color: '#0F6E56', fontSize: 14, lineHeight: 1 }}>✓</span>
-          <span>
-            <strong style={{ color: '#0F6E56' }}>Reconciled</strong>
-            {' — '}
-            PA totals match generated CFF (£{Math.round(reconciliation.totalActual).toLocaleString()}).
-          </span>
-        </div>
-      )}
-      {reconciliation?.status === 'warning' && (
-        <div style={{
-          padding: 10,
-          background: 'rgba(186, 117, 23, 0.10)',
-          border: '0.5px solid rgba(186, 117, 23, 0.4)',
-          borderRadius: 6,
-          fontSize: 12,
-          color: 'var(--text2)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
-            <span style={{ color: '#854F0B', fontSize: 14, lineHeight: 1, marginTop: 1 }}>⚠</span>
-            <div>
-              <strong style={{ color: '#854F0B' }}>Reconciliation warning</strong>
-              {' — '}
-              the generated CFF doesn't match the PA totals. The generator may have a parsing bug.
-              Check before sending the CFF.
-            </div>
-          </div>
-          <div style={{ marginLeft: 22, fontSize: 11, color: 'var(--text3)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {reconciliation.mismatches.map(m => (
-              <div key={m.month}>
-                <strong>{m.pa_label}</strong> (Month {m.month}): expected £{Math.round(m.expected).toLocaleString()}, CFF shows £{Math.round(m.actual).toLocaleString()}{' '}
-                <span style={{ color: m.diff < 0 ? '#A32D2D' : '#854F0B' }}>
-                  ({m.diff > 0 ? '+' : ''}£{Math.round(m.diff).toLocaleString()})
-                </span>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
