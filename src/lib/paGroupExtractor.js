@@ -164,18 +164,37 @@ export async function extractPaGroups(file) {
   }
 }
 
-// Fetch all root-level PAs for a project, parse each, return ordered list.
+// Fetch all PAs at one location for a project, parse each, return ordered list.
 // Each entry includes the index (PA01, PA02, ...) inferred from chronological
-// order of created_at. Multi-building projects: only root-level PAs are
-// covered for now (matches the v1 "no multi-building" decision).
-export async function fetchAllProjectPas(supabase, projectId) {
-  const { data: rows, error } = await supabase
+// order of created_at.
+//
+// `subfolderKey` controls the scope:
+//   - null (default)        → root-level PAs (single-building projects)
+//   - '<building's pa key>' → that building's PAs only (multi-building projects,
+//                             called from a CFF modal scoped to that building)
+//
+// Multi-building note: this function is intentionally one-location-at-a-time.
+// To get every PA in a multi-building project across all buildings, the caller
+// runs this once per building (typically via Promise.all over the buildings
+// list from src/lib/buildings.js).
+export async function fetchAllProjectPas(supabase, projectId, subfolderKey = null) {
+  let query = supabase
     .from('project_doc_files')
     .select('id, file_name, storage_path, created_at')
     .eq('project_id', projectId)
     .eq('folder_key', '02-payment-application')
-    .is('subfolder_key', null)
     .order('created_at', { ascending: true })
+
+  // .is(null) for root-level, .eq() for a specific subfolder. Supabase JS
+  // builder distinguishes these: .is('col', null) is "IS NULL", .eq('col', '')
+  // would be "= ''" which doesn't match NULL rows.
+  if (subfolderKey == null) {
+    query = query.is('subfolder_key', null)
+  } else {
+    query = query.eq('subfolder_key', subfolderKey)
+  }
+
+  const { data: rows, error } = await query
 
   if (error) throw error
   if (!rows || rows.length === 0) return []
