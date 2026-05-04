@@ -8,11 +8,8 @@
 //   • Column header band (row 9, dark fill, white text)
 //   • Body: section headers (light-green fill) + data rows for each group
 //   • Summary block: Monthly Gross, Cumulative, % Programme Complete
-//   • Payment block: Less Retention R%, Plus Retention Release (R-1.5)% at PC,
+//   • Payment block: Less Retention 3%, Plus Retention Release 1.5% at PC,
 //     NET PAYMENT DUE Ex VAT
-//     R is settings.retention_pct (default 3). The release at PC is always
-//     the contracted retention minus 1.5%, with the trailing 1.5% held back
-//     through the defects period.
 //
 // All numeric cells use £#,##0 format; percentages use 0.0%; formulas link
 // summary/payment rows back to body so a user editing month columns will
@@ -233,9 +230,6 @@ function assignRefs(groups) {
 //     csa_no: string,
 //     row_curves: { [groupId]: 'even' | 'front' | 'back' | 'mid' },
 //     default_curve: 'even',
-//     retention_pct: number,   // optional, default 3. Drives the
-//                              // "Less Retention R%" deduction and the
-//                              // "Plus Retention Release (R-1.5)%" line.
 //   }
 // Returns: { blob: Blob, filename: string, summary: { totalForecast, retention, release, netPayment } }
 export async function generateCff(csaExtract, settings) {
@@ -246,22 +240,19 @@ export async function generateCff(csaExtract, settings) {
     monthsBetween(settings.start_date, settings.end_date) ||
     1
 
-  // Retention configuration. The deduction (R%) and release-at-PC ((R-1.5)%)
-  // are driven by settings.retention_pct, defaulting to 3 for backwards
-  // compatibility with all existing CFFs (which were hard-coded to 3% / 1.5%).
-  // A trailing 1.5% is always held through the defects period — that's why
-  // release = R - 1.5. If R is somehow set below 1.5 we clamp release to 0
-  // rather than emit a negative formula.
-  const retentionPct = Number.isFinite(settings.retention_pct) && settings.retention_pct >= 0
-    ? settings.retention_pct
-    : 3
-  const releasePct = Math.max(0, retentionPct - 1.5)
-  const retentionRate = retentionPct / 100
-  const releaseRate = releasePct / 100
-  // Label fragments — strip trailing ".0" so "3%" and "5.5%" both look natural.
-  const fmtPct = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1).replace(/\.0$/, ''))
-  const retentionPctLabel = fmtPct(retentionPct)
-  const releasePctLabel = fmtPct(releasePct)
+  // Retention / release rates. Defaults match the historical Arcady-style
+  // CFF: deduct 3% per PA, release 1.5% at PC. Callers can override either
+  // (e.g. Merton uses 8% / 6.5%, the client CFF converter exposes both as
+  // editable inputs in its modal). Always provided as decimal (0.08 not 8).
+  const retentionPct = typeof settings.retention_pct === 'number' ? settings.retention_pct : 0.03
+  const releasePct = typeof settings.release_pct === 'number' ? settings.release_pct : 0.015
+  // Format as label e.g. "3%" / "8%" / "6.5%" — drop trailing .0 cosmetically
+  const fmtPct = pct => {
+    const asPercent = pct * 100
+    return Number.isInteger(asPercent) ? `${asPercent}%` : `${asPercent.toFixed(1)}%`
+  }
+  const retentionLabel = `Less Retention ${fmtPct(retentionPct)}`
+  const releaseLabel = `Plus Retention Release ${fmtPct(releasePct)} (at PC)`
 
   // Compute distributions per group. For each row we either use the curve-
   // derived distribution OR a user-supplied manual array (settings.row_manual).
@@ -320,74 +311,16 @@ export async function generateCff(csaExtract, settings) {
     return { ...r, monthly: [...pastMonthly, ...futureMonthly], pa_aware: true }
   })
 
-  // ─── Variations overlay ────────────────────────────────────────────────
-  // Variations (VOs) live OUTSIDE the CSA — there's no contract row, no
-  // curve, no future forecast. They appear in the cashflow only where an
-  // actual PA recorded them. Computed from per-PA `variations_cumulative`
-  // values: monthN delta = PA_N.variations_cumulative - PA_(N-1).variations_cumulative.
-  //
-  // We render a dedicated "Variations" data row at the bottom of the body
-  // section, but only when at least one PA has variations > 0. A perpetual
-  // empty row would clutter every CFF on every project, the vast majority
-  // of which have no VOs.
-  //
-  // Why this matters: previously variations were silently dropped from the
-  // CFF entirely. Bishops PA02 and PA03 each contained £17,500 of variation
-  // work that didn't appear in the cashflow's MONTHLY GROSS, leaving a
-  // £17,500 gap between what the CFF said the contractor was owed and what
-  // the PAs actually paid out. This row closes that gap.
-  let variationsRow = null
-  if (paMonthCount > 0) {
-    const variationsCums = paList
-      .slice(0, paMonthCount)
-      .map(p => (typeof p.variations_cumulative === 'number' ? p.variations_cumulative : 0))
-    const totalVariations = variationsCums[variationsCums.length - 1] || 0
-    if (totalVariations > 0) {
-      const variationsMonthly = []
-      let prev = 0
-      for (const cum of variationsCums) {
-        variationsMonthly.push(Math.max(0, cum - prev))
-        prev = cum
-      }
-      // Pad future months with 0 — variations after the last PA are unknown
-      // until the next PA is issued. This is the correct cashflow behaviour:
-      // future variations ≠ forecast variations.
-      while (variationsMonthly.length < numMonths) variationsMonthly.push(0)
-
-      variationsRow = {
-        // Synthetic row — not derived from any CSA group. Doesn't get a
-        // curve, doesn't get an id-based manual override, doesn't appear
-        // in row_curves / row_manual settings. It's a leaf attached to
-        // the body for SUM-formula purposes.
-        id: '__variations__',
-        ref: 'V',
-        section: 'VARIATIONS',
-        label: 'Variations',
-        value: totalVariations,
-        monthly: variationsMonthly,
-        item_count: 1,
-        pa_aware: true,
-        is_variations: true,
-      }
-    }
-  }
-
   // Apply manual overrides — these win over PA-aware values too. User
   // edits are sticky.
   const rowManual = settings.row_manual || {}
-  const csaResolvedRows = paAwareRows.map(r => {
+  const resolvedRows = paAwareRows.map(r => {
     const manual = rowManual[r.id]
     if (Array.isArray(manual) && manual.length === numMonths) {
       return { ...r, monthly: manual.slice(), pa_aware: false }
     }
     return r
   })
-  // Append the variations row (if any) AFTER manual overrides apply.
-  // Variations are not user-editable through the manual-override path
-  // because they have no CSA id; they live or die with the source PAs.
-  const resolvedRows = variationsRow
-    ? [...csaResolvedRows, variationsRow]
-    : csaResolvedRows
 
   // Recompute totals + cumulative from the resolved (post-override) rows so
   // the fallback `v` values written into the xlsx match what Excel will show
@@ -495,14 +428,36 @@ export async function generateCff(csaExtract, settings) {
   let rowIdx = headerRowIdx + 1
   const dataFirstRowIdx = rowIdx  // first section header row (will be row 10 1-indexed)
 
-  for (const sectName of SECTION_ORDER) {
+  // Iteration order: known sections first (in canonical order — preserves
+  // existing single-section CFF appearance), then any unknown sections in
+  // the order they were first seen on the input. This lets the generator
+  // accept arbitrary section names from non-CSA sources (e.g. the client
+  // CFF converter, which uses sections like "4.1.1 Facilitating Works")
+  // without dropping all the rows on the floor.
+  const sectionsInOrder = []
+  for (const known of SECTION_ORDER) {
+    if (sectionGroups[known] && sectionGroups[known].length > 0) {
+      sectionsInOrder.push(known)
+    }
+  }
+  for (const g of groupsForRender) {
+    if (!sectionsInOrder.includes(g.section)) {
+      sectionsInOrder.push(g.section)
+    }
+  }
+
+  for (const sectName of sectionsInOrder) {
     const sectRows = sectionGroups[sectName]
     if (!sectRows || sectRows.length === 0) continue
+
+    // Section header label — use canonical display name when known, else
+    // fall back to the literal section name from the input.
+    const headerLabel = SECTION_DISPLAY[sectName] || sectName
 
     // Section header — fill across all columns
     for (let c = 0; c <= lastColIdx; c++) {
       setCell(rc(rowIdx, c), {
-        v: c === 0 ? SECTION_DISPLAY[sectName] : '',
+        v: c === 0 ? headerLabel : '',
         t: 's',
         s: STYLES.sectionHeader,
       })
@@ -539,62 +494,16 @@ export async function generateCff(csaExtract, settings) {
     }
   }
 
-  // Variations row — appended at the end of the body, only when at least
-  // one PA has variations > 0. Sits inside the data range so the existing
-  // SUM(D{first}:D{last}) formula on MONTHLY GROSS picks it up automatically.
-  // Has its own short header above it ("VARIATIONS") so the row is clearly
-  // distinct from CSA sections — that header is also styled like a section
-  // header, just to keep visual rhythm consistent.
-  if (variationsRow) {
-    // Mini section header for visual clarity
-    for (let c = 0; c <= lastColIdx; c++) {
-      setCell(rc(rowIdx, c), {
-        v: c === 0 ? 'VARIATIONS' : '',
-        t: 's',
-        s: STYLES.sectionHeader,
-      })
-    }
-    rowIdx++
-
-    // The variation row itself
-    setCell(rc(rowIdx, 0), { v: variationsRow.ref, t: 's', s: STYLES.dataRef })
-    setCell(rc(rowIdx, 1), { v: variationsRow.label, t: 's', s: STYLES.dataDesc })
-    setCell(rc(rowIdx, 2), { v: variationsRow.value, t: 'n', s: STYLES.dataNum })
-    for (let m = 0; m < numMonths; m++) {
-      setCell(rc(rowIdx, 3 + m), { v: variationsRow.monthly[m], t: 'n', s: STYLES.dataNum })
-    }
-    const monthRange = `${firstMonthCol}${rowIdx + 1}:${lastMonthColLetter}${rowIdx + 1}`
-    setCell(rc(rowIdx, totalForecastColIdx), {
-      t: 'n',
-      v: variationsRow.value,
-      f: `SUM(${monthRange})`,
-      s: STYLES.dataNum,
-    })
-    setCell(rc(rowIdx, lastColIdx), {
-      v: 'PA-derived — not in CSA',
-      t: 's',
-      s: STYLES.dataNote,
-    })
-    rowIdx++
-  }
-
   const dataLastRowIdx = rowIdx - 1
   const dataLastRow1Indexed = dataLastRowIdx + 1
   const dataFirstRow1Indexed = dataFirstRowIdx + 1
 
   // Summary: MONTHLY GROSS VALUATION
-  // Column C ("Total") and the rightmost "Total Forecast" column both sum
-  // the entire data range, which now includes the variations row when one
-  // is present. Static `v:` fallbacks are pre-computed to match what the
-  // SUM formula will evaluate to, so portal-side parsers that read raw
-  // cell values (without evaluating formulas) still get the right number.
-  const variationsTotal = variationsRow ? variationsRow.value : 0
-  const grossTotal = contractSum + variationsTotal
   setCell(rc(rowIdx, 0), { v: '', t: 's', s: STYLES.summaryLabel })
   setCell(rc(rowIdx, 1), { v: 'MONTHLY GROSS VALUATION', t: 's', s: STYLES.summaryLabel })
   setCell(rc(rowIdx, 2), {
     t: 'n',
-    v: grossTotal,
+    v: contractSum,
     f: `SUM(C${dataFirstRow1Indexed}:C${dataLastRow1Indexed})`,
     s: STYLES.summaryNum,
   })
@@ -609,7 +518,7 @@ export async function generateCff(csaExtract, settings) {
   }
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: grossTotal,
+    v: contractSum,
     f: `SUM(${totalForecastColLetter}${dataFirstRow1Indexed}:${totalForecastColLetter}${dataLastRow1Indexed})`,
     s: STYLES.summaryNum,
   })
@@ -650,9 +559,7 @@ export async function generateCff(csaExtract, settings) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      // grossTotal includes variations so the static fallback agrees with
-      // the formula's divisor (the gross row's total-forecast cell).
-      v: grossTotal > 0 ? finalDist.cumulative[m] / grossTotal : 0,
+      v: finalDist.cumulative[m] / contractSum,
       f: `IFERROR(${colLetter}${cumulativeRowIdx + 1}/${totalForecastColLetter}${monthlyGrossRowIdx + 1},0)`,
       s: STYLES.summaryPct,
     })
@@ -669,42 +576,43 @@ export async function generateCff(csaExtract, settings) {
   merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx, c: lastColIdx } })
   rowIdx++
 
-  // Less Retention R%
-  setCell(rc(rowIdx, 1), { v: `Less Retention ${retentionPctLabel}%`, t: 's', s: STYLES.dataDesc })
+  // Less Retention (rate from settings, defaults to 3%)
+  setCell(rc(rowIdx, 1), { v: retentionLabel, t: 's', s: STYLES.dataDesc })
   for (let m = 0; m < numMonths; m++) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
-      v: -finalDist.totals[m] * retentionRate,
-      f: `-${colLetter}${monthlyGrossRowIdx + 1}*${retentionRate}`,
+      v: -finalDist.totals[m] * retentionPct,
+      f: `-${colLetter}${monthlyGrossRowIdx + 1}*${retentionPct}`,
       s: STYLES.dataNum,
     })
   }
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: -grossTotal * retentionRate,
-    f: `-${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${retentionRate}`,
+    v: -contractSum * retentionPct,
+    f: `-${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${retentionPct}`,
     s: STYLES.dataNum,
   })
   const retentionRowIdx = rowIdx
   rowIdx++
 
-  // Plus Retention Release (R-1.5)% (at PC) — only last month gets the value
-  setCell(rc(rowIdx, 1), { v: `Plus Retention Release ${releasePctLabel}% (at PC)`, t: 's', s: STYLES.dataDesc })
+  // Plus Retention Release (rate from settings, defaults to 1.5%) — only
+  // last month carries the value.
+  setCell(rc(rowIdx, 1), { v: releaseLabel, t: 's', s: STYLES.dataDesc })
   for (let m = 0; m < numMonths; m++) {
     const isLast = m === numMonths - 1
     const cell = {
       t: 'n',
-      v: isLast ? grossTotal * releaseRate : 0,
+      v: isLast ? contractSum * releasePct : 0,
       s: STYLES.dataNum,
     }
-    if (isLast) cell.f = `${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${releaseRate}`
+    if (isLast) cell.f = `${totalForecastColLetter}${monthlyGrossRowIdx + 1}*${releasePct}`
     setCell(rc(rowIdx, 3 + m), cell)
   }
   const releaseRange = `${firstMonthCol}${rowIdx + 1}:${lastMonthColLetter}${rowIdx + 1}`
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
-    v: grossTotal * releaseRate,
+    v: contractSum * releasePct,
     f: `SUM(${releaseRange})`,
     s: STYLES.dataNum,
   })
@@ -724,8 +632,8 @@ export async function generateCff(csaExtract, settings) {
     const colLetter = XLSX.utils.encode_col(3 + m)
     const isLast = m === numMonths - 1
     const monthly = finalDist.totals[m]
-    const retention = monthly * retentionRate
-    const release = isLast ? grossTotal * releaseRate : 0
+    const retention = monthly * retentionPct
+    const release = isLast ? contractSum * releasePct : 0
     setCell(rc(rowIdx, 3 + m), {
       t: 'n',
       v: monthly - retention + release,
@@ -733,7 +641,7 @@ export async function generateCff(csaExtract, settings) {
       s: STYLES.netPaymentNum,
     })
   }
-  const netPayment = grossTotal - grossTotal * retentionRate + grossTotal * releaseRate
+  const netPayment = contractSum - contractSum * retentionPct + contractSum * releasePct
   setCell(rc(rowIdx, totalForecastColIdx), {
     t: 'n',
     v: netPayment,
@@ -782,15 +690,9 @@ export async function generateCff(csaExtract, settings) {
     filename,
     summary: {
       contractSum,
-      // Total forecast includes variations approved through PAs. For projects
-      // with no PAs or no VOs, this equals contractSum.
-      totalForecast: grossTotal,
-      // Variations cumulative across all PAs (zero when no PAs / no VOs).
-      variationsTotal,
-      retention: grossTotal * retentionRate,
-      release: grossTotal * releaseRate,
-      retentionPct,
-      releasePct,
+      totalForecast: contractSum,
+      retention: contractSum * retentionPct,
+      release: contractSum * releasePct,
       netPayment,
       numMonths,
     },
