@@ -31,6 +31,7 @@ const THEME_OPTIONS = [
   { value: 'forest', label: 'Forest', preview: { bg: '#0F1A14', sidebar: '#14241B', border: 'rgba(159,225,203,0.10)', text: '#E1F5EE', accent: '#5DCAA5', accentBg: 'rgba(29,158,117,0.18)' } },
   { value: 'sand',   label: 'Sand',   preview: { bg: '#F4EEDD', sidebar: '#FBF7EB', border: '#E2D5B5', text: '#412402', accent: '#854F0B', accentBg: '#FAEEDA' } },
   { value: 'slate',  label: 'Slate',  preview: { bg: '#1A1E2A', sidebar: '#20253A', border: 'rgba(133,183,235,0.10)', text: '#E6F1FB', accent: '#85B7EB', accentBg: 'rgba(55,138,221,0.18)' } },
+  { value: 'pearl',  label: 'Pearl White', preview: { bg: '#FFFFFF', sidebar: '#FAFAFA', border: '#EAEAEA', text: '#1A1A1A', accent: '#185FA5', accentBg: '#E6F1FB' } },
 ]
 
 export default function Settings() {
