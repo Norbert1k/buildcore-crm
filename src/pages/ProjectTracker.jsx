@@ -84,6 +84,88 @@ async function geocodePostcode(postcode) {
   return null
 }
 
+// London centroid — anchor for "Furthest project" distance calculation.
+// Roughly central London (Charing Cross). Used as the proxy for CCG HQ
+// for the geographic-spread metric on the tracker header.
+const LONDON_ANCHOR = [51.5074, -0.1278]
+
+// Great-circle distance between two [lat, lng] points, in miles. Standard
+// haversine. Result rounded to whole miles where the consumer needs it.
+function haversineMiles(a, b) {
+  if (!a || !b) return null
+  const toRad = (deg) => (deg * Math.PI) / 180
+  const R = 3958.8                 // earth's radius in miles
+  const dLat = toRad(b[0] - a[0])
+  const dLng = toRad(b[1] - a[1])
+  const lat1 = toRad(a[0])
+  const lat2 = toRad(b[0])
+  const h = Math.sin(dLat / 2) ** 2
+        + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)))
+}
+
+// UK postcode area → government region. Areas are the 1-2 letter prefix of
+// a postcode (e.g. "SW1A 1AA" → "SW", "BA12 7AA" → "BA"). Coverage isn't
+// 100% perfect — some postcodes straddle regions — but it's good enough for
+// the "Regions covered" KPI on the tracker header.
+const POSTCODE_REGIONS = {
+  // London (all London postcodes)
+  E:'London', EC:'London', N:'London', NW:'London', SE:'London', SW:'London', W:'London', WC:'London',
+  // South East
+  BN:'South East', CT:'South East', GU:'South East', ME:'South East', OX:'South East',
+  PO:'South East', RG:'South East', RH:'South East', SL:'South East', SO:'South East',
+  TN:'South East', BR:'South East', CR:'South East', DA:'South East', KT:'South East',
+  SM:'South East', TW:'South East', UB:'South East', WD:'South East', EN:'South East',
+  HA:'South East', IG:'South East', RM:'South East',
+  // South West
+  BA:'South West', BH:'South West', BS:'South West', DT:'South West', EX:'South West',
+  GL:'South West', PL:'South West', SN:'South West', SP:'South West', TA:'South West',
+  TQ:'South West', TR:'South West',
+  // East of England
+  AL:'East of England', CB:'East of England', CM:'East of England', CO:'East of England',
+  HP:'East of England', IP:'East of England', LU:'East of England', MK:'East of England',
+  NR:'East of England', PE:'East of England', SG:'East of England', SS:'East of England',
+  // West Midlands
+  B:'West Midlands', CV:'West Midlands', DY:'West Midlands', HR:'West Midlands',
+  ST:'West Midlands', SY:'West Midlands', TF:'West Midlands', WR:'West Midlands',
+  WS:'West Midlands', WV:'West Midlands',
+  // East Midlands
+  DE:'East Midlands', LE:'East Midlands', LN:'East Midlands', NG:'East Midlands',
+  NN:'East Midlands',
+  // North West
+  BB:'North West', BL:'North West', CA:'North West', CH:'North West', CW:'North West',
+  FY:'North West', L:'North West', LA:'North West', M:'North West', OL:'North West',
+  PR:'North West', SK:'North West', WA:'North West', WN:'North West',
+  // Yorkshire & the Humber
+  BD:'Yorkshire', DN:'Yorkshire', HD:'Yorkshire', HG:'Yorkshire', HU:'Yorkshire',
+  HX:'Yorkshire', LS:'Yorkshire', S:'Yorkshire', WF:'Yorkshire', YO:'Yorkshire',
+  // North East
+  DH:'North East', DL:'North East', NE:'North East', SR:'North East', TS:'North East',
+  // Scotland
+  AB:'Scotland', DD:'Scotland', DG:'Scotland', EH:'Scotland', FK:'Scotland',
+  G:'Scotland', HS:'Scotland', IV:'Scotland', KA:'Scotland', KW:'Scotland',
+  KY:'Scotland', ML:'Scotland', PA:'Scotland', PH:'Scotland', TD:'Scotland',
+  ZE:'Scotland',
+  // Wales
+  CF:'Wales', LD:'Wales', LL:'Wales', NP:'Wales', SA:'Wales',
+  // Northern Ireland
+  BT:'Northern Ireland',
+}
+
+// Extract the postcode-area letters from a full postcode. "BA12 7AA" → "BA".
+// Returns null if the input doesn't match the expected pattern.
+function postcodeArea(postcode) {
+  if (!postcode) return null
+  const m = String(postcode).trim().toUpperCase().match(/^([A-Z]{1,2})/)
+  return m ? m[1] : null
+}
+
+function regionForPostcode(postcode) {
+  const area = postcodeArea(postcode)
+  if (!area) return null
+  return POSTCODE_REGIONS[area] || 'Other'
+}
+
 function guessFromCity(city) {
   if (!city) return null
   const lower = city.toLowerCase().trim()
@@ -99,6 +181,11 @@ export default function ProjectTracker() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [mapReady, setMapReady] = useState(false)
+  // User's live geolocation, used by both the map's blue dot and the
+  // "Nearest live site" KPI card on the header. Null = geolocation not
+  // available (denied, pending, or browser unsupported). Updated by the
+  // navigator.geolocation watcher started in the map effect below.
+  const [userCoords, setUserCoords] = useState(null)
   const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('track_live_open') === 'true')
   const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('track_tender_open') === 'true')
   const mapRef = useRef(null)
@@ -197,6 +284,10 @@ export default function ProjectTracker() {
           (pos) => {
             const lat = pos.coords.latitude
             const lng = pos.coords.longitude
+            // Lift coords to component state for the "Nearest live site" KPI.
+            // Watcher fires repeatedly as user moves; the state update is
+            // cheap (only triggers re-renders that depend on userCoords).
+            setUserCoords([lat, lng])
             const userIcon = L.divIcon({
               className: 'custom-marker',
               html: `
@@ -320,6 +411,50 @@ export default function ProjectTracker() {
   const liveProjects = filtered.filter(p => p.status !== 'tender')
   const tenderProjects = filtered.filter(p => p.status === 'tender')
 
+  // ── Geographic KPIs ────────────────────────────────────────────────────
+  // All four header cards aggregate over ACTIVE projects only — the
+  // tracker header is about the live portfolio, not tender or completed.
+  const activeProjects = projects.filter(p => p.status === 'active')
+
+  // Regions covered (postcode-derived). Uses postcode area letters → UK
+  // government region. Projects without a parseable postcode contribute
+  // null and are excluded.
+  const regionsCovered = (() => {
+    const set = new Set()
+    for (const p of activeProjects) {
+      const r = regionForPostcode(p.postcode)
+      if (r) set.add(r)
+    }
+    return Array.from(set).sort()
+  })()
+
+  // Furthest active project from London. Uses geocoded coords (already
+  // resolved during loadProjects). Skips projects without coords.
+  const furthestFromLondon = (() => {
+    let best = null
+    for (const p of activeProjects) {
+      if (!p.coords) continue
+      const dist = haversineMiles(LONDON_ANCHOR, p.coords)
+      if (dist == null) continue
+      if (!best || dist > best.distance) best = { project: p, distance: dist }
+    }
+    return best
+  })()
+
+  // Nearest active project to user's current location. Only computed if
+  // userCoords is available (geolocation granted). Otherwise the KPI card
+  // is hidden — the surrounding grid auto-fits to 3 cards in that case.
+  const nearestToUser = userCoords ? (() => {
+    let best = null
+    for (const p of activeProjects) {
+      if (!p.coords) continue
+      const dist = haversineMiles(userCoords, p.coords)
+      if (dist == null) continue
+      if (!best || dist < best.distance) best = { project: p, distance: dist }
+    }
+    return best
+  })() : null
+
   if (loading) return <Spinner />
 
   return (
@@ -342,41 +477,88 @@ export default function ProjectTracker() {
         </div>
       </div>
 
-      {/* Value cards: Active · Tender · Completed · Cancelled */}
+      {/* Tracker header — geographic KPIs (4 cards: Live sites · Regions ·
+          Furthest from London · Nearest to user) followed by a compact
+          status pill row that doubles as filter buttons. The Nearest card
+          is hidden when userCoords is null so the grid collapses to 3
+          cards. The status pills replace the previous bigger filter-tab
+          strip — same filter behaviour, less visual weight, and the
+          per-status counts are inline with each pill. */}
       {can('view_project_value') && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 14 }}>
+          {/* Live sites + active value */}
           <div className="stat-card" style={{ borderTop: '3px solid #448a40' }}>
-            <div className="stat-label">Active Value</div>
-            <div className="stat-value green" style={{ fontSize: 18 }}>{valueByStatus.active > 0 ? formatCurrency(valueByStatus.active) : '—'}</div>
-            <div className="stat-sub">{counts.active || 0} project{counts.active === 1 ? '' : 's'}</div>
+            <div className="stat-label">Live sites</div>
+            <div className="stat-value green" style={{ fontSize: 22 }}>{counts.active || 0}</div>
+            <div className="stat-sub">{valueByStatus.active > 0 ? formatCurrency(valueByStatus.active) : '—'}</div>
           </div>
-          <div className="stat-card" style={{ borderTop: '3px solid #9b87e0' }}>
-            <div className="stat-label">Tender Value</div>
-            <div className="stat-value" style={{ fontSize: 18, color: '#9b87e0' }}>{valueByStatus.tender > 0 ? formatCurrency(valueByStatus.tender) : '—'}</div>
-            <div className="stat-sub">{counts.tender || 0} project{counts.tender === 1 ? '' : 's'}</div>
+
+          {/* Regions covered. Header shows count, subtitle shows first 2
+              region names plus +N for any additional. Empty state when no
+              projects have parseable postcodes. */}
+          <div className="stat-card" style={{ borderTop: '3px solid #5DCAA5' }}>
+            <div className="stat-label">Regions</div>
+            <div className="stat-value" style={{ fontSize: 22, color: 'var(--text)' }}>
+              {regionsCovered.length || '—'}
+            </div>
+            <div className="stat-sub">
+              {regionsCovered.length === 0
+                ? 'No postcodes set'
+                : regionsCovered.length <= 2
+                  ? regionsCovered.join(', ')
+                  : `${regionsCovered.slice(0, 2).join(', ')} +${regionsCovered.length - 2}`
+              }
+            </div>
           </div>
-          <div className="stat-card" style={{ borderTop: '3px solid #888780' }}>
-            <div className="stat-label">Completed Value</div>
-            <div className="stat-value" style={{ fontSize: 18, color: 'var(--text2)' }}>{valueByStatus.completed > 0 ? formatCurrency(valueByStatus.completed) : '—'}</div>
-            <div className="stat-sub">{counts.completed || 0} project{counts.completed === 1 ? '' : 's'}</div>
+
+          {/* Furthest from London. Distance is rounded to whole miles.
+              Subtitle is the project name. Skipped (shows —) if no active
+              project has coords yet. */}
+          <div className="stat-card" style={{ borderTop: '3px solid #185FA5' }}>
+            <div className="stat-label">Furthest from London</div>
+            <div className="stat-value" style={{ fontSize: 22, color: 'var(--text)' }}>
+              {furthestFromLondon ? `${Math.round(furthestFromLondon.distance)} mi` : '—'}
+            </div>
+            <div className="stat-sub">
+              {furthestFromLondon ? furthestFromLondon.project.project_name : 'No coords yet'}
+            </div>
           </div>
-          <div className="stat-card" style={{ borderTop: '3px solid #E24B4A' }}>
-            <div className="stat-label">Cancelled Value</div>
-            <div className="stat-value" style={{ fontSize: 18, color: 'var(--red)' }}>{valueByStatus.cancelled > 0 ? formatCurrency(valueByStatus.cancelled) : '—'}</div>
-            <div className="stat-sub">{counts.cancelled || 0} project{counts.cancelled === 1 ? '' : 's'}</div>
-          </div>
+
+          {/* Nearest to user. Hidden when geolocation isn't available — the
+              auto-fit grid collapses to 3 cards. Distance can be very small
+              (<1mi) so we show 1 decimal in those cases. */}
+          {nearestToUser && (
+            <div className="stat-card" style={{ borderTop: '3px solid #FFD700' }}>
+              <div className="stat-label">Nearest to you</div>
+              <div className="stat-value" style={{ fontSize: 22, color: 'var(--text)' }}>
+                {nearestToUser.distance < 1
+                  ? `${nearestToUser.distance.toFixed(1)} mi`
+                  : `${Math.round(nearestToUser.distance)} mi`}
+              </div>
+              <div className="stat-sub">{nearestToUser.project.project_name}</div>
+            </div>
+          )}
         </div>
       )}
 
-      <div className="filter-tabs" style={{ marginBottom: 14 }}>
-        <div className={`filter-tab ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>
-          All<span className="tab-badge">{projects.length}</span>
-        </div>
+      {/* Compact status pill row — replaces the previous filter-tabs strip.
+          Each pill is the same status filter the tabs used to be; counts
+          appear inline. Active filter has a tinted background. Clicking
+          the active filter again returns to "All". */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+        <StatusFilterPill
+          label="All" count={projects.length}
+          active={filter === 'all'}
+          accentColor="var(--accent)"
+          onClick={() => setFilter('all')}
+        />
         {Object.entries(PROJECT_STATUSES).map(([k, v]) => (
-          <div key={k} className={`filter-tab ${filter === k ? 'active' : ''}`} onClick={() => setFilter(filter === k ? 'all' : k)}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: STATUS_COLORS[k], display: 'inline-block', flexShrink: 0 }} />
-            {v.label}<span className="tab-badge">{counts[k] || 0}</span>
-          </div>
+          <StatusFilterPill
+            key={k} label={v.label} count={counts[k] || 0}
+            active={filter === k}
+            accentColor={STATUS_COLORS[k]}
+            onClick={() => setFilter(filter === k ? 'all' : k)}
+          />
         ))}
       </div>
 
@@ -572,6 +754,43 @@ function PickerButton({ label, sublabel, active, onClick }) {
       {sublabel && (
         <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 400 }}>{sublabel}</span>
       )}
+    </button>
+  )
+}
+
+// ─── StatusFilterPill ────────────────────────────────────────────────────
+//
+// Compact pill replacing the old filter-tabs strip. One per status (plus
+// "All"). The active pill gets a tinted background using the status colour
+// at low opacity; inactive pills are muted gray with the colour as a 7px
+// dot prefix. Counts are rendered inline so the eye doesn't have to jump
+// between a label and a separate badge.
+function StatusFilterPill({ label, count, active, accentColor, onClick }) {
+  // Hex+alpha for the tinted active background. accentColor here is one of
+  // the STATUS_COLORS hex values so we append an alpha byte directly.
+  const activeBg = active ? `${accentColor}26` : 'var(--surface2)'   // 26 = ~15% alpha
+  const activeColor = active ? accentColor : 'var(--text2)'
+  return (
+    <button onClick={onClick}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '5px 12px',
+        background: activeBg,
+        color: activeColor,
+        border: `0.5px solid ${active ? accentColor + '4D' : 'var(--border)'}`,
+        borderRadius: 99,
+        fontSize: 12,
+        fontWeight: active ? 600 : 500,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        transition: 'background 0.15s, border-color 0.15s',
+      }}
+    >
+      <span style={{ width: 7, height: 7, borderRadius: '50%', background: accentColor, flexShrink: 0 }} />
+      {label}
+      <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 400 }}>{count}</span>
     </button>
   )
 }
