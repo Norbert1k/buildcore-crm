@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { Modal, Field, Spinner } from './ui'
-import { extractCsa } from '../lib/csaExtractor'
+import { extractCsa, groupKeyFor } from '../lib/csaExtractor'
 import { generateCff } from '../lib/cffGenerator'
 import { fetchAllProjectPas } from '../lib/paGroupExtractor'
 import { resolveBuildings, findBuildingByCsaSubfolder } from '../lib/buildings'
+import { extractClientCff } from '../lib/clientCffExtractor'
 import {
   CURVE_TYPES,
   CURVE_LABELS,
@@ -35,13 +36,39 @@ export default function CffGeneratorModal({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // CSA source state
+  // Source mode — 'csa' (curves-based, original Generate CFF flow) or
+  // 'client' (parse a client-supplied CFF and use its per-line monthly
+  // distribution as the forecast). The shape of `csaExtract` is the same
+  // either way (groups[] with values + group_keys), so most of the modal's
+  // downstream logic doesn't care.
+  const [sourceMode, setSourceMode] = useState('csa')
+
+  // CSA source state (used when sourceMode = 'csa')
   const [csaFiles, setCsaFiles] = useState([])      // available CSA files in csa subfolder
   const [loadingCsaList, setLoadingCsaList] = useState(true)
   const [selectedCsaPath, setSelectedCsaPath] = useState('')
   const [uploadedCsaFile, setUploadedCsaFile] = useState(null)
   const [csaExtract, setCsaExtract] = useState(null)
   const [csaParseError, setCsaParseError] = useState('')
+
+  // Client CFF source state (used when sourceMode = 'client'). Mirrors the
+  // (now-deleted) ClientCffConvertModal — supports upload-from-disk and
+  // pick-from-existing-project-files.
+  const [clientCffSourceMode, setClientCffSourceMode] = useState('upload')  // 'upload' | 'pick'
+  const [clientCffFile, setClientCffFile] = useState(null)
+  const [clientCffExistingFiles, setClientCffExistingFiles] = useState([])
+  const [clientCffSelectedPath, setClientCffSelectedPath] = useState('')
+  // Holds the raw parsed client CFF (line items + monthly_pct + section).
+  // Once parsed we transform it into the same csaExtract shape so the rest
+  // of the flow (preview, PA overlay, generate) is identical to CSA mode.
+  const [clientCffParsed, setClientCffParsed] = useState(null)
+
+  // Retention / release rates — entered as percentages (e.g. 8 not 0.08).
+  // Defaults match Merton (most common case for client-CFF conversions).
+  // For pure CSA-mode regenerates of older Bishops-style projects the user
+  // can manually enter 3 / 1.5 to preserve historical defaults.
+  const [retentionPctInput, setRetentionPctInput] = useState('8')
+  const [releasePctInput, setReleasePctInput] = useState('6.5')
 
   // Multi-building state — derived from project_doc_folders. Empty array
   // means single-building (Bishops-style) → all behaviour falls back to
@@ -55,15 +82,35 @@ export default function CffGeneratorModal({
   // Building obj = per-building CSA picked → save to building.subfolders.cff,
   //        scope PAs to building.subfolders.pa.
   const selectedBuilding = useMemo(() => {
-    if (uploadedCsaFile) return null   // uploads always go to global cff
-    if (!selectedCsaPath) return null
-    // Find the csaFile by storage_path to learn its subfolder_key
-    const file = csaFiles.find(f => f.storage_path === selectedCsaPath)
-    if (!file) return null
-    const sub = file.subfolder_key
-    if (!sub || sub === CSA_SUBFOLDER) return null  // global CSA
-    return findBuildingByCsaSubfolder(buildings, sub)
-  }, [uploadedCsaFile, selectedCsaPath, csaFiles, buildings])
+    if (sourceMode === 'csa') {
+      // CSA mode — derive from selected CSA file's subfolder
+      if (uploadedCsaFile) return null   // uploads always go to global cff
+      if (!selectedCsaPath) return null
+      const file = csaFiles.find(f => f.storage_path === selectedCsaPath)
+      if (!file) return null
+      const sub = file.subfolder_key
+      if (!sub || sub === CSA_SUBFOLDER) return null  // global CSA
+      return findBuildingByCsaSubfolder(buildings, sub)
+    } else {
+      // Client mode — derive from picked client CFF's subfolder. Uploads
+      // (clientCffSourceMode='upload') always go to global cff because we
+      // have no folder context for an uploaded file.
+      if (clientCffSourceMode !== 'pick') return null
+      if (!clientCffSelectedPath) return null
+      const file = clientCffExistingFiles.find(f => f.storage_path === clientCffSelectedPath)
+      if (!file) return null
+      const sub = file.subfolder_key
+      if (!sub || sub === CFF_SUBFOLDER) return null  // global CFF
+      // Match by CFF subfolder. We use findBuildingByCsaSubfolder for CSA
+      // mode but here we need a building whose .subfolders.cff matches.
+      return buildings.find(b => b.subfolders.cff === sub) || null
+    }
+  }, [
+    sourceMode,
+    uploadedCsaFile, selectedCsaPath, csaFiles,
+    clientCffSourceMode, clientCffSelectedPath, clientCffExistingFiles,
+    buildings,
+  ])
 
   // Settings state
   const [startDate, setStartDate] = useState('')
@@ -229,7 +276,17 @@ export default function CffGeneratorModal({
           }
         }
 
-        const [csaRes, projectRes] = await Promise.all([
+        // Same idea for CFF subfolders — used by the client-CFF "pick
+        // existing" picker. Includes global 'cff', cff-archive, and every
+        // per-building cff-sub-*.
+        const cffSubfolderKeys = [CFF_SUBFOLDER, CFF_ARCHIVE_SUBFOLDER]
+        for (const b of resolvedBuildings) {
+          if (b.subfolders.cff && b.subfolders.cff !== CFF_SUBFOLDER) {
+            cffSubfolderKeys.push(b.subfolders.cff)
+          }
+        }
+
+        const [csaRes, projectRes, cffFilesRes] = await Promise.all([
           supabase
             .from('project_doc_files')
             .select('id, file_name, storage_path, subfolder_key, created_at')
@@ -242,6 +299,13 @@ export default function CffGeneratorModal({
             .select('start_date, end_date')
             .eq('id', projectId)
             .maybeSingle(),
+          supabase
+            .from('project_doc_files')
+            .select('id, file_name, storage_path, subfolder_key, created_at')
+            .eq('project_id', projectId)
+            .eq('folder_key', PRIMARY_FOLDER)
+            .in('subfolder_key', cffSubfolderKeys)
+            .order('created_at', { ascending: false }),
         ])
 
         if (cancelled) return
@@ -259,6 +323,13 @@ export default function CffGeneratorModal({
           const firstGlobal = xlsxFiles.find(f => f.subfolder_key === CSA_SUBFOLDER)
           setSelectedCsaPath((firstGlobal || xlsxFiles[0]).storage_path)
         }
+
+        // Same xlsx filter for the client-CFF picker.
+        if (cffFilesRes.error) console.warn('CFF list query error:', cffFilesRes.error)
+        const cffXlsx = (cffFilesRes.data || []).filter(f =>
+          /\.xlsx$/i.test(f.file_name)
+        )
+        setClientCffExistingFiles(cffXlsx)
 
         if (projectRes.data) {
           if (projectRes.data.start_date) setStartDate(prev => prev || projectRes.data.start_date)
@@ -340,40 +411,147 @@ export default function CffGeneratorModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, selectedBuilding])
 
-  // ─── Parse CSA when source changes ──────────────────────────────────────
+  // ─── Parse source when user advances from Step 1 ───────────────────────
+  // Despite the name, this handles BOTH source modes — sourceMode='csa'
+  // parses a CSA file via extractCsa, sourceMode='client' parses a client
+  // CFF via extractClientCff and adapts to the same shape. The downstream
+  // Step 2 preview + handleGenerate flow doesn't care which path produced
+  // csaExtract / manualOverrides — it's the same shape.
   async function loadAndParseCsa() {
     setCsaParseError('')
     setCsaExtract(null)
+    setClientCffParsed(null)
+    setManualOverrides({})
     setBusy(true)
 
     try {
-      let file
-      if (uploadedCsaFile) {
-        file = uploadedCsaFile
-      } else if (selectedCsaPath) {
-        // Download from Supabase storage
-        const { data, error } = await supabase
-          .storage
-          .from('project-docs')
-          .download(selectedCsaPath)
-        if (error) throw error
-        file = data // Blob
-      } else {
-        throw new Error('No CSA selected')
-      }
+      if (sourceMode === 'csa') {
+        // ─ CSA path (existing) ─
+        let file
+        if (uploadedCsaFile) {
+          file = uploadedCsaFile
+        } else if (selectedCsaPath) {
+          const { data, error } = await supabase
+            .storage
+            .from('project-docs')
+            .download(selectedCsaPath)
+          if (error) throw error
+          file = data
+        } else {
+          throw new Error('No CSA selected')
+        }
 
-      const extract = await extractCsa(file)
-      if (!extract.groups || extract.groups.length === 0) {
-        throw new Error('No line items found in this CSA')
+        const extract = await extractCsa(file)
+        if (!extract.groups || extract.groups.length === 0) {
+          throw new Error('No line items found in this CSA')
+        }
+        setCsaExtract(extract)
+        const initial = {}
+        for (const g of extract.groups) initial[g.id] = defaultCurve
+        setRowCurves(initial)
+      } else {
+        // ─ Client CFF path ─
+        // Parse the client CFF to get line items + per-month percentages.
+        // Then transform to a csaExtract-shaped object so the rest of the
+        // modal works unchanged. EVERY row gets a manual override (its
+        // monthly amounts), so curves aren't engaged for client-CFF rows.
+        let parseInput
+        if (clientCffSourceMode === 'upload') {
+          if (!clientCffFile) throw new Error('No client CFF file uploaded')
+          parseInput = clientCffFile
+        } else {
+          if (!clientCffSelectedPath) throw new Error('No client CFF picked')
+          // Download from storage as ArrayBuffer
+          const picked = clientCffExistingFiles.find(f => f.storage_path === clientCffSelectedPath)
+          if (!picked) throw new Error('Picked file not found')
+          const { data: signed, error: sErr } = await supabase
+            .storage.from('project-docs').createSignedUrl(picked.storage_path, 600)
+          if (sErr || !signed?.signedUrl) throw new Error('Could not get download URL')
+          const res = await fetch(signed.signedUrl)
+          if (!res.ok) throw new Error(`Download failed (${res.status})`)
+          parseInput = await res.arrayBuffer()
+        }
+
+        const parsed = await extractClientCff(parseInput)
+        if (!parsed.line_items || parsed.line_items.length === 0) {
+          throw new Error('No line items found in the client CFF')
+        }
+        setClientCffParsed(parsed)
+
+        // Build csaExtract-shaped object from parsed line items. group_key
+        // uses the section + description so rows stay distinct. (PA overlay
+        // for client mode happens via Path B at the totals level — it does
+        // NOT need group_keys to match PA groups.)
+        const numMonthsForClient = parsed.num_months || 1
+        const groups = parsed.line_items.map((item, idx) => ({
+          id: `g${idx + 1}`,
+          group_key: groupKeyFor(item.section, item.description || item.ref),
+          label: item.description || item.ref || 'Item',
+          value: item.value,
+          section: item.section,
+          group: null,
+          item_count: 1,
+          source_refs: [item.ref].filter(Boolean),
+        }))
+        const bodyTotal = groups.reduce((s, g) => s + g.value, 0)
+        const synthExtract = {
+          project_name: projectName || 'Project',
+          contract_sum: parsed.contract_sum || bodyTotal,
+          body_total: bodyTotal,
+          groups,
+        }
+        setCsaExtract(synthExtract)
+
+        // Build per-row manual overrides from the line items' monthly_pcts.
+        // Normalise so each row's monthly amounts sum exactly to its value.
+        // (Same logic as clientCffAdapter — duplicated here so we don't
+        // need the adapter for the merged flow.)
+        const overrides = {}
+        for (let i = 0; i < parsed.line_items.length; i++) {
+          const item = parsed.line_items[i]
+          const truncated = item.monthly_pct.slice(0, numMonthsForClient)
+          while (truncated.length < numMonthsForClient) truncated.push(0)
+          const pctSum = truncated.reduce((s, p) => s + p, 0)
+          let monthly
+          if (pctSum > 0) {
+            monthly = truncated.map(p => Math.round((item.value * p / pctSum) * 100) / 100)
+            const sumAfter = monthly.reduce((s, v) => s + v, 0)
+            const residual = Math.round((item.value - sumAfter) * 100) / 100
+            if (Math.abs(residual) > 0.001) {
+              for (let m = monthly.length - 1; m >= 0; m--) {
+                if (monthly[m] > 0) { monthly[m] = Math.round((monthly[m] + residual) * 100) / 100; break }
+              }
+            }
+          } else {
+            // Fallback — even spread across start..finish
+            const start = item.start_month && item.start_month >= 1 ? item.start_month : 1
+            const finish = item.finish_month && item.finish_month >= start ? item.finish_month : numMonthsForClient
+            const span = Math.min(finish, numMonthsForClient) - start + 1
+            const per = span > 0 ? item.value / span : 0
+            monthly = Array.from({ length: numMonthsForClient }, (_, m) =>
+              m + 1 >= start && m + 1 <= finish ? Math.round(per * 100) / 100 : 0
+            )
+          }
+          overrides[`g${i + 1}`] = monthly
+        }
+        setManualOverrides(overrides)
+
+        // Curves don't apply to client-CFF rows (every row is manual), but
+        // initialise the dict so per-row UI elements that key off rowCurves
+        // don't crash.
+        const initialCurves = {}
+        for (const g of groups) initialCurves[g.id] = 'even'
+        setRowCurves(initialCurves)
+
+        // Auto-set num_months from the parsed file if user hasn't manually
+        // overridden it. Client CFFs typically dictate the project length.
+        if (!numMonthsOverride) {
+          setNumMonthsOverride(String(numMonthsForClient))
+        }
       }
-      setCsaExtract(extract)
-      // Initialise per-row curves to default
-      const initial = {}
-      for (const g of extract.groups) initial[g.id] = defaultCurve
-      setRowCurves(initial)
     } catch (err) {
-      console.warn('CSA parse failed', err)
-      setCsaParseError(err.message || 'Failed to parse CSA')
+      console.warn('Source parse failed', err)
+      setCsaParseError(err.message || 'Failed to parse source file')
     } finally {
       setBusy(false)
     }
@@ -382,9 +560,21 @@ export default function CffGeneratorModal({
   // ─── Step 1 → Step 2: validate and parse ────────────────────────────────
   async function handleNextFromStep1() {
     setError('')
-    if (!selectedCsaPath && !uploadedCsaFile) {
-      setError('Select a CSA file from the list, or upload one.')
-      return
+    // Validate source — either CSA or Client CFF must be picked.
+    if (sourceMode === 'csa') {
+      if (!selectedCsaPath && !uploadedCsaFile) {
+        setError('Select a CSA file from the list, or upload one.')
+        return
+      }
+    } else {
+      if (clientCffSourceMode === 'upload' && !clientCffFile) {
+        setError('Upload a client CFF file, or switch to "Pick existing".')
+        return
+      }
+      if (clientCffSourceMode === 'pick' && !clientCffSelectedPath) {
+        setError('Pick a client CFF file from the list, or switch to "Upload new".')
+        return
+      }
     }
     if (!startDate) {
       setError('Project start date is required.')
@@ -396,6 +586,14 @@ export default function CffGeneratorModal({
     }
     if (numMonths < 1 || numMonths > 60) {
       setError('Number of months must be between 1 and 60.')
+      return
+    }
+    // Validate retention/release. Empty falls back to defaults inside
+    // generateCff. Non-numeric or out of range → reject.
+    const r1 = parsePctInput(retentionPctInput)
+    const r2 = parsePctInput(releasePctInput)
+    if (r1 === 'invalid' || r2 === 'invalid') {
+      setError('Retention and release must be numbers between 0 and 100.')
       return
     }
     if (!csaExtract) {
@@ -448,6 +646,89 @@ export default function CffGeneratorModal({
         }
       }
 
+      // ─── Client-CFF Path B PA overlay ────────────────────────────────────
+      // The generator's pa_actuals path matches PAs to rows by group_key. In
+      // CSA mode group_keys line up. In Client mode they don't (client
+      // sections are like "4.1.1 Facilitating Works" which never match the
+      // PA's MAIN WORKS / PRELIMINARIES groupings). So for client mode we
+      // bypass the generator's per-row PA path and apply the overlay AT
+      // THE TOTAL LEVEL here, by mutating manualOverrides. The generator
+      // then sees forecast-only with manual overrides — but those overrides
+      // already encode the past-month actuals.
+      //
+      // Algorithm (Path B):
+      //   1. Take the PA's monthly deltas (PA01.cum, PA02.cum-PA01.cum, ...)
+      //   2. For each past month m:
+      //        S = sum across rows of overrides[row.id][m]   (forecast)
+      //        T = PA's actual monthly total for month m
+      //        scale = T / S    (or proportional to row.value if S = 0)
+      //        for each row: overrides[row.id][m] *= scale
+      //   3. Future months left untouched (forecast continues).
+      //
+      // Edge case — the PA actuals replace forecast values for past months
+      // but the row TOTAL changes as a result: row monthly sum no longer
+      // equals row's contract value. That's the CORRECT semantic for
+      // PA-aware: the row is partially complete + has future work, and we
+      // don't try to redistribute remaining value. (CSA-mode does
+      // redistribute future months — but that's because CSA-mode has a
+      // curve to redistribute over. Client-mode doesn't have a curve, so
+      // future months stay at their forecast values.)
+      let effectiveManualOverrides = manualOverrides
+      if (sourceMode === 'client' && paActuals && paActuals.paList && paActuals.paList.length > 0) {
+        const paMonthly = []
+        let prevCum = 0
+        for (const pa of paActuals.paList) {
+          paMonthly.push(Math.max(0, (pa.total_cumulative || 0) - prevCum))
+          prevCum = pa.total_cumulative || 0
+        }
+        const pastMonthCount = Math.min(paMonthly.length, numMonths)
+        if (pastMonthCount > 0) {
+          // Clone overrides — never mutate state directly.
+          const adjusted = {}
+          for (const [id, arr] of Object.entries(manualOverrides)) {
+            adjusted[id] = Array.isArray(arr) ? arr.slice() : []
+          }
+          for (let m = 0; m < pastMonthCount; m++) {
+            // Sum forecast for this month across all rows
+            let forecastSum = 0
+            for (const g of csaExtract.groups) {
+              const arr = adjusted[g.id]
+              if (Array.isArray(arr) && Number.isFinite(arr[m])) forecastSum += arr[m]
+            }
+            const target = paMonthly[m]
+            if (forecastSum > 0.01) {
+              // Scale each row's month-m proportionally to match target
+              const scale = target / forecastSum
+              for (const g of csaExtract.groups) {
+                const arr = adjusted[g.id]
+                if (Array.isArray(arr) && Number.isFinite(arr[m])) {
+                  arr[m] = Math.round(arr[m] * scale * 100) / 100
+                }
+              }
+            } else {
+              // Edge case — forecast for this month is 0 for every row.
+              // Distribute target proportionally to row contract values.
+              const totalContract = csaExtract.groups.reduce((s, g) => s + g.value, 0) || 1
+              for (const g of csaExtract.groups) {
+                const arr = adjusted[g.id]
+                if (Array.isArray(arr)) {
+                  arr[m] = Math.round(target * (g.value / totalContract) * 100) / 100
+                }
+              }
+            }
+          }
+          effectiveManualOverrides = adjusted
+        }
+        // For client mode, generator should NOT see pa_actuals — overlay is
+        // already baked into manualOverrides. Setting to null prevents the
+        // generator's own (per-group, no-match) overlay from clobbering.
+        paActuals = null
+      }
+
+      // Resolve retention/release (already validated in Step 1).
+      const retentionPct = parsePctInput(retentionPctInput)
+      const releasePct = parsePctInput(releasePctInput)
+
       const result = await generateCff(csaExtract, {
         project_name: projectName || csaExtract.project_name,
         start_date: startDate,
@@ -456,8 +737,10 @@ export default function CffGeneratorModal({
         csa_no: csaExtract.csa_no,
         row_curves: rowCurves,
         default_curve: defaultCurve,
-        row_manual: manualOverrides,
+        row_manual: effectiveManualOverrides,
         pa_actuals: paActuals,
+        retention_pct: retentionPct,
+        release_pct: releasePct,
       })
 
       // Upload to project-docs bucket — match the CRM upload convention:
@@ -632,12 +915,30 @@ export default function CffGeneratorModal({
 
       {step === 1 && (
         <Step1SourceAndProgramme
+          sourceMode={sourceMode}
+          setSourceMode={(m) => {
+            setSourceMode(m)
+            // Switching source mode wipes any parsed extract so user goes
+            // through validation again. Otherwise stale state from the
+            // OTHER mode could leak through.
+            setCsaExtract(null)
+            setClientCffParsed(null)
+            setManualOverrides({})
+            setCsaParseError('')
+          }}
           csaFiles={csaFiles}
           loadingCsaList={loadingCsaList}
           selectedCsaPath={selectedCsaPath}
           setSelectedCsaPath={(p) => { setSelectedCsaPath(p); setUploadedCsaFile(null); setCsaExtract(null); setCsaParseError('') }}
           uploadedCsaFile={uploadedCsaFile}
           setUploadedCsaFile={(f) => { setUploadedCsaFile(f); setSelectedCsaPath(''); setCsaExtract(null); setCsaParseError('') }}
+          clientCffSourceMode={clientCffSourceMode}
+          setClientCffSourceMode={(m) => { setClientCffSourceMode(m); setCsaExtract(null); setCsaParseError('') }}
+          clientCffFile={clientCffFile}
+          setClientCffFile={(f) => { setClientCffFile(f); setClientCffSelectedPath(''); setCsaExtract(null); setCsaParseError('') }}
+          clientCffExistingFiles={clientCffExistingFiles}
+          clientCffSelectedPath={clientCffSelectedPath}
+          setClientCffSelectedPath={(p) => { setClientCffSelectedPath(p); setClientCffFile(null); setCsaExtract(null); setCsaParseError('') }}
           startDate={startDate}
           setStartDate={setStartDate}
           endDate={endDate}
@@ -656,6 +957,10 @@ export default function CffGeneratorModal({
           setManualActuals={setManualActuals}
           buildings={buildings}
           selectedBuilding={selectedBuilding}
+          retentionPctInput={retentionPctInput}
+          setRetentionPctInput={setRetentionPctInput}
+          releasePctInput={releasePctInput}
+          setReleasePctInput={setReleasePctInput}
         />
       )}
 
@@ -687,11 +992,28 @@ export default function CffGeneratorModal({
   )
 }
 
+// ─── Helper: parse a percentage input ─────────────────────────────────────
+// Used by retention / release inputs. Accepts "" (empty → undefined, lets
+// generator use defaults), valid 0–100 number → returns decimal (0.08),
+// anything else → 'invalid'. Caller surfaces the validation error.
+function parsePctInput(input) {
+  const trimmed = String(input).trim()
+  if (trimmed === '') return undefined
+  const n = parseFloat(trimmed)
+  if (!Number.isFinite(n) || n < 0 || n > 100) return 'invalid'
+  return n / 100
+}
+
 // ─── Step 1: Source + programme ────────────────────────────────────────────
 function Step1SourceAndProgramme({
+  sourceMode, setSourceMode,
   csaFiles, loadingCsaList,
   selectedCsaPath, setSelectedCsaPath,
   uploadedCsaFile, setUploadedCsaFile,
+  clientCffSourceMode, setClientCffSourceMode,
+  clientCffFile, setClientCffFile,
+  clientCffExistingFiles,
+  clientCffSelectedPath, setClientCffSelectedPath,
   startDate, setStartDate,
   endDate, setEndDate,
   numMonthsOverride, setNumMonthsOverride,
@@ -702,15 +1024,62 @@ function Step1SourceAndProgramme({
   actualsMode, setActualsMode,
   manualActuals, setManualActuals,
   buildings, selectedBuilding,
+  retentionPctInput, setRetentionPctInput,
+  releasePctInput, setReleasePctInput,
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
     if (file) setUploadedCsaFile(file)
   }
+  function handleClientFileChange(e) {
+    const file = e.target.files?.[0]
+    if (file) setClientCffFile(file)
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* CSA source */}
+      {/* Source mode toggle — pick CSA + curves OR a client CFF file */}
+      <div>
+        <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text2)' }}>
+          Generate from
+        </label>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setSourceMode('csa')}
+            style={{
+              padding: '6px 12px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+              border: '0.5px solid var(--border)',
+              background: sourceMode === 'csa' ? 'var(--accent-soft)' : 'var(--surface2)',
+              color: sourceMode === 'csa' ? 'var(--accent)' : 'var(--text2)',
+              fontWeight: sourceMode === 'csa' ? 500 : 400,
+            }}
+          >
+            CSA + curves
+          </button>
+          <button
+            type="button"
+            onClick={() => setSourceMode('client')}
+            style={{
+              padding: '6px 12px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+              border: '0.5px solid var(--border)',
+              background: sourceMode === 'client' ? 'var(--accent-soft)' : 'var(--surface2)',
+              color: sourceMode === 'client' ? 'var(--accent)' : 'var(--text2)',
+              fontWeight: sourceMode === 'client' ? 500 : 400,
+            }}
+          >
+            Client CFF file
+          </button>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+          {sourceMode === 'csa'
+            ? 'Build forecast from the project CSA using a distribution curve. PA-aware regenerate replaces past months with PA actuals per row.'
+            : 'Use a client-supplied CFF spreadsheet as the forecast. PA actuals (if present) overlay at the totals level — past month totals match the PAs, future months use the client distribution.'}
+        </div>
+      </div>
+
+      {/* CSA source — visible when sourceMode = 'csa' */}
+      {sourceMode === 'csa' && (
       <div>
         <Field label="Source CSA file">
           {loadingCsaList ? (
@@ -794,6 +1163,151 @@ function Step1SourceAndProgramme({
             CSA parse error: {csaParseError}
           </div>
         )}
+      </div>
+      )}
+
+      {/* Client CFF source — visible when sourceMode = 'client' */}
+      {sourceMode === 'client' && (
+      <div>
+        <Field label="Client CFF file (.xlsx)">
+          {/* Sub-toggle: upload-from-disk vs pick-existing */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            <button
+              type="button"
+              onClick={() => setClientCffSourceMode('upload')}
+              style={{
+                padding: '4px 10px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+                border: '0.5px solid var(--border)',
+                background: clientCffSourceMode === 'upload' ? 'var(--accent-soft)' : 'var(--surface2)',
+                color: clientCffSourceMode === 'upload' ? 'var(--accent)' : 'var(--text2)',
+                fontWeight: clientCffSourceMode === 'upload' ? 500 : 400,
+              }}
+            >
+              Upload new file
+            </button>
+            <button
+              type="button"
+              onClick={() => setClientCffSourceMode('pick')}
+              style={{
+                padding: '4px 10px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+                border: '0.5px solid var(--border)',
+                background: clientCffSourceMode === 'pick' ? 'var(--accent-soft)' : 'var(--surface2)',
+                color: clientCffSourceMode === 'pick' ? 'var(--accent)' : 'var(--text2)',
+                fontWeight: clientCffSourceMode === 'pick' ? 500 : 400,
+              }}
+            >
+              Pick from project files ({clientCffExistingFiles.length})
+            </button>
+          </div>
+
+          {clientCffSourceMode === 'upload' ? (
+            <>
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={handleClientFileChange}
+                style={{ fontSize: 13 }}
+              />
+              {clientCffFile && (
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                  Selected: {clientCffFile.name} ({Math.round(clientCffFile.size / 1024)} KB)
+                </div>
+              )}
+            </>
+          ) : (
+            clientCffExistingFiles.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text3)', padding: 8, border: '0.5px solid var(--border)', borderRadius: 4 }}>
+                No xlsx files found in this project's cff subfolders. Upload one instead.
+              </div>
+            ) : (
+              <select
+                value={clientCffSelectedPath}
+                onChange={e => setClientCffSelectedPath(e.target.value)}
+                style={{ width: '100%' }}
+              >
+                <option value="">— select a file —</option>
+                {(() => {
+                  // Group: global cff first, archive next, then per-building.
+                  const groups = []
+                  const globalFiles = clientCffExistingFiles.filter(f => f.subfolder_key === CFF_SUBFOLDER)
+                  if (globalFiles.length > 0) groups.push({ label: 'Project CFF', files: globalFiles })
+                  const archiveFiles = clientCffExistingFiles.filter(f => f.subfolder_key === CFF_ARCHIVE_SUBFOLDER)
+                  if (archiveFiles.length > 0) groups.push({ label: 'Archive', files: archiveFiles })
+                  for (const b of buildings) {
+                    const bFiles = clientCffExistingFiles.filter(f => f.subfolder_key === b.subfolders.cff)
+                    if (bFiles.length > 0) groups.push({ label: b.name || `Building ${b.ordinal}`, files: bFiles })
+                  }
+                  return groups.map(g => (
+                    <optgroup key={g.label} label={g.label}>
+                      {g.files.map(f => (
+                        <option key={f.id} value={f.storage_path}>{f.file_name}</option>
+                      ))}
+                    </optgroup>
+                  ))
+                })()}
+              </select>
+            )
+          )}
+        </Field>
+
+        {/* Building scope banner — same blue note as CSA mode */}
+        {selectedBuilding && (
+          <div style={{
+            marginTop: 6,
+            padding: 8,
+            background: 'rgba(80, 102, 188, 0.08)',
+            border: '0.5px solid rgba(80, 102, 188, 0.3)',
+            borderRadius: 4,
+            fontSize: 12,
+            color: 'var(--text2)',
+            lineHeight: 1.5,
+          }}>
+            <strong style={{ color: '#5066BC' }}>Building scope: {selectedBuilding.name}</strong> · PAs filtered to this building's payment-application subfolder · CFF will be saved to this building's <code>cff</code> subfolder (no archive).
+          </div>
+        )}
+
+        {csaParseError && (
+          <div style={{ marginTop: 8, fontSize: 13, color: '#dc2626' }}>
+            Parse error: {csaParseError}
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* Retention / release — apply in both modes */}
+      <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ flex: 1 }}>
+          <Field label="Retention %">
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={retentionPctInput}
+              onChange={e => setRetentionPctInput(e.target.value)}
+              style={{ width: '100%' }}
+            />
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+              Deducted from each PA. Default 8% (Merton); use 3% for Bishops-style projects.
+            </div>
+          </Field>
+        </div>
+        <div style={{ flex: 1 }}>
+          <Field label="Release at PC %">
+            <input
+              type="number"
+              step="0.1"
+              min="0"
+              max="100"
+              value={releasePctInput}
+              onChange={e => setReleasePctInput(e.target.value)}
+              style={{ width: '100%' }}
+            />
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+              Released at Practical Completion. Default 6.5% (Merton); use 1.5% for Bishops-style.
+            </div>
+          </Field>
+        </div>
       </div>
 
       {/* Programme dates */}
