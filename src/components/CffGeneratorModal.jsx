@@ -343,6 +343,10 @@ export default function CffGeneratorModal({
           cumulative_by_group: Object.fromEntries(
             Object.entries(p.groups || {}).map(([k, v]) => [k, v.cumulative])
           ),
+          // Variations cumulative carried through unchanged. The generator
+          // adds a separate "Variations" row to the cashflow when at least
+          // one PA in the list has variations_cumulative > 0.
+          variations_cumulative: p.variations_cumulative || 0,
         }))
         setPaList(flatPaList)
         // Default mode: if PA files are found and parsed cleanly, default
@@ -493,6 +497,11 @@ export default function CffGeneratorModal({
               pa_label: entry.label || 'Manual',
               total_cumulative: runningTotal,
               cumulative_by_group,
+              // Manual mode has no concept of variations — user enters a
+              // single 'amount' per period and we proportionally distribute
+              // across CSA groups. Variations stay at 0; the user can switch
+              // to PA mode if they need real PA-derived variation tracking.
+              variations_cumulative: 0,
             }
           })
           paActuals = { paList: synthList }
