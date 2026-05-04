@@ -85,9 +85,15 @@ function normaliseRefA(raw) {
   return String(raw).trim()
 }
 
-export async function extractClientCff(file) {
+// Accepts either:
+//   • a File / Blob (must have .arrayBuffer())  — upload-from-disk flow
+//   • a raw ArrayBuffer                          — pick-existing flow
+//     (caller has already downloaded from storage and produces the buffer)
+export async function extractClientCff(input) {
   const XLSX = await loadSheetJs()
-  const arrayBuffer = await file.arrayBuffer()
+  const arrayBuffer = input instanceof ArrayBuffer
+    ? input
+    : await input.arrayBuffer()
   const wb = XLSX.read(arrayBuffer, { type: 'array' })
   const ws = wb.Sheets[wb.SheetNames[0]]
   if (!ws) {
