@@ -143,27 +143,43 @@ export default function Settings() {
         <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>Manage your account and team</p>
       </div>
 
-      {/* My Profile */}
+      {/* My Profile — two cards side by side at desktop widths, stack on
+          narrow screens. Profile card holds identity + auth buttons; the
+          Appearance card holds the theme picker. minmax(360px, 1fr) lets
+          each card claim half the row but fall back to a single column when
+          the available width drops below ~720px. */}
       <div style={{ marginBottom: 28 }}>
         <div className="section-title" style={{ marginBottom: 14 }}>My Profile</div>
-        <div className="card card-pad" style={{ maxWidth: 500 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
-            <Avatar name={profile?.full_name} size="lg" />
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>{profile?.full_name}</div>
-              <div style={{ color: 'var(--text2)', fontSize: 13 }}>{profile?.email}</div>
-              <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Pill cls={ROLES[profile?.role]?.cls || 'pill-gray'}>{ROLES[profile?.role]?.label || profile?.role}</Pill>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gap: 16,
+          alignItems: 'start',
+        }}>
+          {/* Card 1 — Identity + auth actions */}
+          <div className="card card-pad">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <Avatar name={profile?.full_name} size="lg" />
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{profile?.full_name}</div>
+                <div style={{ color: 'var(--text2)', fontSize: 13 }}>{profile?.email}</div>
+                <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <Pill cls={ROLES[profile?.role]?.cls || 'pill-gray'}>{ROLES[profile?.role]?.label || profile?.role}</Pill>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{ROLES[profile?.role]?.desc}</div>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{ROLES[profile?.role]?.desc}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+              <button className="btn btn-sm" onClick={() => setShowChangePassword(true)}>🔑 Change Password</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setShow2FA(true)}>🔐 Two-Factor Authentication</button>
+              <button className="btn btn-danger btn-sm" onClick={signOut}>Sign out</button>
             </div>
           </div>
-          {/* Theme switcher — 7 themes, displayed as a swatch grid where
-              each tile previews the palette (sidebar + surface + accent
-              dot). The active theme is marked with a ring and a small
-              "selected" indicator in the top-right. */}
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Appearance</div>
+
+          {/* Card 2 — Appearance (theme swatches). Heading lives inside the
+              card now since it's no longer nested under Profile. */}
+          <div className="card card-pad">
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Appearance</div>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
@@ -235,11 +251,6 @@ export default function Settings() {
                 )
               })}
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="btn btn-sm" onClick={() => setShowChangePassword(true)}>🔑 Change Password</button>
-            <button className="btn btn-primary btn-sm" onClick={() => setShow2FA(true)}>🔐 Two-Factor Authentication</button>
-            <button className="btn btn-danger btn-sm" onClick={signOut}>Sign out</button>
           </div>
         </div>
       </div>
