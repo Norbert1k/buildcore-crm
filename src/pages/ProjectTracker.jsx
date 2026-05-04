@@ -411,28 +411,49 @@ export default function ProjectTracker() {
   const liveProjects = filtered.filter(p => p.status !== 'tender')
   const tenderProjects = filtered.filter(p => p.status === 'tender')
 
-  // ── Geographic KPIs ────────────────────────────────────────────────────
-  // All four header cards aggregate over ACTIVE projects only — the
-  // tracker header is about the live portfolio, not tender or completed.
-  const activeProjects = projects.filter(p => p.status === 'active')
+  // ── Header KPIs ────────────────────────────────────────────────────────
+  // Geographic stats aggregate over BOTH active and tender projects — the
+  // user wants tender markers visible in distance/regions metrics. Hero
+  // values split active and tender into two separate counters.
+  const liveOrTender = projects.filter(p => p.status === 'active' || p.status === 'tender')
 
-  // Regions covered (postcode-derived). Uses postcode area letters → UK
-  // government region. Projects without a parseable postcode contribute
-  // null and are excluded.
+  // Tender hero — count + summed value. Mirrors how the active hero is
+  // built off valueByStatus.active and counts.active.
+  const tenderTotal = valueByStatus.tender || 0
+  const tenderCount = counts.tender || 0
+
+  // Regions covered (postcode-derived). UK government regions inferred
+  // from the postcode area prefix. Projects without a parseable postcode
+  // contribute null and are excluded.
   const regionsCovered = (() => {
     const set = new Set()
-    for (const p of activeProjects) {
+    for (const p of liveOrTender) {
       const r = regionForPostcode(p.postcode)
       if (r) set.add(r)
     }
     return Array.from(set).sort()
   })()
 
-  // Furthest active project from London. Uses geocoded coords (already
-  // resolved during loadProjects). Skips projects without coords.
+  // Regional spread for the proportional bar — count of projects per region,
+  // sorted descending by count. Used to render the visual "regional spread"
+  // bar below the heroes. Each entry: { region, count }.
+  const regionalSpread = (() => {
+    const counts = new Map()
+    for (const p of liveOrTender) {
+      const r = regionForPostcode(p.postcode)
+      if (!r) continue
+      counts.set(r, (counts.get(r) || 0) + 1)
+    }
+    return Array.from(counts.entries())
+      .map(([region, count]) => ({ region, count }))
+      .sort((a, b) => b.count - a.count)
+  })()
+
+  // Furthest project from London (active + tender). Uses geocoded coords
+  // (already resolved during loadProjects). Skips projects without coords.
   const furthestFromLondon = (() => {
     let best = null
-    for (const p of activeProjects) {
+    for (const p of liveOrTender) {
       if (!p.coords) continue
       const dist = haversineMiles(LONDON_ANCHOR, p.coords)
       if (dist == null) continue
@@ -441,12 +462,12 @@ export default function ProjectTracker() {
     return best
   })()
 
-  // Nearest active project to user's current location. Only computed if
-  // userCoords is available (geolocation granted). Otherwise the KPI card
-  // is hidden — the surrounding grid auto-fits to 3 cards in that case.
+  // Nearest project to user's current location (active + tender). Only
+  // computed if userCoords is available (geolocation granted). Otherwise
+  // the inline stat is hidden.
   const nearestToUser = userCoords ? (() => {
     let best = null
-    for (const p of activeProjects) {
+    for (const p of liveOrTender) {
       if (!p.coords) continue
       const dist = haversineMiles(userCoords, p.coords)
       if (dist == null) continue
@@ -477,90 +498,141 @@ export default function ProjectTracker() {
         </div>
       </div>
 
-      {/* Tracker header — geographic KPIs (4 cards: Live sites · Regions ·
-          Furthest from London · Nearest to user) followed by a compact
-          status pill row that doubles as filter buttons. The Nearest card
-          is hidden when userCoords is null so the grid collapses to 3
-          cards. The status pills replace the previous bigger filter-tab
-          strip — same filter behaviour, less visual weight, and the
-          per-status counts are inline with each pill. */}
+      {/* Tracker header — single panel containing:
+            Row 1: Two heroes (£X live · sites) + (£X tender · projects) on
+                   the left, supporting stats (furthest / nearest) inline
+                   on the right.
+            Row 2: Regional spread bar — proportional segments showing
+                   project distribution across UK regions, including tender.
+            Row 3: Status filter pills (replaces the old filter-tabs strip).
+
+          Geographic stats span ACTIVE + TENDER projects (per spec). The
+          "Nearest to you" inline stat is hidden when geolocation isn't
+          granted; the others always render. */}
       {can('view_project_value') && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 14 }}>
-          {/* Live sites + active value */}
-          <div className="stat-card" style={{ borderTop: '3px solid #448a40' }}>
-            <div className="stat-label">Live sites</div>
-            <div className="stat-value green" style={{ fontSize: 22 }}>{counts.active || 0}</div>
-            <div className="stat-sub">{valueByStatus.active > 0 ? formatCurrency(valueByStatus.active) : '—'}</div>
+        <div style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
+          padding: '14px 18px',
+          marginBottom: 14,
+        }}>
+          {/* Row 1 — heroes + supporting stats */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 22, flexWrap: 'wrap' }}>
+            {/* Active hero */}
+            <div>
+              <span style={{ fontSize: 26, fontWeight: 600, color: 'var(--green)', lineHeight: 1 }}>
+                {valueByStatus.active > 0 ? formatCurrency(valueByStatus.active) : '£0'}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text2)', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                live · {counts.active || 0} {counts.active === 1 ? 'site' : 'sites'}
+              </span>
+            </div>
+            {/* Vertical divider */}
+            <div style={{ width: 1, height: 28, background: 'var(--border)' }} />
+            {/* Tender hero */}
+            <div>
+              <span style={{ fontSize: 22, fontWeight: 600, color: '#9b87e0', lineHeight: 1 }}>
+                {tenderTotal > 0 ? formatCurrency(tenderTotal) : '£0'}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text2)', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                tender · {tenderCount} {tenderCount === 1 ? 'project' : 'projects'}
+              </span>
+            </div>
+            {/* Supporting stats — push to the right on wide screens */}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, alignItems: 'baseline', flexWrap: 'wrap' }}>
+              {furthestFromLondon && (
+                <div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                    {Math.round(furthestFromLondon.distance)}<span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 2 }}>mi</span>
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>
+                    furthest · {furthestFromLondon.project.project_name}
+                  </span>
+                </div>
+              )}
+              {nearestToUser && (
+                <div>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#FFD700' }}>
+                    {nearestToUser.distance < 1
+                      ? nearestToUser.distance.toFixed(1)
+                      : Math.round(nearestToUser.distance)}<span style={{ fontSize: 10, color: 'rgba(255,215,0,0.6)', marginLeft: 2 }}>mi</span>
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>
+                    nearest · {nearestToUser.project.project_name}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Regions covered. Header shows count, subtitle shows first 2
-              region names plus +N for any additional. Empty state when no
-              projects have parseable postcodes. */}
-          <div className="stat-card" style={{ borderTop: '3px solid #5DCAA5' }}>
-            <div className="stat-label">Regions</div>
-            <div className="stat-value" style={{ fontSize: 22, color: 'var(--text)' }}>
-              {regionsCovered.length || '—'}
-            </div>
-            <div className="stat-sub">
-              {regionsCovered.length === 0
-                ? 'No postcodes set'
-                : regionsCovered.length <= 2
-                  ? regionsCovered.join(', ')
-                  : `${regionsCovered.slice(0, 2).join(', ')} +${regionsCovered.length - 2}`
-              }
-            </div>
-          </div>
-
-          {/* Furthest from London. Distance is rounded to whole miles.
-              Subtitle is the project name. Skipped (shows —) if no active
-              project has coords yet. */}
-          <div className="stat-card" style={{ borderTop: '3px solid #185FA5' }}>
-            <div className="stat-label">Furthest from London</div>
-            <div className="stat-value" style={{ fontSize: 22, color: 'var(--text)' }}>
-              {furthestFromLondon ? `${Math.round(furthestFromLondon.distance)} mi` : '—'}
-            </div>
-            <div className="stat-sub">
-              {furthestFromLondon ? furthestFromLondon.project.project_name : 'No coords yet'}
-            </div>
-          </div>
-
-          {/* Nearest to user. Hidden when geolocation isn't available — the
-              auto-fit grid collapses to 3 cards. Distance can be very small
-              (<1mi) so we show 1 decimal in those cases. */}
-          {nearestToUser && (
-            <div className="stat-card" style={{ borderTop: '3px solid #FFD700' }}>
-              <div className="stat-label">Nearest to you</div>
-              <div className="stat-value" style={{ fontSize: 22, color: 'var(--text)' }}>
-                {nearestToUser.distance < 1
-                  ? `${nearestToUser.distance.toFixed(1)} mi`
-                  : `${Math.round(nearestToUser.distance)} mi`}
+          {/* Row 2 — Regional spread bar. Only renders if at least one
+              project has a parseable postcode. Bar is proportional to
+              project count per region. Each region gets a colour from
+              REGION_PALETTE; overflow regions (>6) lump into 'Other' gray. */}
+          {regionalSpread.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Regional spread
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text3)' }}>
+                  {regionsCovered.length} {regionsCovered.length === 1 ? 'region' : 'regions'}
+                </span>
               </div>
-              <div className="stat-sub">{nearestToUser.project.project_name}</div>
+              <RegionalSpreadBar spread={regionalSpread} />
             </div>
           )}
+
+          {/* Row 3 — Status filter pills inside the same panel, separated
+              by a hairline. Same behaviour as the previous standalone pill
+              row. */}
+          <div style={{
+            display: 'flex',
+            gap: 6,
+            flexWrap: 'wrap',
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '0.5px solid var(--border)',
+          }}>
+            <StatusFilterPill
+              label="All" count={projects.length}
+              active={filter === 'all'}
+              accentColor="var(--accent)"
+              onClick={() => setFilter('all')}
+            />
+            {Object.entries(PROJECT_STATUSES).map(([k, v]) => (
+              <StatusFilterPill
+                key={k} label={v.label} count={counts[k] || 0}
+                active={filter === k}
+                accentColor={STATUS_COLORS[k]}
+                onClick={() => setFilter(filter === k ? 'all' : k)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Compact status pill row — replaces the previous filter-tabs strip.
-          Each pill is the same status filter the tabs used to be; counts
-          appear inline. Active filter has a tinted background. Clicking
-          the active filter again returns to "All". */}
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-        <StatusFilterPill
-          label="All" count={projects.length}
-          active={filter === 'all'}
-          accentColor="var(--accent)"
-          onClick={() => setFilter('all')}
-        />
-        {Object.entries(PROJECT_STATUSES).map(([k, v]) => (
+      {/* When the user can't view financial values, render just the status
+          pills standalone (no panel needed). */}
+      {!can('view_project_value') && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
           <StatusFilterPill
-            key={k} label={v.label} count={counts[k] || 0}
-            active={filter === k}
-            accentColor={STATUS_COLORS[k]}
-            onClick={() => setFilter(filter === k ? 'all' : k)}
+            label="All" count={projects.length}
+            active={filter === 'all'}
+            accentColor="var(--accent)"
+            onClick={() => setFilter('all')}
           />
-        ))}
-      </div>
+          {Object.entries(PROJECT_STATUSES).map(([k, v]) => (
+            <StatusFilterPill
+              key={k} label={v.label} count={counts[k] || 0}
+              active={filter === k}
+              accentColor={STATUS_COLORS[k]}
+              onClick={() => setFilter(filter === k ? 'all' : k)}
+            />
+          ))}
+        </div>
+      )}
 
       <div style={{ borderRadius: 'var(--radius-lg, 12px)', overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 20, position: 'relative' }}>
         <div ref={mapRef} style={{ height: 480, width: '100%', background: '#1a1a2e' }} />
@@ -792,5 +864,74 @@ function StatusFilterPill({ label, count, active, accentColor, onClick }) {
       {label}
       <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 400 }}>{count}</span>
     </button>
+  )
+}
+
+// ─── RegionalSpreadBar ────────────────────────────────────────────────
+//
+// Proportional bar showing how the active+tender portfolio is distributed
+// across UK regions. Each segment's width is the region's share of total
+// projects. Segments are colour-coded from a fixed 6-colour palette;
+// regions beyond the first 6 (sorted by count desc) are bucketed into
+// "Other" gray. A small legend below names each region with its count.
+//
+// Empty state isn't rendered here — the parent only mounts this component
+// when regionalSpread.length > 0.
+const REGION_PALETTE = [
+  '#5DCAA5',  // teal
+  '#85B7EB',  // blue
+  '#FAC775',  // amber
+  '#F4C0D1',  // pink
+  '#AFA9EC',  // purple
+  '#F5C4B3',  // coral
+]
+const OTHER_COLOR = '#888780'   // gray (matches c-gray 400)
+
+function RegionalSpreadBar({ spread }) {
+  const total = spread.reduce((sum, s) => sum + s.count, 0)
+  if (total === 0) return null
+
+  // Pull the first 6 regions, lump anything else into 'Other' for both bar
+  // segments and legend.
+  const top = spread.slice(0, 6).map((s, idx) => ({
+    region: s.region,
+    count: s.count,
+    color: REGION_PALETTE[idx],
+  }))
+  const overflow = spread.slice(6)
+  const overflowCount = overflow.reduce((sum, s) => sum + s.count, 0)
+  const segments = overflowCount > 0
+    ? [...top, { region: 'Other', count: overflowCount, color: OTHER_COLOR }]
+    : top
+
+  return (
+    <>
+      <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 }}>
+        {segments.map(seg => (
+          <div key={seg.region}
+            title={`${seg.region} · ${seg.count} ${seg.count === 1 ? 'project' : 'projects'}`}
+            style={{
+              flex: seg.count,
+              background: seg.color,
+              minWidth: 4,
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
+        {segments.map(seg => (
+          <span key={seg.region} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 10,
+            color: 'var(--text2)',
+          }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />
+            {seg.region} <span style={{ color: 'var(--text3)' }}>{seg.count}</span>
+          </span>
+        ))}
+      </div>
+    </>
   )
 }
