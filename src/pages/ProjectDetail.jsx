@@ -1346,7 +1346,16 @@ export default function ProjectDetail() {
               No team members assigned yet. Click <strong>Add Team Member</strong> to get started.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{
+              // Responsive grid for role cards. auto-fit + minmax(380px, 1fr)
+              // gives: 1 col below 760px, 2 cols below ~1140px, 3 cols above.
+              // alignItems:'start' so a role card with many members doesn't
+              // stretch its row partner to match height — they sit at the top.
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
+              gap: 14,
+              alignItems: 'start',
+            }}>
               {grouped.map(g => (
                 <div key={g.role} className="card card-pad">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -1357,7 +1366,12 @@ export default function ProjectDetail() {
                       {g.members.length} {g.members.length === 1 ? 'person' : 'people'}
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+                  {/* Inner member grid — tightened from 280px → 220px min so a
+                      half-width role card (in the new 2-up outer grid) doesn't
+                      have its member cards overflow horizontally. On wide
+                      screens with 1 member per role, each member card still
+                      fills the role card's width via 1fr. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
                     {g.members.map(m => (
                       <div key={m.id} style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
