@@ -24,6 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { groupKeyFor } from './csaExtractor'
+import { sortPaRowsByPaNumber, paNumberFromFilename } from './paOrdering'
 
 async function loadSheetJs() {
   if (window.XLSX) return window.XLSX
@@ -83,17 +84,6 @@ export async function extractPaGroups(file) {
   let contractSumF = null
   let contractCumulativeH = null
   const groupAcc = {}    // key → { section, group, cumulative, item_count, description }
-  // Variations cumulative — sum of column H across every row inside the
-  // VARIATIONS section. Tracked separately from `groupAcc` because variations
-  // are not CSA-derived (no contract row, no curve, no forecast). The CFF
-  // generator's PA-aware overlay reads this number to add a "Variations"
-  // line to the cashflow that captures the per-PA variation deltas.
-  //
-  // Why this matters: previously the VARIATIONS section was skipped entirely
-  // (line below at `continue`), which silently dropped real money — Bishops
-  // PA02 and PA03 each contained £17,500 of variation work that never
-  // appeared in the CFF. Now we capture it.
-  let variationsCumulative = 0
 
   function bumpGroup(section, groupLabel, cumulative, itemDescription) {
     const key = groupKeyFor(
@@ -145,24 +135,7 @@ export async function extractPaGroups(file) {
       continue
     }
 
-    // VARIATIONS section: accumulate column H cumulative on each VO data
-    // row before continuing. We don't try to detect group headers here —
-    // every numeric H inside this section is a real VO cumulative, EXCEPT
-    // for the subtotal row that the PA template emits at the end of the
-    // section. Subtotals are recognised by the same heuristic the rest of
-    // the function uses: both column A and column B empty with numeric F.
-    // Without this skip, a single VO of £17,500 would be double-counted as
-    // £35,000 because the subtotal row repeats H=17,500 right below it.
-    if (currentSection === 'VARIATIONS') {
-      const aEmpty = !a
-      const bEmpty = !b
-      const fIsNumber = typeof f === 'number' && f > 0
-      const isSubtotalRow = aEmpty && bEmpty && fIsNumber
-      if (!isSubtotalRow && typeof h === 'number' && Number.isFinite(h) && h > 0) {
-        variationsCumulative += h
-      }
-      continue
-    }
+    if (currentSection === 'VARIATIONS') continue
 
     const aEmpty = !a
     const bEmpty = !b
@@ -189,52 +162,39 @@ export async function extractPaGroups(file) {
     contract_sum: contractSumF,
     contract_cumulative: contractCumulativeH || 0,
     groups: groupAcc,
-    // Variations cumulative — sum of all "VO*" rows' cumulative-to-date in
-    // this PA. Zero if the VARIATIONS section is empty or absent. The CFF
-    // generator uses this to add an extra "Variations" line in the cashflow.
-    variations_cumulative: variationsCumulative,
   }
 }
 
-// Fetch all PAs at one location for a project, parse each, return ordered list.
-// Each entry includes the index (PA01, PA02, ...) inferred from chronological
-// order of created_at.
+// Fetch all root-level PAs for a project, parse each, return ordered list.
+// Each entry includes:
+//   • index    — derived from parsed PA filename (PA01 → 1) when possible,
+//     else falls back to the entry's array position (1-based)
+//   • pa_label — display label like "PA01" / "PA02"
 //
-// `subfolderKey` controls the scope:
-//   - null (default)        → root-level PAs (single-building projects)
-//   - '<building's pa key>' → that building's PAs only (multi-building projects,
-//                             called from a CFF modal scoped to that building)
+// Ordering: PAs sort by parsed PA number ASC, with unparseable filenames
+// trailing by created_at. This is reupload-stable: a freshly-uploaded PA01
+// no longer jumps to the end of the list.
 //
-// Multi-building note: this function is intentionally one-location-at-a-time.
-// To get every PA in a multi-building project across all buildings, the caller
-// runs this once per building (typically via Promise.all over the buildings
-// list from src/lib/buildings.js).
-export async function fetchAllProjectPas(supabase, projectId, subfolderKey = null) {
-  let query = supabase
+// Multi-building projects: only root-level PAs are covered for now.
+export async function fetchAllProjectPas(supabase, projectId) {
+  const { data: rows, error } = await supabase
     .from('project_doc_files')
     .select('id, file_name, storage_path, created_at')
     .eq('project_id', projectId)
     .eq('folder_key', '02-payment-application')
-    .order('created_at', { ascending: true })
-
-  // .is(null) for root-level, .eq() for a specific subfolder. Supabase JS
-  // builder distinguishes these: .is('col', null) is "IS NULL", .eq('col', '')
-  // would be "= ''" which doesn't match NULL rows.
-  if (subfolderKey == null) {
-    query = query.is('subfolder_key', null)
-  } else {
-    query = query.eq('subfolder_key', subfolderKey)
-  }
-
-  const { data: rows, error } = await query
+    .is('subfolder_key', null)
 
   if (error) throw error
   if (!rows || rows.length === 0) return []
   const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name))
   if (xlsxRows.length === 0) return []
 
+  // Sort by parsed PA number ASC (PA01, PA02, ..., PA10). Unparseable
+  // filenames trail by created_at.
+  const sorted = sortPaRowsByPaNumber(xlsxRows, 'asc')
+
   // Parse each PA in parallel
-  const parsed = await Promise.all(xlsxRows.map(async (row, idx) => {
+  const parsed = await Promise.all(sorted.map(async (row, arrayIdx) => {
     try {
       const { data: signed } = await supabase
         .storage
@@ -245,17 +205,19 @@ export async function fetchAllProjectPas(supabase, projectId, subfolderKey = nul
       if (!res.ok) return null
       const blob = await res.blob()
       const extract = await extractPaGroups(blob)
+      // Index/label come from the parsed PA number when available, so
+      // PA02 always shows as "PA02" regardless of upload order. Falls
+      // back to array position for unparseable filenames.
+      const paNum = paNumberFromFilename(row.file_name)
+      const index = paNum ?? (arrayIdx + 1)
       return {
-        index: idx + 1,    // 1-based: PA01, PA02, ...
-        pa_label: `PA${String(idx + 1).padStart(2, '0')}`,
+        index,
+        pa_label: `PA${String(index).padStart(2, '0')}`,
         file_name: row.file_name,
         created_at: row.created_at,
         contract_sum: extract.contract_sum,
         total_cumulative: extract.contract_cumulative,
         groups: extract.groups,
-        // Variations cumulative for this PA. Read by the CFF generator's
-        // PA-aware overlay to compute per-month variation deltas.
-        variations_cumulative: extract.variations_cumulative || 0,
       }
     } catch (err) {
       console.warn('PA parse failed:', row.file_name, err)
@@ -263,80 +225,4 @@ export async function fetchAllProjectPas(supabase, projectId, subfolderKey = nul
     }
   }))
   return parsed.filter(p => p !== null)
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// extractRetentionFromPa(file) → { retention_pct, status, raw_label? }
-//
-// Reads a PA xlsx looking for the "Less Retention N%" footer row and parses
-// the percentage. Lives separately from extractPaGroups so callers (the CFF
-// modal) can pre-fill the retention field without re-parsing the entire
-// group structure.
-//
-// Returns one of three shapes:
-//   { retention_pct: number, status: 'ok', raw_label: string }
-//   { retention_pct: null,   status: 'not_found' }     // no row matched at all
-//   { retention_pct: null,   status: 'unparseable', raw_label: string }
-//                                                       // row found but no %
-//
-// The status field lets the modal differentiate "no PA template / unusual
-// file" (default to 3, no warning) from "found a retention row but couldn't
-// read the number" (show input + warning so the user notices).
-// ─────────────────────────────────────────────────────────────────────────────
-export async function extractRetentionFromPa(file) {
-  const XLSX = await loadSheetJs()
-  const arrayBuffer = await file.arrayBuffer()
-  const wb = XLSX.read(arrayBuffer, { type: 'array' })
-  if (!wb.SheetNames.length) return { retention_pct: null, status: 'not_found' }
-
-  let ws = wb.Sheets[wb.SheetNames[0]]
-  for (const name of wb.SheetNames) {
-    if (/-\s*PA\s*$/i.test(name)) { ws = wb.Sheets[name]; break }
-  }
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })
-
-  // The retention row sits below CONTRACT SUM. Scan the whole sheet rather
-  // than assume a fixed offset — Arcady's template puts it at row 69 but
-  // older / hand-edited PAs may differ.
-  //
-  // Match patterns we've seen in the wild:
-  //   "Less Retention 3% (on This Application)"
-  //   "Less Retention 5% (on This Application)"
-  //   "Less Retention 8%"
-  //   "Less Retention 2.5%"
-  // The regex is intentionally tolerant: any whitespace between words, allows
-  // decimals, allows the % to be glued to the digits or not.
-  const labelRe = /less\s+retention\s+(\d+(?:\.\d+)?)\s*%/i
-  // Looser fallback: row that mentions "retention" but doesn't carry a parseable
-  // percentage. We use this to distinguish 'not_found' from 'unparseable'.
-  const retentionRowRe = /retention/i
-
-  let unparseableLabel = null
-
-  for (let r = 0; r < rows.length; r++) {
-    const row = rows[r] || []
-    // Retention label can land in col A (Arcady) or col B (some legacy
-    // templates). Check both.
-    for (let c = 0; c < 3; c++) {
-      const v = row[c]
-      if (typeof v !== 'string') continue
-      const m = labelRe.exec(v)
-      if (m) {
-        const pct = parseFloat(m[1])
-        if (Number.isFinite(pct) && pct >= 0 && pct <= 50) {
-          return { retention_pct: pct, status: 'ok', raw_label: v.trim() }
-        }
-      }
-      // Track the first "retention"-mentioning row that didn't parse cleanly
-      // so we can return it as 'unparseable' if no clean match is found.
-      if (!unparseableLabel && retentionRowRe.test(v) && !/release/i.test(v)) {
-        unparseableLabel = v.trim()
-      }
-    }
-  }
-
-  if (unparseableLabel) {
-    return { retention_pct: null, status: 'unparseable', raw_label: unparseableLabel }
-  }
-  return { retention_pct: null, status: 'not_found' }
 }
