@@ -7,7 +7,6 @@ import ProgressReportEditor, { generateProgressReportPdf } from './ProgressRepor
 import ProjectPhotos from './ProjectPhotos'
 import FileLightbox from './FileLightbox'
 import CffGeneratorModal from './CffGeneratorModal'
-import ClientCffConvertModal from './ClientCffConvertModal'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -905,7 +904,6 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
   // styled xlsx straight back into this subfolder.
   const isCffSubfolder = folder.key === '00-project-information' && subfolder.key === 'cff'
   const [showCffGenerator, setShowCffGenerator] = useState(false)
-  const [showClientCffConverter, setShowClientCffConverter] = useState(false)
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -1304,20 +1302,10 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCffGenerator(true) }}
                     style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#448a40', borderColor: '#448a40' }}
-                    title="Generate a cashflow forecast from the project CSA"
+                    title="Generate a cashflow forecast from the project CSA or a client CFF"
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
                     {fileCount > 0 ? 'Re-generate CFF' : 'Generate CFF'}
-                  </button>
-                )}
-                {isCffSubfolder && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setShowClientCffConverter(true) }}
-                    style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#5066BC', borderColor: '#5066BC' }}
-                    title="Render a client-supplied CFF in BuildCore's template"
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                    Convert client CFF
                   </button>
                 )}
                 <button onClick={zipSubfolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3 }} title="Zip">
@@ -1492,17 +1480,6 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
           projectName={projectName}
           onClose={() => setShowCffGenerator(false)}
           onGenerated={() => { setShowCffGenerator(false); loadFiles(); loadFileCount(); refreshTree?.() }}
-        />
-      )}
-
-      {/* Client CFF converter — same lifecycle as Generate CFF, but takes a
-          client-supplied CFF file as input rather than the CSA + curves. */}
-      {showClientCffConverter && isCffSubfolder && (
-        <ClientCffConvertModal
-          projectId={projectId}
-          projectName={projectName}
-          onClose={() => setShowClientCffConverter(false)}
-          onGenerated={() => { setShowClientCffConverter(false); loadFiles(); loadFileCount(); refreshTree?.() }}
         />
       )}
 
