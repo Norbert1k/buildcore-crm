@@ -1,8 +1,22 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ROLES, ROLE_PERMISSIONS, sortBy } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, PasswordInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
+
+// Domain that identifies internal CCG staff. Anyone whose email is NOT under
+// this domain is treated as an "external" user (consultants, EAs, clients
+// invited per-project, etc.) and grouped into the second table. Comparison
+// is case-insensitive.
+const INTERNAL_DOMAIN = 'cltd.co.uk'
+
+function isInternalEmail(email) {
+  if (!email) return false
+  const at = email.indexOf('@')
+  if (at < 0) return false
+  return email.slice(at + 1).toLowerCase() === INTERNAL_DOMAIN
+}
 
 // Theme picker options. Each entry mirrors a [data-theme="..."] block in
 // index.css. The preview object has the four colours rendered in the swatch
@@ -21,6 +35,7 @@ const THEME_OPTIONS = [
 
 export default function Settings() {
   const { profile, can, signOut, setTheme } = useAuth()
+  const navigate = useNavigate()
   const [activeTheme, setActiveTheme] = useState(() => document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'light')
   const [users, setUsers] = useState([])
   const [projects, setProjects] = useState([])
@@ -228,66 +243,101 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Team Management */}
-      {can('manage_users') && (
-        <div>
-          <div className="section-header">
-            <div className="section-title">Team Members ({users.length} / 100)</div>
-            <button className="btn btn-primary btn-sm" onClick={() => { setShowAddUser(true); setAddError(''); setAddSuccess('') }}>
-              <IconPlus size={13} /> Add User
-            </button>
-          </div>
+      {/* Team Management — split into two tables: internal CCG staff
+          (anyone @cltd.co.uk) on top, external users (consultants, EAs,
+          clients with project-specific access) below. The external table
+          replaces the generic "Access" column with project pills showing
+          which projects each user has been allocated to. Pills are
+          clickable and navigate to the project detail page. */}
+      {can('manage_users') && (() => {
+        // Partition by email domain. Sort within each group is already
+        // alphabetical (loadUsers sorts by full_name).
+        const internalUsers = users.filter(u => isInternalEmail(u.email))
+        const externalUsers = users.filter(u => !isInternalEmail(u.email))
+        // Project lookup map for rendering external user pills. Built once
+        // per render — projects list rarely changes mid-session.
+        const projectMap = new Map(projects.map(p => [p.id, p]))
 
-          {loading ? <Spinner /> : (
-            <>
-              <div className="table-wrap" style={{ marginBottom: 16 }}>
-                <table>
-                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th>Added</th><th></th></tr></thead>
-                  <tbody>
-                    {users.map(u => (
-                      <tr key={u.id}>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <Avatar name={u.full_name} size="sm" />
-                            <div>
-                              <div style={{ fontWeight: 500 }}>{u.full_name}</div>
-                              {u.id === profile?.id && <div style={{ fontSize: 11, color: 'var(--text3)' }}>You</div>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="td-muted">{u.email}</td>
-                        <td><Pill cls={ROLES[u.role]?.cls || 'pill-gray'}>{ROLES[u.role]?.label || u.role}</Pill></td>
-                        <td>
-                          {u.role === 'site_manager' ? (
-                            <span style={{ fontSize: 12, color: 'var(--text2)' }}>
-                              {u.projectIds?.length > 0 ? `${u.projectIds.length} project${u.projectIds.length > 1 ? 's' : ''}` : <span style={{ color: 'var(--amber)' }}>No projects assigned</span>}
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 12, color: 'var(--text3)' }}>{ROLE_PERMISSIONS[u.role]?.nav?.length || 0} sections</span>
-                          )}
-                        </td>
-                        <td className="td-muted">{new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                        <td>
-                          {u.id !== profile?.id && (
-                            <button className="btn btn-sm" onClick={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}>
-                              <IconEdit size={13} /> Edit
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        return (
+          <div>
+            <div className="section-header">
+              <div className="section-title">Team Members ({users.length} / 100)</div>
+              <button className="btn btn-primary btn-sm" onClick={() => { setShowAddUser(true); setAddError(''); setAddSuccess('') }}>
+                <IconPlus size={13} /> Add User
+              </button>
+            </div>
 
-              {/* Role reference */}
-              <div className="card card-pad">
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Role Permissions</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-                  {Object.entries(ROLES).map(([key, r]) => (
-                    <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
+            {loading ? <Spinner /> : (
+              <>
+                {/* ── Internal CCG Team table ──────────────────────────── */}
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>CCG Team</span>
+                    <span style={{ fontSize: 11, color: 'var(--text3)', padding: '2px 8px', background: 'var(--surface2)', borderRadius: 99 }}>
+                      {internalUsers.length} internal
+                    </span>
+                  </div>
+                </div>
+                <div className="table-wrap" style={{ marginBottom: 24 }}>
+                  <table>
+                    <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th>Added</th><th></th></tr></thead>
+                    <tbody>
+                      {internalUsers.map(u => (
+                        <TeamRow key={u.id} u={u}
+                          mode="internal"
+                          profile={profile}
+                          projectMap={projectMap}
+                          onNavigateProject={(id) => navigate(`/projects/${id}`)}
+                          onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* ── External Users table ─────────────────────────────────
+                    Only rendered if there are external users — otherwise
+                    the empty header would feel out of place. */}
+                {externalUsers.length > 0 && (
+                  <>
+                    <div style={{ marginBottom: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <Pill cls={r.cls}>{r.label}</Pill>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>External Users</span>
+                        <span style={{ fontSize: 11, color: 'var(--text3)', padding: '2px 8px', background: 'var(--surface2)', borderRadius: 99 }}>
+                          {externalUsers.length} external · project-allocated
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        People outside CCG who've been granted access to specific projects (e.g. Employer's Agents, clients, consultants).
+                      </div>
+                    </div>
+                    <div className="table-wrap" style={{ marginBottom: 16 }}>
+                      <table>
+                        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Projects</th><th>Added</th><th></th></tr></thead>
+                        <tbody>
+                          {externalUsers.map(u => (
+                            <TeamRow key={u.id} u={u}
+                              mode="external"
+                              profile={profile}
+                              projectMap={projectMap}
+                              onNavigateProject={(id) => navigate(`/projects/${id}`)}
+                              onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {/* Role reference */}
+                <div className="card card-pad">
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Role Permissions</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+                    {Object.entries(ROLES).map(([key, r]) => (
+                      <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <Pill cls={r.cls}>{r.label}</Pill>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>{r.desc}</div>
                       <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
@@ -300,7 +350,8 @@ export default function Settings() {
             </>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* Change Password Modal */}
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
@@ -609,5 +660,112 @@ function ChangePasswordModal({ onClose }) {
         </div>
       )}
     </Modal>
+  )
+}
+
+// ─── TeamRow ────────────────────────────────────────────────────────────────
+//
+// Shared row renderer used by both the CCG Team table and the External
+// Users table. The two tables differ in two columns:
+//   • mode='internal'  → Access column shows "X sections" or "X projects"
+//                        for site managers (the original behaviour)
+//   • mode='external'  → Access column becomes a Projects column showing
+//                        clickable pills, one per assigned project
+//
+// Everything else (Name, Email, Role, Added, Edit button) is identical
+// across modes.
+function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onEdit }) {
+  return (
+    <tr>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Avatar name={u.full_name} size="sm" />
+          <div>
+            <div style={{ fontWeight: 500 }}>{u.full_name}</div>
+            {u.id === profile?.id && <div style={{ fontSize: 11, color: 'var(--text3)' }}>You</div>}
+          </div>
+        </div>
+      </td>
+      <td className="td-muted">{u.email}</td>
+      <td><Pill cls={ROLES[u.role]?.cls || 'pill-gray'}>{ROLES[u.role]?.label || u.role}</Pill></td>
+      <td>
+        {mode === 'external'
+          ? <ExternalProjectsCell projectIds={u.projectIds || []} projectMap={projectMap} onNavigateProject={onNavigateProject} />
+          : <InternalAccessCell user={u} />
+        }
+      </td>
+      <td className="td-muted">{new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+      <td>
+        {u.id !== profile?.id && (
+          <button className="btn btn-sm" onClick={onEdit}>
+            <IconEdit size={13} /> Edit
+          </button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+// Internal table's Access cell — preserves the original behaviour:
+//   • Site Manager: "X projects" or amber "No projects assigned"
+//   • Anyone else:  generic "X sections" count from ROLE_PERMISSIONS.nav
+function InternalAccessCell({ user }) {
+  if (user.role === 'site_manager') {
+    return (
+      <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+        {user.projectIds?.length > 0
+          ? `${user.projectIds.length} project${user.projectIds.length > 1 ? 's' : ''}`
+          : <span style={{ color: 'var(--amber)' }}>No projects assigned</span>}
+      </span>
+    )
+  }
+  return (
+    <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+      {ROLE_PERMISSIONS[user.role]?.nav?.length || 0} sections
+    </span>
+  )
+}
+
+// External table's Projects cell — renders one clickable pill per assigned
+// project showing "Name · Ref". If the user has no projects assigned, shows
+// a muted "No projects assigned" hint (admin should edit and add some).
+function ExternalProjectsCell({ projectIds, projectMap, onNavigateProject }) {
+  if (!projectIds || projectIds.length === 0) {
+    return (
+      <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>
+        No projects assigned
+      </span>
+    )
+  }
+  // Resolve IDs against the projects map. Some IDs might point to deleted
+  // projects (orphan rows in user_project_access); render those with the
+  // raw UUID prefix as a fallback so the admin notices.
+  const resolved = projectIds.map(id => {
+    const p = projectMap.get(id)
+    return p ? { id, name: p.project_name, ref: p.project_ref } : { id, name: id.slice(0, 8) + '…', ref: null, orphan: true }
+  })
+
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 360 }}>
+      {resolved.map(p => (
+        <span key={p.id}
+          onClick={(e) => { e.stopPropagation(); onNavigateProject(p.id) }}
+          style={{
+            fontSize: 11,
+            padding: '2px 8px',
+            background: p.orphan ? 'var(--red-bg)' : 'var(--blue-bg)',
+            color: p.orphan ? 'var(--red)' : 'var(--blue)',
+            border: `0.5px solid ${p.orphan ? 'var(--red-border)' : 'var(--blue-border)'}`,
+            borderRadius: 4,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'background 0.15s',
+          }}
+          title={p.orphan ? 'Project no longer exists' : `Click to open ${p.name}`}
+        >
+          {p.name}{p.ref ? ` · ${p.ref}` : ''}
+        </span>
+      ))}
+    </div>
   )
 }
