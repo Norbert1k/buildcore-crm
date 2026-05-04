@@ -16,9 +16,17 @@ function IconClients() {
   )
 }
 
+// The logo swap needs to recognise ALL dark themes, not just 'dark'.
+// As new themes get added this set must be kept in sync with index.css.
+const DARK_THEMES = new Set(['dark', 'forest', 'slate'])
+function isDarkTheme() {
+  const t = document.documentElement.getAttribute('data-theme') || 'light'
+  return DARK_THEMES.has(t)
+}
+
 export default function Sidebar({ expCounts = {}, open, onClose }) {
   const { profile } = useAuth()
-  const [isDark, setIsDark] = useState(document.documentElement.getAttribute('data-theme') === 'dark')
+  const [isDark, setIsDark] = useState(isDarkTheme())
   const location = useLocation()
   const [expandedKeys, setExpandedKeys] = useState(() => {
     try {
@@ -47,7 +55,7 @@ export default function Sidebar({ expCounts = {}, open, onClose }) {
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      setIsDark(document.documentElement.getAttribute('data-theme') === 'dark')
+      setIsDark(isDarkTheme())
     })
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
     return () => observer.disconnect()
