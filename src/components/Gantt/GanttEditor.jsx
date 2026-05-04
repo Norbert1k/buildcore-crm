@@ -18,7 +18,25 @@ const HEADER_H = 56  // date axis area
 
 const COLORS = ['#448a40','#378ADD','#BA7517','#993C1D','#3B6D11','#534AB7','#888780','#c00','#1F8A70']
 
-export default function GanttEditor({ projectId, projectName, onClose, canEdit, initialTasks = null }) {
+// ─── Per-building programme support (Stage 2 of Chunk 2c-programme) ───────
+// `buildingOrdinal` selects which programme row this editor reads + writes:
+//   • null (default)        → project-wide programme (building_ordinal IS NULL).
+//                             Single-building projects always use this.
+//                             Multi-building projects use this when editing
+//                             the master/fallback programme that covers all
+//                             buildings.
+//   • 1, 2, 3, ...          → per-building programme matching the ordinal
+//                             from buildings.js (Residential Block / Sports
+//                             Hall / Changing Rooms etc).
+//
+// `programme_versions` is unchanged — versions belong to their parent
+// programme by `programme_id`. Each (project_id, building_ordinal) pair
+// has its own independent version history.
+//
+// `buildingLabel` is purely cosmetic — shown as a badge at the top of the
+// editor so the user can tell at a glance which programme they're editing.
+// Falls back to a generic "Building N" label if missing.
+export default function GanttEditor({ projectId, projectName, onClose, canEdit, initialTasks = null, buildingOrdinal = null, buildingLabel = null }) {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -37,15 +55,33 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
   const timelineScrollRef = useRef(null)
 
-  useEffect(() => { load() }, [projectId])
+  useEffect(() => { load() }, [projectId, buildingOrdinal])
 
   async function load() {
     setLoading(true)
     try {
-      // Find or create programme for this project
-      let { data: prog } = await supabase.from('programmes').select('*').eq('project_id', projectId).maybeSingle()
+      // Find or create programme for this (project, building_ordinal) pair.
+      // Building_ordinal IS NULL = project-wide programme; numeric = per-building.
+      // Supabase JS builder distinguishes IS NULL from = NULL — use .is(...) for
+      // the null case and .eq(...) for the numeric case. Without this, a
+      // .eq('building_ordinal', null) call would generate WHERE building_ordinal = NULL
+      // which never matches.
+      let progQuery = supabase.from('programmes').select('*').eq('project_id', projectId)
+      progQuery = (buildingOrdinal == null)
+        ? progQuery.is('building_ordinal', null)
+        : progQuery.eq('building_ordinal', buildingOrdinal)
+      let { data: prog } = await progQuery.maybeSingle()
+
       if (!prog && canEdit) {
-        const { data: newProg, error } = await supabase.from('programmes').insert({ project_id: projectId }).select().single()
+        const insertPayload = { project_id: projectId }
+        // Only set building_ordinal when we have one — leaving it absent makes
+        // Postgres assign NULL, which is what the project-wide programme wants.
+        if (buildingOrdinal != null) insertPayload.building_ordinal = buildingOrdinal
+        const { data: newProg, error } = await supabase
+          .from('programmes')
+          .insert(insertPayload)
+          .select()
+          .single()
         if (error) console.error('[Gantt] create programme failed:', error)
         prog = newProg
       }
@@ -214,15 +250,25 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
       drawLetterhead()
       doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(45, 45, 45)
-      doc.text(`Programme — ${projectName}`, 15, 34)
+      // Per-building scope appears in the header title so a user looking at
+      // the PDF later can tell which programme they're seeing.
+      const titleScope = buildingOrdinal != null
+        ? ` — ${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`}`
+        : ''
+      doc.text(`Programme — ${projectName}${titleScope}`, 15, 34)
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 100, 100)
       const versionLabel = activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'Working draft'
       doc.text(`${versionLabel} · Generated: ${new Date().toLocaleString('en-GB')}`, 15, 40)
 
-      // Build a versioned filename: '<Project> - Programme - v3 - 2026-04-27.pdf' or '... - draft - ...'
+      // Build a versioned filename: '<Project> - Programme - v3 - 2026-04-27.pdf' or '... - draft - ...'.
+      // For per-building programmes include the building label in the filename
+      // so multiple PDFs from the same project don't overwrite each other.
       const verPart = activeVersion ? `v${activeVersion.version_number}` : 'draft'
       const datePart = new Date().toISOString().slice(0, 10)
-      const rawFileName = `${projectName} - Programme - ${verPart} - ${datePart}.pdf`
+      const fileScope = buildingOrdinal != null
+        ? ` (${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`})`
+        : ''
+      const rawFileName = `${projectName} - Programme${fileScope} - ${verPart} - ${datePart}.pdf`
       // Strip filesystem-unsafe characters for both download and storage paths
       const safeFileName = rawFileName.replace(/[\/\\<>:"|?*]+/g, '').replace(/\s+/g, ' ').trim() || 'Programme.pdf'
 
@@ -544,8 +590,30 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       {/* Top toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            ⏱ Live Programme — {projectName}
+          <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              ⏱ Live Programme — {projectName}
+            </span>
+            {/* Per-building scope badge — only shown when this editor is
+                scoped to a specific building. Project-wide editing has no
+                badge so single-building projects look unchanged. */}
+            {buildingOrdinal != null && (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 4,
+                background: '#534AB720',
+                color: '#534AB7',
+                border: '0.5px solid #534AB7',
+                whiteSpace: 'nowrap',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}>
+                Building {String(buildingOrdinal).padStart(2, '0')}
+                {buildingLabel ? ` · ${buildingLabel}` : ''}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
             {activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'No saved versions yet'}
