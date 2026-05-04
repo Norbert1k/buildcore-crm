@@ -35,7 +35,11 @@ import { groupKeyFor } from './csaExtractor'
 //
 // Args:
 //   parsed       — output of extractClientCff()
-//   projectMeta  — { project_name, start_date, end_date } for headers/dates
+//   projectMeta  — {
+//     project_name, start_date, end_date,
+//     retention_pct (optional, default 0.03),
+//     release_pct (optional, default 0.015),
+//   }
 //
 // Returns: { blob, filename, summary, source: { line_items_count, ... } }
 export async function generateCffFromClient(parsed, projectMeta) {
@@ -140,6 +144,10 @@ export async function generateCffFromClient(parsed, projectMeta) {
     row_curves: {},
     row_manual: rowManual,
     pa_actuals: null,        // forecast-only output
+    // Pass retention / release through. Both are decimals (0.08 not 8).
+    // generateCff falls back to its 3% / 1.5% defaults when missing.
+    retention_pct: typeof projectMeta.retention_pct === 'number' ? projectMeta.retention_pct : undefined,
+    release_pct: typeof projectMeta.release_pct === 'number' ? projectMeta.release_pct : undefined,
   }
 
   const result = await generateCff(csaExtract, settings)
