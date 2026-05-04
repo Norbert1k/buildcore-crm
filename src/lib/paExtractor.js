@@ -26,6 +26,8 @@
 // existing Excel preview component in ProjectDocumentation.jsx.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { sortPaRowsByPaNumber } from './paOrdering'
+
 async function loadSheetJs() {
   if (window.XLSX) return window.XLSX
   const script = document.createElement('script')
@@ -285,8 +287,6 @@ export async function fetchLatestPaForSubfolder(supabase, projectId, paSubfolder
       .select('storage_path, file_name, created_at')
       .eq('project_id', projectId)
       .eq('folder_key', '02-payment-application')
-      .order('created_at', { ascending: false })
-      .limit(1)
     // NULL vs string handling: PostgREST treats .eq(null) and .is(null)
     // differently. Use .is() for null, .eq() for an actual key.
     if (paSubfolderKey == null) q = q.is('subfolder_key', null)
@@ -296,9 +296,18 @@ export async function fetchLatestPaForSubfolder(supabase, projectId, paSubfolder
     if (error) throw error
     if (!rows || rows.length === 0) return null
 
+    // xlsx-only — non-xlsx files (e.g. supporting PDFs) aren't PAs.
+    const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name))
+    if (xlsxRows.length === 0) return null
+
+    // Sort by parsed PA number DESC, take the highest. Reupload-stable —
+    // doesn't depend on created_at unless a filename can't be parsed.
+    const sorted = sortPaRowsByPaNumber(xlsxRows, 'desc')
+    const latest = sorted[0]
+
     const { data: signed, error: sErr } = await supabase.storage
       .from('project-docs')
-      .createSignedUrl(rows[0].storage_path, 600)
+      .createSignedUrl(latest.storage_path, 600)
     if (sErr || !signed?.signedUrl) return null
 
     const res = await fetch(signed.signedUrl)
@@ -334,21 +343,26 @@ export async function fetchLatestPaForProject(supabase, projectId) {
 export async function fetchAllProjectPas(supabase, projectId) {
   try {
     // Pull every PA file's metadata in a single query, then group by
-    // subfolder_key to find the latest per location. More efficient than
-    // multiple round-trips.
+    // subfolder_key to find the latest per location.
     const { data: rows, error } = await supabase
       .from('project_doc_files')
       .select('storage_path, file_name, subfolder_key, created_at')
       .eq('project_id', projectId)
       .eq('folder_key', '02-payment-application')
-      .order('created_at', { ascending: false })
     if (error) throw error
     if (!rows || rows.length === 0) return []
 
+    // xlsx-only — non-xlsx files (e.g. supporting PDFs) aren't PAs.
+    const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name))
+    if (xlsxRows.length === 0) return []
+
+    // Sort by parsed PA number DESC (latest first). Reupload-stable.
+    const sorted = sortPaRowsByPaNumber(xlsxRows, 'desc')
+
     // Group by subfolder_key (null = root). Within each group keep the
-    // first row, since rows are already ordered DESC by created_at.
+    // first row, since rows are now sorted DESC by parsed PA number.
     const latestPerLocation = new Map()  // key: subfolder_key (string or '__root__')
-    for (const row of rows) {
+    for (const row of sorted) {
       const k = row.subfolder_key == null ? '__root__' : row.subfolder_key
       if (!latestPerLocation.has(k)) latestPerLocation.set(k, row)
     }
