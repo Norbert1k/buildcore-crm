@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import ProjectModal from '../components/ProjectModal'
+import { loadDashboardFinancials, buildInstantFallback } from '../lib/dashboardFinancials'
 
 function calcDuration(start, end) {
   if (!start || !end) return null
@@ -25,6 +26,11 @@ export default function Projects() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('proj_live_open') === 'true')
   const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('proj_tender_open') === 'true')
+  // Dashboard financials — null until first projects load completes. Once
+  // projects are loaded, dashFin starts as the buildInstantFallback shape
+  // (instant, derived from project.value column) then gets replaced by the
+  // real CFF/PA-aggregated shape as background fetches complete.
+  const [dashFin, setDashFin] = useState(null)
   const navigate = useNavigate()
   const { can, role } = useAuth()
   const isAdmin = role === 'admin'
@@ -33,6 +39,54 @@ export default function Projects() {
   function toggleTender() { setTenderOpen(v => { localStorage.setItem('proj_tender_open', !v); return !v }) }
 
   useEffect(() => { load() }, [])
+
+  // Active projects only — derived from the loaded list. We compute it
+  // synchronously here (cheap filter) so we can drive the dashboard load
+  // from a stable reference.
+  const activeProjects = useMemo(
+    () => projects.filter(p => p.status === 'active'),
+    [projects]
+  )
+
+  // Load dashboard financials whenever the set of active projects changes.
+  //
+  // Two-stage load:
+  //   1. Synchronously build a fallback shape from project.value so the
+  //      dashboard renders something instantly (no flicker, no blank cards)
+  //   2. Asynchronously fetch + parse PAs and CFFs for every active
+  //      project, updating dashFin as each completes (incremental progress)
+  //
+  // The cache layer in dashboardFinancials.js means subsequent visits with
+  // unchanged files are near-instant.
+  useEffect(() => {
+    if (loading) return    // wait for projects load to finish
+    if (activeProjects.length === 0) {
+      setDashFin(buildInstantFallback([]))
+      return
+    }
+
+    let cancelled = false
+    setDashFin(buildInstantFallback(activeProjects))
+
+    loadDashboardFinancials(supabase, activeProjects, ({ partial }) => {
+      // Incremental progress callback — update with rolled-up numbers as
+      // each project finishes. Marked as still-loading so the UI can show
+      // a subtle indicator until the final resolve.
+      if (cancelled) return
+      setDashFin({ ...partial, loaded: false, loading_count: activeProjects.length })
+    }).then(final => {
+      if (cancelled) return
+      setDashFin(final)
+    }).catch(err => {
+      console.warn('[Projects] dashboard load failed:', err)
+      if (!cancelled) setDashFin(prev => prev || buildInstantFallback(activeProjects))
+    })
+
+    return () => { cancelled = true }
+    // We intentionally key on the joined IDs string rather than the array
+    // reference so re-renders that don't change membership don't re-fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, activeProjects.map(p => p.id).join('|')])
 
   async function load() {
     setLoading(true)
@@ -57,8 +111,6 @@ export default function Projects() {
   const counts = ['active', 'tender', 'on_hold', 'completed', 'cancelled'].reduce((acc, s) => {
     acc[s] = projects.filter(p => p.status === s).length; return acc
   }, {})
-  const activeValue = projects.filter(p => p.status === 'active').reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0)
-  const tenderValue = tenderProjects.reduce((sum, p) => sum + (parseFloat(p.value) || 0), 0)
 
   return (
     <div>
@@ -80,19 +132,19 @@ export default function Projects() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 20 }}>
-        <div className="stat-card"><div className="stat-label">Active</div><div className="stat-value green">{counts.active}</div></div>
-        <div className="stat-card"><div className="stat-label">Tender</div><div className="stat-value">{counts.tender}</div></div>
-        <div className="stat-card"><div className="stat-label">On Hold</div><div className="stat-value amber">{counts.on_hold}</div></div>
-        <div className="stat-card"><div className="stat-label">Completed</div><div className="stat-value">{counts.completed}</div></div>
-        {can('view_project_value') && (
-        <div className="stat-card" style={{ borderTop: '3px solid var(--green)', gridColumn: 'span 2' }}>
-          <div className="stat-label">Active Projects Value</div>
-          <div className="stat-value green" style={{ fontSize: 22 }}>{activeValue > 0 ? formatCurrency(activeValue) : '—'}</div>
-          {tenderValue > 0 && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>+ {formatCurrency(tenderValue)} in tender</div>}
-        </div>
-        )}
-      </div>
+      {/* Status pills + portfolio dashboard. Replaces the previous 5-stat
+          card row. Status counts are now compact pills at the top; below
+          them sits a four-card KPI strip (total contract / claimed /
+          variations / remaining), a monthly cashflow chart, an expected-
+          billings panel, and a clickable per-project bars list. All
+          financial data is pulled from PAs (claimed) and CFFs (forecast)
+          and aggregated client-side via dashboardFinancials.js. */}
+      <ProjectsDashboard
+        counts={counts}
+        dashFin={dashFin}
+        canViewValue={can('view_project_value')}
+        onProjectClick={(id) => navigate(`/projects/${id}`)}
+      />
 
       {loading ? <Spinner /> : projects.length === 0 ? (
         <EmptyState icon="🏗️" title="No projects" message="Create your first project to start assigning subcontractors." action={can('manage_projects') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> New Project</button>} />
@@ -257,4 +309,324 @@ export default function Projects() {
       />
     </div>
   )
+}
+
+// ─── Projects Dashboard ─────────────────────────────────────────────────────
+//
+// Renders the new portfolio summary block at the top of the Projects page:
+//   • Status pills row (Active / Tender / On Hold / Completed)
+//   • 4-card KPI strip (Total contract / Claimed / Variations / Remaining)
+//   • Monthly cashflow chart (next 12 months, summed across active projects)
+//   • Expected billings panel (next 30/60/90 days)
+//   • Per-project rows (clickable → navigates to project detail)
+//
+// All data flows from the `dashFin` prop populated by dashboardFinancials.js.
+// While the async fetch is in progress, dashFin.loaded is false and a
+// "loading live data" indicator appears in the KPI strip.
+function ProjectsDashboard({ counts, dashFin, canViewValue, onProjectClick }) {
+  const totals = dashFin?.totals || {
+    total_contract: 0, claimed_to_date: 0,
+    variations_total: 0, variations_count: 0, remaining: 0,
+  }
+  const billings = dashFin?.billings || { d30: 0, d60: 0, d90: 0 }
+  const monthlyForecast = dashFin?.monthly_forecast || []
+  const projects = dashFin?.projects || []
+  const isLoading = dashFin && !dashFin.loaded
+
+  return (
+    <div style={{
+      background: 'var(--surface2)',
+      borderRadius: 10,
+      padding: 14,
+      marginBottom: 20,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 12,
+    }}>
+      {/* Status pills row + a small "loading" indicator on the right while
+          PA/CFF parsing is in progress. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <StatusPill label={`${counts.active} active`} accent="green" />
+          <StatusPill label={`${counts.tender} tender`} />
+          <StatusPill label={`${counts.on_hold} on hold`} accent={counts.on_hold > 0 ? 'amber' : null} />
+          <StatusPill label={`${counts.completed} completed`} />
+        </div>
+        {isLoading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text3)' }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: 'var(--green)', opacity: 0.6,
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }} />
+            Loading live financial data…
+          </div>
+        )}
+      </div>
+
+      {canViewValue && (
+        <>
+          {/* KPI strip */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+            <KpiCard label="Total contract" value={fmtMoney(totals.total_contract)} />
+            <KpiCard label="Claimed to date" value={fmtMoney(totals.claimed_to_date)} accent="green"
+              caption={totals.total_contract > 0
+                ? `${Math.round((totals.claimed_to_date / totals.total_contract) * 100)}% of total`
+                : null} />
+            <KpiCard label="Variations" value={fmtMoney(totals.variations_total)}
+              caption={totals.variations_count > 0
+                ? `${totals.variations_count} VO${totals.variations_count === 1 ? '' : 's'}`
+                : 'None issued'} />
+            <KpiCard label="Remaining" value={fmtMoney(totals.remaining)}
+              caption={`across ${counts.active} active`} />
+          </div>
+
+          {/* Cashflow chart + billings panel side-by-side. Stacks on narrow. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)', gap: 10 }}>
+            <CashflowChartCard data={monthlyForecast} />
+            <BillingsCard billings={billings} />
+          </div>
+
+          {/* Per-project bars */}
+          {projects.length > 0 && (
+            <PerProjectBars projects={projects} onProjectClick={onProjectClick} />
+          )}
+        </>
+      )}
+
+      {/* Pulse animation for the loading indicator. Defined inline so the
+          component is self-contained and we don't have to touch global CSS. */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// Compact status pill — used for active/tender/on-hold/completed counts.
+function StatusPill({ label, accent }) {
+  const accentMap = {
+    green: { bg: 'rgba(72, 138, 64, 0.15)', color: '#448a40', border: 'rgba(72, 138, 64, 0.3)' },
+    amber: { bg: 'rgba(202, 138, 4, 0.15)', color: '#ca8a04', border: 'rgba(202, 138, 4, 0.3)' },
+  }
+  const styles = accent && accentMap[accent] ? accentMap[accent] : null
+  return (
+    <span style={{
+      fontSize: 11,
+      fontWeight: 500,
+      padding: '4px 10px',
+      borderRadius: 99,
+      background: styles?.bg || 'var(--surface)',
+      color: styles?.color || 'var(--text2)',
+      border: `0.5px solid ${styles?.border || 'var(--border)'}`,
+      whiteSpace: 'nowrap',
+    }}>
+      {label}
+    </span>
+  )
+}
+
+// 4-up KPI card. Optional accent tint on the value (green for claimed).
+function KpiCard({ label, value, accent, caption }) {
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '0.5px solid var(--border)',
+      borderRadius: 8,
+      padding: '10px 14px',
+    }}>
+      <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 20, fontWeight: 600,
+        color: accent === 'green' ? 'var(--green)' : 'var(--text)',
+      }}>
+        {value}
+      </div>
+      {caption && (
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{caption}</div>
+      )}
+    </div>
+  )
+}
+
+// Monthly cashflow chart — vertical bars showing monthly forecast (gross
+// valuation) summed across active projects, for the next 12 months from
+// today. Past months are darker green (claimed already), future months
+// lighter (forecast). For now we treat everything in monthly_forecast as
+// forecast since CFFs don't carry actuals. Past-vs-future tint comes from
+// whether the bucket is before or after today's month.
+function CashflowChartCard({ data }) {
+  // Slice to the next 12 months from today's month onwards, plus the
+  // immediately-prior 1 for context. If the underlying data has fewer
+  // than 12 months we just show what's there.
+  const today = new Date()
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+  const sliced = useMemo(() => {
+    if (!data || data.length === 0) return []
+    // Find the index of today's month, then take that ± window
+    const todayIdx = data.findIndex(p => p.date >= todayKey)
+    const start = todayIdx === -1 ? 0 : Math.max(0, todayIdx - 1)
+    return data.slice(start, start + 12)
+  }, [data, todayKey])
+
+  const maxAmount = sliced.reduce((m, p) => Math.max(m, p.amount), 0) || 1
+
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '0.5px solid var(--border)',
+      borderRadius: 8,
+      padding: '12px 14px',
+      minHeight: 130,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>Monthly cashflow forecast</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+          {sliced.length > 0 ? `${sliced.length} month${sliced.length === 1 ? '' : 's'}` : 'No CFF data yet'}
+        </div>
+      </div>
+      {sliced.length === 0 ? (
+        <div style={{ fontSize: 11, color: 'var(--text3)', padding: '20px 0', textAlign: 'center' }}>
+          Generate a CFF for any active project to populate this chart.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 70 }}>
+            {sliced.map(point => {
+              const heightPct = Math.max(2, (point.amount / maxAmount) * 100)
+              const isPast = point.date < todayKey
+              return (
+                <div key={point.date} title={`${fmtMonth(point.date)}: ${fmtMoney(point.amount)}`}
+                  style={{
+                    flex: 1,
+                    background: isPast ? '#448a40' : '#86b67e',
+                    height: `${heightPct}%`,
+                    borderRadius: '2px 2px 0 0',
+                    minHeight: 2,
+                  }} />
+              )
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>
+            {sliced.map(point => (
+              <div key={point.date} style={{ flex: 1, fontSize: 9, color: 'var(--text3)', textAlign: 'center' }}>
+                {fmtMonthShort(point.date)}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// Billings windows panel — next 30/60/90 days of expected forecast.
+function BillingsCard({ billings }) {
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '0.5px solid var(--border)',
+      borderRadius: 8,
+      padding: '12px 14px',
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Expected billings</div>
+      <BillingsRow label="Next 30 days" value={billings.d30} accent="green" />
+      <BillingsRow label="Next 60 days" value={billings.d60} />
+      <BillingsRow label="Next 90 days" value={billings.d90} />
+    </div>
+  )
+}
+
+function BillingsRow({ label, value, accent }) {
+  return (
+    <div style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'baseline',
+      padding: '5px 0',
+      borderBottom: '0.5px solid var(--border)',
+    }}>
+      <span style={{ fontSize: 11, color: 'var(--text2)' }}>{label}</span>
+      <span style={{
+        fontSize: 13,
+        fontWeight: 500,
+        color: accent === 'green' ? 'var(--green)' : 'var(--text)',
+      }}>
+        {fmtMoney(value)}
+      </span>
+    </div>
+  )
+}
+
+// Per-project rows with progress bars showing claimed-vs-total. Each row
+// is clickable and navigates to the project's detail page on click.
+function PerProjectBars({ projects, onProjectClick }) {
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '0.5px solid var(--border)',
+      borderRadius: 8,
+      padding: '12px 14px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>Per-project: claimed vs total</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)' }}>{projects.length} active</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {projects.map(p => (
+          <div key={p.id}
+            onClick={() => onProjectClick(p.id)}
+            style={{
+              cursor: 'pointer',
+              padding: '4px 6px',
+              borderRadius: 6,
+              transition: 'background 0.15s',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface2)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+              <span style={{ fontWeight: 500 }}>{p.project_name}</span>
+              <span style={{ color: 'var(--text3)' }}>
+                {fmtMoney(p.claimed_to_date)} / {fmtMoney(p.total_contract)} ({Math.round(p.pct_claimed)}%)
+              </span>
+            </div>
+            <div style={{ height: 5, borderRadius: 3, background: 'var(--surface2)', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%',
+                width: `${Math.max(0, Math.min(100, p.pct_claimed))}%`,
+                background: '#448a40',
+                transition: 'width 0.3s ease',
+              }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+function fmtMoney(n) {
+  if (!n || !Number.isFinite(n)) return '£0'
+  if (Math.abs(n) >= 1_000_000) return `£${(n / 1_000_000).toFixed(1)}M`
+  if (Math.abs(n) >= 1_000) return `£${(n / 1_000).toFixed(0)}K`
+  return `£${Math.round(n).toLocaleString()}`
+}
+
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function fmtMonth(ymd) {
+  const [y, m] = ymd.split('-')
+  return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y.slice(2)}`
+}
+
+function fmtMonthShort(ymd) {
+  const [, m] = ymd.split('-')
+  return MONTH_NAMES[parseInt(m, 10) - 1]
 }
