@@ -18,7 +18,11 @@
 //       remaining:         number,
 //     },
 //     monthly_forecast: [{ date: 'YYYY-MM-01', amount: number }, ...],
-//     billings: { d30: number, d60: number, d90: number },
+//     billings: [
+//       { date: 'YYYY-MM-01', amount: number },   // Next valuation (this month)
+//       { date: 'YYYY-MM-01', amount: number },   // Following (next month)
+//       { date: 'YYYY-MM-01', amount: number },   // Third upcoming (month after)
+//     ],
 //     projects: [
 //       { id, project_name, project_ref, total_contract, claimed_to_date,
 //         pct_claimed, has_real_data }, ...
@@ -207,7 +211,7 @@ export async function loadDashboardFinancials(supabase, activeProjects, onProgre
         remaining: 0,
       },
       monthly_forecast: [],
-      billings: { d30: 0, d60: 0, d90: 0 },
+      billings: zeroBillings(),
       projects: [],
     }
   }
@@ -255,6 +259,20 @@ export async function loadDashboardFinancials(supabase, activeProjects, onProgre
   return rollUp(projectResults.filter(Boolean))
 }
 
+// Build the empty 3-entry billings array for current/next/+2 months. Used
+// by both the empty case and the instant fallback so the UI can always
+// render 3 rows even before any CFF data has loaded.
+function zeroBillings() {
+  const today = new Date()
+  const out = []
+  for (let offset = 0; offset < 3; offset++) {
+    const target = new Date(today.getFullYear(), today.getMonth() + offset, 1)
+    const targetKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-01`
+    out.push({ date: targetKey, amount: 0 })
+  }
+  return out
+}
+
 // ── Roll-up: merge per-project shapes into the dashboard shape ────────────
 function rollUp(projects) {
   const totals = projects.reduce((acc, p) => ({
@@ -277,24 +295,33 @@ function rollUp(projects) {
     .map(([date, amount]) => ({ date, amount }))
     .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
-  // Billings windows (next 30/60/90 days from today). We take any FUTURE
-  // monthly bucket whose end-of-month falls within the window. A bucket
-  // dated 2026-05-01 covers May; if today is 2026-05-04 and the window is
-  // 30 days, May (£X) is in. June end-of-month is June 30 — that's >30
-  // days from May 4 so June goes into the d60/d90 windows but not d30.
+  // Upcoming valuations — next 3 PA submissions across the portfolio.
+  //
+  // Each PA is submitted roughly monthly per project. The CFF's monthly
+  // forecast for a given calendar month is the expected gross valuation
+  // for that month's PA. We pick:
+  //   • Next valuation       = forecast for the CURRENT month (the PA
+  //                             you're about to submit for this month's
+  //                             work — typically end-of-month submission)
+  //   • Following valuation  = next calendar month
+  //   • Third upcoming       = month after that
+  //
+  // Months in monthly_forecast are keyed YYYY-MM-01. We find the bucket
+  // whose date >= today's month-start, then take that and the next 2.
+  // If a project has no CFF its contribution is 0 — the figure is the
+  // sum across whatever projects HAVE forecast data for that month.
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const windows = { d30: 0, d60: 0, d90: 0 }
-  for (const point of monthly_forecast) {
-    const monthStart = new Date(point.date + 'T00:00:00')
-    if (isNaN(monthStart.getTime())) continue
-    // End of that month = first of next month minus 1 day
-    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0)
-    if (monthEnd < today) continue   // entirely in the past, skip
-    const daysOut = Math.ceil((monthEnd - today) / (1000 * 60 * 60 * 24))
-    if (daysOut <= 30) windows.d30 += point.amount
-    if (daysOut <= 60) windows.d60 += point.amount
-    if (daysOut <= 90) windows.d90 += point.amount
+
+  const billings = []
+  for (let offset = 0; offset < 3; offset++) {
+    const target = new Date(today.getFullYear(), today.getMonth() + offset, 1)
+    const targetKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-01`
+    const found = monthly_forecast.find(p => p.date === targetKey)
+    billings.push({
+      date: targetKey,
+      amount: found ? found.amount : 0,
+    })
   }
 
   return {
@@ -302,7 +329,7 @@ function rollUp(projects) {
     loading_count: 0,
     totals,
     monthly_forecast,
-    billings: windows,
+    billings,
     projects: projects.slice().sort((a, b) =>
       (b.total_contract || 0) - (a.total_contract || 0)
     ),
@@ -321,7 +348,7 @@ export function buildInstantFallback(activeProjects) {
         variations_total: 0, variations_count: 0, remaining: 0,
       },
       monthly_forecast: [],
-      billings: { d30: 0, d60: 0, d90: 0 },
+      billings: zeroBillings(),
       projects: [],
     }
   }
@@ -353,7 +380,7 @@ export function buildInstantFallback(activeProjects) {
       remaining: total,
     },
     monthly_forecast: [],
-    billings: { d30: 0, d60: 0, d90: 0 },
+    billings: zeroBillings(),
     projects: projects.sort((a, b) => b.total_contract - a.total_contract),
   }
 }
