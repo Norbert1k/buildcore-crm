@@ -4,6 +4,21 @@ import { ROLES, ROLE_PERMISSIONS, sortBy } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, PasswordInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
+// Theme picker options. Each entry mirrors a [data-theme="..."] block in
+// index.css. The preview object has the four colours rendered in the swatch
+// tile (page bg, sidebar, primary text, accent pill bg + fg). These are
+// hardcoded RGB values matching the corresponding CSS — keeping them in
+// sync is part of the change checklist whenever a theme palette is edited.
+const THEME_OPTIONS = [
+  { value: 'light',  label: 'Light',  preview: { bg: '#F5F4F0', sidebar: '#FFFFFF', border: '#E2E0D8', text: '#1C1B18', accent: '#448a40', accentBg: '#e8f5e7' } },
+  { value: 'dark',   label: 'Dark',   preview: { bg: '#0f1117', sidebar: '#13151f', border: 'rgba(255,255,255,0.07)', text: '#e8e9f0', accent: '#5cb85c', accentBg: 'rgba(68,138,64,0.15)' } },
+  { value: 'rose',   label: 'Rose',   preview: { bg: '#FBF4F1', sidebar: '#FFFFFF', border: '#F0DCD3', text: '#4A1B0C', accent: '#993556', accentBg: '#FBEAF0' } },
+  { value: 'mint',   label: 'Mint',   preview: { bg: '#EFF5F1', sidebar: '#FBFCFB', border: '#D5E5DD', text: '#04342C', accent: '#0F6E56', accentBg: '#E1F5EE' } },
+  { value: 'forest', label: 'Forest', preview: { bg: '#0F1A14', sidebar: '#14241B', border: 'rgba(159,225,203,0.10)', text: '#E1F5EE', accent: '#5DCAA5', accentBg: 'rgba(29,158,117,0.18)' } },
+  { value: 'sand',   label: 'Sand',   preview: { bg: '#F4EEDD', sidebar: '#FBF7EB', border: '#E2D5B5', text: '#412402', accent: '#854F0B', accentBg: '#FAEEDA' } },
+  { value: 'slate',  label: 'Slate',  preview: { bg: '#1A1E2A', sidebar: '#20253A', border: 'rgba(133,183,235,0.10)', text: '#E6F1FB', accent: '#85B7EB', accentBg: 'rgba(55,138,221,0.18)' } },
+]
+
 export default function Settings() {
   const { profile, can, signOut, setTheme } = useAuth()
   const [activeTheme, setActiveTheme] = useState(() => document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'light')
@@ -127,20 +142,82 @@ export default function Settings() {
               <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{ROLES[profile?.role]?.desc}</div>
             </div>
           </div>
-          {/* Theme switcher */}
+          {/* Theme switcher — 7 themes, displayed as a swatch grid where
+              each tile previews the palette (sidebar + surface + accent
+              dot). The active theme is marked with a ring and a small
+              "selected" indicator in the top-right. */}
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Appearance</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[
-                { value: 'light', label: '☀️ Light', },
-                { value: 'dark',  label: '🌙 Dark', },
-              ].map(t => (
-                <button key={t.value} onClick={() => { setTheme(t.value); setActiveTheme(t.value) }}
-                  className={`btn btn-sm ${activeTheme === t.value ? 'btn-primary' : ''}`}
-                  style={{ minWidth: 90 }}>
-                  {t.label}
-                </button>
-              ))}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+              gap: 10,
+            }}>
+              {THEME_OPTIONS.map(t => {
+                const isActive = activeTheme === t.value
+                return (
+                  <button key={t.value}
+                    onClick={() => { setTheme(t.value); setActiveTheme(t.value) }}
+                    style={{
+                      position: 'relative',
+                      padding: 0,
+                      borderRadius: 10,
+                      border: isActive ? '2px solid var(--accent)' : '1px solid var(--border)',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      transition: 'transform .15s, border-color .15s',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    {/* Mini palette preview: sidebar bar + main surface + accent pill */}
+                    <div style={{ display: 'flex', height: 56, background: t.preview.bg }}>
+                      <div style={{ width: '32%', background: t.preview.sidebar, borderRight: `1px solid ${t.preview.border}` }} />
+                      <div style={{ flex: 1, padding: 6, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div style={{ height: 4, width: '70%', background: t.preview.text, opacity: 0.7, borderRadius: 2 }} />
+                        <div style={{
+                          alignSelf: 'flex-start',
+                          padding: '2px 6px',
+                          fontSize: 8,
+                          background: t.preview.accentBg,
+                          color: t.preview.accent,
+                          borderRadius: 99,
+                          fontWeight: 600,
+                        }}>active</div>
+                      </div>
+                    </div>
+                    {/* Label */}
+                    <div style={{
+                      padding: '6px 8px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--text)',
+                      background: 'var(--surface)',
+                      textAlign: 'left',
+                    }}>
+                      {t.label}
+                    </div>
+                    {/* Active indicator */}
+                    {isActive && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 6,
+                        right: 6,
+                        width: 18, height: 18,
+                        borderRadius: '50%',
+                        background: 'var(--accent)',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}>✓</div>
+                    )}
+                  </button>
+                )
+              })}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
