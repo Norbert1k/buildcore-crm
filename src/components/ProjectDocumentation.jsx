@@ -7,7 +7,6 @@ import ProgressReportEditor, { generateProgressReportPdf } from './ProgressRepor
 import ProjectPhotos from './ProjectPhotos'
 import FileLightbox from './FileLightbox'
 import CffGeneratorModal from './CffGeneratorModal'
-import { resolveBuildings, findBuildingByCsaSubfolder } from '../lib/buildings'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -323,6 +322,33 @@ function ConfirmDlg({ message, onOk, onCancel }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// One row in the per-building programme picker. Used only by the picker
+// modal in PrimeFolderSection; lives here for proximity with other small
+// shared visual helpers.
+function PickerOption({ label, hint, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding: '10px 12px',
+        borderRadius: 6,
+        border: 'none',
+        background: 'transparent',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface2)' }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{label}</div>
+      {hint && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{hint}</div>}
+    </button>
   )
 }
 
@@ -904,28 +930,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
   // 'csa' subfolder, lets the user pick a distribution curve, and writes a
   // styled xlsx straight back into this subfolder.
   const isCffSubfolder = folder.key === '00-project-information' && subfolder.key === 'cff'
-  // Per-building CSA subfolder — a CUSTOM subfolder created INSIDE the master
-  // 'csa' template subfolder (e.g. Merton's "01. CSA - Residential Block").
-  // Detected by: this subfolder is custom (user-created) AND its parent is
-  // exactly 'csa'. When true, we surface a "Generate CFF" button that opens
-  // the CFF modal scoped to the matching building (resolved by ordinal). The
-  // generated CFF lands in that building's matching CFF subfolder.
-  //
-  // This is independent of `isCffSubfolder` — they trigger different button
-  // behaviours and never overlap (CSA child vs. CFF master).
-  const isPerBuildingCsaSubfolder = (
-    folder.key === '00-project-information'
-    && subfolder.custom === true
-    && subfolder.parent_key === 'csa'
-  )
   const [showCffGenerator, setShowCffGenerator] = useState(false)
-  // When opening the CFF modal from a per-building CSA, we resolve the
-  // building structure first so the modal knows which CFF subfolder to
-  // upload to, which PAs to scan, etc. Stored in state so the modal can
-  // mount with the resolved Building object as scopedToBuilding prop.
-  const [scopedBuilding, setScopedBuilding] = useState(null)
-  const [resolvingBuilding, setResolvingBuilding] = useState(false)
-  const [buildingResolveError, setBuildingResolveError] = useState('')
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -1031,56 +1036,6 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
     const { data } = await supabase.from('project_doc_folders').select('*')
       .eq('project_id', projectId).eq('parent_key', subfolder.key).order('created_at')
     setChildFolders(data || [])
-  }
-
-  // Open the CFF generator scoped to a building. Called from the per-building
-  // CSA subfolder header. Steps:
-  //   1. Resolve the project's full building structure (ordinal-based)
-  //   2. Find the building whose CSA subfolder matches THIS subfolder.key
-  //   3. Validate the building has a matching CFF subfolder (by ordinal)
-  //   4. Mount the modal with scopedToBuilding = the resolved Building
-  //
-  // If step 2 fails (building helper returned [] or this CSA isn't matched),
-  // the project is misconfigured — the CSA subfolder doesn't have a leading
-  // ordinal that pairs with a PA. We tell the user to rename / check folders.
-  //
-  // If step 3 fails (no matching CFF subfolder), per the design doc we BLOCK
-  // generation and ask the user to create the matching CFF subfolder. This
-  // is the safest behaviour — auto-creating folders silently could surprise
-  // the user, and falling back to the master cff subfolder mixes
-  // building-specific and project-wide CFFs.
-  async function openCffForBuilding() {
-    if (resolvingBuilding) return
-    setResolvingBuilding(true)
-    setBuildingResolveError('')
-    try {
-      const buildings = await resolveBuildings(supabase, projectId)
-      const building = findBuildingByCsaSubfolder(buildings, subfolder.key)
-      if (!building) {
-        setBuildingResolveError(
-          `Couldn't match this CSA subfolder to a building. Make sure the ` +
-          `subfolder name starts with "01.", "02." etc. and that a matching ` +
-          `Payment Application subfolder exists.`
-        )
-        return
-      }
-      if (!building.subfolders.cff) {
-        setBuildingResolveError(
-          `Can't generate yet — there's no matching CFF subfolder for ` +
-          `"${building.name}". Open the Cashflow Forecast folder and create ` +
-          `a subfolder starting with "${String(building.ordinal).padStart(2, '0')}." ` +
-          `(e.g. "${String(building.ordinal).padStart(2, '0')}. CFF - ${building.name}").`
-        )
-        return
-      }
-      setScopedBuilding(building)
-      setShowCffGenerator(true)
-    } catch (err) {
-      console.warn('[CFF building resolve] failed:', err)
-      setBuildingResolveError(err.message || 'Could not resolve building structure')
-    } finally {
-      setResolvingBuilding(false)
-    }
   }
 
   // Load this sub-building's progress reports. Filter is exact match on the
@@ -1380,23 +1335,6 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                     {fileCount > 0 ? 'Re-generate CFF' : 'Generate CFF'}
                   </button>
                 )}
-                {/* Per-building "Generate CFF" — appears on each per-building
-                    CSA subfolder header (e.g. Merton's "01. CSA - Residential
-                    Block"). Click resolves the matching building structure,
-                    validates a matching CFF subfolder exists, then opens the
-                    CFF modal scoped to that building. Same green styling as
-                    the master Generate CFF for visual consistency. */}
-                {isPerBuildingCsaSubfolder && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); openCffForBuilding() }}
-                    disabled={resolvingBuilding}
-                    style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#448a40', borderColor: '#448a40', opacity: resolvingBuilding ? 0.5 : 1 }}
-                    title="Generate a cashflow forecast scoped to this sub-building"
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                    {resolvingBuilding ? 'Resolving…' : 'Generate CFF'}
-                  </button>
-                )}
                 <button onClick={zipSubfolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3 }} title="Zip">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
                   Zip
@@ -1424,32 +1362,6 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
           <polyline points="6 9 12 15 18 9"/>
         </svg>
       </div>
-      {/* Inline error banner — only shown when the per-building CSA "Generate
-          CFF" button hits a resolution error (no matching building, no matching
-          CFF subfolder, etc). Sits below the header so it's visible without
-          expanding the folder. Dismissible by clicking ✕ — error clears,
-          user can retry. */}
-      {buildingResolveError && (
-        <div style={{
-          marginLeft: 14 + depth * 12,
-          marginTop: 4, marginBottom: 4,
-          padding: '8px 12px',
-          fontSize: 12, lineHeight: 1.5,
-          background: 'rgba(184, 122, 0, 0.1)',
-          border: '0.5px solid #b87a00',
-          borderRadius: 5,
-          color: 'var(--text)',
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-        }}>
-          <span style={{ color: '#b87a00', flexShrink: 0, fontSize: 13 }}>⚠</span>
-          <span style={{ flex: 1 }}>{buildingResolveError}</span>
-          <button
-            onClick={(e) => { e.stopPropagation(); setBuildingResolveError('') }}
-            style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 14, padding: 0, lineHeight: 1 }}
-            title="Dismiss"
-          >✕</button>
-        </div>
-      )}
       {open && isPhotosSubfolder && (
         <div style={{ marginLeft: 14 + depth * 12, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 10, paddingBottom: 10 }}>
           {/* Photos subfolder is fed by Telegram — renders its own folder grid,
@@ -1471,7 +1383,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             moveTargets={childFolders.map(cf => ({ key: cf.folder_key, label: cf.label }))} />
           {childFolders.map(cf => (
             <SubfolderSection key={cf.folder_key} projectId={projectId} projectName={projectName} folder={folder}
-              subfolder={{ key: cf.folder_key, label: cf.label, custom: true, parent_key: cf.parent_key }}
+              subfolder={{ key: cf.folder_key, label: cf.label, custom: true }}
               canManage={canManage} viewMode={viewMode} onPreview={onPreview}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
               depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree} />
@@ -1586,27 +1498,15 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         />
       )}
 
-      {/* CFF Generator — mounts in two cases:
-          1. User clicked "Generate CFF" on the master cff subfolder (single-
-             building flow, scopedToBuilding=null, behaves as before)
-          2. User clicked "Generate CFF" on a per-building CSA subfolder, the
-             building was resolved successfully, and scopedBuilding is set
-             (multi-building flow, modal scopes all queries to that building)
-
-          On close in either case we clear scopedBuilding so the next open
-          starts fresh — without this, clicking master Generate after a
-          per-building Generate would silently keep the stale scope. */}
-      {showCffGenerator && (isCffSubfolder || (isPerBuildingCsaSubfolder && scopedBuilding)) && (
+      {/* CFF Generator — only mounts when the user clicks "Generate CFF" inside
+          the cff subfolder. After successful generation it reloads the file
+          list so the new xlsx appears immediately. */}
+      {showCffGenerator && isCffSubfolder && (
         <CffGeneratorModal
           projectId={projectId}
           projectName={projectName}
-          scopedToBuilding={isPerBuildingCsaSubfolder ? scopedBuilding : null}
-          onClose={() => { setShowCffGenerator(false); setScopedBuilding(null) }}
-          onGenerated={() => {
-            setShowCffGenerator(false)
-            setScopedBuilding(null)
-            loadFiles(); loadFileCount(); refreshTree?.()
-          }}
+          onClose={() => setShowCffGenerator(false)}
+          onGenerated={() => { setShowCffGenerator(false); loadFiles(); loadFileCount(); refreshTree?.() }}
         />
       )}
 
@@ -1640,6 +1540,16 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [generating, setGenerating] = useState(false)
   const [generatePreview, setGeneratePreview] = useState(null)
   const [pendingGanttTasks, setPendingGanttTasks] = useState(null)
+  // ─── Per-building programme support (Stage 2 of Chunk 2c-programme) ──
+  // For multi-building projects, the user picks which programme they want
+  // to edit before the Gantt opens. `buildings` holds the resolved list
+  // (empty = single-building, no picker shown). `ganttPickerVisible` is
+  // the modal toggle; `ganttScope` holds the chosen ordinal once picked
+  // (null = project-wide programme, number = per-building) and is what
+  // actually gets handed to GanttEditor.
+  const [buildings, setBuildings] = useState([])
+  const [ganttPickerVisible, setGanttPickerVisible] = useState(false)
+  const [ganttScope, setGanttScope] = useState(null)
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -1670,6 +1580,26 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   useEffect(() => { loadCustomSubfolders() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
   useEffect(() => { loadClientVisible() }, [])
+  // Resolve the per-building structure for this project — but ONLY for the
+  // programme folder section. Other folder sections (PA, variations, etc.)
+  // don't need this and the cost would compound across many rows. The
+  // programme folder is also the only place we open GanttEditor from.
+  useEffect(() => {
+    if (folder.key !== '06-project-programme') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const { resolveBuildings } = await import('../lib/buildings')
+        const result = await resolveBuildings(supabase, projectId)
+        if (!cancelled) setBuildings(result || [])
+      } catch (err) {
+        // Non-fatal: if resolveBuildings fails, fall back to single-building
+        // behaviour (no picker, opens project-wide programme directly).
+        console.warn('[PrimeFolderSection] resolveBuildings failed:', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [folder.key, projectId])
   // Re-fetch when any move happens anywhere in the tree (kills ghost copies)
   useEffect(() => {
     if (treeVersion === 0) return
@@ -2093,7 +2023,17 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                 </button>
               )}
               {folder.key === '06-project-programme' && (
-                <button onClick={(e) => { e.stopPropagation(); setShowGantt(true) }}
+                <button onClick={(e) => {
+                  e.stopPropagation()
+                  // Multi-building: ask which programme to open. Single-
+                  // building: skip the picker, open project-wide directly.
+                  if (buildings.length > 0) {
+                    setGanttPickerVisible(true)
+                  } else {
+                    setGanttScope(null)
+                    setShowGantt(true)
+                  }
+                }}
                   style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
                   title="Open the live editable Gantt chart for this project">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -2104,30 +2044,12 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                 <button onClick={async (e) => {
                   e.stopPropagation()
                   if (generatingPa) return
-                  // Prompt for retention % before generating PA01. Pre-fills 3
-                  // (the most common rate) but the surveyor can type anything
-                  // up to 20%. Cancelling aborts the whole generate. Validates
-                  // here rather than letting the edge function clamp silently
-                  // so the user knows immediately if they typed nonsense.
-                  const raw = window.prompt(
-                    'Retention % for this project?\n\n' +
-                    'Examples: 3, 5, 8. Defaults to 3 if you press OK without changing.\n' +
-                    'You can edit the PA file later if your contract changes.',
-                    '3'
-                  )
-                  if (raw === null) return    // user cancelled — silently abort
-                  const trimmed = raw.trim()
-                  const parsed = trimmed === '' ? 3 : parseFloat(trimmed)
-                  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 20) {
-                    setPaError('Retention must be a number between 0 and 20. Got: "' + raw + '"')
-                    return
-                  }
                   setGeneratingPa(true)
                   setPaError('')
                   try {
                     const { data, error: fnErr } = await supabase.functions.invoke(
                       'activate-project-pa-file',
-                      { body: { project_id: projectId, retention_pct: parsed } }
+                      { body: { project_id: projectId } }
                     )
                     if (fnErr) throw fnErr
                     if (data?.error) throw new Error(data.error)
@@ -2333,10 +2255,74 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         <GanttEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
-          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null) }}
+          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null); setGanttScope(null) }}
           canEdit={canManage}
           initialTasks={pendingGanttTasks}
+          buildingOrdinal={ganttScope}
+          buildingLabel={
+            ganttScope != null
+              ? (buildings.find(b => b.ordinal === ganttScope)?.name || null)
+              : null
+          }
         />
+      )}
+
+      {/* Per-building programme picker (Stage 2 of Chunk 2c-programme).
+          Shown when the user clicks "Open Live Gantt" on a multi-building
+          project. Lets them pick whether they're editing the project-wide
+          master programme or a specific building's programme.
+          Single-building projects never see this — the picker is gated by
+          buildings.length > 0 at the trigger sites. */}
+      {ganttPickerVisible && (
+        <div
+          onClick={() => setGanttPickerVisible(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+            zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)', borderRadius: 8, padding: 0,
+              minWidth: 360, maxWidth: 460, boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+              border: '0.5px solid var(--border)',
+            }}
+          >
+            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                Edit programme for…
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                Each scope has its own version history.
+              </div>
+            </div>
+            <div style={{ padding: '6px 8px' }}>
+              <PickerOption
+                label="Project-wide"
+                hint="Master programme covering all buildings (and the fallback)"
+                onClick={() => { setGanttScope(null); setGanttPickerVisible(false); setShowGantt(true) }}
+              />
+              {buildings.map(b => (
+                <PickerOption
+                  key={b.ordinal}
+                  label={`${String(b.ordinal).padStart(2, '0')} ${b.name}`}
+                  hint={`Building-specific programme${b.hasMissing ? ' (some folders missing)' : ''}`}
+                  onClick={() => { setGanttScope(b.ordinal); setGanttPickerVisible(false); setShowGantt(true) }}
+                />
+              ))}
+            </div>
+            <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => {
+                setGanttPickerVisible(false)
+                // If the user opened the picker via the AI flow, dismiss the
+                // pending tasks too — they shouldn't carry over to the next
+                // attempt without an explicit re-confirmation.
+                setPendingGanttTasks(null)
+              }}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* AI generation spinner */}
@@ -2409,7 +2395,15 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   // Hand the tasks to the Gantt editor and dismiss this preview modal.
                   setPendingGanttTasks(editorTasks)
                   setGeneratePreview(null)
-                  setShowGantt(true)
+                  // Multi-building projects: route through the same picker
+                  // the manual "Open Live Gantt" button uses, so AI-generated
+                  // tasks get associated with the user's chosen scope.
+                  if (buildings.length > 0) {
+                    setGanttPickerVisible(true)
+                  } else {
+                    setGanttScope(null)
+                    setShowGantt(true)
+                  }
                 }}>
                 Open in Gantt Editor →
               </button>
