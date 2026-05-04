@@ -133,14 +133,54 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           ? prevQuery.is('subfolder_key', null)
           : prevQuery.eq('subfolder_key', subfolderKey)
 
-        const [prevRes, projRes, paBuf] = await Promise.all([
+        // Project header redesign — fetch the data sources needed to auto-
+        // populate the new InfoTab fields:
+        //   • projects: name, ref, start_date, end_date, client_id (→ Client)
+        //   • clients: name (joined via client_id)
+        //   • project_employer_agents → employer_agents.company_name (multi)
+        //   • project_team_members where role in (Project Manager, Site Manager) (multi)
+        // All run in parallel with the existing prev-report and PA-buffer fetches.
+        const [prevRes, projRes, paBuf, eaRes, teamRes] = await Promise.all([
           prevQuery.maybeSingle(),
-          supabase.from('projects').select('project_name, project_ref, address, postcode, employer_name').eq('id', projectId).maybeSingle(),
+          supabase.from('projects')
+            .select('project_name, project_ref, address, postcode, employer_name, client_id, start_date, end_date, clients(name)')
+            .eq('id', projectId).maybeSingle(),
           fetchLatestPaForSubfolder(supabase, projectId, subfolderKey),
+          supabase.from('project_employer_agents')
+            .select('ea_id, employer_agents(company_name)')
+            .eq('project_id', projectId),
+          supabase.from('project_team_members')
+            .select('name, role, position_order, created_at')
+            .eq('project_id', projectId)
+            .in('role', ['Project Manager', 'Site Manager'])
+            .order('position_order').order('created_at'),
         ])
         const prev = prevRes.data
         const proj = projRes.data
         const number = await nextReportNumber(projectId)
+
+        // Comma-join helpers — multi-value fields show all assigned people /
+        // companies separated by ", ". Falls back to empty string so the
+        // input renders cleanly when nothing is assigned. User can always
+        // overwrite manually.
+        const eaNames = (eaRes.data || [])
+          .map(r => r.employer_agents?.company_name)
+          .filter(Boolean)
+          .join(', ')
+        const pmNames = (teamRes.data || [])
+          .filter(m => m.role === 'Project Manager')
+          .map(m => m.name)
+          .filter(Boolean)
+          .join(', ')
+        const smNames = (teamRes.data || [])
+          .filter(m => m.role === 'Site Manager')
+          .map(m => m.name)
+          .filter(Boolean)
+          .join(', ')
+
+        // Client name comes through the joined select — supabase returns
+        // null when client_id is null or the join misses.
+        const clientName = (proj?.clients && (proj.clients).name) || ''
 
         // Run extraction if we got a PA file. Convert PA groups → editor groups
         // shape: [{ name, items: [{ label, percent }] }]. One group per PA group,
@@ -189,18 +229,46 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           subfolder_key: subfolderKey,
           report_number: number,
           report_date: new Date().toISOString().slice(0, 10),
-          job_no: prev?.job_no || (proj?.project_ref ? `${projectName} – ${proj.project_ref}` : projectName || ''),
-          employer: prev?.employer || proj?.employer_name || '',
-          client_pm: prev?.client_pm || '',
-          contract_administrator: prev?.contract_administrator || '',
+          // ── Project Information (1.1) ──────────────────────────────────────
+          // SEEDING RULE: prev?.X wins, falls back to newly-fetched source data.
+          // Once the user has saved a report with a value, that value carries
+          // forward to every subsequent report. Source data (project record,
+          // EAs, team) only seeds the FIRST report — after that, the user's
+          // text is sticky. Matches the existing pattern (employer, mc_pm
+          // etc) so manual overrides persist month-to-month.
+          //
+          // Job No → projects.project_ref (was previously composite "name – ref").
+          job_no: prev?.job_no || proj?.project_ref || projectName || '',
+          // REPURPOSED: client_pm now stores Project Name. Old reports with
+          // a real client_pm value will display it under the new "Project
+          // Name" label — visually noisy on first reopen, one-time.
+          client_pm: prev?.client_pm || proj?.project_name || projectName || '',
+          // REPURPOSED: employer now stores Client (clients.name via FK join).
+          // Falls back to legacy employer_name column for old projects
+          // without a client_id assignment.
+          employer: prev?.employer || clientName || proj?.employer_name || '',
+          // REPURPOSED: contract_administrator now stores Employer's Agent
+          // (comma-joined company_name from project_employer_agents). Multi-
+          // EA projects show all assigned agents separated by ", ".
+          contract_administrator: prev?.contract_administrator || eaNames || '',
+          // Surveyor: kept in DB schema for legacy reads but no longer rendered
+          // in the UI or PDF. New reports save '' (or carry forward old value
+          // unmodified — preserves existing reports on round-trip).
           surveyor: prev?.surveyor || '',
           main_contractor: prev?.main_contractor || 'City Construction Group',
-          mc_pm: prev?.mc_pm || '',
-          site_manager: prev?.site_manager || '',
-          start_on_site: prev?.start_on_site || null,
-          contract_completion: prev?.contract_completion || null,
-          target_completion: prev?.target_completion || null,
-          estimated_completion: prev?.estimated_completion || null,
+          // REPURPOSED: mc_pm now stores Project Manager (no "(MC)" suffix).
+          // Comma-joined from project_team_members where role='Project Manager'.
+          mc_pm: prev?.mc_pm || pmNames || '',
+          // Site Manager — same logic, role='Site Manager'.
+          site_manager: prev?.site_manager || smNames || '',
+          // ── Programme Summary (1.2) — auto-populated from project dates ──
+          // Start/Contract/Target/Estimated all default to project.start_date
+          // / end_date the FIRST time. After that, prev wins so the user's
+          // chosen target/estimated dates carry forward report-to-report.
+          start_on_site: prev?.start_on_site || proj?.start_date || null,
+          contract_completion: prev?.contract_completion || proj?.end_date || null,
+          target_completion: prev?.target_completion || proj?.end_date || null,
+          estimated_completion: prev?.estimated_completion || proj?.end_date || null,
           current_phase: prev?.current_phase || '',
           overall_progress: prev?.overall_progress || '',
           delays_text: prev?.delays_text || '',
@@ -402,12 +470,21 @@ function InfoTab({ report, patch }) {
       <Section title="1.1 Project Information">
         <Grid2>
           <Field label="Job No"><input value={report.job_no || ''} onChange={e => patch('job_no', e.target.value)} /></Field>
-          <Field label="Employer"><input value={report.employer || ''} onChange={e => patch('employer', e.target.value)} /></Field>
-          <Field label="Project Manager (Client)"><input value={report.client_pm || ''} onChange={e => patch('client_pm', e.target.value)} /></Field>
-          <Field label="Contract Administrator"><input value={report.contract_administrator || ''} onChange={e => patch('contract_administrator', e.target.value)} /></Field>
-          <Field label="Surveyor"><input value={report.surveyor || ''} onChange={e => patch('surveyor', e.target.value)} /></Field>
+          {/* Project Name lives in client_pm column (repurposed). User can
+              still type to override if the auto-populated project name needs
+              tweaking for this specific report. */}
+          <Field label="Project Name"><input value={report.client_pm || ''} onChange={e => patch('client_pm', e.target.value)} /></Field>
+          {/* Client lives in `employer` column (repurposed). Auto-populates
+              from clients.name via the project's client_id FK. */}
+          <Field label="Client"><input value={report.employer || ''} onChange={e => patch('employer', e.target.value)} /></Field>
           <Field label="Main Contractor"><input value={report.main_contractor || ''} onChange={e => patch('main_contractor', e.target.value)} /></Field>
-          <Field label="Project Manager (MC)"><input value={report.mc_pm || ''} onChange={e => patch('mc_pm', e.target.value)} /></Field>
+          {/* Employer's Agent lives in `contract_administrator` column
+              (repurposed). Comma-joined when a project has multiple EAs. */}
+          <Field label="Employer's Agent"><input value={report.contract_administrator || ''} onChange={e => patch('contract_administrator', e.target.value)} /></Field>
+          {/* Project Manager lives in `mc_pm` column (relabeled — was
+              "Project Manager (MC)"). Comma-joined when team has multiple
+              Project Managers assigned. */}
+          <Field label="Project Manager"><input value={report.mc_pm || ''} onChange={e => patch('mc_pm', e.target.value)} /></Field>
           <Field label="Site Manager"><input value={report.site_manager || ''} onChange={e => patch('site_manager', e.target.value)} /></Field>
         </Grid2>
       </Section>
@@ -810,17 +887,19 @@ export async function generateProgressReportPdf(report, photos, projectName, opt
       doc.setFontSize(11)
       doc.text('1.1 Project Information', 15, y); y += 4
 
-      // Project info table
+      // Project info table — labels match the editor's InfoTab. Note that
+      // some DB columns are repurposed: client_pm holds Project Name,
+      // employer holds Client, contract_administrator holds Employer's
+      // Agent, mc_pm holds Project Manager.
       doc.autoTable({
         startY: y,
         body: [
           ['Job No', report.job_no || ''],
-          ['Employer', report.employer || ''],
-          ['Project Manager', report.client_pm || ''],
-          ['Contract Administrator', report.contract_administrator || ''],
-          ['Surveyor', report.surveyor || ''],
+          ['Project Name', report.client_pm || ''],
+          ['Client', report.employer || ''],
           ['Main Contractor', report.main_contractor || ''],
-          ['Project Manager (MC)', report.mc_pm || ''],
+          ["Employer's Agent", report.contract_administrator || ''],
+          ['Project Manager', report.mc_pm || ''],
           ['Site Manager', report.site_manager || ''],
         ],
         theme: 'plain',
