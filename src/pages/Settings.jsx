@@ -58,14 +58,94 @@ export default function Settings() {
 
   async function loadUsers() {
     setLoading(true)
-    const { data } = await supabase.from('profiles').select('*').order('full_name')
-    // Load project access for site managers
-    const { data: access } = await supabase.from('user_project_access').select('*')
-    const usersWithAccess = (data || []).map(u => ({
-      ...u,
-      projectIds: (access || []).filter(a => a.user_id === u.id).map(a => a.project_id)
+    // Three parallel sources:
+    //   1. profiles + user_project_access — internal/CRM staff access
+    //   2. client_users + clients — external portal access (which client
+    //      they're a portal user of, from which we derive projects)
+    //   3. projects — already loaded by loadProjects(), used to resolve
+    //      client_id → list of projects for portal users
+    const [profilesRes, accessRes, clientUsersRes, clientsRes, projectsRes] = await Promise.all([
+      supabase.from('profiles').select('*').order('full_name'),
+      supabase.from('user_project_access').select('*'),
+      supabase.from('client_users').select('id, email, full_name, role, client_id, created_at'),
+      supabase.from('clients').select('id, name'),
+      supabase.from('projects').select('id, project_name, project_ref, client_id'),
+    ])
+
+    const profiles    = profilesRes.data    || []
+    const access      = accessRes.data      || []
+    const clientUsers = clientUsersRes.data || []
+    const clients     = clientsRes.data     || []
+    const allProjects = projectsRes.data    || []
+
+    // Build a map: email → list of { client_id, role, full_name } for fast
+    // lookup when matching profiles to portal access.
+    const portalByEmail = new Map()
+    for (const cu of clientUsers) {
+      const key = (cu.email || '').toLowerCase()
+      if (!key) continue
+      if (!portalByEmail.has(key)) portalByEmail.set(key, [])
+      portalByEmail.get(key).push(cu)
+    }
+
+    // Build a map: client_id → list of projects (id only).
+    const projectsByClient = new Map()
+    for (const p of allProjects) {
+      if (!p.client_id) continue
+      if (!projectsByClient.has(p.client_id)) projectsByClient.set(p.client_id, [])
+      projectsByClient.get(p.client_id).push(p.id)
+    }
+    const clientName = (id) => clients.find(c => c.id === id)?.name || null
+
+    // Step 1 — profile-based rows. Each gets:
+    //   • projectIds from user_project_access (CRM site-manager access)
+    //   • portalProjectIds from any matching client_users row (portal access)
+    //   • portalClientNames so the UI can show "Bloom Building Consultancy"
+    //   • unified projectIds = union of both for display
+    const profileRows = profiles.map(u => {
+      const crmIds = access.filter(a => a.user_id === u.id).map(a => a.project_id)
+      const emailKey = (u.email || '').toLowerCase()
+      const matchingPortal = portalByEmail.get(emailKey) || []
+      const portalIds = matchingPortal.flatMap(cu => projectsByClient.get(cu.client_id) || [])
+      const portalClientNames = matchingPortal.map(cu => clientName(cu.client_id)).filter(Boolean)
+      const merged = Array.from(new Set([...crmIds, ...portalIds]))
+      return {
+        ...u,
+        projectIds: merged,
+        crmProjectIds: crmIds,
+        portalProjectIds: portalIds,
+        portalClientNames,
+        _portalOnly: false,
+      }
+    })
+
+    // Step 2 — synthetic rows for portal-only users (in client_users but
+    // NOT in profiles). Match is by lowercase email so casing differences
+    // don't create duplicates. id is a sentinel "portal:<id>" so React keys
+    // remain unique and the renderer can detect via _portalOnly.
+    const profileEmails = new Set(profiles.map(p => (p.email || '').toLowerCase()).filter(Boolean))
+    const portalOnly = clientUsers.filter(cu => {
+      const k = (cu.email || '').toLowerCase()
+      return k && !profileEmails.has(k)
+    })
+    const portalOnlyRows = portalOnly.map(cu => ({
+      id: `portal:${cu.id}`,
+      email: cu.email,
+      full_name: cu.full_name || cu.email,
+      // Role pill — synthetic role string used only for display. Falls back
+      // to a "Portal" pill in the renderer when role is one of these.
+      role: cu.role === 'admin' ? 'portal_admin' : 'portal_viewer',
+      created_at: cu.created_at,
+      client_id: cu.client_id,
+      projectIds: projectsByClient.get(cu.client_id) || [],
+      crmProjectIds: [],
+      portalProjectIds: projectsByClient.get(cu.client_id) || [],
+      portalClientNames: [clientName(cu.client_id)].filter(Boolean),
+      _portalOnly: true,
+      _portalClientId: cu.client_id,
     }))
-    setUsers(sortBy(usersWithAccess, 'full_name'))
+
+    setUsers(sortBy([...profileRows, ...portalOnlyRows], 'full_name'))
     setLoading(false)
   }
 
@@ -300,6 +380,7 @@ export default function Settings() {
                           profile={profile}
                           projectMap={projectMap}
                           onNavigateProject={(id) => navigate(`/projects/${id}`)}
+                          onNavigateClient={(id) => navigate(`/clients/${id}`)}
                           onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
                         />
                       ))}
@@ -333,6 +414,7 @@ export default function Settings() {
                               profile={profile}
                               projectMap={projectMap}
                               onNavigateProject={(id) => navigate(`/projects/${id}`)}
+                          onNavigateClient={(id) => navigate(`/clients/${id}`)}
                               onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
                             />
                           ))}
@@ -684,9 +766,13 @@ function ChangePasswordModal({ onClose }) {
 //   • mode='external'  → Access column becomes a Projects column showing
 //                        clickable pills, one per assigned project
 //
-// Everything else (Name, Email, Role, Added, Edit button) is identical
-// across modes.
-function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onEdit }) {
+// Portal-only users (no profiles row, only client_users) are signalled by
+// u._portalOnly === true. These rows show a synthetic "Portal" role pill
+// and a "Manage in client" button (not Edit) since their access is
+// administered from the Client detail page, not via Settings → Edit User.
+//
+// Everything else (Name, Email, Added) is identical across modes.
+function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onNavigateClient, onEdit }) {
   return (
     <tr>
       <td>
@@ -699,23 +785,41 @@ function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onEdit }) {
         </div>
       </td>
       <td className="td-muted">{u.email}</td>
-      <td><Pill cls={ROLES[u.role]?.cls || 'pill-gray'}>{ROLES[u.role]?.label || u.role}</Pill></td>
+      <td><RolePill role={u.role} /></td>
       <td>
         {mode === 'external'
-          ? <ExternalProjectsCell projectIds={u.projectIds || []} projectMap={projectMap} onNavigateProject={onNavigateProject} />
+          ? <ExternalProjectsCell user={u} projectMap={projectMap} onNavigateProject={onNavigateProject} />
           : <InternalAccessCell user={u} />
         }
       </td>
       <td className="td-muted">{new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
       <td>
-        {u.id !== profile?.id && (
+        {u._portalOnly ? (
+          <button className="btn btn-sm" onClick={() => onNavigateClient(u._portalClientId)}>
+            Manage in client
+          </button>
+        ) : u.id !== profile?.id ? (
           <button className="btn btn-sm" onClick={onEdit}>
             <IconEdit size={13} /> Edit
           </button>
-        )}
+        ) : null}
       </td>
     </tr>
   )
+}
+
+// Role pill that handles both real roles (from ROLES) and synthetic
+// portal-* roles (used for portal-only users). Real roles get their
+// configured colour class; portal roles get a neutral gray pill with a
+// "Portal · Admin" / "Portal · Viewer" label.
+function RolePill({ role }) {
+  if (role === 'portal_admin') {
+    return <Pill cls="pill-gray">Portal · Admin</Pill>
+  }
+  if (role === 'portal_viewer') {
+    return <Pill cls="pill-gray">Portal · Viewer</Pill>
+  }
+  return <Pill cls={ROLES[role]?.cls || 'pill-gray'}>{ROLES[role]?.label || role}</Pill>
 }
 
 // Internal table's Access cell — preserves the original behaviour:
@@ -738,11 +842,19 @@ function InternalAccessCell({ user }) {
   )
 }
 
-// External table's Projects cell — renders one clickable pill per assigned
-// project showing "Name · Ref". If the user has no projects assigned, shows
-// a muted "No projects assigned" hint (admin should edit and add some).
-function ExternalProjectsCell({ projectIds, projectMap, onNavigateProject }) {
-  if (!projectIds || projectIds.length === 0) {
+// External table's Projects cell — renders one clickable pill per project
+// the user has access to. For portal users, also shows the source client
+// as a subtitle ("via Bloom Building Consultancy") so admins know WHY
+// they have access (it's via portal membership, not direct CRM allocation).
+//
+// If the user has both CRM project access AND portal access, projects
+// from either source are rendered together — no double-rendering since
+// projectIds is already deduplicated upstream.
+function ExternalProjectsCell({ user, projectMap, onNavigateProject }) {
+  const projectIds = user.projectIds || []
+  const portalClientNames = user.portalClientNames || []
+
+  if (projectIds.length === 0) {
     return (
       <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>
         No projects assigned
@@ -758,26 +870,33 @@ function ExternalProjectsCell({ projectIds, projectMap, onNavigateProject }) {
   })
 
   return (
-    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 360 }}>
-      {resolved.map(p => (
-        <span key={p.id}
-          onClick={(e) => { e.stopPropagation(); onNavigateProject(p.id) }}
-          style={{
-            fontSize: 11,
-            padding: '2px 8px',
-            background: p.orphan ? 'var(--red-bg)' : 'var(--blue-bg)',
-            color: p.orphan ? 'var(--red)' : 'var(--blue)',
-            border: `0.5px solid ${p.orphan ? 'var(--red-border)' : 'var(--blue-border)'}`,
-            borderRadius: 4,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            transition: 'background 0.15s',
-          }}
-          title={p.orphan ? 'Project no longer exists' : `Click to open ${p.name}`}
-        >
-          {p.name}{p.ref ? ` · ${p.ref}` : ''}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 360 }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        {resolved.map(p => (
+          <span key={p.id}
+            onClick={(e) => { e.stopPropagation(); onNavigateProject(p.id) }}
+            style={{
+              fontSize: 11,
+              padding: '2px 8px',
+              background: p.orphan ? 'var(--red-bg)' : 'var(--blue-bg)',
+              color: p.orphan ? 'var(--red)' : 'var(--blue)',
+              border: `0.5px solid ${p.orphan ? 'var(--red-border)' : 'var(--blue-border)'}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              transition: 'background 0.15s',
+            }}
+            title={p.orphan ? 'Project no longer exists' : `Click to open ${p.name}`}
+          >
+            {p.name}{p.ref ? ` · ${p.ref}` : ''}
+          </span>
+        ))}
+      </div>
+      {portalClientNames.length > 0 && (
+        <span style={{ fontSize: 10, color: 'var(--text3)' }}>
+          via {portalClientNames.join(', ')} portal
         </span>
-      ))}
+      )}
     </div>
   )
 }
