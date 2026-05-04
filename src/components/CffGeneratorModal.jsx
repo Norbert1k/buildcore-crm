@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase'
 import { Modal, Field, Spinner } from './ui'
 import { extractCsa } from '../lib/csaExtractor'
 import { generateCff } from '../lib/cffGenerator'
-import { fetchAllProjectPas, extractRetentionFromPa } from '../lib/paGroupExtractor'
+import { fetchAllProjectPas } from '../lib/paGroupExtractor'
 import {
   CURVE_TYPES,
   CURVE_LABELS,
@@ -24,51 +24,12 @@ const CFF_ARCHIVE_SUBFOLDER = 'cff-archive'
 const PRIMARY_FOLDER = '00-project-information'
 
 // ─── Main modal component ──────────────────────────────────────────────────
-// Props:
-//   projectId         — required, the project to generate against
-//   projectName       — display name (used in title)
-//   onClose           — modal close callback
-//   onGenerated       — fired after successful upload + project_doc_files row write
-//   scopedToBuilding  — optional Building object (from src/lib/buildings.js).
-//                       When set, the modal is scoped to ONE sub-building of a
-//                       multi-building project (Merton-style). Effects:
-//                         1. CSA picker only lists files inside that building's
-//                            CSA subfolder, not the master CSA folder
-//                         2. PA actuals + retention auto-detect read from that
-//                            building's PA subfolder, not project-wide
-//                         3. Generated CFF uploads to that building's CFF
-//                            subfolder, not the master 'cff' subfolder
-//                         4. Modal title shows the building name
-//                       When null (default), behaves as the existing single-
-//                       building modal — picks from master csa/, uploads to
-//                       master cff/, reads project-wide PAs.
 export default function CffGeneratorModal({
   projectId,
   projectName,
   onClose,
   onGenerated,
-  scopedToBuilding = null,
 }) {
-  // ─── Effective scope (multi-building support) ──────────────────────────
-  // When scopedToBuilding is set, all reads/writes route through that
-  // building's per-building subfolders instead of the project-wide csa/cff
-  // template subfolders. We compute these once at the top so every query
-  // below uses the same scope without re-checking everywhere.
-  //
-  // Single-building (scopedToBuilding=null):
-  //   csaFolderKey = '00-project-information', csaSubfolderKey = 'csa'
-  //   cffFolderKey = '00-project-information', cffSubfolderKey = 'cff'
-  //   paFolderKey  = '02-payment-application', paSubfolderKey  = null (root)
-  //
-  // Multi-building (e.g. Merton's Sports Hall):
-  //   csaSubfolderKey = '<building's csa subfolder key>'
-  //   cffSubfolderKey = '<building's cff subfolder key>'
-  //   paSubfolderKey  = '<building's pa subfolder key>'
-  //   (folderKey stays the same — scoping happens at subfolder level)
-  const csaSubfolderKey = scopedToBuilding?.subfolders?.csa || CSA_SUBFOLDER
-  const cffSubfolderKey = scopedToBuilding?.subfolders?.cff || CFF_SUBFOLDER
-  const paSubfolderKey = scopedToBuilding?.subfolders?.pa || null
-
   const [step, setStep] = useState(1) // 1 = source & dates, 2 = curves & preview, 3 = generating
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -86,18 +47,6 @@ export default function CffGeneratorModal({
   const [endDate, setEndDate] = useState('')
   const [numMonthsOverride, setNumMonthsOverride] = useState('')
   const [defaultCurve, setDefaultCurve] = useState('even')
-  // Retention configuration. Drives the "Less Retention R%" / "Plus Retention
-  // Release (R-1.5)% (at PC)" rows in the generated CFF. Auto-detected from
-  // the latest PA's footer when one exists; defaults to 3 otherwise. Always
-  // user-editable — surveyor may know the contract retention before any PA
-  // has been issued, and may override even when auto-detect succeeds.
-  const [retentionPct, setRetentionPct] = useState(3)
-  // 'default'    = no PA / not yet determined, sitting on the 3% default
-  // 'pa'         = pulled cleanly from latest PA's footer
-  // 'pa-failed'  = latest PA had a "retention" row but the % couldn't be parsed
-  // 'user'       = user has typed in this field, ignore further auto-detect
-  const [retentionSource, setRetentionSource] = useState('default')
-  const [retentionRawLabel, setRetentionRawLabel] = useState('')   // for the "Detected from PA03" hint
   const [rowCurves, setRowCurves] = useState({})       // { [groupId]: 'even' | 'front' | ... }
   // Manual per-row overrides — when present, replaces the curve-derived
   // distribution for that row. Editing a cell switches the row into manual
@@ -215,6 +164,56 @@ export default function CffGeneratorModal({
     return { rows, totals, cumulative, paMonthCount: actualsMonthCount, actualsMode }
   }, [csaExtract, numMonths, rowCurves, defaultCurve, manualOverrides, paList, actualsMode, manualActuals])
 
+  // ─── Reconciliation check ────────────────────────────────────────────────
+  // Verifies the generated MONTHLY GROSS row (preview.totals) matches the
+  // sum of "TOTAL DUE THIS APPLICATION" across the PAs used as past-actuals.
+  // For each past month m: expected = paList[m].total_cumulative -
+  // paList[m-1].total_cumulative (or 0 for m=0). Mismatch if |expected -
+  // actual| > £1.
+  //
+  // This catches a class of generator bugs we've previously hit:
+  //   • PA parser dropped variations rows → MONTHLY GROSS short by VO total
+  //   • Cumulative_by_group missed sections → row sums didn't reconcile
+  //
+  // Only runs in PA mode. Manual mode lets the user type any numbers — by
+  // definition those reconcile to themselves. None mode has no past-actuals
+  // to reconcile against.
+  const reconciliation = useMemo(() => {
+    const TOLERANCE = 1  // £1 — generous for floating-point but tight enough to catch real errors
+    if (!preview || actualsMode !== 'pa') return { status: 'no_check' }
+    const paMonthCount = preview.paMonthCount || 0
+    if (paMonthCount === 0 || paList.length === 0) return { status: 'no_check' }
+
+    const mismatches = []
+    let totalExpected = 0
+    let totalActual = 0
+    for (let m = 0; m < paMonthCount; m++) {
+      const pa = paList[m]
+      if (!pa) continue
+      const prev = m === 0 ? 0 : (paList[m - 1]?.total_cumulative || 0)
+      const expected = (pa.total_cumulative || 0) - prev
+      const actual = preview.totals[m] || 0
+      const diff = actual - expected
+      totalExpected += expected
+      totalActual += actual
+      if (Math.abs(diff) > TOLERANCE) {
+        mismatches.push({
+          month: m + 1,
+          pa_label: pa.pa_label || `PA${String(m + 1).padStart(2, '0')}`,
+          expected,
+          actual,
+          diff,
+        })
+      }
+    }
+    return {
+      status: mismatches.length === 0 ? 'ok' : 'warning',
+      mismatches,
+      totalExpected,
+      totalActual,
+    }
+  }, [preview, paList, actualsMode])
+
   // Reset manual overrides whenever numMonths changes — old arrays would be
   // wrong length anyway. Done as effect so we don't silently keep stale data.
   useEffect(() => {
@@ -237,83 +236,27 @@ export default function CffGeneratorModal({
     async function loadInitialData() {
       setLoadingCsaList(true)
       try {
-        const [csaRes, projectRes, paResult, latestPaForRetention] = await Promise.all([
-          // CSA file list — scoped to the building's CSA subfolder when in
-          // building-scope mode, master csa subfolder otherwise. csaSubfolderKey
-          // is computed at component mount (top of function).
+        const [csaRes, projectRes, paResult] = await Promise.all([
           supabase
             .from('project_doc_files')
             .select('id, file_name, storage_path, created_at')
             .eq('project_id', projectId)
             .eq('folder_key', PRIMARY_FOLDER)
-            .eq('subfolder_key', csaSubfolderKey)
+            .eq('subfolder_key', CSA_SUBFOLDER)
             .order('created_at', { ascending: false }),
           supabase
             .from('projects')
             .select('start_date, end_date')
             .eq('id', projectId)
             .maybeSingle(),
-          // PA-aware regenerate: fetch + parse the PAs at this scope. For
-          // single-building projects that's root-level PAs (paSubfolderKey =
-          // null). For per-building modal scope it's the building's own PA
-          // subfolder. If parsing any one PA fails, that PA is dropped from
-          // the list and a warning is shown — the rest still apply.
-          fetchAllProjectPas(supabase, projectId, paSubfolderKey).catch(err => {
+          // PA-aware regenerate: fetch + parse all root-level PAs in parallel
+          // so they're ready by the time the user reaches Step 2. If parsing
+          // any one PA fails, that specific PA is dropped from the list and
+          // a warning is shown — the rest still apply.
+          fetchAllProjectPas(supabase, projectId).catch(err => {
             console.warn('PA pre-fetch failed:', err)
             return []
           }),
-          // Retention auto-detect: download the latest PA at this scope and
-          // parse its "Less Retention N%" footer row. Single-building reads
-          // root-level PAs; building-scoped reads that building's PAs.
-          //
-          // Multi-building fallback: if the building has no PAs of its own
-          // yet (e.g. user is generating Changing Rooms CFF before issuing
-          // PA01 for Changing Rooms), fall back to ANY PA in the project.
-          // Retention is a project-level decision in practice, so reading
-          // it from a sibling building's PA is correct.
-          (async () => {
-            try {
-              // Helper: try one query, return latest row or null
-              async function tryFetchLatest(scopeFilter) {
-                let q = supabase
-                  .from('project_doc_files')
-                  .select('storage_path, file_name')
-                  .eq('project_id', projectId)
-                  .eq('folder_key', '02-payment-application')
-                  .like('file_name', '%.xlsx')
-                  .order('created_at', { ascending: false })
-                  .limit(1)
-                q = scopeFilter(q)
-                const { data, error } = await q.maybeSingle()
-                if (error) return null
-                return data
-              }
-              // 1st preference: this scope's own PAs.
-              let latest = paSubfolderKey == null
-                ? await tryFetchLatest(q => q.is('subfolder_key', null))
-                : await tryFetchLatest(q => q.eq('subfolder_key', paSubfolderKey))
-              // Fallback (building-scoped only): any PA in the project.
-              // Skip the fallback for single-building case — there's no
-              // sibling scope to fall back to.
-              if (!latest && paSubfolderKey != null) {
-                latest = await tryFetchLatest(q => q)   // no scope filter at all
-              }
-              if (!latest) return null
-              const { data: signed } = await supabase
-                .storage
-                .from('project-docs')
-                .createSignedUrl(latest.storage_path, 600)
-              if (!signed?.signedUrl) return null
-              const res = await fetch(signed.signedUrl)
-              if (!res.ok) return null
-              const blob = await res.blob()
-              const ret = await extractRetentionFromPa(blob)
-              return { ...ret, file_name: latest.file_name }
-            } catch (err) {
-              console.warn('Retention pre-fetch failed:', err)
-              return null
-            }
-          })(),
         ])
 
         if (cancelled) return
@@ -343,10 +286,6 @@ export default function CffGeneratorModal({
           cumulative_by_group: Object.fromEntries(
             Object.entries(p.groups || {}).map(([k, v]) => [k, v.cumulative])
           ),
-          // Variations cumulative carried through unchanged. The generator
-          // adds a separate "Variations" row to the cashflow when at least
-          // one PA in the list has variations_cumulative > 0.
-          variations_cumulative: p.variations_cumulative || 0,
         }))
         setPaList(flatPaList)
         // Default mode: if PA files are found and parsed cleanly, default
@@ -355,28 +294,6 @@ export default function CffGeneratorModal({
         if (flatPaList.length > 0) {
           setActualsMode('pa')
         }
-
-        // Apply retention auto-detect from latest PA, but only if the user
-        // hasn't already typed in the field. setRetentionSource is read via
-        // its current state in the setter to avoid a stale closure on the
-        // initial 'default' value.
-        setRetentionSource(prevSource => {
-          if (prevSource === 'user') return prevSource
-          if (!latestPaForRetention) return 'default'
-          if (latestPaForRetention.status === 'ok' &&
-              Number.isFinite(latestPaForRetention.retention_pct)) {
-            setRetentionPct(latestPaForRetention.retention_pct)
-            setRetentionRawLabel(latestPaForRetention.file_name || '')
-            return 'pa'
-          }
-          if (latestPaForRetention.status === 'unparseable') {
-            setRetentionRawLabel(latestPaForRetention.raw_label || '')
-            return 'pa-failed'
-          }
-          // status: 'not_found' — file existed but no retention row visible.
-          // Stay on default; no warning.
-          return 'default'
-        })
       } catch (err) {
         if (!cancelled) {
           console.warn('Failed to load modal initial data', err)
@@ -390,10 +307,7 @@ export default function CffGeneratorModal({
     return () => {
       cancelled = true
     }
-    // csaSubfolderKey + paSubfolderKey are derived from scopedToBuilding so
-    // they implicitly capture that prop. Listing them explicitly keeps
-    // exhaustive-deps lint happy without forcing the consumer to memoise.
-  }, [projectId, csaSubfolderKey, paSubfolderKey])
+  }, [projectId])
 
   // ─── Parse CSA when source changes ──────────────────────────────────────
   async function loadAndParseCsa() {
@@ -497,11 +411,6 @@ export default function CffGeneratorModal({
               pa_label: entry.label || 'Manual',
               total_cumulative: runningTotal,
               cumulative_by_group,
-              // Manual mode has no concept of variations — user enters a
-              // single 'amount' per period and we proportionally distribute
-              // across CSA groups. Variations stay at 0; the user can switch
-              // to PA mode if they need real PA-derived variation tracking.
-              variations_cumulative: 0,
             }
           })
           paActuals = { paList: synthList }
@@ -518,7 +427,6 @@ export default function CffGeneratorModal({
         default_curve: defaultCurve,
         row_manual: manualOverrides,
         pa_actuals: paActuals,
-        retention_pct: retentionPct,
       })
 
       // Upload to project-docs bucket — match the CRM upload convention:
@@ -527,19 +435,8 @@ export default function CffGeneratorModal({
       // than overwriting the previous one in storage. We delete any existing
       // CFF rows for this subfolder afterwards so the file list shows only
       // the latest one (matches the publish-PR-to-folder flow used elsewhere).
-      //
-      // Archive subfolder key: for the master CFF folder we use the global
-      // CFF_ARCHIVE_SUBFOLDER ('cff-archive'). For per-building CFFs we
-      // synthesise a per-building archive key by suffixing the building's
-      // CFF subfolder key. Both are synthetic — no folder definition exists
-      // in project_doc_folders for either — so they never appear in the file
-      // browser, only the portal's diff query reads them.
-      const archiveSubfolderKey = cffSubfolderKey === CFF_SUBFOLDER
-        ? CFF_ARCHIVE_SUBFOLDER
-        : `${cffSubfolderKey}-archive`
-
       const ts = Date.now()
-      const storagePath = `projects/${projectId}/${PRIMARY_FOLDER}/${cffSubfolderKey}/${ts}-${result.filename}`
+      const storagePath = `projects/${projectId}/${PRIMARY_FOLDER}/${CFF_SUBFOLDER}/${ts}-${result.filename}`
       const { error: uploadErr } = await supabase
         .storage
         .from('project-docs')
@@ -550,15 +447,16 @@ export default function CffGeneratorModal({
         })
       if (uploadErr) throw uploadErr
 
-      // Find existing CFF rows (current + any pre-existing archive) — scoped
-      // to this building's subfolder pair, NOT the master cff/cff-archive.
-      // Cross-building "current" CFFs from siblings are left alone.
+      // Find existing CFF rows (current + any pre-existing archive). On
+      // regenerate, we KEEP the previous CURRENT version as an archive so
+      // the portal can show "what changed" diffs. We only ever keep one
+      // archive — older archives are deleted to prevent unbounded growth.
       const { data: existing } = await supabase
         .from('project_doc_files')
         .select('id, storage_path, subfolder_key')
         .eq('project_id', projectId)
         .eq('folder_key', PRIMARY_FOLDER)
-        .in('subfolder_key', [cffSubfolderKey, archiveSubfolderKey])
+        .in('subfolder_key', [CFF_SUBFOLDER, CFF_ARCHIVE_SUBFOLDER])
 
       // Insert the new row using the standard column set (matches every
       // other place in the codebase that writes to project_doc_files).
@@ -567,7 +465,7 @@ export default function CffGeneratorModal({
         .insert({
           project_id: projectId,
           folder_key: PRIMARY_FOLDER,
-          subfolder_key: cffSubfolderKey,
+          subfolder_key: CFF_SUBFOLDER,
           file_name: result.filename,
           file_size: result.blob.size,
           storage_path: storagePath,
@@ -581,10 +479,10 @@ export default function CffGeneratorModal({
       //     stays put under its original path — only the logical folder
       //     changes)
       const previousCurrent = (existing || []).filter(r =>
-        r.subfolder_key === cffSubfolderKey && r.storage_path !== storagePath
+        r.subfolder_key === CFF_SUBFOLDER && r.storage_path !== storagePath
       )
       const previousArchive = (existing || []).filter(r =>
-        r.subfolder_key === archiveSubfolderKey
+        r.subfolder_key === CFF_ARCHIVE_SUBFOLDER
       )
 
       // Delete old archive (DB + storage)
@@ -603,7 +501,7 @@ export default function CffGeneratorModal({
       if (previousCurrent.length > 0) {
         await supabase
           .from('project_doc_files')
-          .update({ subfolder_key: archiveSubfolderKey })
+          .update({ subfolder_key: CFF_ARCHIVE_SUBFOLDER })
           .in('id', previousCurrent.map(r => r.id))
       }
 
@@ -619,15 +517,12 @@ export default function CffGeneratorModal({
   }
 
   // ─── Render ─────────────────────────────────────────────────────────────
-  // Building suffix appears on every step's title when the modal is scoped
-  // to a specific sub-building (Merton-style multi-building project).
-  const buildingSuffix = scopedToBuilding?.name ? ` — ${scopedToBuilding.name}` : ''
   const title =
     step === 1
-      ? `Generate Cashflow Forecast${buildingSuffix} — Source & Programme`
+      ? 'Generate Cashflow Forecast — Source & Programme'
       : step === 2
-      ? `Generate Cashflow Forecast${buildingSuffix} — Curves & Preview`
-      : `Generating Cashflow Forecast${buildingSuffix}…`
+      ? 'Generate Cashflow Forecast — Curves & Preview'
+      : 'Generating Cashflow Forecast…'
 
   const footer = (
     <>
@@ -693,13 +588,6 @@ export default function CffGeneratorModal({
           setActualsMode={setActualsMode}
           manualActuals={manualActuals}
           setManualActuals={setManualActuals}
-          retentionPct={retentionPct}
-          setRetentionPct={setRetentionPct}
-          retentionSource={retentionSource}
-          setRetentionSource={setRetentionSource}
-          retentionRawLabel={retentionRawLabel}
-          csaSubfolderKey={csaSubfolderKey}
-          scopedToBuilding={scopedToBuilding}
         />
       )}
 
@@ -716,6 +604,7 @@ export default function CffGeneratorModal({
           paList={paList}
           actualsMode={actualsMode}
           manualActuals={manualActuals}
+          reconciliation={reconciliation}
         />
       )}
 
@@ -745,11 +634,6 @@ function Step1SourceAndProgramme({
   paList, paLoadError,
   actualsMode, setActualsMode,
   manualActuals, setManualActuals,
-  retentionPct, setRetentionPct,
-  retentionSource, setRetentionSource,
-  retentionRawLabel,
-  csaSubfolderKey,         // 'csa' for master, building's csa key when scoped
-  scopedToBuilding,        // null for master, Building object when scoped
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -767,13 +651,8 @@ function Step1SourceAndProgramme({
             </div>
           ) : csaFiles.length === 0 ? (
             <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
-              {scopedToBuilding ? (
-                <>No CSA files found in <code>{scopedToBuilding.label}</code>.
-                Upload one below to continue.</>
-              ) : (
-                <>No CSA files found in <code>{PRIMARY_FOLDER} / {csaSubfolderKey}</code>.
-                Upload one below to continue.</>
-              )}
+              No CSA files found in <code>{PRIMARY_FOLDER} / {CSA_SUBFOLDER}</code>.
+              Upload one below to continue.
             </div>
           ) : (
             <select
@@ -829,52 +708,6 @@ function Step1SourceAndProgramme({
           />
         </Field>
       </div>
-
-      {/* Retention. Auto-detected from latest PA when one exists; defaults to
-          3% otherwise. Always editable — surveyor may override even when the
-          PA value is correct (e.g. they're regenerating before issuing PA01
-          on a renegotiated contract). The release at PC is always (R-1.5)%
-          so we surface that as a calculated hint underneath. */}
-      <Field label="Retention %">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <input
-            type="number"
-            min="0"
-            max="20"
-            step="0.5"
-            value={retentionPct}
-            onChange={e => {
-              const v = e.target.value
-              // Allow blank while typing; clamp on commit.
-              if (v === '') { setRetentionPct(0); setRetentionSource('user'); return }
-              const n = parseFloat(v)
-              if (Number.isFinite(n)) {
-                setRetentionPct(Math.max(0, Math.min(20, n)))
-                setRetentionSource('user')
-              }
-            }}
-            style={{ width: 110 }}
-          />
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-            Release at PC: <strong>{Math.max(0, retentionPct - 1.5).toFixed(1).replace(/\.0$/, '')}%</strong>
-            &nbsp;· Held through defects: <strong>1.5%</strong>
-          </div>
-        </div>
-        <div style={{ fontSize: 11, marginTop: 4, color: retentionSource === 'pa-failed' ? '#b87a00' : 'var(--text3)' }}>
-          {retentionSource === 'pa' && (
-            <>Detected from latest PA{retentionRawLabel ? ` (${retentionRawLabel})` : ''}. Edit if your contract differs.</>
-          )}
-          {retentionSource === 'pa-failed' && (
-            <>⚠ Couldn't read retention % from the latest PA — please confirm the value above before generating.</>
-          )}
-          {retentionSource === 'default' && (
-            <>Default 3%. Edit if your contract specifies a different rate.</>
-          )}
-          {retentionSource === 'user' && (
-            <>Set manually.</>
-          )}
-        </div>
-      </Field>
 
       <Field label={`Number of months (${numMonths || '—'} computed from dates)`}>
         <input
@@ -1000,7 +833,7 @@ function Step1SourceAndProgramme({
 function Step2CurvesAndPreview({
   csaExtract, numMonths, rowCurves, setRowCurves, defaultCurve, preview,
   manualOverrides, setManualOverrides,
-  paList, actualsMode, manualActuals,
+  paList, actualsMode, manualActuals, reconciliation,
 }) {
   function setRowCurve(groupId, curve) {
     setRowCurves(prev => ({ ...prev, [groupId]: curve }))
@@ -1101,6 +934,61 @@ function Step2CurvesAndPreview({
           ).join(' · ')}.
           Per-row split is proportional by contract value (indicative — not actual progress).
           Remaining months redistribute leftover via the chosen curve.
+        </div>
+      )}
+
+      {/* Reconciliation banner — verifies the generated MONTHLY GROSS row
+          matches the sum of "TOTAL DUE THIS APPLICATION" across the PAs
+          used as past-actuals. Catches generator bugs (e.g. dropped VOs,
+          missed sections) BEFORE the user downloads a wrong CFF. */}
+      {reconciliation?.status === 'ok' && (
+        <div style={{
+          padding: 10,
+          background: 'rgba(15, 110, 86, 0.08)',
+          border: '0.5px solid rgba(15, 110, 86, 0.3)',
+          borderRadius: 6,
+          fontSize: 12,
+          color: 'var(--text2)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <span style={{ color: '#0F6E56', fontSize: 14, lineHeight: 1 }}>✓</span>
+          <span>
+            <strong style={{ color: '#0F6E56' }}>Reconciled</strong>
+            {' — '}
+            PA totals match generated CFF (£{Math.round(reconciliation.totalActual).toLocaleString()}).
+          </span>
+        </div>
+      )}
+      {reconciliation?.status === 'warning' && (
+        <div style={{
+          padding: 10,
+          background: 'rgba(186, 117, 23, 0.10)',
+          border: '0.5px solid rgba(186, 117, 23, 0.4)',
+          borderRadius: 6,
+          fontSize: 12,
+          color: 'var(--text2)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 6 }}>
+            <span style={{ color: '#854F0B', fontSize: 14, lineHeight: 1, marginTop: 1 }}>⚠</span>
+            <div>
+              <strong style={{ color: '#854F0B' }}>Reconciliation warning</strong>
+              {' — '}
+              the generated CFF doesn't match the PA totals. The generator may have a parsing bug.
+              Check before sending the CFF.
+            </div>
+          </div>
+          <div style={{ marginLeft: 22, fontSize: 11, color: 'var(--text3)', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {reconciliation.mismatches.map(m => (
+              <div key={m.month}>
+                <strong>{m.pa_label}</strong> (Month {m.month}): expected £{Math.round(m.expected).toLocaleString()}, CFF shows £{Math.round(m.actual).toLocaleString()}{' '}
+                <span style={{ color: m.diff < 0 ? '#A32D2D' : '#854F0B' }}>
+                  ({m.diff > 0 ? '+' : ''}£{Math.round(m.diff).toLocaleString()})
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
