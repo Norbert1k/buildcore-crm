@@ -116,6 +116,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .modal-sm { max-width: 100%; }
 .modal-md { max-width: 100%; }
 .modal-lg { max-width: 100%; }
+.modal-xl { max-width: 100%; }
 .modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .modal-title { font-size: 15px; font-weight: 600; }
 .modal-body { padding: 16px 20px; }
@@ -177,6 +178,7 @@ tbody tr:hover td { background: var(--surface2); }
   .modal-sm { max-width: 440px; }
   .modal-md { max-width: 580px; }
   .modal-lg { max-width: 720px; }
+  .modal-xl { max-width: 1100px; }
   .form-grid { grid-template-columns: 1fr 1fr; }
   .form-grid .full { grid-column: 1 / -1; }
   .form-section { grid-column: 1 / -1; }
