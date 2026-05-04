@@ -5,6 +5,46 @@ import { PROJECT_STATUSES, formatCurrency } from '../lib/utils'
 import { Spinner, Pill } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
+// Tile providers used for the map. Keys map to values stored in
+// profiles.map_style. 'auto' is the default — derived from the active
+// CRM theme via deriveAutoStyle() below. The other four are explicit
+// overrides the user can pick from the in-map picker.
+//
+// All providers are free for reasonable usage and don't require API keys.
+// Voyager (CartoDB) is the default "colour" option — looks like a
+// muted Google Maps. OSM standard is the classic OpenStreetMap look.
+const MAP_STYLES = {
+  dark: {
+    label: 'Dark',
+    url:   'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attr:  '© OpenStreetMap contributors © CARTO',
+  },
+  light: {
+    label: 'Light',
+    url:   'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attr:  '© OpenStreetMap contributors © CARTO',
+  },
+  colour: {
+    label: 'Colour',
+    url:   'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attr:  '© OpenStreetMap contributors © CARTO',
+  },
+  osm: {
+    label: 'OSM',
+    url:   'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attr:  '© OpenStreetMap contributors',
+  },
+}
+
+// Themes considered "dark" for the auto-map-style derivation. Must stay in
+// sync with the DARK_THEMES set in Sidebar.jsx and the ones defined in
+// index.css. Pearl White, Light, Rose, Mint, Sand are light → light map.
+const DARK_THEMES_FOR_MAP = new Set(['dark', 'forest', 'slate'])
+
+function deriveAutoStyle(theme) {
+  return DARK_THEMES_FOR_MAP.has(theme) ? 'dark' : 'light'
+}
+
 const STATUS_COLORS = {
   active: '#448a40',
   tender: '#9b87e0',
@@ -63,9 +103,44 @@ export default function ProjectTracker() {
   const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('track_tender_open') === 'true')
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
+  const tileLayerRef = useRef(null)
   const markersRef = useRef([])
   const navigate = useNavigate()
-  const { can } = useAuth()
+  const { can, profile, setMapStyle } = useAuth()
+
+  // Map style state. The persisted override comes from profiles.map_style
+  // (or localStorage as a fallback for first-time use). null/empty means
+  // "auto" — follow the CRM theme. The picker shows 5 buttons: Auto + the
+  // 4 explicit styles.
+  const [styleOverride, setStyleOverride] = useState(() => {
+    return profile?.map_style || (typeof window !== 'undefined' ? localStorage.getItem('map_style') : '') || ''
+  })
+
+  // Track the currently-applied data-theme so changes to the CRM theme
+  // re-derive the map style when the override is "auto". Uses a
+  // MutationObserver mirroring the pattern in Sidebar.jsx.
+  const [activeTheme, setActiveTheme] = useState(() =>
+    typeof document !== 'undefined' ? document.documentElement.getAttribute('data-theme') || 'light' : 'light'
+  )
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const observer = new MutationObserver(() => {
+      setActiveTheme(document.documentElement.getAttribute('data-theme') || 'light')
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+
+  // When the profile loads from auth (async), pick up its saved value.
+  useEffect(() => {
+    if (profile?.map_style != null) setStyleOverride(profile.map_style || '')
+  }, [profile?.map_style])
+
+  // The effective style key — explicit override wins; otherwise derive
+  // from the current theme.
+  const effectiveStyle = styleOverride && MAP_STYLES[styleOverride]
+    ? styleOverride
+    : deriveAutoStyle(activeTheme)
 
   function toggleLive() { setLiveOpen(v => { localStorage.setItem('track_live_open', !v); return !v }) }
   function toggleTender() { setTenderOpen(v => { localStorage.setItem('track_tender_open', !v); return !v }) }
@@ -108,7 +183,10 @@ export default function ProjectTracker() {
       if (!mapRef.current || mapInstanceRef.current) return
       const L = window.L
       const map = L.map(mapRef.current, { zoomControl: true, scrollWheelZoom: true, attributionControl: false }).setView([53.0, -1.5], 6)
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map)
+      // Initial tile layer uses the resolved effective style. The swap
+      // effect below replaces this when the user changes style or theme.
+      const style = MAP_STYLES[effectiveStyle] || MAP_STYLES.dark
+      tileLayerRef.current = L.tileLayer(style.url, { maxZoom: 19, attribution: style.attr }).addTo(map)
       mapInstanceRef.current = map
       setMapReady(true)
 
@@ -215,6 +293,22 @@ export default function ProjectTracker() {
     return () => { delete window.__navigateToProject__ }
   }, [navigate])
 
+  // Swap the tile layer whenever the effective style changes. This fires
+  // when the user picks an override OR when the CRM theme changes while
+  // override is "auto". The map instance and markers persist — only the
+  // tile provider is replaced.
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return
+    const L = window.L
+    if (!L) return
+    const style = MAP_STYLES[effectiveStyle] || MAP_STYLES.dark
+    if (tileLayerRef.current) {
+      mapInstanceRef.current.removeLayer(tileLayerRef.current)
+    }
+    tileLayerRef.current = L.tileLayer(style.url, { maxZoom: 19, attribution: style.attr })
+      .addTo(mapInstanceRef.current)
+  }, [effectiveStyle, mapReady])
+
   const filtered = filter === 'all' ? projects : projects.filter(p => p.status === filter)
   const counts = Object.keys(STATUS_COLORS).reduce((acc, s) => {
     acc[s] = projects.filter(p => p.status === s).length; return acc
@@ -286,8 +380,21 @@ export default function ProjectTracker() {
         ))}
       </div>
 
-      <div style={{ borderRadius: 'var(--radius-lg, 12px)', overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 20 }}>
+      <div style={{ borderRadius: 'var(--radius-lg, 12px)', overflow: 'hidden', border: '1px solid var(--border)', marginBottom: 20, position: 'relative' }}>
         <div ref={mapRef} style={{ height: 480, width: '100%', background: '#1a1a2e' }} />
+        {/* Map-style picker overlay. Positioned over the map's top-right
+            corner. 'Auto' = no override (follows theme); the four explicit
+            buttons each persist via setMapStyle. The active button is
+            highlighted — when override is empty, 'Auto' is active and the
+            current effective style still shows in muted text underneath. */}
+        <MapStylePicker
+          override={styleOverride}
+          effective={effectiveStyle}
+          onPick={(value) => {
+            setStyleOverride(value)
+            setMapStyle(value)
+          }}
+        />
       </div>
 
       {/* ─── Live Projects ────────────────────────────────────── */}
@@ -394,5 +501,77 @@ export default function ProjectTracker() {
         )}
       </div>
     </div>
+  )
+}
+
+// ─── MapStylePicker ────────────────────────────────────────────────────────
+//
+// In-map overlay that lets the user pick a tile style. 5 buttons total:
+// "Auto" (clears override → follows the CRM theme), plus one button per
+// entry in MAP_STYLES (Dark / Light / Colour / OSM).
+//
+// `override` is the raw stored value ('' | 'dark' | 'light' | ...).
+// `effective` is what's currently driving the tiles (always one of the
+// MAP_STYLES keys). When override is empty, the Auto button is highlighted
+// and a small subtitle shows which style is being used as the auto-derived
+// default — e.g. "(Light)" — so the user knows what they're getting.
+function MapStylePicker({ override, effective, onPick }) {
+  const isAutoActive = !override
+  return (
+    <div style={{
+      position: 'absolute',
+      top: 10,
+      right: 10,
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      padding: '4px',
+      display: 'flex',
+      gap: 2,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+      zIndex: 1000,
+    }}>
+      <PickerButton
+        label="Auto"
+        sublabel={isAutoActive ? `(${MAP_STYLES[effective]?.label || ''})` : null}
+        active={isAutoActive}
+        onClick={() => onPick('')}
+      />
+      {Object.entries(MAP_STYLES).map(([key, style]) => (
+        <PickerButton
+          key={key}
+          label={style.label}
+          active={override === key}
+          onClick={() => onPick(key)}
+        />
+      ))}
+    </div>
+  )
+}
+
+function PickerButton({ label, sublabel, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '4px 10px',
+        fontSize: 11,
+        fontWeight: active ? 600 : 500,
+        background: active ? 'var(--accent)' : 'transparent',
+        color: active ? 'white' : 'var(--text2)',
+        border: 'none',
+        borderRadius: 5,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+      }}
+    >
+      {label}
+      {sublabel && (
+        <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 400 }}>{sublabel}</span>
+      )}
+    </button>
   )
 }
