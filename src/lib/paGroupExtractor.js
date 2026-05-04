@@ -83,6 +83,17 @@ export async function extractPaGroups(file) {
   let contractSumF = null
   let contractCumulativeH = null
   const groupAcc = {}    // key → { section, group, cumulative, item_count, description }
+  // Variations cumulative — sum of column H across every row inside the
+  // VARIATIONS section. Tracked separately from `groupAcc` because variations
+  // are not CSA-derived (no contract row, no curve, no forecast). The CFF
+  // generator's PA-aware overlay reads this number to add a "Variations"
+  // line to the cashflow that captures the per-PA variation deltas.
+  //
+  // Why this matters: previously the VARIATIONS section was skipped entirely
+  // (line below at `continue`), which silently dropped real money — Bishops
+  // PA02 and PA03 each contained £17,500 of variation work that never
+  // appeared in the CFF. Now we capture it.
+  let variationsCumulative = 0
 
   function bumpGroup(section, groupLabel, cumulative, itemDescription) {
     const key = groupKeyFor(
@@ -134,7 +145,24 @@ export async function extractPaGroups(file) {
       continue
     }
 
-    if (currentSection === 'VARIATIONS') continue
+    // VARIATIONS section: accumulate column H cumulative on each VO data
+    // row before continuing. We don't try to detect group headers here —
+    // every numeric H inside this section is a real VO cumulative, EXCEPT
+    // for the subtotal row that the PA template emits at the end of the
+    // section. Subtotals are recognised by the same heuristic the rest of
+    // the function uses: both column A and column B empty with numeric F.
+    // Without this skip, a single VO of £17,500 would be double-counted as
+    // £35,000 because the subtotal row repeats H=17,500 right below it.
+    if (currentSection === 'VARIATIONS') {
+      const aEmpty = !a
+      const bEmpty = !b
+      const fIsNumber = typeof f === 'number' && f > 0
+      const isSubtotalRow = aEmpty && bEmpty && fIsNumber
+      if (!isSubtotalRow && typeof h === 'number' && Number.isFinite(h) && h > 0) {
+        variationsCumulative += h
+      }
+      continue
+    }
 
     const aEmpty = !a
     const bEmpty = !b
@@ -161,6 +189,10 @@ export async function extractPaGroups(file) {
     contract_sum: contractSumF,
     contract_cumulative: contractCumulativeH || 0,
     groups: groupAcc,
+    // Variations cumulative — sum of all "VO*" rows' cumulative-to-date in
+    // this PA. Zero if the VARIATIONS section is empty or absent. The CFF
+    // generator uses this to add an extra "Variations" line in the cashflow.
+    variations_cumulative: variationsCumulative,
   }
 }
 
@@ -221,6 +253,9 @@ export async function fetchAllProjectPas(supabase, projectId, subfolderKey = nul
         contract_sum: extract.contract_sum,
         total_cumulative: extract.contract_cumulative,
         groups: extract.groups,
+        // Variations cumulative for this PA. Read by the CFF generator's
+        // PA-aware overlay to compute per-month variation deltas.
+        variations_cumulative: extract.variations_cumulative || 0,
       }
     } catch (err) {
       console.warn('PA parse failed:', row.file_name, err)
