@@ -16,22 +16,31 @@
 //     parsed ones (parsed PAs are more authoritative than incidental drafts)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Parse the PA number from a filename. Matches /^PA(\d+)/i — must be at the
-// very start of the filename, case-insensitive, no separator between PA and
-// the digits. Returns the integer or null if the filename doesn't match.
+// Parse the PA number from a filename. Matches PA(digits) where PA is at
+// the start of the filename OR preceded by a non-alphanumeric separator
+// (space, dash, underscore, etc.). No separator allowed between PA and the
+// digits. Case-insensitive. Returns the integer or null if no match.
 //
-// Examples:
-//   "PA01.xlsx"            → 1
-//   "PA1 Bishops.xlsx"     → 1
-//   "pa001 draft.xlsx"     → 1
-//   "PA10 Sports Hall.xlsx"→ 10
-//   "Bishops PA01.xlsx"    → null  (PA not at start)
-//   "PA-01.xlsx"           → null  (separator between PA and digits)
-//   "Application 1.xlsx"   → null
-//   "Draft.xlsx"           → null
+// Examples (ALL match):
+//   "PA01.xlsx"                                → 1
+//   "PA1 Bishops.xlsx"                         → 1
+//   "pa001 draft.xlsx"                         → 1
+//   "PA10 Sports Hall.xlsx"                    → 10
+//   "Bishops PA01.xlsx"                        → 1
+//   "Merton - Sports Hall PSC - PA02.xlsx"     → 2
+//   "Merton-PA01.xlsx"                         → 1
+//   "PROJECT_PA1_DRAFT.xlsx"                   → 1
+//
+// Examples (do NOT match — fall back to created_at):
+//   "PA-01.xlsx"             — separator between PA and digits
+//   "PA - 02.xlsx"           — same
+//   "Application 1.xlsx"     — no PA token
+//   "MyAppPA1.xlsx"          — PA preceded by alphanumeric (ambiguous)
+//   "spa1.xlsx"              — same
+//   "PA.xlsx"                — no digits after PA
 export function paNumberFromFilename(filename) {
   if (!filename) return null
-  const m = filename.match(/^PA(\d+)/i)
+  const m = filename.match(/(?:^|[^A-Za-z0-9])PA(\d+)/i)
   if (!m) return null
   const n = parseInt(m[1], 10)
   if (!Number.isFinite(n)) return null
