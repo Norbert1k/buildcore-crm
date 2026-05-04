@@ -165,8 +165,7 @@ export async function extractPaGroups(file) {
   }
 }
 
-// Fetch all root-level PAs for a project, parse each, return ordered list.
-// Each entry includes:
+// Fetch PAs for a project, parse each, return ordered list. Each entry includes:
 //   • index    — derived from parsed PA filename (PA01 → 1) when possible,
 //     else falls back to the entry's array position (1-based)
 //   • pa_label — display label like "PA01" / "PA02"
@@ -175,14 +174,30 @@ export async function extractPaGroups(file) {
 // trailing by created_at. This is reupload-stable: a freshly-uploaded PA01
 // no longer jumps to the end of the list.
 //
-// Multi-building projects: only root-level PAs are covered for now.
-export async function fetchAllProjectPas(supabase, projectId) {
-  const { data: rows, error } = await supabase
+// Scoping (paSubfolderKey arg):
+//   • undefined or null → root-level PAs only (single-building projects like
+//     Bishops where PAs sit directly under '02-payment-application')
+//   • string key        → PAs in that specific subfolder (e.g. Merton's
+//     '02-payment-application-custom-...tsd8' for Sports Hall)
+//
+// For projects with no PAs at the queried location, returns []. The CFF
+// generator's PA-aware regenerate falls back to forecast-only mode in that
+// case.
+export async function fetchAllProjectPas(supabase, projectId, paSubfolderKey = null) {
+  let q = supabase
     .from('project_doc_files')
     .select('id, file_name, storage_path, created_at')
     .eq('project_id', projectId)
     .eq('folder_key', '02-payment-application')
-    .is('subfolder_key', null)
+  // PostgREST handles null vs string differently. Use .is() for null,
+  // .eq() for an actual string key.
+  if (paSubfolderKey == null) {
+    q = q.is('subfolder_key', null)
+  } else {
+    q = q.eq('subfolder_key', paSubfolderKey)
+  }
+
+  const { data: rows, error } = await q
 
   if (error) throw error
   if (!rows || rows.length === 0) return []
