@@ -107,13 +107,35 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
     setLoading(true)
     try {
       if (reportId) {
-        // Existing report — load it
+        // Existing report — load it. Also fetch project_ref so we can
+        // auto-correct job_no on display (the field is auto-locked to the
+        // canonical project_ref; old reports may have legacy values from
+        // before the relabel).
         const [rRes, pRes] = await Promise.all([
           supabase.from('progress_reports').select('*').eq('id', reportId).single(),
           supabase.from('progress_report_photos').select('*').eq('report_id', reportId).order('display_order'),
         ])
         if (rRes.error) throw rRes.error
-        setReport(rRes.data)
+
+        // Pull project_ref once we know the report's project_id. Cheap
+        // single-row query; failure is non-fatal — we just keep the saved
+        // job_no as-is and the user can reopen later when network/data is
+        // available.
+        let canonicalJobNo = null
+        if (rRes.data?.project_id) {
+          const projRes = await supabase.from('projects')
+            .select('project_ref').eq('id', rRes.data.project_id).maybeSingle()
+          canonicalJobNo = projRes?.data?.project_ref || null
+        }
+
+        // Override job_no with canonical project_ref. Doesn't mark dirty —
+        // if the user changes other fields and saves, the corrected job_no
+        // persists. If they close without changes, no write happens (safe —
+        // next open auto-corrects again).
+        const corrected = canonicalJobNo
+          ? { ...rRes.data, job_no: canonicalJobNo }
+          : rRes.data
+        setReport(corrected)
         setPhotos(pRes.data || [])
         setDirty(false)
       } else {
@@ -237,12 +259,17 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           // text is sticky. Matches the existing pattern (employer, mc_pm
           // etc) so manual overrides persist month-to-month.
           //
-          // Job No → projects.project_ref (was previously composite "name – ref").
-          job_no: prev?.job_no || proj?.project_ref || projectName || '',
-          // REPURPOSED: client_pm now stores Project Name. Old reports with
-          // a real client_pm value will display it under the new "Project
-          // Name" label — visually noisy on first reopen, one-time.
-          client_pm: prev?.client_pm || proj?.project_name || projectName || '',
+          // Job No → always projects.project_ref. Auto-locked: ignores prev
+          // because legacy reports stored "name – ref" composite or the
+          // project name in this column. Falls back to projectName only if
+          // the project record literally has no project_ref.
+          job_no: proj?.project_ref || projectName || '',
+          // REPURPOSED: client_pm now stores Project Name. Always pulls
+          // projects.project_name, ignoring prev — legacy reports stored
+          // unrelated values (client name, PM name) here under the old
+          // "Project Manager (Client)" label. The input remains editable
+          // so the user can manually adjust if needed.
+          client_pm: proj?.project_name || projectName || '',
           // REPURPOSED: employer now stores Client (clients.name via FK join).
           // Falls back to legacy employer_name column for old projects
           // without a client_id assignment.
@@ -469,7 +496,21 @@ function InfoTab({ report, patch }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, maxWidth: 800 }}>
       <Section title="1.1 Project Information">
         <Grid2>
-          <Field label="Job No"><input value={report.job_no || ''} onChange={e => patch('job_no', e.target.value)} /></Field>
+          {/* Job No is auto-locked to projects.project_ref. Read-only by
+              design (per Norbert's spec — "automated job ref number ... and
+              autolocked"). The seeding logic always pulls the canonical
+              project_ref, so legacy reports get auto-corrected on next open.
+              Subtle visual styling indicates non-editability without making
+              it look broken. */}
+          <Field label="Job No">
+            <input
+              value={report.job_no || ''}
+              readOnly
+              tabIndex={-1}
+              style={{ cursor: 'not-allowed', opacity: 0.75 }}
+              title="Auto-populated from project record (cannot be edited)"
+            />
+          </Field>
           {/* Project Name lives in client_pm column (repurposed). User can
               still type to override if the auto-populated project name needs
               tweaking for this specific report. */}
