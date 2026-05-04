@@ -165,7 +165,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         const [prevRes, projRes, paBuf, eaRes, teamRes] = await Promise.all([
           prevQuery.maybeSingle(),
           supabase.from('projects')
-            .select('project_name, project_ref, address, postcode, employer_name, client_id, start_date, end_date, clients(name)')
+            .select('project_name, project_ref, address, postcode, employer_name, client_id, client_name, start_date, end_date')
             .eq('id', projectId).maybeSingle(),
           fetchLatestPaForSubfolder(supabase, projectId, subfolderKey),
           supabase.from('project_employer_agents')
@@ -180,18 +180,6 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         const prev = prevRes.data
         const proj = projRes.data
         const number = await nextReportNumber(projectId)
-
-        // TEMP DIAGNOSTIC — confirms what the projects query returned. Tag
-        // 'JOB-NO-DEBUG' for easy console filtering. Remove once Job No
-        // populates correctly.
-        console.warn('[JOB-NO-DEBUG] new report seeding', {
-          projectId,
-          projectName_param: projectName,
-          projRes_error: projRes.error,
-          proj_data: proj,
-          proj_project_ref: proj?.project_ref,
-          proj_project_name: proj?.project_name,
-        })
 
         // Comma-join helpers — multi-value fields show all assigned people /
         // companies separated by ", ". Falls back to empty string so the
@@ -212,9 +200,12 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           .filter(Boolean)
           .join(', ')
 
-        // Client name comes through the joined select — supabase returns
-        // null when client_id is null or the join misses.
-        const clientName = (proj?.clients && (proj.clients).name) || ''
+        // Client name comes from the denormalized projects.client_name
+        // column (populated when the project was created/edited via
+        // ProjectModal). Same pattern used elsewhere in the codebase
+        // (ProjectTracker, Projects, CaseStudyEditor) — avoids needing a
+        // nested supabase select with FK relationship hints.
+        const clientName = proj?.client_name || ''
 
         // Run extraction if we got a PA file. Convert PA groups → editor groups
         // shape: [{ name, items: [{ label, percent }] }]. One group per PA group,
