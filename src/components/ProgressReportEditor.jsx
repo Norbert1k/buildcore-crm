@@ -165,7 +165,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         const [prevRes, projRes, paBuf, eaRes, teamRes] = await Promise.all([
           prevQuery.maybeSingle(),
           supabase.from('projects')
-            .select('project_name, project_ref, employer_name, client_name, start_date, end_date')
+            .select('project_name, project_ref, client_name, start_date, end_date')
             .eq('id', projectId).maybeSingle(),
           fetchLatestPaForSubfolder(supabase, projectId, subfolderKey),
           supabase.from('project_employer_agents')
@@ -273,10 +273,11 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           // "Project Manager (Client)" label. The input remains editable
           // so the user can manually adjust if needed.
           client_pm: proj?.project_name || projectName || '',
-          // REPURPOSED: employer now stores Client (clients.name via FK join).
-          // Falls back to legacy employer_name column for old projects
-          // without a client_id assignment.
-          employer: prev?.employer || clientName || proj?.employer_name || '',
+          // REPURPOSED: employer now stores Client (clients.name via the
+          // denormalized projects.client_name column). The original schema
+          // had no employer_name column on projects, so prev or clientName
+          // are the only sources.
+          employer: prev?.employer || clientName || '',
           // REPURPOSED: contract_administrator now stores Employer's Agent
           // (comma-joined company_name from project_employer_agents). Multi-
           // EA projects show all assigned agents separated by ", ".
