@@ -165,7 +165,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         const [prevRes, projRes, paBuf, eaRes, teamRes] = await Promise.all([
           prevQuery.maybeSingle(),
           supabase.from('projects')
-            .select('project_name, project_ref, address, postcode, employer_name, client_id, client_name, start_date, end_date')
+            .select('project_name, project_ref, employer_name, client_name, start_date, end_date')
             .eq('id', projectId).maybeSingle(),
           fetchLatestPaForSubfolder(supabase, projectId, subfolderKey),
           supabase.from('project_employer_agents')
