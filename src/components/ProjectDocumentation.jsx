@@ -963,6 +963,36 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         client_visible: newValue,
       }, { onConflict: 'project_id,folder_key,subfolder_key' })
       if (error) throw error
+
+      // RLS on project_doc_files AND-chains a top-level folder visibility
+      // check WITH the subfolder check. If the top-level row (subfolder_key='')
+      // is missing or false, even toggling a subfolder visible doesn't expose
+      // files to portal users. Most folders ('02-payment-application' etc.)
+      // get their top-level row written by ProjectDocumentation's folder-level
+      // toggle UI, but '00-project-information' has no folder-level toggle —
+      // visibility is managed exclusively per subfolder (CFF, CSA, Reports).
+      // So we backfill the top-level row here when toggling a subfolder
+      // visible.
+      //
+      // INSERT only if missing — we never overwrite an existing row, since
+      // an admin may have deliberately set the whole folder to hidden. The
+      // upsert with ignoreDuplicates emulates "INSERT ON CONFLICT DO NOTHING".
+      if (newValue === true) {
+        const { error: parentErr } = await supabase
+          .from('project_template_folder_visibility')
+          .upsert({
+            project_id: projectId,
+            folder_key: folder.key,
+            subfolder_key: '',
+            client_visible: true,
+          }, {
+            onConflict: 'project_id,folder_key,subfolder_key',
+            ignoreDuplicates: true,
+          })
+        // Don't fail the whole toggle if the parent backfill errors —
+        // the subfolder write already succeeded. Log for diagnostics.
+        if (parentErr) console.warn('[visibility] parent backfill failed:', parentErr.message)
+      }
     } catch (err) {
       setClientVisible(!newValue)  // revert
       alert('Could not update visibility: ' + err.message)
@@ -1302,7 +1332,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCffGenerator(true) }}
                     style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#448a40', borderColor: '#448a40' }}
-                    title="Generate a cashflow forecast from the project CSA or a client CFF"
+                    title="Generate a cashflow forecast from the project CSA"
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
                     {fileCount > 0 ? 'Re-generate CFF' : 'Generate CFF'}
