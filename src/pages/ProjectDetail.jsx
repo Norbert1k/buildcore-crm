@@ -1301,23 +1301,14 @@ export default function ProjectDetail() {
       )}
 
       {activeTab === 'ccg_team' && (() => {
-        // Group team members by role for display. Roles render in hierarchy
-        // order; multiple people per role appear as cards within each role
-        // section. 'Other' / unknown roles drop to the bottom.
+        // Sort team members by role hierarchy (position_order asc), then
+        // by created_at within each role. Compact list view renders one
+        // row per person with the role as a colored pill — no grouping
+        // panels needed.
         const sorted = [...team].sort((a, b) => {
           if (a.position_order !== b.position_order) return a.position_order - b.position_order
           return new Date(a.created_at) - new Date(b.created_at)
         })
-        const grouped = []
-        const seenOrders = new Set()
-        for (const m of sorted) {
-          if (!seenOrders.has(m.role)) {
-            grouped.push({ role: m.role, members: [m] })
-            seenOrders.add(m.role)
-          } else {
-            grouped.find(g => g.role === m.role).members.push(m)
-          }
-        }
         return (
         <div>
           <div className="section-header">
@@ -1346,83 +1337,65 @@ export default function ProjectDetail() {
               No team members assigned yet. Click <strong>Add Team Member</strong> to get started.
             </div>
           ) : (
-            <div style={{
-              // Vertical stack — each role is a full-width row containing
-              // an auto-fill member grid. Replaces the previous 3-column
-              // outer grid which produced ragged panel heights when role
-              // cards held different numbers of members. With this layout
-              // each role section is independent so heights never need
-              // to align across columns.
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 18,
-            }}>
-              {grouped.map((g, idx) => (
-                <div key={g.role}>
-                  {/* Role header — small caps label + count, with a
-                      hairline separator below. No more boxed panel
-                      around each role; the visual grouping comes from
-                      the label and spacing between sections. */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: 10,
-                    paddingBottom: 6,
-                    borderBottom: '0.5px solid var(--border)',
-                  }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                      {g.role}
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--text3)' }}>
-                      {g.members.length} {g.members.length === 1 ? 'person' : 'people'}
-                    </div>
-                  </div>
-                  {/* Member grid — auto-fill at 240px min. Now spans the
-                      full content width since the outer is a vertical
-                      stack. Cards wrap to multiple rows when there are
-                      more members than fit in one row. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-                    {g.members.map(m => (
-                      <div key={m.id} style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                          <Avatar name={m.name} size={36} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {m.name}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{m.role}</div>
+            <div className="card card-pad" style={{ padding: 0, overflow: 'hidden' }}>
+              {/* Compact list view — all team members in a single table
+                  sorted by role hierarchy (position_order). No more
+                  per-role panels. Each row is one person; role is shown
+                  as a small pill. Edit + Delete buttons inline at right.
+                  Mirrors the look of the External Users table on Settings. */}
+              <div className="table-wrap">
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left' }}>Name</th>
+                      <th style={{ textAlign: 'left' }}>Role</th>
+                      <th style={{ textAlign: 'left' }}>Email</th>
+                      <th style={{ textAlign: 'left' }}>Phone</th>
+                      {can('manage_projects') && <th style={{ width: 130 }}></th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map(m => (
+                      <tr key={m.id}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <Avatar name={m.name} size="sm" />
+                            <div style={{ fontWeight: 500, fontSize: 13 }}>{m.name}</div>
                           </div>
-                        </div>
-                        {m.email && (
-                          <div style={{ fontSize: 11, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                            <a href={`mailto:${m.email}`} style={{ color: 'var(--text2)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {m.email}
-                            </a>
-                          </div>
-                        )}
-                        {m.phone && (
-                          <div style={{ fontSize: 11, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                            {m.phone}
-                          </div>
-                        )}
+                        </td>
+                        <td>
+                          <RoleHierarchyPill role={m.role} positionOrder={m.position_order} />
+                        </td>
+                        <td className="td-muted">
+                          {m.email
+                            ? <a href={`mailto:${m.email}`} style={{ color: 'var(--text2)', textDecoration: 'none' }}>{m.email}</a>
+                            : <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>—</span>
+                          }
+                        </td>
+                        <td className="td-muted">
+                          {m.phone || <span style={{ color: 'var(--text3)', fontStyle: 'italic' }}>—</span>}
+                        </td>
                         {can('manage_projects') && (
-                          <div style={{ display: 'flex', gap: 6, marginTop: 8, paddingTop: 8, borderTop: '0.5px solid var(--border)' }}>
-                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '3px 8px', flex: 1 }} onClick={() => openTeamModal(m)}>
-                              <IconEdit size={11} /> Edit
-                            </button>
-                            <button className="btn btn-sm" style={{ fontSize: 10, padding: '3px 8px', color: 'var(--red)' }} onClick={() => setConfirmRemoveTeam(m.id)}>
-                              <IconTrash size={11} />
-                            </button>
-                          </div>
+                          <td>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button className="btn btn-sm" onClick={() => openTeamModal(m)}>
+                                <IconEdit size={11} /> Edit
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                onClick={() => setConfirmRemoveTeam(m.id)}
+                                title={`Remove ${m.name}`}
+                              >
+                                <IconTrash size={11} />
+                              </button>
+                            </div>
+                          </td>
                         )}
-                      </div>
+                      </tr>
                     ))}
-                  </div>
-                </div>
-              ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1810,5 +1783,40 @@ function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
         </div>
       </div>
     </div>
+  )
+}
+
+// ─── RoleHierarchyPill ────────────────────────────────────────────────
+//
+// Small color-coded pill showing a CCG team member's role. Color comes
+// from a fixed map based on hierarchy (purple for director-level, green
+// for ops/PM-level, amber for site, gray for other). Falls back to a
+// neutral pill for unrecognised roles.
+const ROLE_PILL_STYLES = {
+  'Project Director':       { bg: 'rgba(127,119,221,0.15)', color: '#3C3489' },
+  'Operations Manager':     { bg: 'rgba(151,196,89,0.18)',  color: '#3B6D11' },
+  'Project Manager':        { bg: 'rgba(56,138,64,0.18)',   color: '#1F5024' },
+  'Site Manager':           { bg: 'rgba(255,167,80,0.18)',  color: '#854F0B' },
+  'Assistant Site Manager': { bg: 'rgba(255,167,80,0.12)',  color: '#854F0B' },
+  'Quantity Surveyor':      { bg: 'rgba(56,138,64,0.12)',   color: '#3B6D11' },
+  'Design Manager':         { bg: 'rgba(127,119,221,0.10)', color: '#3C3489' },
+  'H&S Officer':            { bg: 'rgba(226,75,74,0.14)',   color: '#A32D2D' },
+  'Document Controller':    { bg: 'rgba(133,183,235,0.18)', color: '#0C447C' },
+}
+
+function RoleHierarchyPill({ role }) {
+  const style = ROLE_PILL_STYLES[role] || { bg: 'var(--surface2)', color: 'var(--text2)' }
+  return (
+    <span style={{
+      fontSize: 11,
+      padding: '2px 10px',
+      background: style.bg,
+      color: style.color,
+      borderRadius: 99,
+      fontWeight: 500,
+      whiteSpace: 'nowrap',
+    }}>
+      {role}
+    </span>
   )
 }
