@@ -1347,18 +1347,30 @@ export default function ProjectDetail() {
             </div>
           ) : (
             <div style={{
-              // Responsive grid for role cards. auto-fit + minmax(380px, 1fr)
-              // gives: 1 col below 760px, 2 cols below ~1140px, 3 cols above.
-              // alignItems:'start' so a role card with many members doesn't
-              // stretch its row partner to match height — they sit at the top.
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))',
-              gap: 14,
-              alignItems: 'start',
+              // Vertical stack — each role is a full-width row containing
+              // an auto-fill member grid. Replaces the previous 3-column
+              // outer grid which produced ragged panel heights when role
+              // cards held different numbers of members. With this layout
+              // each role section is independent so heights never need
+              // to align across columns.
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 18,
             }}>
-              {grouped.map(g => (
-                <div key={g.role} className="card card-pad">
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              {grouped.map((g, idx) => (
+                <div key={g.role}>
+                  {/* Role header — small caps label + count, with a
+                      hairline separator below. No more boxed panel
+                      around each role; the visual grouping comes from
+                      the label and spacing between sections. */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 10,
+                    paddingBottom: 6,
+                    borderBottom: '0.5px solid var(--border)',
+                  }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                       {g.role}
                     </div>
@@ -1366,12 +1378,11 @@ export default function ProjectDetail() {
                       {g.members.length} {g.members.length === 1 ? 'person' : 'people'}
                     </div>
                   </div>
-                  {/* Inner member grid — tightened from 280px → 220px min so a
-                      half-width role card (in the new 2-up outer grid) doesn't
-                      have its member cards overflow horizontally. On wide
-                      screens with 1 member per role, each member card still
-                      fills the role card's width via 1fr. */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                  {/* Member grid — auto-fill at 240px min. Now spans the
+                      full content width since the outer is a vertical
+                      stack. Cards wrap to multiple rows when there are
+                      more members than fit in one row. */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
                     {g.members.map(m => (
                       <div key={m.id} style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
