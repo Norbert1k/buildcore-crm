@@ -46,11 +46,15 @@ interface DeleteBody {
 }
 
 serve(async (req) => {
-  // VERSION MARKER — if 'delete-user v5-log' doesn't appear in
-  // function logs when a delete is attempted, the deployed code is NOT
-  // this file. That immediately reveals a deployment issue rather than
-  // a code bug. Remove this once the function is working.
-  console.log('[delete-user] v5-log invoked, method=' + req.method)
+  // VERSION MARKER + trace collector. Since Supabase Edge Function logs
+  // weren't surfacing console output, we bundle a trace into the error
+  // response so the browser can see exactly which step failed.
+  const trace: string[] = []
+  const log = (msg: string) => {
+    console.log('[delete-user] ' + msg)
+    trace.push(msg)
+  }
+  log('v6-trace invoked, method=' + req.method)
 
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -88,7 +92,7 @@ serve(async (req) => {
     }
 
     const body: DeleteBody = await req.json()
-    console.log('[delete-user] body received: mode=' + body?.mode + ' target_id=' + body?.target_id)
+    log('body received: mode=' + body?.mode + ' target_id=' + body?.target_id)
     if (!body?.mode || !body?.target_id) {
       throw new Error('Missing mode or target_id')
     }
@@ -121,7 +125,7 @@ serve(async (req) => {
     }
 
     if (body.mode === 'profile') {
-      console.log('[delete-user] profile mode for target_id=' + body.target_id)
+      log('profile mode for target_id=' + body.target_id)
 
       // ── Mode 2: hard-delete a CRM user ──
       //
@@ -132,14 +136,14 @@ serve(async (req) => {
         .eq('id', body.target_id)
         .maybeSingle()
       if (lookupErr) {
-        console.log('[delete-user] profile lookup error: ' + lookupErr.message)
+        log('profile lookup error: ' + lookupErr.message)
         throw new Error(`Profile lookup failed: ${lookupErr.message}`)
       }
       if (!target) {
-        console.log('[delete-user] profile not found for id=' + body.target_id)
+        log('profile not found for id=' + body.target_id)
         throw new Error('User not found')
       }
-      console.log('[delete-user] target found: id=' + target.id + ' email=' + target.email + ' role=' + target.role)
+      log('target found: id=' + target.id + ' email=' + target.email + ' role=' + target.role)
 
       // Guard 1 — caller can't delete themselves.
       if (target.id === caller.id) {
@@ -166,9 +170,9 @@ serve(async (req) => {
         throw new Error('Internal error: profile row has no id')
       }
 
-      console.log('[delete-user] calling GoTrue admin DELETE for id=' + target.id)
+      log('calling GoTrue admin DELETE for id=' + target.id)
       const deleteUrl = `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(target.id)}`
-      console.log('[delete-user] DELETE url=' + deleteUrl)
+      log('DELETE url=' + deleteUrl)
       const deleteResp = await fetch(deleteUrl, {
         method: 'DELETE',
         headers: {
@@ -177,22 +181,22 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
       })
-      console.log('[delete-user] GoTrue response status=' + deleteResp.status)
+      log('GoTrue response status=' + deleteResp.status)
       if (!deleteResp.ok) {
         // Try to extract GoTrue's error body for a clear message.
         let detail = `HTTP ${deleteResp.status}`
         let rawBody = ''
         try {
           rawBody = await deleteResp.text()
-          console.log('[delete-user] GoTrue error body: ' + rawBody)
+          log('GoTrue error body: ' + rawBody)
           const parsed = JSON.parse(rawBody)
           detail = parsed?.msg || parsed?.error_description || parsed?.error || detail
         } catch (e) {
-          console.log('[delete-user] failed to parse GoTrue body: ' + (e instanceof Error ? e.message : String(e)))
+          log('failed to parse GoTrue body: ' + (e instanceof Error ? e.message : String(e)))
         }
         throw new Error(`Failed to delete auth user: ${detail}`)
       }
-      console.log('[delete-user] auth user deleted successfully')
+      log('auth user deleted successfully')
 
       // client_users.user_id has no FK to auth.users (it's plain uuid),
       // so we clean up manually. Rows might be 0 or many depending on
@@ -216,12 +220,15 @@ serve(async (req) => {
     throw new Error(`Unknown mode: ${body.mode}`)
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
-    console.log('[delete-user] catch block returning error: ' + message)
+    log('catch block returning error: ' + message)
     if (e instanceof Error && e.stack) {
-      console.log('[delete-user] error stack: ' + e.stack)
+      log('error stack: ' + e.stack)
     }
+    // Include the trace so the browser can see what the function did
+    // step-by-step. Once we identify and fix the root cause this debug
+    // payload should be removed.
     return new Response(
-      JSON.stringify({ error: message }),
+      JSON.stringify({ error: message, trace }),
       {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
