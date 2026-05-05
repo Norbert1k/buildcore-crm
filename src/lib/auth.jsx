@@ -60,25 +60,6 @@ export function AuthProvider({ children }) {
     if (user) await supabase.from('profiles').update({ theme }).eq('id', user.id)
   }
 
-  // Map tile style preference for ProjectTracker. Stored on profiles
-  // (column: map_style, nullable). Null = "follow theme" (default). Set
-  // values: 'dark' | 'light' | 'colour' | 'osm'. Validation is intentionally
-  // loose — caller is trusted, unknown values are stored anyway.
-  //
-  // Also mirrored to localStorage so the page can read the preference
-  // synchronously on first paint without waiting for the profile fetch.
-  async function setMapStyle(mapStyle) {
-    setProfile(p => ({ ...p, map_style: mapStyle }))
-    try { localStorage.setItem('map_style', mapStyle || '') } catch {}
-    if (user) {
-      const { error } = await supabase.from('profiles').update({ map_style: mapStyle }).eq('id', user.id)
-      // If the column doesn't exist yet (migration not run) the update
-      // fails — that's OK, localStorage carries the preference until the
-      // schema catches up.
-      if (error) console.warn('[auth] setMapStyle DB write failed (column missing?):', error.message)
-    }
-  }
-
   async function signIn(email, password) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     return { error }
@@ -115,6 +96,11 @@ export function AuthProvider({ children }) {
       view_suppliers:        ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
       view_supplier_detail:  ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
       view_supplier_passwords: ['project_manager', 'accountant', 'director_viewer'],
+      // Credit limits and portal/login info — hidden from site managers
+      // who only need supplier contact/account info on-site, not commercial
+      // or credentials data. All other supplier-viewing roles retain access.
+      view_supplier_credit:    ['project_manager', 'accountant', 'director_viewer'],
+      view_supplier_login:     ['project_manager', 'accountant', 'director_viewer'],
       view_performance:      ['project_manager', 'accountant', 'director_viewer', 'site_manager'],
       issue_ratings:         ['project_manager', 'accountant'],
       view_all:              ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
@@ -150,7 +136,7 @@ export function AuthProvider({ children }) {
   const canViewActivity = () => ['admin', 'project_manager', 'operations_manager'].includes(role)
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, canViewActivity, projectAccess, role, setTheme, setMapStyle, mfaVerified, markMfaVerified }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, canViewActivity, projectAccess, role, setTheme, mfaVerified, markMfaVerified }}>
       {children}
     </AuthContext.Provider>
   )
