@@ -43,6 +43,11 @@ export default function Settings() {
   const [loading, setLoading] = useState(true)
   const [showAddUser, setShowAddUser] = useState(false)
   const [showEditUser, setShowEditUser] = useState(null)
+  // Delete-user state: holds the row currently being confirmed for delete.
+  // Null = no modal open; { user, mode } = modal open. mode is 'profile'
+  // for CRM users (hard delete) or 'client_user' for portal-only users
+  // (revoke access only).
+  const [showDeleteUser, setShowDeleteUser] = useState(null)
   const [show2FA, setShow2FA] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [addForm, setAddForm] = useState({ email: '', full_name: '', password: '', role: 'viewer' })
@@ -382,6 +387,7 @@ export default function Settings() {
                           onNavigateProject={(id) => navigate(`/projects/${id}`)}
                           onNavigateClient={(id) => navigate(`/clients/${id}`)}
                           onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
+                          onDelete={() => setShowDeleteUser({ user: u, mode: 'profile' })}
                         />
                       ))}
                     </tbody>
@@ -416,6 +422,15 @@ export default function Settings() {
                               onNavigateProject={(id) => navigate(`/projects/${id}`)}
                           onNavigateClient={(id) => navigate(`/clients/${id}`)}
                               onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
+                              onDelete={() => setShowDeleteUser({
+                                user: u,
+                                // Portal-only users (synthetic rows from
+                                // client_users) get the lighter
+                                // 'client_user' mode = revoke portal
+                                // access only. Real profile-backed users
+                                // get full hard-delete.
+                                mode: u._portalOnly ? 'client_user' : 'profile',
+                              })}
                             />
                           ))}
                         </tbody>
@@ -452,6 +467,16 @@ export default function Settings() {
 
       {/* 2FA Modal */}
       {show2FA && <TwoFAModal onClose={() => setShow2FA(false)} profile={profile} />}
+
+      {/* Delete User Modal — confirmation + edge-function call */}
+      {showDeleteUser && (
+        <DeleteUserModal
+          user={showDeleteUser.user}
+          mode={showDeleteUser.mode}
+          onClose={() => setShowDeleteUser(null)}
+          onDeleted={() => { setShowDeleteUser(null); loadUsers() }}
+        />
+      )}
 
       {/* Add User Modal */}
       <Modal open={showAddUser} onClose={() => { setShowAddUser(false); setAddError(''); setAddSuccess('') }}
@@ -772,7 +797,10 @@ function ChangePasswordModal({ onClose }) {
 // administered from the Client detail page, not via Settings → Edit User.
 //
 // Everything else (Name, Email, Added) is identical across modes.
-function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onNavigateClient, onEdit }) {
+function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onNavigateClient, onEdit, onDelete }) {
+  // Caller can delete other users if they're an admin. They never see a
+  // delete button on their own row (handled by onDelete being null).
+  const canDelete = profile?.role === 'admin' && u.id !== profile?.id
   return (
     <tr>
       <td>
@@ -794,15 +822,39 @@ function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onNavigateCl
       </td>
       <td className="td-muted">{new Date(u.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
       <td>
-        {u._portalOnly ? (
-          <button className="btn btn-sm" onClick={() => onNavigateClient(u._portalClientId)}>
-            Manage in client
-          </button>
-        ) : u.id !== profile?.id ? (
-          <button className="btn btn-sm" onClick={onEdit}>
-            <IconEdit size={13} /> Edit
-          </button>
-        ) : null}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {u._portalOnly ? (
+            <>
+              <button className="btn btn-sm" onClick={() => onNavigateClient(u._portalClientId)}>
+                Manage in client
+              </button>
+              {canDelete && onDelete && (
+                <button
+                  className="btn btn-sm btn-danger"
+                  onClick={onDelete}
+                  title={`Revoke ${u.email}'s portal access`}
+                >
+                  Remove access
+                </button>
+              )}
+            </>
+          ) : u.id !== profile?.id ? (
+            <>
+              <button className="btn btn-sm" onClick={onEdit}>
+                <IconEdit size={13} /> Edit
+              </button>
+              {canDelete && onDelete && (
+                <button
+                  className="btn btn-sm btn-danger"
+                  onClick={onDelete}
+                  title={`Permanently delete ${u.full_name}`}
+                >
+                  Delete
+                </button>
+              )}
+            </>
+          ) : null}
+        </div>
       </td>
     </tr>
   )
@@ -898,5 +950,139 @@ function ExternalProjectsCell({ user, projectMap, onNavigateProject }) {
         </span>
       )}
     </div>
+  )
+}
+
+// ─── DeleteUserModal ────────────────────────────────────────────────────
+//
+// Confirmation modal for deleting a user. Two modes:
+//   • mode='profile'      — hard delete a CRM user (auth.users + cascade).
+//                           Requires typing the user's email to confirm.
+//   • mode='client_user'  — revoke a portal-only user's access (delete
+//                           their client_users row only). Single-click
+//                           confirm (lighter consequence, doesn't touch
+//                           auth user).
+//
+// Calls the `delete-user` edge function which validates the caller is an
+// admin, runs the appropriate delete, and returns ok/error. On success the
+// parent's loadUsers() is fired via onDeleted to refresh the table.
+function DeleteUserModal({ user, mode, onClose, onDeleted }) {
+  const [confirmText, setConfirmText] = useState('')
+  const [error, setError] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const isHard = mode === 'profile'
+
+  // Hard-delete requires typing the email exactly. Soft-delete (revoke
+  // portal access) is single-click.
+  const canConfirm = isHard
+    ? confirmText.trim().toLowerCase() === (user.email || '').toLowerCase()
+    : true
+
+  async function performDelete() {
+    setError('')
+    setDeleting(true)
+    try {
+      // Pull the auth session so we can pass the user's JWT — the edge
+      // function uses it to verify the caller is an admin.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not signed in')
+
+      // Strip the synthetic 'portal:' prefix if present (portal-only rows
+      // have id like 'portal:<client_users.id>'). The edge function wants
+      // the raw client_users.id for client_user mode.
+      const rawId = (user.id || '').startsWith('portal:')
+        ? user.id.slice('portal:'.length)
+        : user.id
+
+      const { data, error: fnErr } = await supabase.functions.invoke('delete-user', {
+        body: { mode, target_id: rawId },
+      })
+      if (fnErr) {
+        // Surface the actual error from the edge function (parsed via
+        // FunctionsHttpError context.json() — same pattern as
+        // PortalAccessTab uses).
+        let detailedMessage = fnErr.message || 'Failed to delete user.'
+        try {
+          if (fnErr.context && typeof fnErr.context.json === 'function') {
+            const body = await fnErr.context.json()
+            if (body?.error) detailedMessage = body.error
+          }
+        } catch { /* keep original */ }
+        throw new Error(detailedMessage)
+      }
+      if (data?.error) throw new Error(data.error)
+      onDeleted()
+    } catch (e) {
+      setError(e.message || 'Something went wrong.')
+      setDeleting(false)
+    }
+  }
+
+  const title = isHard
+    ? `Delete ${user.full_name || user.email}?`
+    : `Remove portal access for ${user.full_name || user.email}?`
+
+  return (
+    <Modal open onClose={onClose} title={title} size="sm"
+      footer={
+        <>
+          <button className="btn" onClick={onClose} disabled={deleting}>Cancel</button>
+          <button
+            className="btn btn-danger"
+            onClick={performDelete}
+            disabled={!canConfirm || deleting}
+          >
+            {deleting
+              ? (isHard ? 'Deleting…' : 'Removing…')
+              : (isHard ? 'Delete user' : 'Remove access')}
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {isHard ? (
+          <>
+            <div style={{ padding: 12, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 8, fontSize: 13, color: 'var(--red)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>This cannot be undone</div>
+              <div>
+                Permanently deletes <strong>{user.email}</strong> and removes
+                all their data: profile, project access, portal memberships,
+                and authentication. They will no longer be able to sign in
+                anywhere.
+              </div>
+            </div>
+            <Field label={`To confirm, type the email below: ${user.email}`}>
+              <input
+                type="text"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder={user.email}
+                autoFocus
+                disabled={deleting}
+                className="input"
+              />
+            </Field>
+          </>
+        ) : (
+          <>
+            <div style={{ padding: 12, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 8, fontSize: 13, color: 'var(--amber)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Revoke portal access</div>
+              <div>
+                Removes <strong>{user.email}</strong> from the
+                {user.portalClientNames?.[0] ? ` ${user.portalClientNames[0]}` : ''} client portal.
+                Their authentication account is preserved (in case they
+                have access to other portals), but they won't be able to
+                sign in to this one.
+              </div>
+            </div>
+          </>
+        )}
+        {error && (
+          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, fontSize: 12, color: 'var(--red)' }}>
+            {error}
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }
