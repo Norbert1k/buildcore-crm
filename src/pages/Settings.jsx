@@ -982,20 +982,32 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
     setError('')
     setDeleting(true)
     try {
-      // Pull the auth session so we can pass the user's JWT — the edge
-      // function uses it to verify the caller is an admin.
+      // Pull the auth session so we can pass the user's JWT.
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not signed in')
 
-      // Strip the synthetic 'portal:' prefix if present (portal-only rows
-      // have id like 'portal:<client_users.id>'). The edge function wants
-      // the raw client_users.id for client_user mode.
-      const rawId = (user.id || '').startsWith('portal:')
-        ? user.id.slice('portal:'.length)
-        : user.id
+      if (mode === 'client_user') {
+        // Portal-only user: just remove their client_users row. No edge
+        // function call needed — admin RLS on client_users allows the
+        // direct DELETE. Strip the 'portal:' prefix to get the raw id.
+        const rawId = (user.id || '').startsWith('portal:')
+          ? user.id.slice('portal:'.length)
+          : user.id
+        const { error: delErr } = await supabase
+          .from('client_users')
+          .delete()
+          .eq('id', rawId)
+        if (delErr) throw new Error(`Failed to remove access: ${delErr.message}`)
+        onDeleted()
+        return
+      }
 
+      // Hard delete: invoke the deployed delete-user edge function. Note
+      // it expects `userId` (not `target_id`) in the body and only handles
+      // profile-row deletes — it doesn't clean up client_users so we do
+      // that ourselves after the auth delete succeeds.
       const { data, error: fnErr } = await supabase.functions.invoke('delete-user', {
-        body: { mode, target_id: rawId },
+        body: { userId: user.id },
       })
       if (fnErr) {
         // Surface the actual error from the edge function (parsed via
@@ -1006,17 +1018,22 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           if (fnErr.context && typeof fnErr.context.json === 'function') {
             const body = await fnErr.context.json()
             if (body?.error) detailedMessage = body.error
-            // DEBUG: if the edge function returned a trace, append it so
-            // we can see every step the function took before failing.
-            // Remove once delete works reliably.
-            if (Array.isArray(body?.trace) && body.trace.length > 0) {
-              detailedMessage += '\n\n--- function trace ---\n' + body.trace.join('\n')
-            }
           }
         } catch { /* keep original */ }
         throw new Error(detailedMessage)
       }
       if (data?.error) throw new Error(data.error)
+
+      // Clean up any client_users rows tied to this auth user. The edge
+      // function only deletes profiles/auth.users, leaving any portal
+      // memberships dangling. RLS allows admin to delete client_users.
+      try {
+        await supabase.from('client_users').delete().eq('user_id', user.id)
+      } catch (e) {
+        // Non-fatal — the user is already deleted, this is just cleanup.
+        console.warn('client_users cleanup failed:', e)
+      }
+
       onDeleted()
     } catch (e) {
       setError(e.message || 'Something went wrong.')
@@ -1084,7 +1101,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           </>
         )}
         {error && (
-          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, fontSize: 11, color: 'var(--red)', whiteSpace: 'pre-wrap', fontFamily: 'monospace', maxHeight: 240, overflowY: 'auto' }}>
+          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, fontSize: 12, color: 'var(--red)' }}>
             {error}
           </div>
         )}
