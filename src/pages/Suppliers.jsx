@@ -77,9 +77,11 @@ export default function Suppliers() {
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: can('view_supplier_credit') ? 'repeat(3,1fr)' : 'repeat(2,1fr)', gap: 14, marginBottom: 24 }}>
         <div className="stat-card"><div className="stat-label">Total Suppliers</div><div className="stat-value">{suppliers.length}</div><div className="stat-sub">{active} active</div></div>
-        <div className="stat-card"><div className="stat-label">Total Credit Available</div><div className="stat-value" style={{ fontSize: 18 }}>{formatCurrency(totalCredit)}</div><div className="stat-sub">Combined credit limits</div></div>
+        {can('view_supplier_credit') && (
+          <div className="stat-card"><div className="stat-label">Total Credit Available</div><div className="stat-value" style={{ fontSize: 18 }}>{formatCurrency(totalCredit)}</div><div className="stat-sub">Combined credit limits</div></div>
+        )}
         <div className="stat-card"><div className="stat-label">Categories</div><div className="stat-value">{new Set(suppliers.map(s => s.category)).size}</div><div className="stat-sub">Different supply types</div></div>
       </div>
 
@@ -117,7 +119,7 @@ export default function Suppliers() {
                 <th>Category</th>
                 <th>Contact</th>
                 <th>Account No.</th>
-                <th>Credit Limit</th>
+                {can('view_supplier_credit') && <th>Credit Limit</th>}
                 <th>Payment Terms</th>
                 <th>Status</th>
                 <th></th>
@@ -145,9 +147,11 @@ export default function Suppliers() {
                       {s.account_number || '—'}
                     </div>
                   </td>
-                  <td style={{ fontWeight: 500, color: s.credit_limit ? 'var(--green)' : 'var(--text3)' }}>
-                    {s.credit_limit ? formatCurrency(s.credit_limit) : '—'}
-                  </td>
+                  {can('view_supplier_credit') && (
+                    <td style={{ fontWeight: 500, color: s.credit_limit ? 'var(--green)' : 'var(--text3)' }}>
+                      {s.credit_limit ? formatCurrency(s.credit_limit) : '—'}
+                    </td>
+                  )}
                   <td className="td-muted">{s.payment_terms || '—'}</td>
                   <td><Pill cls={s.status === 'active' ? 'pill-green' : 'pill-gray'}>{s.status === 'active' ? 'Active' : 'Inactive'}</Pill></td>
                   <td onClick={e => e.stopPropagation()}>
@@ -197,13 +201,22 @@ export default function Suppliers() {
               <div style={{ height: 1, background: 'var(--border)', margin: '0 0 16px' }} />
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Account Details</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 13, marginBottom: 20 }}>
-                {[['Account No.', viewing.account_number], ['Credit Limit', viewing.credit_limit ? formatCurrency(viewing.credit_limit) : null], ['Payment Terms', viewing.payment_terms]].filter(([,v]) => v).map(([k,v]) => (
+                {[
+                  ['Account No.', viewing.account_number],
+                  // Credit Limit only shown to roles with view_supplier_credit
+                  // (excludes site_manager — they see other account details).
+                  ['Credit Limit', can('view_supplier_credit') && viewing.credit_limit ? formatCurrency(viewing.credit_limit) : null],
+                  ['Payment Terms', viewing.payment_terms],
+                ].filter(([,v]) => v).map(([k,v]) => (
                   <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><strong>{v}</strong></div>
                 ))}
               </div>
 
-              {/* Portal / Login */}
-              {(viewing.portal_url || viewing.portal_username || (viewing.portal_password && can('view_supplier_passwords'))) && (
+              {/* Portal / Login — hidden entirely from site managers, who
+                  don't need supplier login credentials on-site. The
+                  existing view_supplier_passwords gate inside still
+                  applies for those who DO see this section. */}
+              {can('view_supplier_login') && (viewing.portal_url || viewing.portal_username || (viewing.portal_password && can('view_supplier_passwords'))) && (
                 <>
                   <div style={{ height: 1, background: 'var(--border)', margin: '0 0 16px' }} />
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Portal / Login</div>
