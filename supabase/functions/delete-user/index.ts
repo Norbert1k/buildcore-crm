@@ -151,18 +151,35 @@ serve(async (req) => {
         throw new Error('Internal error: profile row has no id')
       }
 
-      // Delete from auth.users. This cascades to profiles via the FK
-      // (`profiles.id REFERENCES auth.users(id) ON DELETE CASCADE`),
-      // which in turn cascades to user_project_access, performance,
-      // notifications, etc.
+      // Delete from auth.users via direct REST call to the GoTrue admin
+      // endpoint. We tried adminSupabase.auth.admin.deleteUser(id) and
+      // .deleteUser(id, false) — both rejected by GoTrue with "userId
+      // required" despite passing valid UUIDs. Most likely a version
+      // mismatch between supabase-js 2.39.7 and the deployed GoTrue
+      // version on this project. Bypassing the SDK with raw fetch is
+      // safer + matches what the SDK does internally anyway.
       //
-      // IMPORTANT: pass the second argument (shouldSoftDelete=false)
-      // explicitly. Some Supabase SDK + GoTrue version combinations
-      // throw "userId required" when only the UUID is provided —
-      // documented in supabase/discussions/16232. Passing the boolean
-      // makes the request reach the deleteUser endpoint correctly.
-      const { error: authErr } = await adminSupabase.auth.admin.deleteUser(target.id, false)
-      if (authErr) throw new Error(`Failed to delete auth user: ${authErr.message}`)
+      // On success, this cascades via FK:
+      //   auth.users → profiles (ON DELETE CASCADE)
+      //   profiles → user_project_access, performance, notifications, etc.
+      const deleteUrl = `${SUPABASE_URL}/auth/v1/admin/users/${encodeURIComponent(target.id)}`
+      const deleteResp = await fetch(deleteUrl, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+          'apikey': SERVICE_ROLE_KEY,
+          'Content-Type': 'application/json',
+        },
+      })
+      if (!deleteResp.ok) {
+        // Try to extract GoTrue's error body for a clear message.
+        let detail = `HTTP ${deleteResp.status}`
+        try {
+          const body = await deleteResp.json()
+          detail = body?.msg || body?.error_description || body?.error || detail
+        } catch { /* keep status */ }
+        throw new Error(`Failed to delete auth user: ${detail}`)
+      }
 
       // client_users.user_id has no FK to auth.users (it's plain uuid),
       // so we clean up manually. Rows might be 0 or many depending on
