@@ -1788,35 +1788,24 @@ function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
 
 // ─── RoleHierarchyPill ────────────────────────────────────────────────
 //
-// Small color-coded pill showing a CCG team member's role. Color comes
-// from a fixed map based on hierarchy (purple for director-level, green
-// for ops/PM-level, amber for site, gray for other). Falls back to a
-// neutral pill for unrecognised roles.
-const ROLE_PILL_STYLES = {
-  'Project Director':       { bg: 'rgba(127,119,221,0.15)', color: '#3C3489' },
-  'Operations Manager':     { bg: 'rgba(151,196,89,0.18)',  color: '#3B6D11' },
-  'Project Manager':        { bg: 'rgba(56,138,64,0.18)',   color: '#1F5024' },
-  'Site Manager':           { bg: 'rgba(255,167,80,0.18)',  color: '#854F0B' },
-  'Assistant Site Manager': { bg: 'rgba(255,167,80,0.12)',  color: '#854F0B' },
-  'Quantity Surveyor':      { bg: 'rgba(56,138,64,0.12)',   color: '#3B6D11' },
-  'Design Manager':         { bg: 'rgba(127,119,221,0.10)', color: '#3C3489' },
-  'H&S Officer':            { bg: 'rgba(226,75,74,0.14)',   color: '#A32D2D' },
-  'Document Controller':    { bg: 'rgba(133,183,235,0.18)', color: '#0C447C' },
+// Small color-coded pill showing a CCG team member's role. Uses the
+// shared Pill component which is theme-aware via CSS variables — works
+// in both light and dark themes (the previous hardcoded RGB colors were
+// dark-on-dark in dark mode and unreadable). Falls back to gray for
+// unrecognised roles.
+const ROLE_PILL_CLASSES = {
+  'Project Director':       'pill-purple',
+  'Operations Manager':     'pill-green',
+  'Project Manager':        'pill-blue',
+  'Site Manager':           'pill-amber',
+  'Assistant Site Manager': 'pill-amber',
+  'Quantity Surveyor':      'pill-green',
+  'Design Manager':         'pill-purple',
+  'H&S Officer':            'pill-red',
+  'Document Controller':    'pill-blue',
 }
 
 function RoleHierarchyPill({ role }) {
-  const style = ROLE_PILL_STYLES[role] || { bg: 'var(--surface2)', color: 'var(--text2)' }
-  return (
-    <span style={{
-      fontSize: 11,
-      padding: '2px 10px',
-      background: style.bg,
-      color: style.color,
-      borderRadius: 99,
-      fontWeight: 500,
-      whiteSpace: 'nowrap',
-    }}>
-      {role}
-    </span>
-  )
+  const cls = ROLE_PILL_CLASSES[role] || 'pill-gray'
+  return <Pill cls={cls}>{role}</Pill>
 }
