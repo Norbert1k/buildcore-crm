@@ -143,11 +143,25 @@ serve(async (req) => {
         }
       }
 
+      // Defensive guard — `target` came from a successful maybeSingle()
+      // lookup so target.id should be present, but be explicit so any
+      // upstream issue surfaces with a clear message rather than the
+      // cryptic 'userId required' from GoTrue.
+      if (!target.id) {
+        throw new Error('Internal error: profile row has no id')
+      }
+
       // Delete from auth.users. This cascades to profiles via the FK
       // (`profiles.id REFERENCES auth.users(id) ON DELETE CASCADE`),
       // which in turn cascades to user_project_access, performance,
       // notifications, etc.
-      const { error: authErr } = await adminSupabase.auth.admin.deleteUser(target.id)
+      //
+      // IMPORTANT: pass the second argument (shouldSoftDelete=false)
+      // explicitly. Some Supabase SDK + GoTrue version combinations
+      // throw "userId required" when only the UUID is provided —
+      // documented in supabase/discussions/16232. Passing the boolean
+      // makes the request reach the deleteUser endpoint correctly.
+      const { error: authErr } = await adminSupabase.auth.admin.deleteUser(target.id, false)
       if (authErr) throw new Error(`Failed to delete auth user: ${authErr.message}`)
 
       // client_users.user_id has no FK to auth.users (it's plain uuid),
