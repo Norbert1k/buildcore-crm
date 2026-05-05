@@ -1006,6 +1006,12 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           if (fnErr.context && typeof fnErr.context.json === 'function') {
             const body = await fnErr.context.json()
             if (body?.error) detailedMessage = body.error
+            // DEBUG: if the edge function returned a trace, append it so
+            // we can see every step the function took before failing.
+            // Remove once delete works reliably.
+            if (Array.isArray(body?.trace) && body.trace.length > 0) {
+              detailedMessage += '\n\n--- function trace ---\n' + body.trace.join('\n')
+            }
           }
         } catch { /* keep original */ }
         throw new Error(detailedMessage)
@@ -1078,7 +1084,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           </>
         )}
         {error && (
-          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, fontSize: 12, color: 'var(--red)' }}>
+          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, fontSize: 11, color: 'var(--red)', whiteSpace: 'pre-wrap', fontFamily: 'monospace', maxHeight: 240, overflowY: 'auto' }}>
             {error}
           </div>
         )}
