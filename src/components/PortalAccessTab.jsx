@@ -241,8 +241,21 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
         if (fnErr) throw fnErr
         setEmailSent(true)
       } catch (e) {
-        console.warn('Invite email send failed:', e)
-        setEmailWarning(e?.message || 'Email failed to send — please email the portal link manually.')
+        // The supabase-js SDK throws FunctionsHttpError for any non-2xx
+        // response, but doesn't put the response body on the error message —
+        // it's only available via `e.context.json()`. Parse it so the user
+        // sees the actual failure reason (e.g. "RESEND_API_KEY not
+        // configured", "Email send failed", "Not authorised", etc.) rather
+        // than the generic SDK message.
+        let detailedMessage = e?.message || 'Email failed to send.'
+        try {
+          if (e?.context && typeof e.context.json === 'function') {
+            const body = await e.context.json()
+            if (body?.error) detailedMessage = body.error
+          }
+        } catch { /* keep the original message */ }
+        console.warn('Invite email send failed:', detailedMessage, e)
+        setEmailWarning(`Email failed to send: ${detailedMessage}. Please email the portal link manually.`)
       }
 
       setSuccess(true)
