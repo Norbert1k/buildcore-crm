@@ -13,7 +13,7 @@ const ZOOM_LEVELS = {
   month: { name: 'Month', pxPerDay: 3  },
 }
 const ROW_HEIGHT = 30
-const TASK_LIST_W = 360
+const TASK_LIST_W = 260
 const HEADER_H = 56  // date axis area
 
 const COLORS = ['#448a40','#378ADD','#BA7517','#993C1D','#3B6D11','#534AB7','#888780','#c00','#1F8A70']
@@ -325,15 +325,33 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         return
       }
 
-      // Layout: PDF table-list-with-bars approach.
-      // Left column: task names (80mm). Right: timeline drawn as vector bars.
+      // Layout: Engineering schedule (Option 1) — MS Project-style columns
+      // on the left, two-tier date header on the right.
+      //
+      // Column widths in mm (left edge of each):
+      //   ID        15  (width 8)
+      //   Task      23  (width 60)
+      //   Duration  83  (width 16)
+      //   Start     99  (width 20)
+      //   Finish   119  (width 20)
+      // Total left section ends at 139mm. Timeline gets the rest:
+      //   timelineX0 = 139 + 4 = 143mm
+      //   timelineW  = 420 - 143 - 15 = 262mm
       const startY = 46
-      const bottomY = pageH - 14
-      const taskColW = 80  // mm, task name column
-      const timelineX0 = 15 + taskColW + 4
+      const colX = {
+        id:       15,
+        task:     23,
+        duration: 83,
+        start:    99,
+        finish:  119,
+      }
+      const taskColEnd = 139
+      const timelineX0 = taskColEnd + 4
       const timelineW = pageW - timelineX0 - 15
       const rowH = 5.5  // mm per task row
-      const headerH = 12
+      const headerH = 16  // two-tier header (month tier + week tier)
+      const legendH = 8   // reserved space at the bottom for the legend
+      const bottomY = pageH - 14 - legendH
 
       // Compute date range for the bars
       const minDate = bounds.min, maxDate = bounds.max
@@ -345,65 +363,102 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       const todayInRange = todayDt >= minDate && todayDt <= maxDate
       const todayXmm = todayInRange ? timelineX0 + diffDays(minDate, todayDt) * mmPerDay : null
 
-      // Draw header row (axis labels) — zoom-aware: matches the screen view's day/week/month setting
+      // Two-tier date axis. Top tier = months; bottom tier = week-start
+      // day numbers (Mondays). Always uses week granularity for the lower
+      // tier regardless of screen zoom — PDFs are static so we pick the
+      // most-print-friendly setting.
       const drawAxis = (yTop) => {
-        // Box around axis row
+        const monthRowH = 7
+        const weekRowH = headerH - monthRowH
+
+        // Frame
         doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.2)
-        doc.line(15, yTop, pageW - 15, yTop)  // top line
-        doc.line(15, yTop + headerH, pageW - 15, yTop + headerH)  // bottom line
-        // Vertical separator between task col and timeline
+        doc.line(15, yTop, pageW - 15, yTop)
+        doc.line(15, yTop + headerH, pageW - 15, yTop + headerH)
+        doc.line(15, yTop + monthRowH, pageW - 15, yTop + monthRowH)
+        // Vertical column separators in the left section
+        doc.line(colX.task - 0.5,     yTop, colX.task - 0.5,     yTop + headerH)
+        doc.line(colX.duration - 0.5, yTop, colX.duration - 0.5, yTop + headerH)
+        doc.line(colX.start - 0.5,    yTop, colX.start - 0.5,    yTop + headerH)
+        doc.line(colX.finish - 0.5,   yTop, colX.finish - 0.5,   yTop + headerH)
+        // Separator between left section and timeline
         doc.line(timelineX0 - 4, yTop, timelineX0 - 4, yTop + headerH)
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(45, 45, 45)
-        doc.text('Task', 17, yTop + 7.5)
-        // Tick + label spacing per zoom level (mm of horizontal room each label needs to avoid overlap)
-        const minLabelGapMm = 8
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
+
+        // Column headers — span both tiers, vertically centered
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
+        doc.text('ID',       colX.id + 1,       yTop + 10)
+        doc.text('Task name', colX.task + 1,    yTop + 10)
+        doc.text('Duration', colX.duration + 1, yTop + 10)
+        doc.text('Start',    colX.start + 1,    yTop + 10)
+        doc.text('Finish',   colX.finish + 1,   yTop + 10)
+
+        // Top tier — month boundaries. Walk days, draw month label at
+        // the start of each new month within the timeline range.
+        let lastMonth = -1
+        for (let i = 0; i < totalD; i++) {
+          const d = addDays(minDate, i)
+          const m = d.getUTCMonth()
+          if (m !== lastMonth) {
+            const x = timelineX0 + i * mmPerDay
+            // Vertical month boundary line (full height of axis)
+            doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3)
+            doc.line(x, yTop, x, yTop + headerH)
+            // Month label — short month + 2-digit year
+            const label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(60, 60, 60)
+            doc.text(label, x + 1, yTop + 5)
+            lastMonth = m
+          }
+        }
+
+        // Bottom tier — week-start day numbers (Mondays). Smaller text.
+        const minLabelGapMm = 5
         let lastLabelX = -100
         for (let i = 0; i < totalD; i++) {
           const d = addDays(minDate, i)
           const dow = d.getUTCDay()
-          const dayOfMonth = d.getUTCDate()
+          // Tick on every Monday (dow=1) plus the very first day in case
+          // the range starts mid-week.
+          if (dow !== 1 && i !== 0) continue
           const x = timelineX0 + i * mmPerDay
-
-          // Decide whether THIS day is a tick under the active zoom
-          let isTick = false
-          let label = null
-          if (zoom === 'day') {
-            // Tick every day; label every day if there's room
-            isTick = true
-            label = String(dayOfMonth)
-            // Bold + month name on day-1 to give context
-            if (dayOfMonth === 1) {
-              label = d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-            }
-          } else if (zoom === 'week') {
-            // Tick on every Monday (and the very first day, in case range starts mid-week)
-            if (dow === 1 || i === 0) {
-              isTick = true
-              label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
-            }
-          } else {
-            // month — tick on 1st of each month
-            if (dayOfMonth === 1) {
-              isTick = true
-              label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
-            }
-          }
-
-          if (!isTick) continue
-
-          // Draw the tick line
+          // Tick line into the bottom tier only
           doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1)
-          doc.line(x, yTop, x, yTop + headerH)
-
-          // Draw the label only if there's room since the last label (avoids overlap when range is large)
-          if (label && (x - lastLabelX) > minLabelGapMm) {
-            doc.setDrawColor(220, 220, 220)  // keep tick colour
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
-            doc.text(label, x + 1, yTop + 7.5)
+          doc.line(x, yTop + monthRowH, x, yTop + headerH)
+          // Day label (just the day number)
+          if ((x - lastLabelX) > minLabelGapMm) {
+            const label = String(d.getUTCDate()).padStart(2, '0')
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(110, 110, 110)
+            doc.text(label, x + 0.8, yTop + monthRowH + 4)
             lastLabelX = x
           }
         }
+      }
+
+      // Legend strip at the bottom of every page. Placed below the row
+      // area in the reserved `legendH` space. Helps subbies/clients
+      // recognise summary vs task vs milestone shapes at a glance.
+      const drawLegend = () => {
+        const y = pageH - 12
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110, 110, 110)
+        let cx = 15
+        // Task swatch
+        doc.setFillColor(68, 138, 64)
+        doc.rect(cx, y - 1.6, 8, 1.6, 'F')
+        doc.text('Task', cx + 11, y)
+        cx += 11 + doc.getTextWidth('Task') + 8
+        // Summary swatch (thicker bar with end caps)
+        doc.setFillColor(45, 106, 50)
+        doc.rect(cx, y - 2.3, 8, 2.4, 'F')
+        doc.rect(cx, y - 3, 1, 3.6, 'F')
+        doc.rect(cx + 7, y - 3, 1, 3.6, 'F')
+        doc.text('Summary', cx + 11, y)
+        cx += 11 + doc.getTextWidth('Summary') + 8
+        // Milestone swatch (diamond)
+        const dx = cx + 2, dy = y - 1
+        doc.setFillColor(45, 106, 50)
+        doc.triangle(dx, dy - 2, dx + 2, dy, dx, dy + 2, 'F')
+        doc.triangle(dx, dy - 2, dx - 2, dy, dx, dy + 2, 'F')
+        doc.text('Milestone', cx + 11, y)
       }
 
       // Draw each task page-by-page
@@ -413,6 +468,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
       for (let i = 0; i < flat.length; i++) {
         if (cursorY + rowH > bottomY) {
+          drawLegend()
           doc.addPage()
           drawLetterhead()
           cursorY = 34
@@ -420,40 +476,79 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           cursorY += headerH
         }
         const t = flat[i]
-        // Row separator
+        const isGroup = t._hasChildren
+        const isMilestone = !isGroup && t.start_date === t.end_date
+        const dur = durationFromDates(parseDate(t.start_date), parseDate(t.end_date))
+
+        // Row separator (bottom border of this row)
         doc.setDrawColor(230, 230, 230); doc.setLineWidth(0.1)
         doc.line(15, cursorY + rowH, pageW - 15, cursorY + rowH)
-        // Vertical separator
-        doc.line(timelineX0 - 4, cursorY, timelineX0 - 4, cursorY + rowH)
-        // Today line
+        // Vertical column separators
+        doc.line(colX.task - 0.5,     cursorY, colX.task - 0.5,     cursorY + rowH)
+        doc.line(colX.duration - 0.5, cursorY, colX.duration - 0.5, cursorY + rowH)
+        doc.line(colX.start - 0.5,    cursorY, colX.start - 0.5,    cursorY + rowH)
+        doc.line(colX.finish - 0.5,   cursorY, colX.finish - 0.5,   cursorY + rowH)
+        doc.line(timelineX0 - 4,      cursorY, timelineX0 - 4,      cursorY + rowH)
+
+        // Today line — drawn inside the timeline column only
         if (todayXmm !== null) {
           doc.setDrawColor(204, 0, 0); doc.setLineWidth(0.3)
           doc.setLineDashPattern([1, 1], 0)
           doc.line(todayXmm, cursorY, todayXmm, cursorY + rowH)
           doc.setLineDashPattern([], 0)
         }
-        // Task name (with indent)
-        doc.setFont('helvetica', t._hasChildren ? 'bold' : 'normal'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
-        const nameX = 17 + t._depth * 3
-        const nameMaxW = taskColW - (nameX - 15) - 4
+
+        // ── Left columns ─────────────────────────────────────
+        // ID
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 80)
+        doc.text(String(i + 1), colX.id + 1, cursorY + 4)
+
+        // Task name with hierarchical indent + bold for summary rows
+        doc.setFont('helvetica', isGroup ? 'bold' : 'normal'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
+        const nameX = colX.task + 1 + t._depth * 3
+        const nameMaxW = colX.duration - nameX - 1
         const nameLines = doc.splitTextToSize(t.name || '(untitled)', nameMaxW)
         doc.text(nameLines[0], nameX, cursorY + 4)
-        // Bar
+
+        // Duration: '0 d' for milestones, weeks when divisible by 5 or 7
+        // working days, days otherwise.
+        let durLabel
+        if (isMilestone) durLabel = '0 d'
+        else if (dur >= 7 && dur % 7 === 0) durLabel = `${dur / 7} wks`
+        else if (dur >= 5 && dur % 5 === 0) durLabel = `${dur / 5} wks`
+        else durLabel = `${dur} d`
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 80)
+        doc.text(durLabel, colX.duration + 1, cursorY + 4)
+
+        // Start / Finish — short UK format with weekday for clarity
+        const sd = parseDate(t.start_date), ed = parseDate(t.end_date)
+        const fmtCell = (d) => d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' }) : ''
+        doc.text(fmtCell(sd), colX.start + 1,  cursorY + 4)
+        doc.text(fmtCell(ed), colX.finish + 1, cursorY + 4)
+
+        // ── Bar / shape on the timeline ──────────────────────
         const x = dayToXmm(t.start_date)
-        const w = Math.max(0.6, durationFromDates(parseDate(t.start_date), parseDate(t.end_date)) * mmPerDay)
-        // Convert hex color to RGB
+        const w = Math.max(0.6, dur * mmPerDay)
+        // Task colour — used only for non-summary, non-milestone bars.
         const hex = (t.color || '#448a40').replace('#', '')
         const r = parseInt(hex.substring(0, 2), 16) || 68
         const g = parseInt(hex.substring(2, 4), 16) || 138
         const b = parseInt(hex.substring(4, 6), 16) || 64
-        if (t._hasChildren) {
-          // Group bar — black bracket-style
-          doc.setFillColor(60, 60, 60)
-          doc.rect(x, cursorY + 1.5, w, 1.2, 'F')
-          doc.setFillColor(60, 60, 60)
-          doc.rect(x, cursorY + 0.5, 0.8, 3, 'F')
-          doc.rect(x + w - 0.8, cursorY + 0.5, 0.8, 3, 'F')
+
+        if (isMilestone) {
+          // Diamond marker for zero-duration tasks (centered on the date)
+          const dx = x, dy = cursorY + rowH / 2
+          doc.setFillColor(45, 106, 50)
+          doc.triangle(dx, dy - 1.6, dx + 1.6, dy, dx, dy + 1.6, 'F')
+          doc.triangle(dx, dy - 1.6, dx - 1.6, dy, dx, dy + 1.6, 'F')
+        } else if (isGroup) {
+          // Summary bar — thicker dark green with end caps
+          doc.setFillColor(45, 106, 50)
+          doc.rect(x, cursorY + 1.5, w, 1.6, 'F')
+          doc.rect(x, cursorY + 0.6, 1, 3.4, 'F')
+          doc.rect(x + w - 1, cursorY + 0.6, 1, 3.4, 'F')
         } else {
+          // Standard task bar — green
           doc.setFillColor(r, g, b)
           doc.roundedRect(x, cursorY + 1.5, w, rowH - 3, 0.5, 0.5, 'F')
           // Progress overlay
@@ -463,18 +558,14 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
             doc.roundedRect(x, cursorY + 1.5, Math.max(0.3, w * (t.progress / 100)), rowH - 3, 0.5, 0.5, 'F')
             doc.setGState(new doc.GState({ opacity: 1 }))
           }
-          // Date label after the bar (if there's room)
-          if (w >= 8) {
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(255, 255, 255)
-            const lbl = `${fmtDateUK(t.start_date)} → ${fmtDateUK(t.end_date)}`
-            const textW = doc.getTextWidth(lbl)
-            if (textW < w - 2) {
-              doc.text(lbl, x + 1.5, cursorY + 4.2)
-            }
-          }
+          // No date label inside the bar — Start/Finish columns now show
+          // those values explicitly.
         }
         cursorY += rowH
       }
+
+      // Legend on the final page
+      drawLegend()
 
       // Footer on every page
       const pageCount = doc.internal.getNumberOfPages()
