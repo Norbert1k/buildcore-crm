@@ -31,10 +31,124 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
   const [dragging, setDragging] = useState(false)
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  // AI scan state. `scanning` is true while the edge function is running.
+  // `scanResult` holds the most recent parser response (used to show a
+  // confidence pill + notes, if any). `autoFilledFields` tracks which
+  // form fields were populated by the parser — used to render a small
+  // "✨ Auto-filled" hint next to those fields. The hint clears for a
+  // given field as soon as the user edits it manually.
+  const [scanning, setScanning] = useState(false)
+  const [scanResult, setScanResult] = useState(null)
+  const [autoFilledFields, setAutoFilledFields] = useState(() => new Set())
 
   function setCoverAmount(type, v) {
     setCoverAmounts(prev => ({ ...prev, [type]: v }))
     setErrors(e => ({ ...e, ['cover_' + type]: '' }))
+    // Manual edit clears the auto-filled badge for this specific cover field.
+    clearAutoFilled('cover_' + type)
+  }
+
+  // Clears the "auto-filled" hint for a single field once the user has
+  // manually edited it. Called from every field's onChange so the hint
+  // doesn't linger on values the user has overridden.
+  function clearAutoFilled(field) {
+    setAutoFilledFields(prev => {
+      if (!prev.has(field)) return prev
+      const next = new Set(prev)
+      next.delete(field)
+      return next
+    })
+  }
+
+  // ── AI scan: read the dropped PDF as base64, send to the edge function,
+  // populate the form fields with parser output. The parser only handles
+  // PDFs (not images or Word docs) so we skip the call for non-PDF files.
+  // After a successful scan we mark each populated field as "auto-filled"
+  // so the user gets a visual hint to review before saving.
+  async function scanWithAI(pdfFile) {
+    if (!pdfFile) return
+    if (pdfFile.type !== 'application/pdf' && !pdfFile.name.toLowerCase().endsWith('.pdf')) {
+      // Silent skip — non-PDFs aren't supported by the parser. The user
+      // can still fill the form manually as before.
+      return
+    }
+    if (types.length === 0) return  // need at least one type to scan
+    setScanning(true)
+    setScanResult(null)
+    try {
+      // Read file → base64. We strip the data: URL prefix because the
+      // edge function expects raw base64.
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const res = String(reader.result || '')
+          const idx = res.indexOf(',')
+          resolve(idx >= 0 ? res.slice(idx + 1) : res)
+        }
+        reader.onerror = () => reject(new Error('Could not read file'))
+        reader.readAsDataURL(pdfFile)
+      })
+      const { data, error } = await supabase.functions.invoke('parse-compliance-doc', {
+        body: { pdf_base64: base64, document_types: types },
+      })
+      if (error) throw error
+      if (!data?.ok) {
+        throw new Error(data?.error || data?.parse_error || 'Parser returned no usable result')
+      }
+      // Apply each non-null field. Build the auto-filled set as we go so
+      // the badge only appears next to fields we actually populated.
+      const filled = new Set()
+      const formPatch = {}
+      if (data.expiry_date) {
+        formPatch.expiry_date = data.expiry_date
+        filled.add('expiry_date')
+      }
+      if (data.issue_date) {
+        formPatch.issue_date = data.issue_date
+        filled.add('issue_date')
+      }
+      if (data.reference_number) {
+        formPatch.reference_number = data.reference_number
+        filled.add('reference_number')
+      }
+      if (Object.keys(formPatch).length > 0) {
+        setForm(f => ({ ...f, ...formPatch }))
+      }
+      // Cover amounts are per-insurance-type. Apply each that came back.
+      if (data.cover_amounts && typeof data.cover_amounts === 'object') {
+        const newCovers = { ...coverAmounts }
+        for (const t of INSURANCE_TYPES) {
+          const amt = data.cover_amounts[t]
+          if (amt != null && Number.isFinite(amt) && amt > 0 && types.includes(t)) {
+            newCovers[t] = String(amt)
+            filled.add('cover_' + t)
+          }
+        }
+        setCoverAmounts(newCovers)
+      }
+      // Clear validation errors for fields we just filled — they're no
+      // longer empty.
+      setErrors(prev => {
+        const next = { ...prev }
+        for (const f of filled) delete next[f]
+        return next
+      })
+      setAutoFilledFields(filled)
+      setScanResult({
+        confidence: data.confidence || 'unknown',
+        notes: data.notes || null,
+        filledCount: filled.size,
+      })
+    } catch (err) {
+      console.error('[scanCompliance]', err)
+      setScanResult({
+        confidence: 'error',
+        notes: err?.message || 'Scan failed',
+        filledCount: 0,
+      })
+    } finally {
+      setScanning(false)
+    }
   }
 
   function setName(v) {
@@ -190,7 +304,13 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
     e.preventDefault()
     setDragging(false)
     const f = e.dataTransfer?.files?.[0]
-    if (f) { setFile(f); setErrors(er => ({ ...er, file: '' })) }
+    if (f) {
+      setFile(f)
+      setErrors(er => ({ ...er, file: '' }))
+      // Auto-scan PDFs as soon as they're dropped. Non-PDFs and the
+      // edit-mode-no-types case are silently skipped inside scanWithAI.
+      scanWithAI(f)
+    }
   }
 
   const docGroups = {
@@ -370,10 +490,93 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                 id="_doc_file_input"
                 type="file"
                 style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); setErrors(er => ({ ...er, file: '' })) } }}
+                onChange={e => {
+                  const f = e.target.files?.[0]
+                  if (f) {
+                    setFile(f)
+                    setErrors(er => ({ ...er, file: '' }))
+                    scanWithAI(f)
+                  }
+                }}
               />
             </div>
           </Field>
+
+          {/* AI scan status — shows during scan + result summary after.
+              Hidden entirely when scanning hasn't started yet. */}
+          {(scanning || scanResult) && (
+            <div style={{
+              marginTop: 10,
+              padding: '8px 12px',
+              borderRadius: 6,
+              fontSize: 12,
+              background: scanning ? 'rgba(68,138,64,0.06)' :
+                          scanResult?.confidence === 'error' ? 'rgba(217,53,53,0.06)' :
+                          'rgba(68,138,64,0.06)',
+              border: '1px solid ' + (
+                scanning ? 'rgba(68,138,64,0.25)' :
+                scanResult?.confidence === 'error' ? 'rgba(217,53,53,0.25)' :
+                'rgba(68,138,64,0.25)'
+              ),
+              color: 'var(--text2)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+            }}>
+              {scanning ? (
+                <>
+                  <div style={{
+                    width: 14, height: 14, borderRadius: '50%',
+                    border: '2px solid var(--border)', borderTop: '2px solid var(--accent)',
+                    animation: 'spin .8s linear infinite', flexShrink: 0, marginTop: 1,
+                  }} />
+                  <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+                  <div>Scanning document with AI… this takes a few seconds.</div>
+                </>
+              ) : scanResult?.confidence === 'error' ? (
+                <>
+                  <span style={{ color: 'var(--red)' }}>⚠️</span>
+                  <div>
+                    <div style={{ fontWeight: 500 }}>AI scan failed</div>
+                    <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text3)' }}>
+                      {scanResult.notes || 'You can fill the fields manually.'}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span>✨</span>
+                  <div>
+                    <div style={{ fontWeight: 500 }}>
+                      {scanResult.filledCount > 0
+                        ? `Auto-filled ${scanResult.filledCount} ${scanResult.filledCount === 1 ? 'field' : 'fields'}`
+                        : 'Scan complete — no fields could be extracted'}
+                      <span style={{
+                        marginLeft: 8,
+                        fontSize: 10, fontWeight: 500,
+                        padding: '1px 6px',
+                        borderRadius: 8,
+                        background: scanResult.confidence === 'high' ? 'rgba(68,138,64,0.15)' :
+                                    scanResult.confidence === 'medium' ? 'rgba(186,117,23,0.15)' :
+                                    'rgba(160,160,160,0.15)',
+                        color: scanResult.confidence === 'high' ? 'var(--accent)' :
+                               scanResult.confidence === 'medium' ? 'var(--amber)' :
+                               'var(--text3)',
+                      }}>{scanResult.confidence} confidence</span>
+                    </div>
+                    {scanResult.notes && (
+                      <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                        {scanResult.notes}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text3)' }}>
+                      Please review the values below before saving.
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="full">
@@ -382,14 +585,17 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
           </Field>
         </div>
         <Field label="Reference / Certificate Number">
-          <input value={form.reference_number} onChange={e => setForm(f => ({ ...f, reference_number: e.target.value }))} placeholder="e.g. EL-2025-00123" />
+          <input value={form.reference_number} onChange={e => { setForm(f => ({ ...f, reference_number: e.target.value })); clearAutoFilled('reference_number') }} placeholder="e.g. EL-2025-00123" />
+          {autoFilledFields.has('reference_number') && <AutoFilledHint />}
         </Field>
         <div />
         <Field label="Issue Date">
-          <input type="date" value={form.issue_date} onChange={e => setForm(f => ({ ...f, issue_date: e.target.value }))} />
+          <input type="date" value={form.issue_date} onChange={e => { setForm(f => ({ ...f, issue_date: e.target.value })); clearAutoFilled('issue_date') }} />
+          {autoFilledFields.has('issue_date') && <AutoFilledHint />}
         </Field>
         <Field label={hasInsurance ? 'Expiry Date *' : 'Expiry Date'} error={errors.expiry_date}>
-          <input type="date" value={form.expiry_date} onChange={e => setForm(f => ({ ...f, expiry_date: e.target.value }))} />
+          <input type="date" value={form.expiry_date} onChange={e => { setForm(f => ({ ...f, expiry_date: e.target.value })); clearAutoFilled('expiry_date') }} />
+          {autoFilledFields.has('expiry_date') && <AutoFilledHint />}
         </Field>
         {days !== null && days < 0 && (
           <div className="full" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--red)' }}>
@@ -408,5 +614,17 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
         </div>
       </div>
     </Modal>
+  )
+}
+
+// Tiny hint shown below a form field when it was populated by the AI
+// scan. Fades to the muted text colour so it doesn't compete with the
+// field value. Disappears as soon as the user edits the field manually.
+function AutoFilledHint() {
+  return (
+    <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+      <span style={{ color: 'var(--accent)' }}>✨</span>
+      <span>Auto-filled — review</span>
+    </div>
   )
 }
