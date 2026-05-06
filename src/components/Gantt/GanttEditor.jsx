@@ -79,7 +79,25 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         : progQuery.eq('building_ordinal', buildingOrdinal)
       let { data: prog } = await progQuery.maybeSingle()
 
-      let progCreateError = null
+      // FALLBACK for the buildingOrdinal=null case: if no explicit project-wide
+      // programme exists, use the FIRST programme on this project. This handles
+      // existing data created before per-building support was introduced —
+      // those rows have building_ordinal set to specific values (1/2/3) but
+      // there's no project-wide row. Without this fallback, callers that don't
+      // pass buildingOrdinal (e.g. the "Open in Gantt Editor" flow from the
+      // AI PDF parser) would create a new orphan project-wide programme and
+      // miss all existing version history. This matches the pre-per-building
+      // load behavior that was on production through May.
+      if (!prog && buildingOrdinal == null) {
+        const { data: anyProg } = await supabase
+          .from('programmes')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('building_ordinal', { ascending: true, nullsFirst: true })
+          .limit(1)
+        if (anyProg && anyProg.length > 0) prog = anyProg[0]
+      }
+
       if (!prog && canEdit) {
         const insertPayload = { project_id: projectId }
         // Only set building_ordinal when we have one — leaving it absent makes
@@ -90,61 +108,34 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           .insert(insertPayload)
           .select()
           .single()
-        if (error) {
-          console.error('[Gantt] create programme failed:', error)
-          progCreateError = error
-        }
+        if (error) console.error('[Gantt] create programme failed:', error)
         prog = newProg
       }
+      if (!prog) { setLoading(false); return }
+      setProgramme(prog)
 
-      if (prog) {
-        setProgramme(prog)
+      // Load all versions
+      const { data: vs } = await supabase.from('programme_versions')
+        .select('id, version_number, notes, created_at, created_by, profiles(full_name)')
+        .eq('programme_id', prog.id)
+        .order('version_number', { ascending: false })
+      setVersions(vs || [])
 
-        // Load all versions
-        const { data: vs } = await supabase.from('programme_versions')
-          .select('id, version_number, notes, created_at, created_by, profiles(full_name)')
-          .eq('programme_id', prog.id)
-          .order('version_number', { ascending: false })
-        setVersions(vs || [])
-
-        // Load latest version's tasks
-        const latest = (vs || [])[0]
-        if (latest) {
-          const { data: full } = await supabase.from('programme_versions').select('*').eq('id', latest.id).single()
-          setActiveVersion(latest)
-          setTasks(full?.tasks || [])
-          setOriginalTasks(full?.tasks || [])
-        } else {
-          setActiveVersion(null)
-          setTasks([])
-          setOriginalTasks([])
-        }
+      // Load latest version's tasks
+      const latest = (vs || [])[0]
+      if (latest) {
+        const { data: full } = await supabase.from('programme_versions').select('*').eq('id', latest.id).single()
+        setActiveVersion(latest)
+        setTasks(full?.tasks || [])
+        setOriginalTasks(full?.tasks || [])
       } else {
-        // No programme found AND we couldn't create one. Most likely cause:
-        // RLS denying insert, or canEdit is false. Surface a clear error
-        // so the user knows the editor is in a half-functional state
-        // rather than just silently empty.
-        setProgramme(null)
-        setVersions([])
         setActiveVersion(null)
         setTasks([])
         setOriginalTasks([])
-        if (progCreateError) {
-          console.warn('[Gantt] no programme available; save will be blocked. Reason:', progCreateError.message)
-        } else if (!canEdit) {
-          console.warn('[Gantt] no programme exists and current user lacks edit permission to create one')
-        }
       }
 
-      // Apply pre-filled tasks from the AI parser AFTER the programme/version
-      // load — this way they override whatever was loaded (or fill in for an
-      // empty programme). Mark the editor dirty so the user is prompted to
-      // save when ready.
-      //
-      // Important: this runs even when `prog` is null. That way the user can
-      // SEE the AI-parsed tasks in the editor and review them. Save will
-      // be blocked separately by saveAsNewVersion if no programme exists,
-      // with a clear error.
+      // If we got pre-filled tasks from the AI parser, use them as the working set.
+      // Marks the editor dirty so the user is prompted to save when ready.
       if (initialTasks && Array.isArray(initialTasks) && initialTasks.length > 0) {
         setTasks(initialTasks)
         // Don't update originalTasks — that way isDirty is true and a save prompt appears
@@ -228,13 +219,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   }
 
   async function saveAsNewVersion() {
-    if (!programme) {
-      // Couldn't load or create a programme row earlier — most likely
-      // RLS blocked the INSERT. Don't silently swallow this; tell the
-      // user so they (or an admin) can fix the policy.
-      alert("Can't save — there's no programme row for this project to attach the version to. Likely cause: missing INSERT/SELECT policy on the `programmes` table. Check the browser console for the original error.")
-      return
-    }
+    if (!programme) return
     setSaving(true)
     try {
       const nextVersionNumber = (versions[0]?.version_number || 0) + 1
