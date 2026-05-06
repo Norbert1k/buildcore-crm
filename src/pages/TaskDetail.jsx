@@ -40,6 +40,12 @@ export default function TaskDetail() {
   const [savingAssign, setSavingAssign] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [emlPreview, setEmlPreview] = useState(null)
+  // Note edit state. editingNoteId is the id of the note currently
+  // being edited (null = not editing anything); editingNoteText is the
+  // in-progress draft text. Only one note can be edited at a time.
+  const [editingNoteId, setEditingNoteId] = useState(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   useEffect(() => { load() }, [taskId])
 
@@ -81,7 +87,42 @@ export default function TaskDetail() {
   const canComment = isAssignee || isAdmin
   const canUpload = isAssignee || isAdmin
   const canDeleteNote = (note) => note.author_id === profile?.id || isAdmin
+  const canEditNote = (note) => note.author_id === profile?.id || isAdmin
   const canDeleteFile = (file) => file.uploaded_by === profile?.id || isAdmin
+
+  function startEditNote(note) {
+    setEditingNoteId(note.id)
+    setEditingNoteText(note.note || '')
+  }
+
+  function cancelEditNote() {
+    setEditingNoteId(null)
+    setEditingNoteText('')
+  }
+
+  async function saveEditNote() {
+    if (!editingNoteId) return
+    const trimmed = editingNoteText.trim()
+    if (!trimmed) {
+      // Empty note isn't allowed — keep editor open so the user can
+      // either type something or cancel.
+      return
+    }
+    setSavingEdit(true)
+    const { error } = await supabase
+      .from('task_notes')
+      .update({ note: trimmed })
+      .eq('id', editingNoteId)
+    if (error) {
+      alert('Could not save edit: ' + error.message)
+      setSavingEdit(false)
+      return
+    }
+    setEditingNoteId(null)
+    setEditingNoteText('')
+    setSavingEdit(false)
+    await load()
+  }
 
   async function addNote() {
     if (!noteText.trim()) return
@@ -343,20 +384,45 @@ export default function TaskDetail() {
           <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No notes yet. Be the first to post an update.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {notes.map(n => (
-              <div key={n.id} style={{ padding: 10, background: 'var(--surface2)', borderRadius: 6, borderLeft: '3px solid var(--accent)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(n.created_at).toLocaleString('en-GB')}</div>
-                    {canDeleteNote(n) && (
-                      <button onClick={() => deleteNote(n.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: 0 }} title="Delete note">✕</button>
-                    )}
+            {notes.map(n => {
+              const isEditing = editingNoteId === n.id
+              return (
+                <div key={n.id} style={{ padding: 10, background: 'var(--surface2)', borderRadius: 6, borderLeft: '3px solid var(--accent)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(n.created_at).toLocaleString('en-GB')}</div>
+                      {/* Edit and delete buttons hidden while THIS note is in
+                          edit mode — they live next to the textarea instead. */}
+                      {!isEditing && canEditNote(n) && (
+                        <button onClick={() => startEditNote(n)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: 0 }} title="Edit note">✎</button>
+                      )}
+                      {!isEditing && canDeleteNote(n) && (
+                        <button onClick={() => deleteNote(n.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: 0 }} title="Delete note">✕</button>
+                      )}
+                    </div>
                   </div>
+                  {isEditing ? (
+                    <div>
+                      <textarea
+                        value={editingNoteText}
+                        onChange={e => setEditingNoteText(e.target.value)}
+                        autoFocus
+                        style={{ width: '100%', minHeight: 80, padding: 8, fontSize: 13, lineHeight: 1.5, fontFamily: 'inherit', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
+                      />
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-sm" onClick={cancelEditNote} disabled={savingEdit}>Cancel</button>
+                        <button className="btn btn-sm btn-primary" onClick={saveEditNote} disabled={savingEdit || !editingNoteText.trim()}>
+                          {savingEdit ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.note}</div>
+                  )}
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.note}</div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
