@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
+import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { sortBy, formatDate } from '../lib/utils'
@@ -19,7 +19,24 @@ const STATUS_LABELS = {
 export default function TaskDetail() {
   const { taskId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { can, profile } = useAuth()
+
+  // Smart back navigation. If we got here from another page in the app
+  // (the normal case: user clicked a task row in the Task Tracker), use
+  // navigate(-1) so the browser restores the previous URL exactly —
+  // including any filter query params like ?assignee={chris}. If the
+  // user landed on this page directly (fresh tab, deep link from an
+  // email, etc.), there's no history to go back to so we fall back to
+  // /tasks. React Router uses location.key === 'default' as the signal
+  // for "first entry, no history yet".
+  function goBack() {
+    if (location.key && location.key !== 'default') {
+      navigate(-1)
+    } else {
+      navigate('/tasks')
+    }
+  }
 
   const [task, setTask] = useState(null)
   const [project, setProject] = useState(null)
@@ -276,7 +293,7 @@ export default function TaskDetail() {
   if (loading) return <Spinner />
   if (!task) return (
     <div>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/tasks')}><IconChevron size={13} dir="left" /> Back</button>
+      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={goBack}><IconChevron size={13} dir="left" /> Back</button>
       <div className="card card-pad">Task not found.</div>
     </div>
   )
@@ -286,7 +303,7 @@ export default function TaskDetail() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/tasks')}><IconChevron size={13} dir="left" /> Back to Task Tracker</button>
+      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={goBack}><IconChevron size={13} dir="left" /> Back to Task Tracker</button>
 
       {/* Header */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
