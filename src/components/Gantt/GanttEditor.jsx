@@ -18,7 +18,25 @@ const HEADER_H = 56  // date axis area
 
 const COLORS = ['#448a40','#378ADD','#BA7517','#993C1D','#3B6D11','#534AB7','#888780','#c00','#1F8A70']
 
-export default function GanttEditor({ projectId, projectName, onClose, canEdit, initialTasks = null }) {
+// ─── Per-building programme support (Stage 2 of Chunk 2c-programme) ───────
+// `buildingOrdinal` selects which programme row this editor reads + writes:
+//   • null (default)        → project-wide programme (building_ordinal IS NULL).
+//                             Single-building projects always use this.
+//                             Multi-building projects use this when editing
+//                             the master/fallback programme that covers all
+//                             buildings.
+//   • 1, 2, 3, ...          → per-building programme matching the ordinal
+//                             from buildings.js (Residential Block / Sports
+//                             Hall / Changing Rooms etc).
+//
+// `programme_versions` is unchanged — versions belong to their parent
+// programme by `programme_id`. Each (project_id, building_ordinal) pair
+// has its own independent version history.
+//
+// `buildingLabel` is purely cosmetic — shown as a badge at the top of the
+// editor so the user can tell at a glance which programme they're editing.
+// Falls back to a generic "Building N" label if missing.
+export default function GanttEditor({ projectId, projectName, onClose, canEdit, initialTasks = null, buildingOrdinal = null, buildingLabel = null }) {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -33,54 +51,100 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [versionNote, setVersionNote] = useState('')
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(null)
+  const [confirmCloseDirty, setConfirmCloseDirty] = useState(false)
   // Drag state — tracking which task is being dragged + how many days it
   // has moved during the in-flight drag. We use a ref for the live mouse
   // position (high-frequency, mustn't re-render) and a state-only flag
   // for the visible delta (one re-render per day-of-movement, at worst).
-  const dragRef = useRef(null)  // { taskId, startX, startMouseX, originalStart, originalEnd }
+  const dragRef = useRef(null)  // { taskId, startMouseX, originalStart, originalEnd, moved }
   const [dragDeltaDays, setDragDeltaDays] = useState(0)
   const [dragTaskId, setDragTaskId] = useState(null)
-  const [confirmCloseDirty, setConfirmCloseDirty] = useState(false)
 
   const timelineScrollRef = useRef(null)
 
-  useEffect(() => { load() }, [projectId])
+  useEffect(() => { load() }, [projectId, buildingOrdinal])
 
   async function load() {
     setLoading(true)
     try {
-      // Find or create programme for this project
-      let { data: prog } = await supabase.from('programmes').select('*').eq('project_id', projectId).maybeSingle()
+      // Find or create programme for this (project, building_ordinal) pair.
+      // Building_ordinal IS NULL = project-wide programme; numeric = per-building.
+      // Supabase JS builder distinguishes IS NULL from = NULL — use .is(...) for
+      // the null case and .eq(...) for the numeric case. Without this, a
+      // .eq('building_ordinal', null) call would generate WHERE building_ordinal = NULL
+      // which never matches.
+      let progQuery = supabase.from('programmes').select('*').eq('project_id', projectId)
+      progQuery = (buildingOrdinal == null)
+        ? progQuery.is('building_ordinal', null)
+        : progQuery.eq('building_ordinal', buildingOrdinal)
+      let { data: prog } = await progQuery.maybeSingle()
+
+      let progCreateError = null
       if (!prog && canEdit) {
-        const { data: newProg, error } = await supabase.from('programmes').insert({ project_id: projectId }).select().single()
-        if (error) console.error('[Gantt] create programme failed:', error)
+        const insertPayload = { project_id: projectId }
+        // Only set building_ordinal when we have one — leaving it absent makes
+        // Postgres assign NULL, which is what the project-wide programme wants.
+        if (buildingOrdinal != null) insertPayload.building_ordinal = buildingOrdinal
+        const { data: newProg, error } = await supabase
+          .from('programmes')
+          .insert(insertPayload)
+          .select()
+          .single()
+        if (error) {
+          console.error('[Gantt] create programme failed:', error)
+          progCreateError = error
+        }
         prog = newProg
       }
-      if (!prog) { setLoading(false); return }
-      setProgramme(prog)
 
-      // Load all versions
-      const { data: vs } = await supabase.from('programme_versions')
-        .select('id, version_number, notes, created_at, created_by, profiles(full_name)')
-        .eq('programme_id', prog.id)
-        .order('version_number', { ascending: false })
-      setVersions(vs || [])
+      if (prog) {
+        setProgramme(prog)
 
-      // Load latest version's tasks
-      const latest = (vs || [])[0]
-      if (latest) {
-        const { data: full } = await supabase.from('programme_versions').select('*').eq('id', latest.id).single()
-        setActiveVersion(latest)
-        setTasks(full?.tasks || [])
-        setOriginalTasks(full?.tasks || [])
+        // Load all versions
+        const { data: vs } = await supabase.from('programme_versions')
+          .select('id, version_number, notes, created_at, created_by, profiles(full_name)')
+          .eq('programme_id', prog.id)
+          .order('version_number', { ascending: false })
+        setVersions(vs || [])
+
+        // Load latest version's tasks
+        const latest = (vs || [])[0]
+        if (latest) {
+          const { data: full } = await supabase.from('programme_versions').select('*').eq('id', latest.id).single()
+          setActiveVersion(latest)
+          setTasks(full?.tasks || [])
+          setOriginalTasks(full?.tasks || [])
+        } else {
+          setActiveVersion(null)
+          setTasks([])
+          setOriginalTasks([])
+        }
       } else {
+        // No programme found AND we couldn't create one. Most likely cause:
+        // RLS denying insert, or canEdit is false. Surface a clear error
+        // so the user knows the editor is in a half-functional state
+        // rather than just silently empty.
+        setProgramme(null)
+        setVersions([])
         setActiveVersion(null)
         setTasks([])
         setOriginalTasks([])
+        if (progCreateError) {
+          console.warn('[Gantt] no programme available; save will be blocked. Reason:', progCreateError.message)
+        } else if (!canEdit) {
+          console.warn('[Gantt] no programme exists and current user lacks edit permission to create one')
+        }
       }
 
-      // If we got pre-filled tasks from the AI parser, use them as the working set.
-      // Marks the editor dirty so the user is prompted to save when ready.
+      // Apply pre-filled tasks from the AI parser AFTER the programme/version
+      // load — this way they override whatever was loaded (or fill in for an
+      // empty programme). Mark the editor dirty so the user is prompted to
+      // save when ready.
+      //
+      // Important: this runs even when `prog` is null. That way the user can
+      // SEE the AI-parsed tasks in the editor and review them. Save will
+      // be blocked separately by saveAsNewVersion if no programme exists,
+      // with a clear error.
       if (initialTasks && Array.isArray(initialTasks) && initialTasks.length > 0) {
         setTasks(initialTasks)
         // Don't update originalTasks — that way isDirty is true and a save prompt appears
@@ -105,21 +169,23 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   }
 
   async function deleteVersion(versionId) {
-    // Safety rail: keep at least one version
-    if (versions.length <= 1) {
-      alert("Can't delete the only saved version.")
-      return
-    }
+    // Per Issue 4b, no minimum-version safety rail — user can delete the
+    // only remaining version. When they do, the editor clears the canvas
+    // back to empty (versionsCount=0, tasks=[]) so they truly start over.
     const v = versions.find(x => x.id === versionId)
     if (!v) return
-    if (!window.confirm(`Permanently delete Version ${v.version_number}? This cannot be undone.`)) return
+    const isLastOne = versions.length === 1
+    const confirmMessage = isLastOne
+      ? `Permanently delete Version ${v.version_number}?\n\nThis is the only saved version. Deleting it will clear the Gantt back to empty. This cannot be undone.`
+      : `Permanently delete Version ${v.version_number}? This cannot be undone.`
+    if (!window.confirm(confirmMessage)) return
     try {
       // Use .select() so Supabase returns the rows that were actually
       // deleted. If RLS or any other policy silently blocks the delete,
       // Supabase returns { data: [], error: null } — no error, but no
       // rows touched either. Without checking the count we'd update
       // local state optimistically and the user would see the version
-      // reappear on next reload (the bug Norbert hit).
+      // reappear on next reload (the "deleted versions come back" bug).
       const { data: deleted, error } = await supabase
         .from('programme_versions')
         .delete()
@@ -127,13 +193,11 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         .select('id')
       if (error) throw error
       if (!deleted || deleted.length === 0) {
-        // Most likely cause: RLS DELETE policy missing or restrictive.
-        // Tell the user clearly so they don't think it worked silently.
         throw new Error('Delete was blocked by row-level security. Ask an admin to add a DELETE policy on programme_versions.')
       }
       const remaining = versions.filter(x => x.id !== versionId)
       setVersions(remaining)
-      // If the deleted version was the active one, auto-load the next most recent
+      // If the deleted version was the active one, decide what to show next.
       if (activeVersion?.id === versionId) {
         const next = remaining[0] // versions are sorted DESC by version_number
         if (next) {
@@ -148,8 +212,13 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           }
           setLoading(false)
         } else {
-          // No remaining versions — fall back to working-draft mode
+          // No remaining versions — clear the canvas back to empty (Issue 4b).
+          // The user explicitly asked to start over rather than keep the
+          // deleted tasks as a working draft.
           setActiveVersion(null)
+          setTasks([])
+          setOriginalTasks([])
+          setSelectedTaskId(null)
         }
       }
     } catch (err) {
@@ -159,7 +228,13 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   }
 
   async function saveAsNewVersion() {
-    if (!programme) return
+    if (!programme) {
+      // Couldn't load or create a programme row earlier — most likely
+      // RLS blocked the INSERT. Don't silently swallow this; tell the
+      // user so they (or an admin) can fix the policy.
+      alert("Can't save — there's no programme row for this project to attach the version to. Likely cause: missing INSERT/SELECT policy on the `programmes` table. Check the browser console for the original error.")
+      return
+    }
     setSaving(true)
     try {
       const nextVersionNumber = (versions[0]?.version_number || 0) + 1
@@ -236,15 +311,25 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
       drawLetterhead()
       doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(45, 45, 45)
-      doc.text(`Programme — ${projectName}`, 15, 34)
+      // Per-building scope appears in the header title so a user looking at
+      // the PDF later can tell which programme they're seeing.
+      const titleScope = buildingOrdinal != null
+        ? ` — ${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`}`
+        : ''
+      doc.text(`Programme — ${projectName}${titleScope}`, 15, 34)
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 100, 100)
       const versionLabel = activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'Working draft'
       doc.text(`${versionLabel} · Generated: ${new Date().toLocaleString('en-GB')}`, 15, 40)
 
-      // Build a versioned filename: '<Project> - Programme - v3 - 2026-04-27.pdf' or '... - draft - ...'
+      // Build a versioned filename: '<Project> - Programme - v3 - 2026-04-27.pdf' or '... - draft - ...'.
+      // For per-building programmes include the building label in the filename
+      // so multiple PDFs from the same project don't overwrite each other.
       const verPart = activeVersion ? `v${activeVersion.version_number}` : 'draft'
       const datePart = new Date().toISOString().slice(0, 10)
-      const rawFileName = `${projectName} - Programme - ${verPart} - ${datePart}.pdf`
+      const fileScope = buildingOrdinal != null
+        ? ` (${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`})`
+        : ''
+      const rawFileName = `${projectName} - Programme${fileScope} - ${verPart} - ${datePart}.pdf`
       // Strip filesystem-unsafe characters for both download and storage paths
       const safeFileName = rawFileName.replace(/[\/\\<>:"|?*]+/g, '').replace(/\s+/g, ' ').trim() || 'Programme.pdf'
 
@@ -255,29 +340,15 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         return
       }
 
-      // Layout: PDF table-list-with-bars approach (Option B redesign).
-      // Columns from the left:
-      //   ID       8mm   — task index in the flattened list
-      //   Task    70mm   — name (with depth indent)
-      //   Duration 18mm  — wks/days display
-      //   Start    22mm  — Mon DD/MM/YY
-      //   Finish   22mm  — Mon DD/MM/YY
-      // Timeline fills the remaining width, with a two-tier date header
-      // (month row + week-start day row) similar to MS Project export.
+      // Layout: PDF table-list-with-bars approach.
+      // Left column: task names (80mm). Right: timeline drawn as vector bars.
       const startY = 46
-      const bottomY = pageH - 20  // leave room for legend
-      const colX = {
-        id:       15,
-        task:     23,
-        duration: 93,
-        start:    111,
-        finish:   133,
-      }
-      const taskColEnd = 155       // end of the left section
-      const timelineX0 = taskColEnd + 4
+      const bottomY = pageH - 14
+      const taskColW = 80  // mm, task name column
+      const timelineX0 = 15 + taskColW + 4
       const timelineW = pageW - timelineX0 - 15
       const rowH = 5.5  // mm per task row
-      const headerH = 16  // two-tier header is taller than the old one
+      const headerH = 12
 
       // Compute date range for the bars
       const minDate = bounds.min, maxDate = bounds.max
@@ -289,112 +360,64 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       const todayInRange = todayDt >= minDate && todayDt <= maxDate
       const todayXmm = todayInRange ? timelineX0 + diffDays(minDate, todayDt) * mmPerDay : null
 
-      // ── Date axis: two-tier (month label row above, week-start day row
-      // below) — gives the same readability as MS Project exports without
-      // the per-day clutter. Always uses week granularity for the lower
-      // tier regardless of screen zoom; PDFs are static so we pick the
-      // most-print-friendly setting.
+      // Draw header row (axis labels) — zoom-aware: matches the screen view's day/week/month setting
       const drawAxis = (yTop) => {
-        const monthRowH = 7
-        const weekRowH = headerH - monthRowH
-
-        // Frame
+        // Box around axis row
         doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.2)
-        doc.line(15, yTop, pageW - 15, yTop)
-        doc.line(15, yTop + headerH, pageW - 15, yTop + headerH)
-        doc.line(15, yTop + monthRowH, pageW - 15, yTop + monthRowH)
-        // Vertical column separators in the left section
-        doc.line(colX.task - 0.5,     yTop, colX.task - 0.5,     yTop + headerH)
-        doc.line(colX.duration - 0.5, yTop, colX.duration - 0.5, yTop + headerH)
-        doc.line(colX.start - 0.5,    yTop, colX.start - 0.5,    yTop + headerH)
-        doc.line(colX.finish - 0.5,   yTop, colX.finish - 0.5,   yTop + headerH)
-        // Separator between task block and timeline
+        doc.line(15, yTop, pageW - 15, yTop)  // top line
+        doc.line(15, yTop + headerH, pageW - 15, yTop + headerH)  // bottom line
+        // Vertical separator between task col and timeline
         doc.line(timelineX0 - 4, yTop, timelineX0 - 4, yTop + headerH)
-
-        // Column headers (left section) — span both tiers
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
-        doc.text('ID',       colX.id + 1,       yTop + 10)
-        doc.text('Task',     colX.task + 1,     yTop + 10)
-        doc.text('Duration', colX.duration + 1, yTop + 10)
-        doc.text('Start',    colX.start + 1,    yTop + 10)
-        doc.text('Finish',   colX.finish + 1,   yTop + 10)
-
-        // Top tier — month boundaries. Walk days, draw month label at
-        // the start of each new month within the timeline range.
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(60, 60, 60)
-        let lastMonth = -1
-        for (let i = 0; i < totalD; i++) {
-          const d = addDays(minDate, i)
-          const m = d.getUTCMonth()
-          if (m !== lastMonth) {
-            const x = timelineX0 + i * mmPerDay
-            // Vertical month boundary line (full height of axis)
-            doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3)
-            doc.line(x, yTop, x, yTop + headerH)
-            // Month label — short month + 2-digit year
-            const label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(60, 60, 60)
-            doc.text(label, x + 1, yTop + 5)
-            lastMonth = m
-          }
-        }
-
-        // Bottom tier — week-start day numbers (Mondays). Smaller text.
-        const minLabelGapMm = 5
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(45, 45, 45)
+        doc.text('Task', 17, yTop + 7.5)
+        // Tick + label spacing per zoom level (mm of horizontal room each label needs to avoid overlap)
+        const minLabelGapMm = 8
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
         let lastLabelX = -100
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(110, 110, 110)
         for (let i = 0; i < totalD; i++) {
           const d = addDays(minDate, i)
           const dow = d.getUTCDay()
-          // Tick on every Monday (dow=1) plus the very first day in case
-          // the range starts mid-week.
-          if (dow !== 1 && i !== 0) continue
+          const dayOfMonth = d.getUTCDate()
           const x = timelineX0 + i * mmPerDay
-          // Tick line into the bottom tier only
+
+          // Decide whether THIS day is a tick under the active zoom
+          let isTick = false
+          let label = null
+          if (zoom === 'day') {
+            // Tick every day; label every day if there's room
+            isTick = true
+            label = String(dayOfMonth)
+            // Bold + month name on day-1 to give context
+            if (dayOfMonth === 1) {
+              label = d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+            }
+          } else if (zoom === 'week') {
+            // Tick on every Monday (and the very first day, in case range starts mid-week)
+            if (dow === 1 || i === 0) {
+              isTick = true
+              label = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+            }
+          } else {
+            // month — tick on 1st of each month
+            if (dayOfMonth === 1) {
+              isTick = true
+              label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+            }
+          }
+
+          if (!isTick) continue
+
+          // Draw the tick line
           doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1)
-          doc.line(x, yTop + monthRowH, x, yTop + headerH)
-          // Day label (just the day number)
-          if ((x - lastLabelX) > minLabelGapMm) {
-            const label = String(d.getUTCDate()).padStart(2, '0')
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(110, 110, 110)
-            doc.text(label, x + 0.8, yTop + monthRowH + 4)
+          doc.line(x, yTop, x, yTop + headerH)
+
+          // Draw the label only if there's room since the last label (avoids overlap when range is large)
+          if (label && (x - lastLabelX) > minLabelGapMm) {
+            doc.setDrawColor(220, 220, 220)  // keep tick colour
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(90, 90, 90)
+            doc.text(label, x + 1, yTop + 7.5)
             lastLabelX = x
           }
-        }
-      }
-
-      // ── Legend at the bottom of every page. Drawn after all rows are
-      // placed; centered below the chart area. Helps subcontractors and
-      // clients recognise summary vs task vs milestone shapes.
-      const drawLegend = (yBottom) => {
-        const y = yBottom + 4
-        const items = [
-          { label: 'Task',      color: [68, 138, 64], shape: 'bar'      },
-          { label: 'Summary',   color: [45, 106, 50], shape: 'summary'  },
-          { label: 'Milestone', color: [45, 106, 50], shape: 'diamond'  },
-        ]
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110, 110, 110)
-        let cx = 15
-        for (const it of items) {
-          // swatch
-          doc.setFillColor(...it.color)
-          if (it.shape === 'bar') {
-            doc.rect(cx, y + 1, 8, 1.6, 'F')
-          } else if (it.shape === 'summary') {
-            // thicker bar with end caps
-            doc.rect(cx, y + 0.6, 8, 2.4, 'F')
-            doc.rect(cx, y + 0, 1, 3.6, 'F')
-            doc.rect(cx + 7, y + 0, 1, 3.6, 'F')
-          } else {
-            // diamond
-            const dx = cx + 4, dy = y + 2
-            doc.setFillColor(...it.color)
-            doc.triangle(dx, dy - 2, dx + 2, dy, dx, dy + 2, 'F')
-            doc.triangle(dx, dy - 2, dx - 2, dy, dx, dy + 2, 'F')
-          }
-          // label
-          doc.text(it.label, cx + 11, y + 3)
-          cx += 11 + doc.getTextWidth(it.label) + 8
         }
       }
 
@@ -405,7 +428,6 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
       for (let i = 0; i < flat.length; i++) {
         if (cursorY + rowH > bottomY) {
-          drawLegend(bottomY)
           doc.addPage()
           drawLetterhead()
           cursorY = 34
@@ -413,77 +435,40 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           cursorY += headerH
         }
         const t = flat[i]
-        const isGroup = t._hasChildren
-        const isMilestone = !isGroup && t.start_date === t.end_date
-        const dur = durationFromDates(parseDate(t.start_date), parseDate(t.end_date))
         // Row separator
         doc.setDrawColor(230, 230, 230); doc.setLineWidth(0.1)
         doc.line(15, cursorY + rowH, pageW - 15, cursorY + rowH)
-        // Vertical column separators
-        doc.line(colX.task - 0.5,     cursorY, colX.task - 0.5,     cursorY + rowH)
-        doc.line(colX.duration - 0.5, cursorY, colX.duration - 0.5, cursorY + rowH)
-        doc.line(colX.start - 0.5,    cursorY, colX.start - 0.5,    cursorY + rowH)
-        doc.line(colX.finish - 0.5,   cursorY, colX.finish - 0.5,   cursorY + rowH)
-        doc.line(timelineX0 - 4,      cursorY, timelineX0 - 4,      cursorY + rowH)
-
-        // Today line — draw inside the timeline only
+        // Vertical separator
+        doc.line(timelineX0 - 4, cursorY, timelineX0 - 4, cursorY + rowH)
+        // Today line
         if (todayXmm !== null) {
           doc.setDrawColor(204, 0, 0); doc.setLineWidth(0.3)
           doc.setLineDashPattern([1, 1], 0)
           doc.line(todayXmm, cursorY, todayXmm, cursorY + rowH)
           doc.setLineDashPattern([], 0)
         }
-
-        // ── Left columns ─────────────────────────────────────
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 80)
-        doc.text(String(i + 1), colX.id + 1, cursorY + 4)
-
-        // Task name with hierarchical indent + bold for summary rows
-        doc.setFont('helvetica', isGroup ? 'bold' : 'normal'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
-        const nameX = colX.task + 1 + t._depth * 3
-        const nameMaxW = colX.duration - nameX - 1
+        // Task name (with indent)
+        doc.setFont('helvetica', t._hasChildren ? 'bold' : 'normal'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
+        const nameX = 17 + t._depth * 3
+        const nameMaxW = taskColW - (nameX - 15) - 4
         const nameLines = doc.splitTextToSize(t.name || '(untitled)', nameMaxW)
         doc.text(nameLines[0], nameX, cursorY + 4)
-
-        // Duration: show '0 d' for milestones, weeks for >=5 days, days otherwise
-        let durLabel
-        if (isMilestone) durLabel = '0 d'
-        else if (dur >= 7 && dur % 7 === 0) durLabel = `${dur / 7} wks`
-        else if (dur >= 5) durLabel = `${(dur / 5).toFixed(1).replace(/\.0$/, '')} wks`
-        else durLabel = `${dur} d`
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 80)
-        doc.text(durLabel, colX.duration + 1, cursorY + 4)
-
-        // Start / Finish — short UK format with weekday for clarity
-        const sd = parseDate(t.start_date), ed = parseDate(t.end_date)
-        const fmtCell = (d) => d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' }) : ''
-        doc.text(fmtCell(sd), colX.start + 1,  cursorY + 4)
-        doc.text(fmtCell(ed), colX.finish + 1, cursorY + 4)
-
-        // ── Bar / shape ──────────────────────────────────────
+        // Bar
         const x = dayToXmm(t.start_date)
-        const w = Math.max(0.6, dur * mmPerDay)
+        const w = Math.max(0.6, durationFromDates(parseDate(t.start_date), parseDate(t.end_date)) * mmPerDay)
         // Convert hex color to RGB
         const hex = (t.color || '#448a40').replace('#', '')
         const r = parseInt(hex.substring(0, 2), 16) || 68
         const g = parseInt(hex.substring(2, 4), 16) || 138
         const b = parseInt(hex.substring(4, 6), 16) || 64
-
-        if (isMilestone) {
-          // Diamond marker for zero-duration tasks
-          const dx = x, dy = cursorY + rowH / 2
-          doc.setFillColor(45, 106, 50)
-          doc.triangle(dx, dy - 1.6, dx + 1.6, dy, dx, dy + 1.6, 'F')
-          doc.triangle(dx, dy - 1.6, dx - 1.6, dy, dx, dy + 1.6, 'F')
-        } else if (isGroup) {
-          // Summary bar — thick darker green with end caps (same as before
-          // but in green not black to match Option B's brand colours)
-          doc.setFillColor(45, 106, 50)
-          doc.rect(x, cursorY + 1.5, w, 1.4, 'F')
-          doc.rect(x, cursorY + 0.5, 0.8, 3.4, 'F')
-          doc.rect(x + w - 0.8, cursorY + 0.5, 0.8, 3.4, 'F')
+        if (t._hasChildren) {
+          // Group bar — black bracket-style
+          doc.setFillColor(60, 60, 60)
+          doc.rect(x, cursorY + 1.5, w, 1.2, 'F')
+          doc.setFillColor(60, 60, 60)
+          doc.rect(x, cursorY + 0.5, 0.8, 3, 'F')
+          doc.rect(x + w - 0.8, cursorY + 0.5, 0.8, 3, 'F')
         } else {
-          // Standard task bar — green by default
           doc.setFillColor(r, g, b)
           doc.roundedRect(x, cursorY + 1.5, w, rowH - 3, 0.5, 0.5, 'F')
           // Progress overlay
@@ -493,14 +478,18 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
             doc.roundedRect(x, cursorY + 1.5, Math.max(0.3, w * (t.progress / 100)), rowH - 3, 0.5, 0.5, 'F')
             doc.setGState(new doc.GState({ opacity: 1 }))
           }
-          // No date label inside the bar — Start/Finish columns now show
-          // those values explicitly so the bar can stay clean.
+          // Date label after the bar (if there's room)
+          if (w >= 8) {
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(255, 255, 255)
+            const lbl = `${fmtDateUK(t.start_date)} → ${fmtDateUK(t.end_date)}`
+            const textW = doc.getTextWidth(lbl)
+            if (textW < w - 2) {
+              doc.text(lbl, x + 1.5, cursorY + 4.2)
+            }
+          }
         }
         cursorY += rowH
       }
-
-      // Legend on the final page
-      drawLegend(bottomY)
 
       // Footer on every page
       const pageCount = doc.internal.getNumberOfPages()
@@ -556,8 +545,8 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
   }
 
-  // Start a drag on a task's bar. We capture the original dates and the
-  // mouse's starting X, then listen on `window` for move/up so the drag
+  // Start a drag on a task's bar. Captures the original dates and the
+  // mouse's starting X, then listens on `window` for move/up so the drag
   // tracks even when the cursor leaves the bar. The visible bar position
   // is offset by `dragDeltaDays * pxPerDay` during the drag; on release
   // we commit the new start/end via setTasks and the dirty-flag effect
@@ -585,8 +574,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       const deltaPx = moveEvt.clientX - ref.startMouseX
       const deltaDays = Math.round(deltaPx / pxPerDay)
       // Threshold: only mark as a real drag once the cursor has moved
-      // by more than ~3px. Below that we treat as a click (don't
-      // suppress the row's onClick selection).
+      // by more than ~3px. Below that we treat as a click.
       if (Math.abs(deltaPx) > 3) ref.moved = true
       setDragDeltaDays(deltaDays)
     }
@@ -600,7 +588,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       if (!ref || !ref.moved) return  // tiny movement = click, not drag
       const deltaPx = upEvt.clientX - ref.startMouseX
       const deltaDays = Math.round(deltaPx / pxPerDay)
-      if (deltaDays === 0) return  // snapped back to zero, nothing to commit
+      if (deltaDays === 0) return
       // Commit: shift both start and end by the same day-delta, preserving
       // duration. parseDate/addDays/fmtDate are UTC-safe so we don't drift
       // across DST boundaries.
@@ -721,8 +709,30 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       {/* Top toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            ⏱ Live Programme — {projectName}
+          <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              ⏱ Live Programme — {projectName}
+            </span>
+            {/* Per-building scope badge — only shown when this editor is
+                scoped to a specific building. Project-wide editing has no
+                badge so single-building projects look unchanged. */}
+            {buildingOrdinal != null && (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 4,
+                background: '#534AB720',
+                color: '#534AB7',
+                border: '0.5px solid #534AB7',
+                whiteSpace: 'nowrap',
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em',
+              }}>
+                Building {String(buildingOrdinal).padStart(2, '0')}
+                {buildingLabel ? ` · ${buildingLabel}` : ''}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
             {activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'No saved versions yet'}
@@ -757,7 +767,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                     <div style={{ fontSize: 10, color: 'var(--text3)' }}>{fmtDateUK(v.created_at)} · {v.profiles?.full_name || 'Unknown'}</div>
                     {v.notes && <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, fontStyle: 'italic' }}>"{v.notes}"</div>}
                   </div>
-                  {canEdit && versions.length > 1 && (
+                  {canEdit && (
                     <button
                       onClick={e => { e.stopPropagation(); deleteVersion(v.id) }}
                       title={`Delete Version ${v.version_number}`}
@@ -868,19 +878,10 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
               const isGroup = t._hasChildren
               const isSelected = selectedTaskId === t.id
               const isDragging = dragTaskId === t.id
-              // During an in-flight drag, offset the bar visually by the
-              // pixels-equivalent of the day-delta so the user sees the
-              // bar follow their cursor. The actual task dates aren't
-              // mutated until mouseup.
               const dragOffsetX = isDragging ? dragDeltaDays * pxPerDay : 0
               return (
                 <div key={t.id}
-                  onClick={() => {
-                    // Don't override selection if we just finished a drag
-                    // (beginBarDrag clears dragRef before this fires, so
-                    // a moved-drag's mouseup won't bubble into a click).
-                    setSelectedTaskId(t.id)
-                  }}
+                  onClick={() => setSelectedTaskId(t.id)}
                   style={{
                     position: 'absolute', top: HEADER_H + i * ROW_HEIGHT, left: 0,
                     width: timelineW, height: ROW_HEIGHT,
@@ -905,13 +906,8 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                       display: 'flex', alignItems: 'center', paddingLeft: 6,
                       fontSize: 10, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden',
                       boxShadow: isSelected ? '0 0 0 2px var(--accent)' : 'none',
-                      // Cursor: grab when draggable, grabbing during drag,
-                      // default for group bars (not draggable).
                       cursor: isGroup ? 'pointer' : (isDragging ? 'grabbing' : (canEdit ? 'grab' : 'pointer')),
-                      // Slight visual feedback during drag so it feels alive
                       opacity: isDragging ? 0.85 : 1,
-                      // Disable user-select during drag so text doesn't
-                      // get highlighted as the cursor sweeps across.
                       userSelect: 'none',
                     }}>
                     {/* Progress overlay */}
