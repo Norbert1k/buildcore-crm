@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { PROJECT_STATUSES, sortBy } from '../lib/utils'
@@ -28,10 +28,32 @@ export default function TaskTracker() {
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ project_id: '', title: '', description: '', priority: 'medium', partner_id: '' })
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [filterProject, setFilterProject] = useState('all')
-  const [filterPriority, setFilterPriority] = useState('all')
-  const [filterAssignee, setFilterAssignee] = useState('all')
-  const [viewMode, setViewMode] = useState('open')
+  // Filters live in the URL (?project=&priority=&assignee=&view=) so the
+  // browser's back button restores them when returning from a task
+  // detail page. Without this, useState resets to defaults on remount
+  // and the user loses their filter every time they open and close
+  // a task.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filterProject  = searchParams.get('project')  || 'all'
+  const filterPriority = searchParams.get('priority') || 'all'
+  const filterAssignee = searchParams.get('assignee') || 'all'
+  const viewMode       = searchParams.get('view')     || 'open'
+
+  // Update one filter without touching the others; falls back to
+  // removing the param when set to the default ('all'/'open') to keep
+  // the URL clean.
+  function updateFilter(key, value, defaultValue) {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (!value || value === defaultValue) next.delete(key)
+      else next.set(key, value)
+      return next
+    }, { replace: true })
+  }
+  const setFilterProject  = (v) => updateFilter('project',  v, 'all')
+  const setFilterPriority = (v) => updateFilter('priority', v, 'all')
+  const setFilterAssignee = (v) => updateFilter('assignee', v, 'all')
+  const setViewMode       = (v) => updateFilter('view',     v, 'open')
 
   useEffect(() => { load() }, [])
 
@@ -57,7 +79,24 @@ export default function TaskTracker() {
       setAssignees(map)
       setProjects(sortBy(projRes.data || [], 'project_ref'))
       setTasks(taskRes.data || [])
-      setUsers(sortBy(usrRes.data || [], 'full_name'))
+      // Filter to internal CCG team only — anyone with a recognised
+      // internal role (matching the values used in src/lib/auth.jsx).
+      // Externals (clients, contacts) might have rows in `profiles` but
+      // null or non-internal `role` values; those don't belong in the
+      // task-assignment dropdown. Keep this list in sync if new roles
+      // are added to auth.jsx.
+      const INTERNAL_ROLES = new Set([
+        'admin',
+        'project_manager',
+        'operations_manager',
+        'accountant',
+        'director_viewer',
+        'site_manager',
+        'document_controller',
+        'viewer',
+      ])
+      const internalUsers = (usrRes.data || []).filter(u => INTERNAL_ROLES.has(u.role))
+      setUsers(sortBy(internalUsers, 'full_name'))
     } catch (e) {
       console.error('[TaskTracker] load error:', e)
     }
