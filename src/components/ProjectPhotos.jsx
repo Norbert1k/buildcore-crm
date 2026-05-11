@@ -19,6 +19,21 @@ import { useAuth } from '../lib/auth'
 
 const STORAGE_BUCKET = 'company-docs'
 
+// Trigger a browser download for a blob with the given filename. Used by
+// both the single-photo download (from the lightbox) and the bulk zip
+// download. Creates a temporary <a download>, clicks it, then revokes the
+// object URL after a short delay so memory doesn't leak.
+function triggerBrowserDownload(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 2000)
+}
+
 export default function ProjectPhotos({ projectId }) {
   const { profile, can } = useAuth()
   const canManage = can ? can('manage_documents') : (profile?.role === 'admin')
@@ -29,8 +44,23 @@ export default function ProjectPhotos({ projectId }) {
   const [telegramGroup, setTelegramGroup] = useState(null)
   const [openFolder, setOpenFolder] = useState(null) // folder_slug
   const [thumbs, setThumbs] = useState({}) // { photo_id: signed_url }
-  const [lightbox, setLightbox] = useState(null)
+  // Lightbox now holds an INDEX into the currently-open folder's photo array,
+  // not the photo object itself. This lets us cycle via ← → arrow keys
+  // (see the global keydown listener inside the folder detail view).
+  // null = lightbox closed.
+  const [lightboxIndex, setLightboxIndex] = useState(null)
   const [showConnect, setShowConnect] = useState(false)
+  // Multi-select state. Set of photo IDs that the user has ticked. The
+  // checkbox sits in the top-left corner of every PhotoTile (always
+  // visible — confirmed by Norbert). When the set is non-empty a sticky
+  // bulk-action bar appears at the top of the folder detail view.
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  // Track bulk-action progress so we can disable buttons and show a label
+  // while a zip is being assembled or a batch delete is running.
+  const [bulkBusy, setBulkBusy] = useState(null) // null | 'downloading' | 'deleting'
+  // Live progress for zip downloads: "Fetching 4/12…". Updated as each
+  // signed URL fetch completes.
+  const [bulkProgress, setBulkProgress] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -151,7 +181,116 @@ export default function ProjectPhotos({ projectId }) {
 
     await supabase.storage.from(STORAGE_BUCKET).remove([photo.storage_path])
     setPhotos(prev => prev.filter(p => p.id !== photo.id))
-    setLightbox(null)
+    setLightboxIndex(null)
+    // If the deleted photo was selected, drop it from the selection set
+    // so the bulk-action bar count stays accurate.
+    setSelectedIds(prev => {
+      if (!prev.has(photo.id)) return prev
+      const next = new Set(prev)
+      next.delete(photo.id)
+      return next
+    })
+  }
+
+  // Download a single photo. Used by the lightbox's Download button.
+  // Fetches the signed URL, pulls the blob, triggers a browser download
+  // with a clean filename based on the project slug + photo timestamp.
+  async function downloadOnePhoto(photo) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(photo.storage_path, 60)
+      if (error || !data) throw error || new Error('No URL returned')
+      const res = await fetch(data.signedUrl)
+      if (!res.ok) throw new Error('Fetch failed: ' + res.status)
+      const blob = await res.blob()
+      const ext = (photo.storage_path.split('.').pop() || 'jpg').toLowerCase()
+      const stamp = new Date(photo.taken_at).toISOString().slice(0, 10)
+      const fname = `${photo.folder_name || 'photo'}-${stamp}-${photo.id.slice(0, 8)}.${ext}`
+      triggerBrowserDownload(blob, fname)
+    } catch (err) {
+      alert('Download failed: ' + (err?.message || err))
+    }
+  }
+
+  // Bulk zip download. Loads JSZip on demand (we don't want it in the
+  // initial bundle just for occasional bulk downloads), builds a zip in
+  // memory, and triggers a single browser download. Filename pattern:
+  // <FolderName>-YYYY-MM-DD.zip. Progress is reported via bulkProgress
+  // state so the user sees "Fetching 4/12…" while the zip builds.
+  async function downloadSelectedAsZip(folderName) {
+    if (selectedIds.size === 0) return
+    const ids = Array.from(selectedIds)
+    const picked = photos.filter(p => ids.includes(p.id))
+    setBulkBusy('downloading')
+    setBulkProgress(0)
+    try {
+      // Dynamic import keeps the zip library out of the main bundle.
+      const JSZip = (await import('https://esm.sh/jszip@3.10.1')).default
+      const zip = new JSZip()
+      let done = 0
+      for (const photo of picked) {
+        const { data, error } = await supabase.storage
+          .from(STORAGE_BUCKET)
+          .createSignedUrl(photo.storage_path, 60)
+        if (error || !data) {
+          console.warn('Skipping (sign error):', photo.id, error)
+          done++; setBulkProgress(done)
+          continue
+        }
+        const res = await fetch(data.signedUrl)
+        if (!res.ok) {
+          console.warn('Skipping (fetch error):', photo.id, res.status)
+          done++; setBulkProgress(done)
+          continue
+        }
+        const blob = await res.blob()
+        const ext = (photo.storage_path.split('.').pop() || 'jpg').toLowerCase()
+        const stamp = new Date(photo.taken_at).toISOString().slice(0, 10)
+        // Keep filename short and unique. ID prefix avoids collisions if
+        // two photos were taken at exactly the same time.
+        const fname = `${stamp}-${photo.id.slice(0, 8)}.${ext}`
+        zip.file(fname, blob)
+        done++; setBulkProgress(done)
+      }
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const today = new Date().toISOString().slice(0, 10)
+      triggerBrowserDownload(blob, `${folderName}-${today}.zip`)
+    } catch (err) {
+      alert('Zip download failed: ' + (err?.message || err))
+    } finally {
+      setBulkBusy(null)
+      setBulkProgress(0)
+    }
+  }
+
+  // Bulk delete the selected photos. One confirm, then loops through.
+  // Database deletes happen one-by-one; storage cleanup is batched per
+  // 100-file chunk (Supabase storage.remove accepts an array).
+  async function deleteSelected() {
+    if (!canManage || selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} photo${selectedIds.size === 1 ? '' : 's'}? This cannot be undone.`)) return
+    setBulkBusy('deleting')
+    try {
+      const ids = Array.from(selectedIds)
+      const picked = photos.filter(p => ids.includes(p.id))
+      // Delete DB rows in one statement.
+      const { error: dbErr } = await supabase.from('project_photos').delete().in('id', ids)
+      if (dbErr) throw dbErr
+      // Storage cleanup. Batch into chunks of 100 to stay safely under
+      // Supabase's batch-remove limits.
+      const paths = picked.map(p => p.storage_path)
+      for (let i = 0; i < paths.length; i += 100) {
+        await supabase.storage.from(STORAGE_BUCKET).remove(paths.slice(i, i + 100))
+      }
+      setPhotos(prev => prev.filter(p => !selectedIds.has(p.id)))
+      setSelectedIds(new Set())
+      setLightboxIndex(null)
+    } catch (err) {
+      alert('Bulk delete failed: ' + (err?.message || err))
+    } finally {
+      setBulkBusy(null)
+    }
   }
 
   async function disconnectTelegram() {
@@ -174,11 +313,15 @@ export default function ProjectPhotos({ projectId }) {
       setOpenFolder(null)
       return null
     }
+    // Photos in this folder that are currently selected. We compute this
+    // from the global selectedIds rather than a separate state so it
+    // stays in sync when photos are deleted or filtered.
+    const selectedCount = folder.photos.filter(p => selectedIds.has(p.id)).length
     return (
       <div style={{ padding: '12px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           <button
-            onClick={() => setOpenFolder(null)}
+            onClick={() => { setOpenFolder(null); setSelectedIds(new Set()); setLightboxIndex(null) }}
             style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: 'var(--text2)' }}>
             ← All folders
           </button>
@@ -198,13 +341,111 @@ export default function ProjectPhotos({ projectId }) {
             </button>
           )}
         </div>
+
+        {/* Bulk-action bar. Renders only when at least one photo is
+            selected. Sticks just below the header. Shows the count and
+            three actions: download zip, delete (if canManage), clear. */}
+        {selectedCount > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            background: 'var(--surface2)', border: '1px solid var(--border)',
+            borderRadius: 6, padding: '8px 12px', marginBottom: 12,
+            position: 'sticky', top: 8, zIndex: 10,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 600 }}>
+              {selectedCount} selected
+            </div>
+            <button
+              onClick={() => downloadSelectedAsZip(folder.name)}
+              disabled={bulkBusy !== null}
+              style={{
+                background: 'var(--accent, #448a40)', color: 'white', border: 0,
+                borderRadius: 4, padding: '6px 12px', fontSize: 11, fontWeight: 600,
+                cursor: bulkBusy ? 'wait' : 'pointer', opacity: bulkBusy ? 0.6 : 1,
+              }}>
+              {bulkBusy === 'downloading'
+                ? `Zipping… ${bulkProgress}/${selectedCount}`
+                : `Download zip (${selectedCount})`}
+            </button>
+            {canManage && (
+              <button
+                onClick={deleteSelected}
+                disabled={bulkBusy !== null}
+                style={{
+                  background: '#A32D2D', color: 'white', border: 0,
+                  borderRadius: 4, padding: '6px 12px', fontSize: 11, fontWeight: 600,
+                  cursor: bulkBusy ? 'wait' : 'pointer', opacity: bulkBusy ? 0.6 : 1,
+                }}>
+                {bulkBusy === 'deleting' ? 'Deleting…' : `Delete (${selectedCount})`}
+              </button>
+            )}
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              disabled={bulkBusy !== null}
+              style={{
+                background: 'transparent', color: 'var(--text2)', border: '1px solid var(--border)',
+                borderRadius: 4, padding: '6px 12px', fontSize: 11, cursor: 'pointer',
+              }}>
+              Clear
+            </button>
+            {/* Select-all toggle for the current folder. */}
+            <button
+              onClick={() => {
+                const allIds = folder.photos.map(p => p.id)
+                const allSelected = allIds.every(id => selectedIds.has(id))
+                setSelectedIds(prev => {
+                  const next = new Set(prev)
+                  if (allSelected) {
+                    for (const id of allIds) next.delete(id)
+                  } else {
+                    for (const id of allIds) next.add(id)
+                  }
+                  return next
+                })
+              }}
+              style={{
+                background: 'transparent', color: 'var(--text2)',
+                border: '1px solid var(--border)', borderRadius: 4,
+                padding: '6px 12px', fontSize: 11, cursor: 'pointer', marginLeft: 'auto',
+              }}>
+              {folder.photos.every(p => selectedIds.has(p.id)) ? 'Deselect all' : 'Select all'}
+            </button>
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
-          {folder.photos.map(p => (
-            <PhotoTile key={p.id} photo={p} url={thumbs[p.id]} onClick={() => setLightbox(p)} />
+          {folder.photos.map((p, i) => (
+            <PhotoTile
+              key={p.id}
+              photo={p}
+              url={thumbs[p.id]}
+              selected={selectedIds.has(p.id)}
+              onToggleSelect={() => {
+                setSelectedIds(prev => {
+                  const next = new Set(prev)
+                  if (next.has(p.id)) next.delete(p.id)
+                  else next.add(p.id)
+                  return next
+                })
+              }}
+              onClick={() => setLightboxIndex(i)}
+            />
           ))}
         </div>
 
-        {lightbox && <Lightbox photo={lightbox} url={thumbs[lightbox.id]} onClose={() => setLightbox(null)} canManage={canManage} onDelete={() => deletePhoto(lightbox)} />}
+        {lightboxIndex !== null && folder.photos[lightboxIndex] && (
+          <Lightbox
+            photos={folder.photos}
+            index={lightboxIndex}
+            thumbs={thumbs}
+            onClose={() => setLightboxIndex(null)}
+            onPrev={() => setLightboxIndex(i => (i > 0 ? i - 1 : i))}
+            onNext={() => setLightboxIndex(i => (i < folder.photos.length - 1 ? i + 1 : i))}
+            canManage={canManage}
+            onDelete={() => deletePhoto(folder.photos[lightboxIndex])}
+            onDownload={() => downloadOnePhoto(folder.photos[lightboxIndex])}
+          />
+        )}
       </div>
     )
   }
@@ -369,23 +610,50 @@ function FolderCard({ folder, thumbUrl, canManage, onOpen, onToggleVisibility })
 }
 
 // ── PhotoTile ──────────────────────────────────────────────────────────────
-function PhotoTile({ photo, url, onClick }) {
+function PhotoTile({ photo, url, selected, onToggleSelect, onClick }) {
   return (
     <div
       onClick={onClick}
       style={{
         aspectRatio: '1 / 1',
-        background: url ? `url(${url}) center/cover no-repeat` : 'var(--surface2)',
+        // Letterbox treatment so portrait photos show whole picture
+        // instead of being cropped. Matches the portal fix.
+        backgroundColor: 'var(--surface2)',
+        backgroundImage: url ? `url(${url})` : undefined,
+        backgroundSize: 'contain',
+        backgroundRepeat: 'no-repeat',
+        backgroundPosition: 'center',
         borderRadius: 6,
         cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
+        // Visible selection state. A bright green border + small inset
+        // shadow makes it obvious which photos are picked at a glance.
+        outline: selected ? '2px solid var(--accent, #448a40)' : 'none',
+        outlineOffset: -2,
       }}>
       {!url && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)' }}>
           ⏳
         </div>
       )}
+      {/* Checkbox — top-left, always visible. Clicking it toggles
+          selection without opening the lightbox. The label/box style
+          makes it readable on either dark or light photos. */}
+      <button
+        onClick={e => { e.stopPropagation(); onToggleSelect?.() }}
+        aria-label={selected ? 'Deselect photo' : 'Select photo'}
+        style={{
+          position: 'absolute', top: 6, left: 6, width: 22, height: 22,
+          borderRadius: 4, cursor: 'pointer',
+          border: '2px solid white',
+          background: selected ? 'var(--accent, #448a40)' : 'rgba(0,0,0,0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0, color: 'white', fontWeight: 700, fontSize: 14, lineHeight: 1,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.4)',
+        }}>
+        {selected ? '✓' : ''}
+      </button>
       {photo.caption && (
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -401,20 +669,76 @@ function PhotoTile({ photo, url, onClick }) {
 }
 
 // ── Lightbox ──────────────────────────────────────────────────────────────
-function Lightbox({ photo, url, onClose, canManage, onDelete }) {
+function Lightbox({ photos, index, thumbs, onClose, onPrev, onNext, canManage, onDelete, onDownload }) {
+  const photo = photos[index]
+  const url = thumbs[photo.id]
+  const hasPrev = index > 0
+  const hasNext = index < photos.length - 1
+
+  // Keyboard navigation. ← previous, → next, Esc close. Listener is
+  // attached for the lightbox's lifetime and removed on close. We use
+  // window so it works regardless of focus, but stop early if the user
+  // is typing in an input (defensive — there shouldn't be inputs in
+  // the lightbox today, but worth guarding against future additions).
+  useEffect(() => {
+    function onKey(e) {
+      const tag = (e.target?.tagName || '').toUpperCase()
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (e.key === 'ArrowLeft') { e.preventDefault(); if (hasPrev) onPrev() }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); if (hasNext) onNext() }
+      else if (e.key === 'Escape') { e.preventDefault(); onClose() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [hasPrev, hasNext, onPrev, onNext, onClose])
+
   const taken = new Date(photo.taken_at).toLocaleString('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })
+
   return (
     <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000,
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 9999,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
     }}>
+      {/* Previous chevron — floats on the left edge of the viewport.
+          Hidden (visibility: hidden) at index 0 so it reserves the space
+          but doesn't render — keeps the photo position stable across
+          navigations. */}
+      <button
+        onClick={e => { e.stopPropagation(); if (hasPrev) onPrev() }}
+        aria-label="Previous photo"
+        style={{
+          position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)',
+          width: 48, height: 48, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+          color: 'white', fontSize: 24, lineHeight: 1, cursor: hasPrev ? 'pointer' : 'default',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: hasPrev ? 1 : 0.3,
+        }}>‹</button>
+
+      {/* Next chevron — mirror of above. */}
+      <button
+        onClick={e => { e.stopPropagation(); if (hasNext) onNext() }}
+        aria-label="Next photo"
+        style={{
+          position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)',
+          width: 48, height: 48, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+          color: 'white', fontSize: 24, lineHeight: 1, cursor: hasNext ? 'pointer' : 'default',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          opacity: hasNext ? 1 : 0.3,
+        }}>›</button>
+
       <div onClick={e => e.stopPropagation()} style={{
         maxWidth: '92vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         {url ? (
-          <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: '76vh', objectFit: 'contain', borderRadius: 4, background: '#000' }} />
+          // key forces React to re-mount the <img> when the photo
+          // changes, which makes the transition cleaner (avoids the
+          // browser briefly showing the old image stretched to new size
+          // before the new src loads).
+          <img key={photo.id} src={url} alt="" style={{ maxWidth: '100%', maxHeight: '76vh', objectFit: 'contain', borderRadius: 4, background: '#000' }} />
         ) : (
           <div style={{ width: 400, height: 300, background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>Loading…</div>
         )}
@@ -424,8 +748,15 @@ function Lightbox({ photo, url, onClose, canManage, onDelete }) {
             <div style={{ opacity: 0.7 }}>
               {taken}
               {photo.telegram_username && <> · @{photo.telegram_username}</>}
+              <> · {index + 1} / {photos.length}</>
             </div>
           </div>
+          {onDownload && (
+            <button onClick={onDownload} style={{
+              background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: 4, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            }}>Download</button>
+          )}
           {canManage && (
             <button onClick={onDelete} style={{
               background: '#A32D2D', color: 'white', border: 0, borderRadius: 4,
