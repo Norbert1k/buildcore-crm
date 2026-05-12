@@ -7,6 +7,7 @@ import ProgressReportEditor, { generateProgressReportPdf } from './ProgressRepor
 import ProjectPhotos from './ProjectPhotos'
 import FileLightbox from './FileLightbox'
 import CffGeneratorModal from './CffGeneratorModal'
+import { resolveBuildings } from '../lib/buildings'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -1540,6 +1541,18 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [renamingFolder, setRenamingFolder] = useState(false)
   const [renameFolderVal, setRenameFolderVal] = useState('')
   const [showGantt, setShowGantt] = useState(false)
+  // Multi-building support. projectBuildings is loaded once on mount via
+  // resolveBuildings(); empty array = single-building project (the
+  // current default — clicking Open Live Gantt opens the project-wide
+  // programme directly). When length > 0 the button becomes a dropdown
+  // picker.
+  const [projectBuildings, setProjectBuildings] = useState([])
+  // ganttBuilding is the Building object the user picked, or null for
+  // single-building projects (= project-wide programme).
+  const [ganttBuilding, setGanttBuilding] = useState(null)
+  // Whether the building picker dropdown is open (anchored under the
+  // Open Live Gantt button).
+  const [showBuildingPicker, setShowBuildingPicker] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatePreview, setGeneratePreview] = useState(null)
   const [pendingGanttTasks, setPendingGanttTasks] = useState(null)
@@ -1573,6 +1586,24 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   useEffect(() => { loadCustomSubfolders() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
   useEffect(() => { loadClientVisible() }, [])
+  // Load the per-building structure for this project so the programme
+  // folder's "Open Live Gantt" button knows whether to render a single
+  // direct button (single-building project) or a dropdown picker
+  // (multi-building project). Only fires on the programme folder to
+  // avoid hitting the DB unnecessarily for other folders' card renders.
+  useEffect(() => {
+    if (folder.key !== '06-project-programme') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const buildings = await resolveBuildings(supabase, projectId)
+        if (!cancelled) setProjectBuildings(buildings)
+      } catch (err) {
+        console.warn('[ProjectDocumentation] resolveBuildings failed:', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [projectId, folder.key, treeVersion])
   // Re-fetch when any move happens anywhere in the tree (kills ghost copies)
   useEffect(() => {
     if (treeVersion === 0) return
@@ -1995,13 +2026,78 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   New Progress Report
                 </button>
               )}
-              {folder.key === '06-project-programme' && (
-                <button onClick={(e) => { e.stopPropagation(); setShowGantt(true) }}
+              {folder.key === '06-project-programme' && projectBuildings.length === 0 && (
+                // Single-building project: behave exactly as before.
+                // Opens the project-wide programme (buildingOrdinal=null).
+                <button onClick={(e) => { e.stopPropagation(); setGanttBuilding(null); setShowGantt(true) }}
                   style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
                   title="Open the live editable Gantt chart for this project">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   Open Live Gantt
                 </button>
+              )}
+              {folder.key === '06-project-programme' && projectBuildings.length > 0 && (
+                // Multi-building project: button toggles a dropdown
+                // listing each building. The dropdown is positioned
+                // absolutely below the trigger button; it's contained in
+                // a relatively-positioned wrapper so it follows the
+                // button's location. Click-outside is handled by an
+                // invisible fixed-position overlay underneath.
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setShowBuildingPicker(v => !v) }}
+                    style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
+                    title="Open the live editable Gantt chart for a building">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Open Live Gantt
+                    <span style={{ fontSize: 9, opacity: 0.8 }}>▾</span>
+                  </button>
+                  {showBuildingPicker && (
+                    <>
+                      {/* Click-outside catcher. Fixed full-viewport, sits BENEATH
+                          the dropdown menu via lower z-index, closes the menu
+                          when clicked. stopPropagation prevents the click from
+                          re-opening the picker via the parent row handler. */}
+                      <div
+                        onClick={(e) => { e.stopPropagation(); setShowBuildingPicker(false) }}
+                        style={{ position: 'fixed', inset: 0, zIndex: 50 }}
+                      />
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: 'absolute', top: 'calc(100% + 4px)', right: 0,
+                          background: 'var(--surface)', border: '0.5px solid var(--border)',
+                          borderRadius: 6, padding: 4, minWidth: 220, zIndex: 51,
+                          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                        }}>
+                        <div style={{ fontSize: 10, color: 'var(--text3)', padding: '6px 10px 4px', fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                          Pick a building
+                        </div>
+                        {projectBuildings.map(b => (
+                          <button
+                            key={b.ordinal}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setGanttBuilding(b)
+                              setShowBuildingPicker(false)
+                              setShowGantt(true)
+                            }}
+                            style={{
+                              display: 'block', width: '100%', textAlign: 'left',
+                              background: 'transparent', border: 0,
+                              borderRadius: 4, padding: '8px 10px',
+                              fontSize: 12, color: 'var(--text)',
+                              cursor: 'pointer',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)' }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+                            <span style={{ fontWeight: 600 }}>{b.ordinal}. {b.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
               )}
               {folder.key === '02-payment-application' && canManage && fileCount === 0 && (
                 <button onClick={async (e) => {
@@ -2218,9 +2314,11 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         <GanttEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
-          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null) }}
+          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null); setGanttBuilding(null) }}
           canEdit={canManage}
           initialTasks={pendingGanttTasks}
+          buildingOrdinal={ganttBuilding?.ordinal ?? null}
+          buildingLabel={ganttBuilding?.name ?? null}
         />
       )}
 
