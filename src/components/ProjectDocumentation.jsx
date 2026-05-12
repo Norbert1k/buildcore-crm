@@ -870,7 +870,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 }
 
 // ── Subfolder Section (recursive — supports nested sub-subfolders) ────────────
-function SubfolderSection({ projectId, projectName, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree }) {
+function SubfolderSection({ projectId, projectName, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree, onGenerateGantt = null }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -1390,7 +1390,8 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
               subfolder={{ key: cf.folder_key, label: cf.label, custom: true }}
               canManage={canManage} viewMode={viewMode} onPreview={onPreview}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
-              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree} />
+              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree}
+              onGenerateGantt={onGenerateGantt} />
           ))}
 
           {/* Progress Reports (only inside 05-progress-report subfolders, e.g. Merton's Sports Hall) */}
@@ -1483,7 +1484,8 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             </label>
           ) : files.length > 0 ? (
             <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage}
-              onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles} />
+              onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles}
+              onGenerateGantt={onGenerateGantt} />
           ) : null}
         </div>
       )}
@@ -1875,8 +1877,14 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     loadProgressReports()
   }
 
-  async function generateGanttFromPdf(file) {
+  async function generateGanttFromPdf(file, building = null) {
     if (!file?.storage_path) return
+    // Stash the building selection BEFORE kicking off the parser. The
+    // preview modal's "Open in Gantt Editor →" button just calls
+    // setShowGantt(true), which reads ganttBuilding when constructing
+    // the GanttEditor. So setting it here ensures the parsed tasks land
+    // in the right per-building programme. null = project-wide (default).
+    setGanttBuilding(building)
     setGenerating(true)
     try {
       const { data, error } = await supabase.functions.invoke('parse-programme-pdf', {
@@ -2253,7 +2261,26 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                     if (id === '__folder_deleted__') loadCustomSubfolders()
                     else loadRootFiles()
                   }}
-                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
+                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree}
+                  onGenerateGantt={folder.key === '06-project-programme' ? (file) => {
+                    // Detect which building this subfolder belongs to so
+                    // parsed tasks land in the right per-building programme.
+                    // Anchor: the leading ordinal in the subfolder label
+                    // (e.g. "01. Residential" → ordinal 1). Same convention
+                    // used by buildings.js for PA/CSA/CFF matching. If the
+                    // subfolder doesn't match any building (or this is a
+                    // single-building project) the handler runs with
+                    // building=null, which means project-wide programme —
+                    // identical to the top-level button behaviour.
+                    let building = null
+                    const m = (sf.label || '').trim().match(/^(\d{1,3})\s*[.\-)]/)
+                    if (m) {
+                      const ord = parseInt(m[1], 10)
+                      building = projectBuildings.find(b => b.ordinal === ord) || null
+                    }
+                    return generateGanttFromPdf(file, building)
+                  } : null}
+                />
               </div>
             </div>
           ))}
