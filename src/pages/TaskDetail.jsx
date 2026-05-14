@@ -78,8 +78,88 @@ export default function TaskDetail() {
   // (either pre-filled for editing or empty for a new quote).
   const [quoteModal, setQuoteModal] = useState(null)
   const [savingQuote, setSavingQuote] = useState(false)
+  const [extractingQuote, setExtractingQuote] = useState(false)
+  // Drag-and-drop. Tracks whether files are currently being dragged over
+  // the page so we can show a full-page drop overlay.
+  const [dragOver, setDragOver] = useState(false)
 
   useEffect(() => { load() }, [taskId])
+
+  // Window-level drag-and-drop. Drop files anywhere on the page to
+  // upload them. PDFs detected as quotes also trigger AI extraction
+  // automatically, so the user can drop a quote PDF and immediately
+  // see the pre-filled form.
+  useEffect(() => {
+    if (!canUpload) return undefined
+
+    function handleDragEnter(e) {
+      // Only react to actual file drags (not text selections, link drags, etc.)
+      if (e.dataTransfer?.types?.includes('Files')) {
+        e.preventDefault()
+        setDragOver(true)
+      }
+    }
+    function handleDragOver(e) {
+      if (e.dataTransfer?.types?.includes('Files')) {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+      }
+    }
+    function handleDragLeave(e) {
+      // Only hide when leaving the window. If relatedTarget exists
+      // we're moving between child elements within the page.
+      if (!e.relatedTarget || e.relatedTarget === null) {
+        setDragOver(false)
+      }
+    }
+    async function handleDrop(e) {
+      e.preventDefault()
+      setDragOver(false)
+      const dropped = Array.from(e.dataTransfer?.files || [])
+      if (dropped.length === 0) return
+      // Upload all files. We re-use the existing uploadFiles flow so
+      // categorisation and activity logging stay consistent. But for a
+      // single PDF dropped on its own that auto-categorises to 'quote',
+      // ALSO trigger the AI extraction afterward.
+      await uploadFiles(dropped)
+      if (dropped.length === 1) {
+        const f = dropped[0]
+        const cat = detectFileCategory(f.name, f.type || '')
+        if (cat === 'quote' && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))) {
+          // The upload's load() will have refreshed `files`. We need to
+          // find the just-inserted task_file by filename + size to get
+          // its task_file_id for the extract call. Re-fetch the latest
+          // files row directly to avoid React state staleness.
+          const { data: latestFiles } = await supabase
+            .from('task_files')
+            .select('*')
+            .eq('task_id', taskId)
+            .eq('file_name', f.name)
+            .order('uploaded_at', { ascending: false })
+            .limit(1)
+          const tf = latestFiles?.[0]
+          if (tf) {
+            // Open the modal first so the user sees the in-progress UI,
+            // then run the extraction.
+            openQuoteModal()
+            await extractQuoteFromFile({ task_file_id: tf.id, blob: f })
+          }
+        }
+      }
+    }
+
+    window.addEventListener('dragenter', handleDragEnter)
+    window.addEventListener('dragover', handleDragOver)
+    window.addEventListener('dragleave', handleDragLeave)
+    window.addEventListener('drop', handleDrop)
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter)
+      window.removeEventListener('dragover', handleDragOver)
+      window.removeEventListener('dragleave', handleDragLeave)
+      window.removeEventListener('drop', handleDrop)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId, canUpload, files])
 
   async function load() {
     setLoading(true)
@@ -239,6 +319,109 @@ export default function TaskDetail() {
       return
     }
     load()
+  }
+
+  // AI-extract quote fields from a PDF. Two call paths:
+  //   1. After upload of a file in 'quote' category — open modal pre-filled
+  //   2. From the modal itself when user has linked a task_file
+  // file param: { source: 'task_file' | 'raw_file', task_file_id?, blob? }
+  async function extractQuoteFromFile(source) {
+    setExtractingQuote(true)
+    try {
+      let blob
+      if (source.task_file_id) {
+        // Fetch the bytes from storage so we can base64-encode them
+        const tf = files.find(f => f.id === source.task_file_id)
+        if (!tf) throw new Error('File not found')
+        const { data: urlData, error } = await supabase.storage
+          .from('task-files').createSignedUrl(tf.storage_path, 60)
+        if (error || !urlData) throw error || new Error('Could not sign URL')
+        const resp = await fetch(urlData.signedUrl)
+        if (!resp.ok) throw new Error('Could not download file for analysis')
+        blob = await resp.blob()
+      } else if (source.blob) {
+        blob = source.blob
+      } else {
+        throw new Error('No file provided')
+      }
+
+      // Base64-encode. Use FileReader for browser-safe encoding of binary.
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = reader.result
+          // strip "data:application/pdf;base64," prefix
+          const comma = dataUrl.indexOf(',')
+          resolve(comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl)
+        }
+        reader.onerror = () => reject(reader.error || new Error('Read failed'))
+        reader.readAsDataURL(blob)
+      })
+
+      const { data, error } = await supabase.functions.invoke('parse-quote-pdf', {
+        body: { pdf_base64: base64 },
+      })
+      if (error) throw error
+      if (!data?.ok) throw new Error(data?.error || data?.parse_error || 'Could not parse the PDF')
+
+      // Match extracted vendor name to existing suppliers/subcontractors
+      // case-insensitively. If found, switch the form to the matching
+      // vendor kind. Otherwise fall back to freetext so the user can
+      // confirm and optionally create-from-this.
+      const extractedName = (data.vendor_name || '').trim()
+      let matched = null
+      if (extractedName) {
+        const lc = extractedName.toLowerCase()
+        matched = vendors.find(v => v.name.toLowerCase() === lc)
+          || vendors.find(v => v.name.toLowerCase().includes(lc) || lc.includes(v.name.toLowerCase()))
+      }
+
+      // Pre-fill the modal. If the modal is already open (user clicked
+      // "Extract from PDF" from inside), preserve any id they're editing
+      // and merge — otherwise create a fresh form.
+      setQuoteModal(prev => {
+        const base = prev || {
+          _id: null,
+          supplier_id: '',
+          subcontractor_id: '',
+          vendor_name_text: '',
+          amount: '',
+          currency: 'GBP',
+          received_date: '',
+          status: 'pending',
+          notes: '',
+          task_file_id: '',
+          vendor_kind: 'supplier',
+        }
+        return {
+          ...base,
+          // Link to the attached file if we have one (from drag-drop or
+          // when extracted from an already-uploaded file).
+          task_file_id: source.task_file_id || base.task_file_id || '',
+          vendor_kind: matched ? matched.kind : 'freetext',
+          supplier_id: matched?.kind === 'supplier' ? matched.id : '',
+          subcontractor_id: matched?.kind === 'subcontractor' ? matched.id : '',
+          vendor_name_text: extractedName || base.vendor_name_text,
+          amount: data.amount != null ? String(data.amount) : base.amount,
+          currency: data.currency || base.currency || 'GBP',
+          received_date: data.received_date || base.received_date,
+          notes: data.notes || base.notes,
+          // Mark which fields were AI-filled so the modal can badge them.
+          _aiFilled: {
+            vendor_name: !!extractedName,
+            amount: data.amount != null,
+            currency: !!data.currency,
+            received_date: !!data.received_date,
+            notes: !!data.notes,
+          },
+          _aiConfidence: data.confidence || 'unknown',
+        }
+      })
+    } catch (err) {
+      alert('Could not extract quote details: ' + (err?.message || err))
+    } finally {
+      setExtractingQuote(false)
+    }
   }
 
   async function deleteFile(file) {
@@ -448,9 +631,24 @@ export default function TaskDetail() {
       } catch (e) {
         alert('Email parse failed: ' + e.message)
       }
-    } else {
-      downloadFile(file)
+      return
     }
+    // PDFs and images: open the signed URL in a new tab so the browser
+    // renders them natively. Falls back to download for other types.
+    const lower = file.file_name.toLowerCase()
+    const isViewable = lower.endsWith('.pdf')
+      || /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/i.test(lower)
+      || (file.mime_type || '').startsWith('image/')
+      || file.mime_type === 'application/pdf'
+    if (isViewable) {
+      const { data } = await supabase.storage.from('task-files').createSignedUrl(file.storage_path, 300)
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank', 'noopener')
+        return
+      }
+    }
+    // Fallback: download
+    downloadFile(file)
   }
 
   async function changeStatus(newStatus) {
@@ -894,7 +1092,23 @@ export default function TaskDetail() {
                                   ))}
                                 </select>
                               )}
-                              {isEml && <button className="btn btn-sm" onClick={() => previewFile(f)} title="Read email">Open</button>}
+                              {(() => {
+                                // View button — for PDFs, images, and EMLs.
+                                // PDFs/images open in a new tab via signed URL.
+                                // EML opens in the existing in-app viewer.
+                                const lower = f.file_name.toLowerCase()
+                                const isViewable = isEml
+                                  || lower.endsWith('.pdf')
+                                  || /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/i.test(lower)
+                                  || (f.mime_type || '').startsWith('image/')
+                                  || f.mime_type === 'application/pdf'
+                                if (!isViewable) return null
+                                return (
+                                  <button className="btn btn-sm" onClick={() => previewFile(f)} title="View">
+                                    👁
+                                  </button>
+                                )
+                              })()}
                               <button className="btn btn-sm" onClick={() => downloadFile(f)} title="Download">⬇</button>
                               {canDeleteFile(f) && (
                                 <button className="btn btn-sm btn-danger" onClick={() => deleteFile(f)} title="Delete">✕</button>
@@ -1083,24 +1297,52 @@ export default function TaskDetail() {
             {/* Attached file (only quote-category files for this task) */}
             <div className="full">
               <Field label="Attached PDF (optional)">
-                <select value={quoteModal.task_file_id}
-                  onChange={e => setQuoteModal(prev => ({ ...prev, task_file_id: e.target.value }))}>
-                  <option value="">— None —</option>
-                  {files.filter(f => f.category === 'quote').map(f => (
-                    <option key={f.id} value={f.id}>{f.file_name}</option>
-                  ))}
-                </select>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select value={quoteModal.task_file_id}
+                    onChange={e => setQuoteModal(prev => ({ ...prev, task_file_id: e.target.value }))}
+                    style={{ flex: 1 }}>
+                    <option value="">— None —</option>
+                    {files.filter(f => f.category === 'quote').map(f => (
+                      <option key={f.id} value={f.id}>{f.file_name}</option>
+                    ))}
+                  </select>
+                  {quoteModal.task_file_id && (
+                    <button className="btn btn-sm" type="button"
+                      onClick={() => extractQuoteFromFile({ task_file_id: quoteModal.task_file_id })}
+                      disabled={extractingQuote || savingQuote}
+                      title="Use AI to read the PDF and fill in vendor, amount, date, notes">
+                      {extractingQuote ? '⚙ Scanning…' : '✨ Extract from PDF'}
+                    </button>
+                  )}
+                </div>
               </Field>
               <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
                 Only files in the Quotes category appear here. Upload a quote PDF first if you want to link it.
               </div>
             </div>
 
+            {/* AI extraction summary banner */}
+            {quoteModal._aiFilled && Object.values(quoteModal._aiFilled).some(Boolean) && (
+              <div className="full" style={{
+                background: '#E6F1FB', color: '#0C447C',
+                padding: 10, borderRadius: 4, fontSize: 11,
+                borderLeft: '3px solid #185FA5',
+              }}>
+                <strong>✨ AI auto-filled some fields</strong>
+                {quoteModal._aiConfidence && (
+                  <span style={{ marginLeft: 6, opacity: 0.85 }}>(confidence: {quoteModal._aiConfidence})</span>
+                )}
+                <div style={{ marginTop: 2 }}>Review the highlighted fields and adjust before saving.</div>
+              </div>
+            )}
+
             {/* Notes */}
             <div className="full">
-              <Field label="Notes">
+              <Field label={
+                <span>Notes {quoteModal._aiFilled?.notes && <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 9, padding: '1px 6px', borderRadius: 99, marginLeft: 4 }}>AI</span>}</span>
+              }>
                 <textarea value={quoteModal.notes}
-                  onChange={e => setQuoteModal(prev => ({ ...prev, notes: e.target.value }))}
+                  onChange={e => setQuoteModal(prev => ({ ...prev, notes: e.target.value, _aiFilled: prev._aiFilled ? { ...prev._aiFilled, notes: false } : undefined }))}
                   placeholder="What's included, exclusions, validity period, etc."
                   style={{ minHeight: 60 }} />
               </Field>
@@ -1121,6 +1363,27 @@ export default function TaskDetail() {
       <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={deleteTask} title="Delete task" message="Permanently delete this task along with all its notes, files, and activity log?" danger />
 
       {/* EML preview overlay */}
+      {/* Drag-and-drop overlay */}
+      {dragOver && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(33, 70, 22, 0.85)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            border: '3px dashed white', borderRadius: 12,
+            padding: '40px 60px', textAlign: 'center', color: 'white',
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 8 }}>📥</div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>Drop to upload</div>
+            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
+              Files will be auto-categorised. Single quote PDFs are scanned by AI.
+            </div>
+          </div>
+        </div>
+      )}
+
       {emlPreview && <EmlViewer file={emlPreview.file} parsed={emlPreview.parsed} onClose={() => setEmlPreview(null)} />}
     </div>
   )
