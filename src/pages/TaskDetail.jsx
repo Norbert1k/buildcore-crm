@@ -85,82 +85,6 @@ export default function TaskDetail() {
 
   useEffect(() => { load() }, [taskId])
 
-  // Window-level drag-and-drop. Drop files anywhere on the page to
-  // upload them. PDFs detected as quotes also trigger AI extraction
-  // automatically, so the user can drop a quote PDF and immediately
-  // see the pre-filled form.
-  useEffect(() => {
-    if (!canUpload) return undefined
-
-    function handleDragEnter(e) {
-      // Only react to actual file drags (not text selections, link drags, etc.)
-      if (e.dataTransfer?.types?.includes('Files')) {
-        e.preventDefault()
-        setDragOver(true)
-      }
-    }
-    function handleDragOver(e) {
-      if (e.dataTransfer?.types?.includes('Files')) {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'copy'
-      }
-    }
-    function handleDragLeave(e) {
-      // Only hide when leaving the window. If relatedTarget exists
-      // we're moving between child elements within the page.
-      if (!e.relatedTarget || e.relatedTarget === null) {
-        setDragOver(false)
-      }
-    }
-    async function handleDrop(e) {
-      e.preventDefault()
-      setDragOver(false)
-      const dropped = Array.from(e.dataTransfer?.files || [])
-      if (dropped.length === 0) return
-      // Upload all files. We re-use the existing uploadFiles flow so
-      // categorisation and activity logging stay consistent. But for a
-      // single PDF dropped on its own that auto-categorises to 'quote',
-      // ALSO trigger the AI extraction afterward.
-      await uploadFiles(dropped)
-      if (dropped.length === 1) {
-        const f = dropped[0]
-        const cat = detectFileCategory(f.name, f.type || '')
-        if (cat === 'quote' && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))) {
-          // The upload's load() will have refreshed `files`. We need to
-          // find the just-inserted task_file by filename + size to get
-          // its task_file_id for the extract call. Re-fetch the latest
-          // files row directly to avoid React state staleness.
-          const { data: latestFiles } = await supabase
-            .from('task_files')
-            .select('*')
-            .eq('task_id', taskId)
-            .eq('file_name', f.name)
-            .order('uploaded_at', { ascending: false })
-            .limit(1)
-          const tf = latestFiles?.[0]
-          if (tf) {
-            // Open the modal first so the user sees the in-progress UI,
-            // then run the extraction.
-            openQuoteModal()
-            await extractQuoteFromFile({ task_file_id: tf.id, blob: f })
-          }
-        }
-      }
-    }
-
-    window.addEventListener('dragenter', handleDragEnter)
-    window.addEventListener('dragover', handleDragOver)
-    window.addEventListener('dragleave', handleDragLeave)
-    window.addEventListener('drop', handleDrop)
-    return () => {
-      window.removeEventListener('dragenter', handleDragEnter)
-      window.removeEventListener('dragover', handleDragOver)
-      window.removeEventListener('dragleave', handleDragLeave)
-      window.removeEventListener('drop', handleDrop)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId, canUpload, files])
-
   async function load() {
     setLoading(true)
     try {
@@ -225,6 +149,74 @@ export default function TaskDetail() {
   const canDeleteNote = (note) => note.author_id === profile?.id || isAdmin
   const canEditNote = (note) => note.author_id === profile?.id || isAdmin
   const canDeleteFile = (file) => file.uploaded_by === profile?.id || isAdmin
+
+  // Window-level drag-and-drop. Drop files anywhere on the page to
+  // upload them. PDFs detected as quotes also trigger AI extraction
+  // automatically, so the user can drop a quote PDF and immediately
+  // see the pre-filled form.
+  //
+  // This useEffect must come AFTER canUpload is defined — reading
+  // canUpload from the dependency array before its const declaration
+  // throws a temporal-dead-zone ReferenceError on first render, which
+  // blanks the whole page.
+  useEffect(() => {
+    if (!canUpload) return undefined
+
+    function handleDragEnter(e) {
+      if (e.dataTransfer?.types?.includes('Files')) {
+        e.preventDefault()
+        setDragOver(true)
+      }
+    }
+    function handleDragOver(e) {
+      if (e.dataTransfer?.types?.includes('Files')) {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+      }
+    }
+    function handleDragLeave(e) {
+      if (!e.relatedTarget || e.relatedTarget === null) {
+        setDragOver(false)
+      }
+    }
+    async function handleDrop(e) {
+      e.preventDefault()
+      setDragOver(false)
+      const dropped = Array.from(e.dataTransfer?.files || [])
+      if (dropped.length === 0) return
+      await uploadFiles(dropped)
+      if (dropped.length === 1) {
+        const f = dropped[0]
+        const cat = detectFileCategory(f.name, f.type || '')
+        if (cat === 'quote' && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))) {
+          const { data: latestFiles } = await supabase
+            .from('task_files')
+            .select('*')
+            .eq('task_id', taskId)
+            .eq('file_name', f.name)
+            .order('uploaded_at', { ascending: false })
+            .limit(1)
+          const tf = latestFiles?.[0]
+          if (tf) {
+            openQuoteModal()
+            await extractQuoteFromFile({ task_file_id: tf.id, blob: f })
+          }
+        }
+      }
+    }
+
+    window.addEventListener('dragenter', handleDragEnter)
+    window.addEventListener('dragover', handleDragOver)
+    window.addEventListener('dragleave', handleDragLeave)
+    window.addEventListener('drop', handleDrop)
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter)
+      window.removeEventListener('dragover', handleDragOver)
+      window.removeEventListener('dragleave', handleDragLeave)
+      window.removeEventListener('drop', handleDrop)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskId, canUpload])
 
   function startEditNote(note) {
     setEditingNoteId(note.id)
