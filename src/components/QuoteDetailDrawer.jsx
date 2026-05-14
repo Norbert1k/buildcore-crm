@@ -172,9 +172,23 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
     }
   }
 
-  // Compute lowest for diff column in the quotes table.
+  // Per-cohort comparison. Two quotes are comparable only when they
+  // cover the same buildings — otherwise diff is meaningless. Group by
+  // sorted-comma-joined ordinals; empty = "covers whole project".
+  function cohortKeyForQuote(q) {
+    const ords = Array.isArray(q.building_ordinals) ? q.building_ordinals : []
+    return ords.length === 0 ? '' : [...ords].sort((a, b) => a - b).join(',')
+  }
   const priced = quotes.filter(q => q.amount != null && q.amount > 0)
-  const lowest = priced.length > 0 ? priced.reduce((a, b) => Number(a.amount) <= Number(b.amount) ? a : b) : null
+  const cohorts = new Map()
+  for (const q of priced) {
+    const k = cohortKeyForQuote(q)
+    if (!cohorts.has(k)) cohorts.set(k, { priced: [] })
+    cohorts.get(k).priced.push(q)
+  }
+  for (const c of cohorts.values()) {
+    c.lowest = c.priced.reduce((a, b) => Number(a.amount) <= Number(b.amount) ? a : b)
+  }
 
   // Group files into visible categories. Photos and Other are skipped.
   const filesByCategory = new Map()
@@ -325,9 +339,16 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                         const kind = q.supplier_id ? 'supplier'
                           : q.subcontractor_id ? (vendors.find(v => v.id === q.subcontractor_id && v.kind === 'design_team') ? 'design_team' : 'subcontractor')
                           : 'freetext'
-                        const isLowest = lowest && q.id === lowest.id && priced.length > 1
-                        const diff = (q.amount != null && lowest && lowest.amount > 0) ? Number(q.amount) - Number(lowest.amount) : null
-                        const diffPct = (diff != null && lowest && lowest.amount > 0) ? (diff / Number(lowest.amount)) * 100 : null
+                        const isLowest = (() => {
+                          const c = cohorts.get(cohortKeyForQuote(q))
+                          return c && c.priced.length > 1 && q.id === c.lowest.id
+                        })()
+                        const cohortForRow = cohorts.get(cohortKeyForQuote(q))
+                        const hasComparable = cohortForRow && cohortForRow.priced.length > 1
+                        const diff = (hasComparable && q.amount != null && cohortForRow.lowest.amount > 0)
+                          ? Number(q.amount) - Number(cohortForRow.lowest.amount) : null
+                        const diffPct = (diff != null && cohortForRow.lowest.amount > 0)
+                          ? (diff / Number(cohortForRow.lowest.amount)) * 100 : null
                         return (
                           <tr key={q.id} style={{ borderTop: '1px solid var(--border)' }}>
                             <td style={{ padding: '8px 10px' }}>
