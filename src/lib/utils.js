@@ -1,186 +1,205 @@
-import { NavLink, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
-import { useAuth } from '../lib/auth'
-import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
-import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
-
-function IconClients() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="3" width="20" height="18" rx="2"/>
-      <path d="M8 3v3"/>
-      <path d="M16 3v3"/>
-      <circle cx="12" cy="13" r="3"/>
-      <path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
-    </svg>
-  )
+import { differenceInDays, format, parseISO } from 'date-fns'
+ 
+export const TRADES = [
+  'Agency','Architects','Asbestos Surveys','Balcony Specialists','Bike Storage','Borehole Investigations','Brickwork','Building Control','Carpentry','Civil Engineers','Cladding',
+  'Consultant','Core Drilling & Sawing','Demolition','Drainage','Dryliners','Ecologist','Electrical',
+  'Fire Consultants','Fire Engineer','Fire Protection','Flood Risk Consultants','Flooring','General Builders','Glazing','Ground Investigation','Groundworks',
+  'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','Mastic Man','MEP Consultants',
+  'Noise Consultants','Nurse Call System','Painting & Decorating','Piling','Planning Consultants','Plastering','Plumbing','Precast Concrete B&B','Principle Designers',
+  'Roofing','Roofing & Cladding','Roofing Trusses','Scaffolding','Screeding',
+  'Setting Out Engineer','SFS Engineers','Solar Panels','Sprinkler System','Steel Erection','Stone Masonry',
+  'Structural Engineers','Surfacing & Tarmac','Underfloor Heating','Wardrobes','Warranty Providers','Other'
+]
+ 
+// Trades that default to Design Team when assigning to a project
+export const DESIGN_TEAM_TRADES = [
+  'Architects', 'Building Control', 'Civil Engineers', 'Consultant',
+  'Fire Consultants', 'MEP Consultants', 'Principle Designers', 'Setting Out Engineer',
+  'SFS Engineers', 'Structural Engineers', 'Warranty Providers',
+]
+ 
+// Trades that default to "Both" (can sit in Subcontractor OR Design Team tab)
+export const BOTH_TRADES = [
+  'Asbestos Surveys', 'Borehole Investigations', 'Ecologist', 'Fire Engineer', 'Flood Risk Consultants', 'Ground Investigation',
+  'Lighting Consultants', 'Noise Consultants', 'Nurse Call System', 'Planning Consultants',
+]
+ 
+export const SUBCONTRACTOR_CATEGORIES = {
+  design_team: { label: 'Design Team', color: 'var(--blue, #0c447c)', bg: 'var(--blue-bg, #e6f1fb)' },
+  contractual_work: { label: 'Contractual Work', color: 'var(--amber, #ba7517)', bg: 'var(--amber-bg, #faeeda)' },
 }
-
-// The logo swap needs to recognise ALL dark themes, not just 'dark'.
-// As new themes get added this set must be kept in sync with index.css.
-const DARK_THEMES = new Set(['dark', 'forest', 'slate'])
-function isDarkTheme() {
-  const t = document.documentElement.getAttribute('data-theme') || 'light'
-  return DARK_THEMES.has(t)
+ 
+export const DOCUMENT_TYPES = {
+  public_liability: 'Public Liability Insurance',
+  employers_liability: "Employer's Liability Insurance",
+  professional_indemnity: 'Professional Indemnity Insurance',
+  rams: 'RAMS (Risk Assessment & Method Statement)',
+  method_statement: 'Method Statement',
+  risk_assessment: 'Risk Assessment',
+  cscs_card: 'CSCS Card',
+  gas_safe: 'Gas Safe Certificate',
+  niceic: 'NICEIC Certificate',
+  chas: 'CHAS Accreditation',
+  constructionline: 'Constructionline',
+  iso_9001: 'ISO 9001 Quality',
+  iso_14001: 'ISO 14001 Environmental',
+  iso_45001: 'ISO 45001 Health & Safety',
+  f10_notification: 'F10 CDM Notification',
+  trade_certificate: 'Trade Certificate',
+  other: 'Other Document',
 }
-
-export default function Sidebar({ expCounts = {}, open, onClose }) {
-  const { profile } = useAuth()
-  const [isDark, setIsDark] = useState(isDarkTheme())
-  const location = useLocation()
-  const [expandedKeys, setExpandedKeys] = useState(() => {
-    try {
-      const saved = localStorage.getItem('sidebar:expanded')
-      return saved ? new Set(JSON.parse(saved)) : new Set()
-    } catch { return new Set() }
+ 
+export const PROJECT_STATUSES = {
+  tender: { label: 'Tender', cls: 'pill-purple' },
+  active: { label: 'Active', cls: 'pill-green' },
+  on_hold: { label: 'On Hold', cls: 'pill-amber' },
+  completed: { label: 'Completed', cls: 'pill-blue' },
+  cancelled: { label: 'Cancelled', cls: 'pill-gray' },
+}
+ 
+export const SUB_STATUSES = {
+  active: { label: 'Active', cls: 'pill-green' },
+  approved: { label: 'Approved', cls: 'pill-blue' },
+  on_hold: { label: 'On Hold', cls: 'pill-amber' },
+  inactive: { label: 'Inactive', cls: 'pill-gray' },
+}
+ 
+export const ROLES = {
+  admin:                { label: 'Admin',               cls: 'pill-red',    desc: 'Full access including user management' },
+  project_manager:      { label: 'Project Manager',     cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
+  operations_manager:   { label: 'Operations Manager',  cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
+  director_viewer:      { label: 'Director Viewer',     cls: 'pill-blue',   desc: 'View everything including financials — read-only, no editing' },
+  accountant:           { label: 'Accountant',          cls: 'pill-purple', desc: 'Manage suppliers, add/edit subcontractor VAT & CIS, view financials' },
+  site_manager:         { label: 'Site Manager',        cls: 'pill-amber',  desc: 'Access assigned projects & compliance docs only' },
+  document_controller:  { label: 'Document Controller', cls: 'pill-green',  desc: 'Add & edit compliance documents' },
+  viewer:               { label: 'Viewer',              cls: 'pill-gray',   desc: 'Read-only access to all areas' },
+}
+ 
+export const ROLE_PERMISSIONS = {
+  admin:               { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  operations_manager:  { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  accountant:          { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  site_manager:        { nav: ['dashboard','subcontractors','projects','tasks','suppliers','quotes','company','settings'], financials: false, performance: true },
+  document_controller: { nav: ['dashboard','subcontractors','documents','projects','tasks','clients','quotes','company'], financials: false, performance: false },
+  viewer:              { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','quotes','company'], financials: false, performance: false },
+}
+ 
+export const NOTE_TYPES = {
+  note:     { label: 'Note',      icon: '📝', color: 'var(--text2)' },
+  call:     { label: 'Call',      icon: '📞', color: 'var(--blue)' },
+  email:    { label: 'Email',     icon: '✉️',  color: 'var(--purple)' },
+  visit:    { label: 'Site Visit',icon: '🏗️',  color: 'var(--green)' },
+  issue:    { label: 'Issue',     icon: '⚠️',  color: 'var(--red)' },
+  document: { label: 'Document',  icon: '📄', color: 'var(--amber)' },
+}
+ 
+export function docStatus(expiryDate) {
+  if (!expiryDate) return 'no_expiry'
+  const days = differenceInDays(parseISO(expiryDate), new Date())
+  if (days < 0) return 'expired'
+  if (days <= 30) return 'expiring_soon'
+  return 'valid'
+}
+ 
+export function docStatusInfo(expiryDate) {
+  const status = docStatus(expiryDate)
+  const map = {
+    expired:      { label: 'Expired',       cls: 'pill-red',   dotCls: 'dot-red'   },
+    expiring_soon:{ label: 'Expiring Soon', cls: 'pill-amber', dotCls: 'dot-amber' },
+    valid:        { label: 'Valid',          cls: 'pill-green', dotCls: 'dot-green' },
+    no_expiry:    { label: 'No Expiry',      cls: 'pill-gray',  dotCls: 'dot-gray'  },
+  }
+  return map[status]
+}
+ 
+export function daysUntilExpiry(expiryDate) {
+  if (!expiryDate) return null
+  return differenceInDays(parseISO(expiryDate), new Date())
+}
+ 
+export function formatDate(dateStr) {
+  if (!dateStr) return '—'
+  try { return format(parseISO(dateStr), 'd MMM yyyy') } catch (e) { return dateStr }
+}
+ 
+export function formatDateTime(dateStr) {
+  if (!dateStr) return '—'
+  try { return format(parseISO(dateStr), 'd MMM yyyy, HH:mm') } catch (e) { return dateStr }
+}
+ 
+export function formatCurrency(val) {
+  if (val == null) return '—'
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(val)
+}
+ 
+export function initials(name) {
+  if (!name) return '?'
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+ 
+const AVATAR_COLORS = [
+  { bg: '#EEEDFE', color: '#3C3489' }, { bg: '#E1F5EE', color: '#085041' },
+  { bg: '#FAECE7', color: '#712B13' }, { bg: '#E6F1FB', color: '#0C447C' },
+  { bg: '#FAEEDA', color: '#633806' }, { bg: '#EAF3DE', color: '#27500A' },
+  { bg: '#FBEAF0', color: '#72243E' }, { bg: '#F1EFE8', color: '#444441' },
+]
+ 
+export function avatarColor(str) {
+  if (!str) return AVATAR_COLORS[0]
+  let hash = 0
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash)
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+ 
+export function subDocSummary(documents) {
+  let expired = 0, expiring = 0, valid = 0
+  documents?.forEach(d => {
+    const s = docStatus(d.expiry_date)
+    if (s === 'expired') expired++
+    else if (s === 'expiring_soon') expiring++
+    else valid++
   })
-
-  useEffect(() => {
-    if (location.pathname.startsWith('/subcontractors')) {
-      setExpandedKeys(prev => { const n = new Set(prev); n.add('subcontractors'); return n })
-    }
-    if (location.pathname.startsWith('/projects')) {
-      setExpandedKeys(prev => { const n = new Set(prev); n.add('projects'); return n })
-    }
-  }, [location.pathname])
-
-  function toggleExpanded(key) {
-    setExpandedKeys(prev => {
-      const n = new Set(prev)
-      if (n.has(key)) n.delete(key); else n.add(key)
-      try { localStorage.setItem('sidebar:expanded', JSON.stringify([...n])) } catch {}
-      return n
-    })
-  }
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      setIsDark(isDarkTheme())
-    })
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-    return () => observer.disconnect()
-  }, [])
-  const role = profile?.role || 'viewer'
-  const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer
-
-  function handleNav() {
-    if (window.innerWidth < 768) onClose()
-  }
-
-  const allNavItems = [
-    { to: '/',               key: 'dashboard',      label: 'Dashboard',      icon: <IconDashboard /> },
-    { to: '/subcontractors', key: 'subcontractors', label: 'Subcontractors', icon: <IconUsers />,
-      children: [
-        { to: '/subcontractors/ea', key: 'subcontractors', label: 'Employers Agent', before: true, icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/></svg> },
-        { to: '/subcontractors/design-team', key: 'subcontractors', label: 'Design Team', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> },
-        { to: '/subcontractors/compliance', key: 'documents', label: 'Compliance', icon: <IconDoc />,
-          expired: expCounts.expired || 0, expiring: expCounts.expiring || 0 },
-      ]
-    },
-    { to: '/projects',          key: 'projects', label: 'Projects',     icon: <IconProject />,
-      children: [
-        { to: '/projects/tracker', key: 'tracker', label: 'Project Tracker', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> },
-      ]
-    },
-    { to: '/tasks', key: 'tasks', label: 'Task Tracker',
-      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-    },
-    { to: '/clients',           key: 'clients',  label: 'Clients',      icon: <IconClients /> },
-    { to: '/suppliers',         key: 'suppliers', label: 'Suppliers',    icon: <IconBuilding /> },
-    { to: '/quotes',            key: 'quotes', label: 'Quotes',
-      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-    },
-    { to: '/company-documents', key: 'company',  label: 'Company Docs', icon: <IconDoc /> },
-    { to: '/google-drive',      key: 'gdrive',   label: 'Google Drive', icon: <IconProject /> },
-  ]
-
-  const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))
-
-  return (
-    <>
-      <div className={`sidebar-overlay ${open ? 'open' : ''}`} onClick={onClose} />
-      <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <div className="sidebar-logo">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
-            </div>
-          </div>
-        </div>
-
-        <nav style={{ flex: 1, padding: '8px 0' }}>
-          <div className="nav-section">Navigation</div>
-          {visibleItems.map(item => (
-            <div key={item.to}>
-              {item.children ? (
-                <div
-                  className={`nav-item${location.pathname.startsWith(item.to) ? ' active' : ''}`}
-                  onClick={() => toggleExpanded(item.key)}
-                  style={{ userSelect: 'none' }}
-                >
-                  {item.icon}
-                  {item.label}
-                  {item.badge && <span className="nav-badge">{item.badge}</span>}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', flexShrink: 0, transition: 'transform .2s', transform: expandedKeys.has(item.key) ? 'rotate(180deg)' : 'none' }}>
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
-                </div>
-              ) : (
-                <NavLink to={item.to} end={item.to === '/'} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={handleNav}>
-                  {item.icon}
-                  {item.label}
-                  {item.badge && <span className="nav-badge">{item.badge}</span>}
-                </NavLink>
-              )}
-              {item.children && expandedKeys.has(item.key) && (
-                <>
-                  {item.children.filter(child => child.before && perms.nav.includes(child.key)).map(child => (
-                    <NavLink key={child.to} to={child.to} className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
-                      <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
-                      {child.icon}
-                      {child.label}
-                      {child.expired > 0 && <span className="nav-badge" style={{ background: '#c00', color: 'white', marginLeft: 'auto' }}>{child.expired}</span>}
-                      {child.expiring > 0 && <span className="nav-badge" style={{ background: '#b87a00', color: 'white', marginLeft: child.expired > 0 ? 4 : 'auto' }}>{child.expiring}</span>}
-                    </NavLink>
-                  ))}
-                  <NavLink to={item.to} end className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
-                    <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
-                    {item.icon}
-                    {item.label}
-                  </NavLink>
-                  {item.children.filter(child => !child.before && perms.nav.includes(child.key)).map(child => (
-                    <NavLink key={child.to} to={child.to} className={({ isActive }) => `nav-item nav-item-child${isActive ? ' active' : ''}`} onClick={handleNav}>
-                      <span style={{ opacity: 0.4, fontSize: 10, marginLeft: 2, marginRight: 2 }}>{'\u203A'}</span>
-                      {child.icon}
-                      {child.label}
-                      {child.expired > 0 && <span className="nav-badge" style={{ background: '#c00', color: 'white', marginLeft: 'auto' }}>{child.expired}</span>}
-                      {child.expiring > 0 && <span className="nav-badge" style={{ background: '#b87a00', color: 'white', marginLeft: child.expired > 0 ? 4 : 'auto' }}>{child.expiring}</span>}
-                    </NavLink>
-                  ))}
-                </>
-              )}
-            </div>
-          ))}
-
-          <div className="nav-section" style={{ marginTop: 8 }}>Account</div>
-          <NavLink to="/settings" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={handleNav}>
-            <IconSettings />
-            Settings
-          </NavLink>
-        </nav>
-
-        {profile && (
-          <div className="nav-user">
-            <Avatar name={profile.full_name} size="sm" />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{ROLES[role]?.label || role}</div>
-            </div>
-          </div>
-        )}
-      </aside>
-    </>
-  )
+  return { expired, expiring, valid, total: (documents?.length || 0) }
 }
+ 
+export function complianceScore(documents) {
+  if (!documents || documents.length === 0) return null
+  const { expired, expiring, valid, total } = subDocSummary(documents)
+  const score = Math.round((valid / total) * 100)
+  return { score, expired, expiring, valid, total }
+}
+ 
+export function exportToCSV(data, filename) {
+  if (!data || data.length === 0) return
+  const headers = Object.keys(data[0])
+  const rows = data.map(row => headers.map(h => {
+    const val = row[h]
+    if (val === null || val === undefined) return ''
+    const str = String(val)
+    return str.includes(',') || str.includes('"') || str.includes('\n')
+      ? `"${str.replace(/"/g, '""')}"` : str
+  }).join(','))
+  const csv = [headers.join(','), ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+ 
+// Case-insensitive alphabetical sort for any array of objects.
+// Usage: sortBy(subs, 'company_name') or sortBy(clients, 'name')
+// Nulls/undefineds sink to the bottom.
+export function sortBy(arr, key) {
+  if (!Array.isArray(arr)) return []
+  return [...arr].sort((a, b) => {
+    const va = a?.[key]; const vb = b?.[key]
+    if (va == null && vb == null) return 0
+    if (va == null) return 1
+    if (vb == null) return -1
+    return String(va).localeCompare(String(vb), undefined, { sensitivity: 'base', numeric: true })
+  })
+}
+ 
