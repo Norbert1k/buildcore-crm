@@ -575,92 +575,40 @@ export default function TaskDetail() {
           .neq('id', savedId)
           .in('status', ['pending', 'expired'])
       }
-      // Auto-link the accepted quote to the project's subcontractor
-      // list. Only triggers on a fresh transition INTO accepted
-      // (skipping re-saves of an already-accepted quote, so we don't
-      // double-count). Skips supplier + freetext quotes — those don't
-      // belong on the subcontractor tab.
-      const transitionedToAccepted = payload.status === 'accepted' && prevStatus !== 'accepted'
-      const canAutolink = transitionedToAccepted
-        && (q.vendor_kind === 'subcontractor' || q.vendor_kind === 'design_team')
-        && subcontractorId
-        && amountNum != null
-        && amountNum > 0
-        && task?.project_id
-      if (canAutolink) {
-        try {
-          // Look up the subcontractor's own trade for trade_on_project default.
-          const { data: subRow } = await supabase
-            .from('subcontractors')
-            .select('trade')
-            .eq('id', subcontractorId)
-            .single()
-          const defaultTrade = subRow?.trade || ''
-          const category = q.vendor_kind === 'design_team' ? 'design_team' : 'contractual_work'
-          // Existing row on this project for this subcontractor?
-          const { data: existing } = await supabase
-            .from('project_subcontractors')
-            .select('id, contract_value, variation_amount, variation_notes')
-            .eq('project_id', task.project_id)
-            .eq('subcontractor_id', subcontractorId)
-            .maybeSingle()
-          if (existing) {
-            // Add as a variation rather than overwriting contract_value.
-            // Matches how the existing Variation flow in ProjectDetail
-            // works, so the audit trail stays consistent.
-            const currentVariation = parseFloat(existing.variation_amount) || 0
-            const newVariation = currentVariation + amountNum
-            const noteLine = `${new Date().toLocaleDateString('en-GB')}: £${amountNum.toLocaleString('en-GB')} — Added from accepted quote on task "${task.title}"`
-            const newNotes = existing.variation_notes
-              ? existing.variation_notes + '\n' + noteLine
-              : noteLine
-            await supabase.from('project_subcontractors').update({
-              variation_amount: newVariation,
-              variation_notes: newNotes,
-            }).eq('id', existing.id)
-            await supabase.from('task_activity').insert({
-              task_id: taskId,
-              actor_id: profile?.id,
-              action: 'quote_autolinked',
-              details: {
-                vendor: vendorName,
-                amount: amountNum,
-                mode: 'variation_added',
-                project_id: task.project_id,
-              },
-            })
-          } else {
-            // Fresh assignment.
-            const { error: psErr } = await supabase.from('project_subcontractors').insert({
-              project_id: task.project_id,
-              subcontractor_id: subcontractorId,
-              category,
-              trade_on_project: defaultTrade,
-              contract_value: amountNum,
-              variation_amount: 0,
-              variation_notes: `Created from accepted quote on task "${task.title}"`,
-            })
-            if (!psErr) {
+      // Auto-sync the project's subcontractor list to reflect the
+      // current sum of accepted quotes. Self-healing: handles accept,
+      // un-accept, edit, status change to any state. Runs for both
+      // the current quote's subcontractor AND (if the user edited
+      // a quote and changed the vendor) the previously-linked one.
+      //
+      // Skips supplier + freetext — those don't belong on the
+      // project subcontractor list.
+      if (task?.project_id) {
+        const prevSubId = q._id ? (quotes.find(qq => qq.id === q._id)?.subcontractor_id || null) : null
+        const subIds = new Set()
+        if (subcontractorId) subIds.add(subcontractorId)
+        if (prevSubId && prevSubId !== subcontractorId) subIds.add(prevSubId)
+        for (const sid of subIds) {
+          try {
+            const wasAccepted = await recomputeProjectSubcontractor(sid, q.vendor_kind === 'design_team' ? 'design_team' : 'contractual_work')
+            // Log activity only when there was a real outcome (the
+            // recompute didn't bail) — keeps the timeline meaningful.
+            if (wasAccepted.changed) {
               await supabase.from('task_activity').insert({
                 task_id: taskId,
                 actor_id: profile?.id,
                 action: 'quote_autolinked',
                 details: {
                   vendor: vendorName,
-                  amount: amountNum,
-                  mode: 'new_assignment',
+                  amount: wasAccepted.total,
+                  mode: wasAccepted.mode,
                   project_id: task.project_id,
                 },
               })
-            } else {
-              // Don't fail the whole save if the project_subcontractors
-              // insert fails — just warn in console. The quote is still
-              // saved correctly.
-              console.warn('[saveQuote] project_subcontractors insert failed:', psErr)
             }
+          } catch (autoErr) {
+            console.warn('[saveQuote] recompute error for sub', sid, autoErr)
           }
-        } catch (autoErr) {
-          console.warn('[saveQuote] auto-link error:', autoErr)
         }
       }
       // Log activity so the timeline records the action.
@@ -682,6 +630,99 @@ export default function TaskDetail() {
       setSavingQuote(false)
     }
   }
+  // Recompute the project_subcontractors row for a (project, sub) pair
+  // based on the current sum of accepted task_quotes. Self-healing:
+  // run after any quote change (save, delete, status flip) to keep
+  // contract_value in sync.
+  //
+  // Returns {changed, mode, total}:
+  //   changed=true if the project_subcontractors row was created,
+  //                updated, or deleted
+  //   mode='new_assignment' / 'value_updated' / 'row_deleted' / 'noop'
+  //   total=current sum (after recompute)
+  //
+  // Manual entries (auto_managed_by_quotes=false) are NEVER touched.
+  async function recomputeProjectSubcontractor(subcontractorId, defaultCategory) {
+    if (!subcontractorId || !task?.project_id) return { changed: false, mode: 'noop', total: 0 }
+    // Sum accepted quotes across ALL tasks in this project for this sub.
+    // Note: we need to filter by tasks.project_id — task_quotes has
+    // task_id only. Use the joined query.
+    const { data: acceptedRows, error: sumErr } = await supabase
+      .from('task_quotes')
+      .select('amount, tasks!inner(project_id)')
+      .eq('subcontractor_id', subcontractorId)
+      .eq('status', 'accepted')
+      .eq('tasks.project_id', task.project_id)
+    if (sumErr) {
+      console.warn('[recompute] sum query error:', sumErr)
+      return { changed: false, mode: 'noop', total: 0 }
+    }
+    const total = (acceptedRows || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+    // Look up existing row.
+    const { data: existing } = await supabase
+      .from('project_subcontractors')
+      .select('id, contract_value, auto_managed_by_quotes')
+      .eq('project_id', task.project_id)
+      .eq('subcontractor_id', subcontractorId)
+      .maybeSingle()
+    if (total > 0) {
+      if (existing) {
+        // Only touch the row if it's auto-managed. Manual rows are
+        // preserved exactly as the user entered them.
+        if (existing.auto_managed_by_quotes) {
+          if (Number(existing.contract_value || 0) === total) {
+            return { changed: false, mode: 'noop', total }
+          }
+          const { error: updErr } = await supabase
+            .from('project_subcontractors')
+            .update({ contract_value: total })
+            .eq('id', existing.id)
+          if (updErr) { console.warn('[recompute] update error:', updErr); return { changed: false, mode: 'noop', total } }
+          return { changed: true, mode: 'value_updated', total }
+        } else {
+          // Manual row exists — DON'T touch it. (Could be cleaner to
+          // surface this conflict somewhere, but the user explicitly
+          // chose to protect manual entries.)
+          return { changed: false, mode: 'noop', total }
+        }
+      } else {
+        // Fresh auto-managed row.
+        const { data: subRow } = await supabase
+          .from('subcontractors')
+          .select('trade')
+          .eq('id', subcontractorId)
+          .single()
+        const defaultTrade = subRow?.trade || ''
+        const { error: insErr } = await supabase
+          .from('project_subcontractors')
+          .insert({
+            project_id: task.project_id,
+            subcontractor_id: subcontractorId,
+            category: defaultCategory,
+            trade_on_project: defaultTrade,
+            contract_value: total,
+            variation_amount: 0,
+            variation_notes: null,
+            auto_managed_by_quotes: true,
+          })
+        if (insErr) { console.warn('[recompute] insert error:', insErr); return { changed: false, mode: 'noop', total } }
+        return { changed: true, mode: 'new_assignment', total }
+      }
+    } else {
+      // Sum is 0 — no accepted quotes for this sub on this project.
+      if (existing && existing.auto_managed_by_quotes) {
+        // Auto-managed row that's lost all its accepted quotes — delete.
+        const { error: delErr } = await supabase
+          .from('project_subcontractors')
+          .delete()
+          .eq('id', existing.id)
+        if (delErr) { console.warn('[recompute] delete error:', delErr); return { changed: false, mode: 'noop', total } }
+        return { changed: true, mode: 'row_deleted', total: 0 }
+      }
+      // No row, or row is manual → nothing to do.
+      return { changed: false, mode: 'noop', total: 0 }
+    }
+  }
   // Delete a quote. Confirms first (irreversible).
   async function deleteQuote(quote) {
     if (!window.confirm(`Delete the quote from ${quote.vendor_name_text}?`)) return
@@ -696,6 +737,32 @@ export default function TaskDetail() {
       action: 'quote_deleted',
       details: { vendor: quote.vendor_name_text },
     })
+    // Recompute the project subcontractor row in case the deleted
+    // quote was accepted — removing it should drop the project total.
+    // Only run for subcontractor/design_team quotes (supplier and
+    // freetext are not auto-managed anyway).
+    if (quote.subcontractor_id && task?.project_id) {
+      const isDesignTeam = !!vendors.find(v => v.id === quote.subcontractor_id && v.kind === 'design_team')
+      const category = isDesignTeam ? 'design_team' : 'contractual_work'
+      try {
+        const r = await recomputeProjectSubcontractor(quote.subcontractor_id, category)
+        if (r.changed) {
+          await supabase.from('task_activity').insert({
+            task_id: taskId,
+            actor_id: profile?.id,
+            action: 'quote_autolinked',
+            details: {
+              vendor: quote.vendor_name_text,
+              amount: r.total,
+              mode: r.mode,
+              project_id: task.project_id,
+            },
+          })
+        }
+      } catch (e) {
+        console.warn('[deleteQuote] recompute error:', e)
+      }
+    }
     load()
   }
   // Open the inline vendor-creation modal pre-filled with the typed
@@ -1739,9 +1806,17 @@ function formatActivityAction(a) {
     case 'quote_updated': return `updated the quote from ${d.vendor || 'a vendor'}${d.status ? ` (now ${d.status})` : ''}`
     case 'quote_deleted': return `deleted the quote from ${d.vendor || 'a vendor'}`
     case 'quote_autolinked':
-      return d.mode === 'variation_added'
-        ? `auto-added £${Number(d.amount || 0).toLocaleString('en-GB')} variation to ${d.vendor || 'a vendor'} on the project`
-        : `auto-assigned ${d.vendor || 'a vendor'} to the project (£${Number(d.amount || 0).toLocaleString('en-GB')})`
+      if (d.mode === 'new_assignment')
+        return `auto-assigned ${d.vendor || 'a vendor'} to the project (£${Number(d.amount || 0).toLocaleString('en-GB')})`
+      if (d.mode === 'value_updated')
+        return `auto-updated ${d.vendor || 'a vendor'} on the project to £${Number(d.amount || 0).toLocaleString('en-GB')}`
+      if (d.mode === 'row_deleted')
+        return `removed ${d.vendor || 'a vendor'} from the project (no accepted quotes)`
+      // Legacy 'variation_added' from the old additive logic — keep the
+      // label readable if older entries exist.
+      if (d.mode === 'variation_added')
+        return `auto-added £${Number(d.amount || 0).toLocaleString('en-GB')} to ${d.vendor || 'a vendor'} on the project`
+      return `auto-updated the project subcontractor list`
     default: return a.action
   }
 }
