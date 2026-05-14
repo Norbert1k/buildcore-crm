@@ -64,18 +64,45 @@ export default function TaskDetail() {
   const [editingNoteText, setEditingNoteText] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // ─── Quotes state (Step 3) ──────────────────────────────────────────────
+  // List of task_quotes for this task, ordered with the lowest amount
+  // first so the comparison card naturally shows the cheapest at the
+  // top. Each row may have supplier_id, subcontractor_id, or only
+  // vendor_name_text.
+  const [quotes, setQuotes] = useState([])
+  // Vendors list for the quote picker. Combined from suppliers and
+  // subcontractors tables, each tagged with `kind` so the picker can
+  // show distinct sub-groups. Loaded once on mount.
+  const [vendors, setVendors] = useState([])
+  // Quote modal state. null = closed; otherwise holds the form data
+  // (either pre-filled for editing or empty for a new quote).
+  const [quoteModal, setQuoteModal] = useState(null)
+  const [savingQuote, setSavingQuote] = useState(false)
+
   useEffect(() => { load() }, [taskId])
 
   async function load() {
     setLoading(true)
     try {
-      const [taskRes, asgRes, notesRes, filesRes, actRes, usersRes] = await Promise.all([
+      const [taskRes, asgRes, notesRes, filesRes, actRes, usersRes, quotesRes, suppliersRes, subsRes] = await Promise.all([
         supabase.from('tasks').select('*').eq('id', taskId).single(),
         supabase.from('task_assignees').select('user_id, assigned_at, profiles(id, full_name, role)').eq('task_id', taskId),
         supabase.from('task_notes').select('*, profiles(id, full_name)').eq('task_id', taskId).order('created_at', { ascending: false }),
         supabase.from('task_files').select('*, profiles(id, full_name)').eq('task_id', taskId).order('uploaded_at', { ascending: false }),
         supabase.from('task_activity').select('*, profiles(id, full_name)').eq('task_id', taskId).order('created_at', { ascending: false }),
         supabase.from('profiles').select('id, full_name, role').order('full_name'),
+        // task_quotes joined with supplier + subcontractor for vendor
+        // name resolution. Ordered by amount ascending so the
+        // comparison card lists cheapest first by default.
+        supabase.from('task_quotes')
+          .select('*, supplier:suppliers(id, company_name), subcontractor:subcontractors(id, company_name), profiles(id, full_name)')
+          .eq('task_id', taskId)
+          .order('amount', { ascending: true, nullsLast: true }),
+        // Combined vendor picker source: all suppliers + subcontractors
+        // by name. Each list fetched separately so we can preserve the
+        // 'kind' tag client-side.
+        supabase.from('suppliers').select('id, company_name').order('company_name'),
+        supabase.from('subcontractors').select('id, company_name').order('company_name'),
       ])
       if (taskRes.error) { console.error('[TaskDetail] task error:', taskRes.error); setLoading(false); return }
 
@@ -85,6 +112,18 @@ export default function TaskDetail() {
       setFiles(filesRes.data || [])
       setActivity(actRes.data || [])
       setAllUsers(sortBy(usersRes.data || [], 'full_name'))
+      setQuotes(quotesRes.data || [])
+
+      // Tag and merge the vendor lists. The picker renders a single
+      // <select> but groups options into <optgroup>s by kind. Storing
+      // them as one list with a `kind` field makes that trivial.
+      const supplierList = (suppliersRes.data || []).map(s => ({
+        kind: 'supplier', id: s.id, name: s.company_name,
+      }))
+      const subList = (subsRes.data || []).map(s => ({
+        kind: 'subcontractor', id: s.id, name: s.company_name,
+      }))
+      setVendors([...supplierList, ...subList])
 
       if (taskRes.data?.project_id) {
         const { data: proj } = await supabase.from('projects').select('id, project_name, project_ref, status').eq('id', taskRes.data.project_id).single()
@@ -207,6 +246,188 @@ export default function TaskDetail() {
     await supabase.storage.from('task-files').remove([file.storage_path])
     await supabase.from('task_files').delete().eq('id', file.id)
     load()
+  }
+
+  // ─── Quote handlers (Step 3) ────────────────────────────────────────────
+
+  // Open the quote modal. If `existing` is passed it's an edit; otherwise
+  // a fresh new-quote form. The form state lives inside `quoteModal`
+  // so the modal can render a controlled form against it.
+  function openQuoteModal(existing = null) {
+    if (existing) {
+      // Pre-fill from the existing row. We keep the original quote id
+      // on `_id` so the save handler knows to UPDATE not INSERT.
+      setQuoteModal({
+        _id: existing.id,
+        // vendor_kind = 'supplier' | 'subcontractor' | 'freetext'
+        vendor_kind: existing.supplier_id
+          ? 'supplier'
+          : existing.subcontractor_id
+            ? 'subcontractor'
+            : 'freetext',
+        supplier_id: existing.supplier_id || '',
+        subcontractor_id: existing.subcontractor_id || '',
+        vendor_name_text: existing.vendor_name_text || '',
+        amount: existing.amount != null ? String(existing.amount) : '',
+        currency: existing.currency || 'GBP',
+        received_date: existing.received_date || '',
+        status: existing.status || 'pending',
+        notes: existing.notes || '',
+        task_file_id: existing.task_file_id || '',
+      })
+    } else {
+      setQuoteModal({
+        _id: null,
+        vendor_kind: 'supplier',
+        supplier_id: '',
+        subcontractor_id: '',
+        vendor_name_text: '',
+        amount: '',
+        currency: 'GBP',
+        received_date: new Date().toISOString().slice(0, 10),
+        status: 'pending',
+        notes: '',
+        task_file_id: '',
+      })
+    }
+  }
+
+  // Save (insert or update) the quote. Handles:
+  //  - resolving vendor_name_text from the picked supplier/subcontractor
+  //  - auto-rejecting siblings when status transitions to 'accepted'
+  //  - logging activity
+  async function saveQuote() {
+    if (!quoteModal) return
+    const q = quoteModal
+    setSavingQuote(true)
+    try {
+      // Resolve vendor identity. Exactly one of supplier_id /
+      // subcontractor_id should be set; the freetext fallback always
+      // populates vendor_name_text.
+      let supplierId = null
+      let subcontractorId = null
+      let vendorName = q.vendor_name_text?.trim() || ''
+      if (q.vendor_kind === 'supplier' && q.supplier_id) {
+        supplierId = q.supplier_id
+        const v = vendors.find(v => v.kind === 'supplier' && v.id === q.supplier_id)
+        vendorName = v?.name || vendorName
+      } else if (q.vendor_kind === 'subcontractor' && q.subcontractor_id) {
+        subcontractorId = q.subcontractor_id
+        const v = vendors.find(v => v.kind === 'subcontractor' && v.id === q.subcontractor_id)
+        vendorName = v?.name || vendorName
+      }
+      if (!vendorName) {
+        alert('Please pick a vendor or type a vendor name.')
+        setSavingQuote(false)
+        return
+      }
+
+      const amountNum = q.amount === '' ? null : Number(q.amount)
+      if (q.amount !== '' && (Number.isNaN(amountNum) || amountNum < 0)) {
+        alert('Amount must be a positive number, or leave blank.')
+        setSavingQuote(false)
+        return
+      }
+
+      const payload = {
+        task_id: taskId,
+        task_file_id: q.task_file_id || null,
+        supplier_id: supplierId,
+        subcontractor_id: subcontractorId,
+        vendor_name_text: vendorName,
+        amount: amountNum,
+        currency: q.currency || 'GBP',
+        received_date: q.received_date || null,
+        status: q.status || 'pending',
+        notes: q.notes?.trim() || null,
+      }
+
+      let savedId = q._id
+      if (q._id) {
+        const { error } = await supabase.from('task_quotes').update(payload).eq('id', q._id)
+        if (error) throw error
+      } else {
+        payload.created_by = profile?.id
+        const { data, error } = await supabase.from('task_quotes').insert(payload).select('id').single()
+        if (error) throw error
+        savedId = data?.id
+      }
+
+      // Auto-reject sibling quotes when this one is now accepted.
+      // We update any sibling on the same task that's still pending or
+      // expired (NOT already-rejected — leave history alone) to
+      // rejected. The newly-saved quote is excluded by id.
+      if (payload.status === 'accepted' && savedId) {
+        await supabase.from('task_quotes')
+          .update({ status: 'rejected' })
+          .eq('task_id', taskId)
+          .neq('id', savedId)
+          .in('status', ['pending', 'expired'])
+      }
+
+      // Log activity so the timeline records the action.
+      await supabase.from('task_activity').insert({
+        task_id: taskId,
+        actor_id: profile?.id,
+        action: q._id ? 'quote_updated' : 'quote_added',
+        details: {
+          vendor: vendorName,
+          amount: amountNum,
+          status: payload.status,
+        },
+      })
+
+      setQuoteModal(null)
+      load()
+    } catch (err) {
+      alert('Could not save quote: ' + (err?.message || err))
+    } finally {
+      setSavingQuote(false)
+    }
+  }
+
+  // Delete a quote. Confirms first (irreversible).
+  async function deleteQuote(quote) {
+    if (!window.confirm(`Delete the quote from ${quote.vendor_name_text}?`)) return
+    const { error } = await supabase.from('task_quotes').delete().eq('id', quote.id)
+    if (error) {
+      alert('Could not delete: ' + error.message)
+      return
+    }
+    await supabase.from('task_activity').insert({
+      task_id: taskId,
+      actor_id: profile?.id,
+      action: 'quote_deleted',
+      details: { vendor: quote.vendor_name_text },
+    })
+    load()
+  }
+
+  // Create a supplier from the current freetext vendor name, then link
+  // the form to the new supplier_id. Called from the "Create supplier"
+  // button next to the freetext input when vendor_kind === 'freetext'.
+  async function createSupplierFromFreetext() {
+    const name = quoteModal?.vendor_name_text?.trim()
+    if (!name) return
+    if (!window.confirm(`Create a new supplier "${name}"?`)) return
+    const { data, error } = await supabase
+      .from('suppliers')
+      .insert({ company_name: name, status: 'active', created_by: profile?.id })
+      .select('id, company_name')
+      .single()
+    if (error) {
+      alert('Could not create supplier: ' + error.message)
+      return
+    }
+    // Add to local vendors list so the picker has it immediately, then
+    // switch the form to use the new supplier_id.
+    setVendors(prev => [...prev, { kind: 'supplier', id: data.id, name: data.company_name }])
+    setQuoteModal(prev => prev ? {
+      ...prev,
+      vendor_kind: 'supplier',
+      supplier_id: data.id,
+      vendor_name_text: data.company_name,
+    } : prev)
   }
 
   async function downloadFile(file) {
@@ -463,6 +684,130 @@ export default function TaskDetail() {
         )}
       </div>
 
+      {/* Quote comparison (Step 3) */}
+      {(() => {
+        const canManageQuotes = ['admin', 'project_manager', 'operations_manager', 'site_manager', 'document_controller'].includes(profile?.role)
+        const canDeleteQuotes = ['admin', 'project_manager', 'operations_manager'].includes(profile?.role)
+        // Don't render the card if no quotes AND user can't add. (User
+        // would never see the Add Quote button so showing an empty card
+        // is just visual noise.)
+        if (quotes.length === 0 && !canManageQuotes) return null
+        // Compute comparison stats — only meaningful when we have at
+        // least 2 priced quotes. The lowest is used as the baseline for
+        // the diff column.
+        const priced = quotes.filter(q => q.amount != null && q.amount > 0)
+        const lowest = priced.length > 0
+          ? priced.reduce((a, b) => (a.amount <= b.amount ? a : b))
+          : null
+        const highest = priced.length > 0
+          ? priced.reduce((a, b) => (a.amount >= b.amount ? a : b))
+          : null
+        const avg = priced.length > 0
+          ? priced.reduce((s, q) => s + Number(q.amount), 0) / priced.length
+          : null
+        return (
+          <div className="card card-pad" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>
+                Quote comparison{quotes.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{quotes.length}</span>}
+              </div>
+              {canManageQuotes && (
+                <button className="btn btn-sm btn-primary" onClick={() => openQuoteModal()}>+ Add quote</button>
+              )}
+            </div>
+            {quotes.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
+                No quotes yet. Click "Add quote" to record one.
+              </div>
+            ) : (
+              <>
+                <div style={{ overflow: 'auto' }}>
+                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ color: 'var(--text3)', fontWeight: 400, textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                        <th style={{ padding: '6px 8px', fontWeight: 500 }}>Vendor</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>Amount</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500 }}>Status</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>vs Lowest</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500, width: 60 }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {quotes.map(q => {
+                        const isLowest = lowest && q.id === lowest.id && priced.length > 1
+                        const diff = (q.amount != null && lowest && lowest.amount > 0)
+                          ? Number(q.amount) - Number(lowest.amount)
+                          : null
+                        const diffPct = (diff != null && lowest && lowest.amount > 0)
+                          ? (diff / Number(lowest.amount)) * 100
+                          : null
+                        const statusStyle = {
+                          accepted: { bg: '#EAF3DE', fg: '#27500A' },
+                          rejected: { bg: '#FCEBEB', fg: '#791F1F' },
+                          pending:  { bg: 'var(--surface2)', fg: 'var(--text2)' },
+                          expired:  { bg: '#F1EFE8', fg: '#5F5E5A' },
+                        }[q.status] || { bg: 'var(--surface2)', fg: 'var(--text2)' }
+                        return (
+                          <tr key={q.id}
+                            onClick={() => canManageQuotes && openQuoteModal(q)}
+                            style={{
+                              borderBottom: '1px solid var(--border)',
+                              cursor: canManageQuotes ? 'pointer' : 'default',
+                            }}>
+                            <td style={{ padding: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span>{q.vendor_name_text}</span>
+                                {q.supplier_id && <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Supplier</span>}
+                                {q.subcontractor_id && <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Sub</span>}
+                              </div>
+                              {q.notes && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{q.notes.length > 80 ? q.notes.slice(0, 80) + '…' : q.notes}</div>}
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              {q.amount != null ? `${q.currency === 'GBP' ? '£' : (q.currency + ' ')}${Number(q.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              <span style={{
+                                display: 'inline-block', fontSize: 10, padding: '2px 8px', borderRadius: 99,
+                                background: statusStyle.bg, color: statusStyle.fg, fontWeight: 600,
+                                textTransform: 'capitalize',
+                              }}>{q.status}</span>
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              {isLowest ? (
+                                <span style={{ color: 'var(--text3)' }}>—</span>
+                              ) : diff != null ? (
+                                <span style={{ color: diffPct >= 20 ? '#791F1F' : (diffPct >= 10 ? '#854F0B' : 'var(--text2)') }}>
+                                  +£{diff.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (+{diffPct.toFixed(1)}%)
+                                </span>
+                              ) : (
+                                <span style={{ color: 'var(--text3)' }}>—</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>
+                              {canDeleteQuotes && (
+                                <button className="btn btn-sm btn-danger"
+                                  onClick={(e) => { e.stopPropagation(); deleteQuote(q) }}
+                                  title="Delete quote">✕</button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                {priced.length >= 2 && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text2)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <span>Average: £{avg.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span>Spread: £{(highest.amount - lowest.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({(((highest.amount - lowest.amount) / lowest.amount) * 100).toFixed(1)}%)</span>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Files */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -637,6 +982,142 @@ export default function TaskDetail() {
         </div>
       </Modal>
 
+      {/* Quote modal (Step 3) */}
+      <Modal open={!!quoteModal} onClose={() => !savingQuote && setQuoteModal(null)}
+        title={quoteModal?._id ? 'Edit quote' : 'Add quote'} size="md"
+        footer={<>
+          <button className="btn" onClick={() => setQuoteModal(null)} disabled={savingQuote}>Cancel</button>
+          <button className="btn btn-primary" onClick={saveQuote} disabled={savingQuote}>
+            {savingQuote ? 'Saving…' : 'Save quote'}
+          </button>
+        </>}>
+        {quoteModal && (
+          <div className="form-grid">
+            {/* Vendor picker. Radio for kind, then the appropriate input. */}
+            <div className="full">
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>Vendor</div>
+              <div style={{ display: 'flex', gap: 14, marginBottom: 8 }}>
+                {[
+                  { v: 'supplier',      label: 'Supplier' },
+                  { v: 'subcontractor', label: 'Subcontractor' },
+                  { v: 'freetext',      label: 'Not in system' },
+                ].map(opt => (
+                  <label key={opt.v} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
+                    <input type="radio" name="vendor_kind"
+                      checked={quoteModal.vendor_kind === opt.v}
+                      onChange={() => setQuoteModal(prev => ({
+                        ...prev, vendor_kind: opt.v,
+                        // Clear the unused fields when switching kind
+                        // so we don't end up with stale supplier_id +
+                        // a typed freetext name confusing the save.
+                        supplier_id: opt.v === 'supplier' ? prev.supplier_id : '',
+                        subcontractor_id: opt.v === 'subcontractor' ? prev.subcontractor_id : '',
+                      }))} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              {quoteModal.vendor_kind === 'supplier' && (
+                <select value={quoteModal.supplier_id} onChange={e => setQuoteModal(prev => ({ ...prev, supplier_id: e.target.value }))} style={{ width: '100%' }}>
+                  <option value="">— Pick a supplier —</option>
+                  {vendors.filter(v => v.kind === 'supplier').map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              )}
+              {quoteModal.vendor_kind === 'subcontractor' && (
+                <select value={quoteModal.subcontractor_id} onChange={e => setQuoteModal(prev => ({ ...prev, subcontractor_id: e.target.value }))} style={{ width: '100%' }}>
+                  <option value="">— Pick a subcontractor —</option>
+                  {vendors.filter(v => v.kind === 'subcontractor').map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              )}
+              {quoteModal.vendor_kind === 'freetext' && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="text"
+                    placeholder="Type vendor name"
+                    value={quoteModal.vendor_name_text}
+                    onChange={e => setQuoteModal(prev => ({ ...prev, vendor_name_text: e.target.value }))}
+                    style={{ flex: 1 }} />
+                  <button className="btn btn-sm" type="button"
+                    onClick={createSupplierFromFreetext}
+                    disabled={!quoteModal.vendor_name_text?.trim()}
+                    title="Add this vendor to your Suppliers list">
+                    + Create supplier
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Amount + currency */}
+            <Field label="Amount">
+              <input type="number" min="0" step="0.01"
+                value={quoteModal.amount}
+                onChange={e => setQuoteModal(prev => ({ ...prev, amount: e.target.value }))}
+                placeholder="0.00" />
+            </Field>
+            <Field label="Currency">
+              <select value={quoteModal.currency} onChange={e => setQuoteModal(prev => ({ ...prev, currency: e.target.value }))}>
+                <option value="GBP">GBP £</option>
+                <option value="EUR">EUR €</option>
+                <option value="USD">USD $</option>
+              </select>
+            </Field>
+
+            {/* Date + status */}
+            <Field label="Received date">
+              <input type="date" value={quoteModal.received_date}
+                onChange={e => setQuoteModal(prev => ({ ...prev, received_date: e.target.value }))} />
+            </Field>
+            <Field label="Status">
+              <select value={quoteModal.status} onChange={e => setQuoteModal(prev => ({ ...prev, status: e.target.value }))}>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+                <option value="rejected">Rejected</option>
+                <option value="expired">Expired</option>
+              </select>
+            </Field>
+
+            {/* Attached file (only quote-category files for this task) */}
+            <div className="full">
+              <Field label="Attached PDF (optional)">
+                <select value={quoteModal.task_file_id}
+                  onChange={e => setQuoteModal(prev => ({ ...prev, task_file_id: e.target.value }))}>
+                  <option value="">— None —</option>
+                  {files.filter(f => f.category === 'quote').map(f => (
+                    <option key={f.id} value={f.id}>{f.file_name}</option>
+                  ))}
+                </select>
+              </Field>
+              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
+                Only files in the Quotes category appear here. Upload a quote PDF first if you want to link it.
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="full">
+              <Field label="Notes">
+                <textarea value={quoteModal.notes}
+                  onChange={e => setQuoteModal(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="What's included, exclusions, validity period, etc."
+                  style={{ minHeight: 60 }} />
+              </Field>
+            </div>
+
+            {/* Auto-reject hint */}
+            {quoteModal.status === 'accepted' && quotes.filter(q => q.id !== quoteModal._id && (q.status === 'pending' || q.status === 'expired')).length > 0 && (
+              <div className="full" style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--surface2)', padding: 8, borderRadius: 4, marginTop: -4 }}>
+                ℹ Marking this quote Accepted will automatically reject{' '}
+                {quotes.filter(q => q.id !== quoteModal._id && (q.status === 'pending' || q.status === 'expired')).length}{' '}
+                other pending quote(s) on this task.
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
       <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={deleteTask} title="Delete task" message="Permanently delete this task along with all its notes, files, and activity log?" danger />
 
       {/* EML preview overlay */}
@@ -688,6 +1169,9 @@ function formatActivityAction(a) {
     case 'unassigned': return `removed ${d.user_name || 'someone'}`
     case 'claimed': return 'claimed this task'
     case 'file_uploaded': return `uploaded ${d.file_name || 'a file'}`
+    case 'quote_added': return `added a quote from ${d.vendor || 'a vendor'}${d.amount != null ? ` (£${Number(d.amount).toLocaleString('en-GB')})` : ''}`
+    case 'quote_updated': return `updated the quote from ${d.vendor || 'a vendor'}${d.status ? ` (now ${d.status})` : ''}`
+    case 'quote_deleted': return `deleted the quote from ${d.vendor || 'a vendor'}`
     default: return a.action
   }
 }
