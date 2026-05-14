@@ -917,19 +917,35 @@ export default function TaskDetail() {
         // would never see the Add Quote button so showing an empty card
         // is just visual noise.)
         if (quotes.length === 0 && !canManageQuotes) return null
-        // Compute comparison stats — only meaningful when we have at
-        // least 2 priced quotes. The lowest is used as the baseline for
-        // the diff column.
+        // Per-cohort comparison. Two quotes are comparable only when
+        // they cover the same set of buildings — otherwise we'd be
+        // comparing apples to oranges (e.g. Capital Piling's Residential
+        // + Sports Hall quote vs their Changing Rooms quote).
+        //
+        // cohortKey: sorted, comma-joined ordinals. NULL/empty array =
+        // "" (the "covers whole project" cohort). Two quotes with the
+        // same cohortKey share scope and are comparable.
+        function cohortKeyForQuote(q) {
+          const ords = Array.isArray(q.building_ordinals) ? q.building_ordinals : []
+          return ords.length === 0 ? '' : [...ords].sort((a, b) => a - b).join(',')
+        }
         const priced = quotes.filter(q => q.amount != null && q.amount > 0)
-        const lowest = priced.length > 0
-          ? priced.reduce((a, b) => (a.amount <= b.amount ? a : b))
-          : null
-        const highest = priced.length > 0
-          ? priced.reduce((a, b) => (a.amount >= b.amount ? a : b))
-          : null
-        const avg = priced.length > 0
-          ? priced.reduce((s, q) => s + Number(q.amount), 0) / priced.length
-          : null
+        // Group priced quotes by cohort. Each cohort gets its own
+        // lowest/highest/avg.
+        const cohorts = new Map()
+        for (const q of priced) {
+          const k = cohortKeyForQuote(q)
+          if (!cohorts.has(k)) cohorts.set(k, { priced: [] })
+          cohorts.get(k).priced.push(q)
+        }
+        for (const c of cohorts.values()) {
+          c.lowest  = c.priced.reduce((a, b) => (a.amount <= b.amount ? a : b))
+          c.highest = c.priced.reduce((a, b) => (a.amount >= b.amount ? a : b))
+          c.avg     = c.priced.reduce((s, q) => s + Number(q.amount), 0) / c.priced.length
+        }
+        // The footer only makes sense for a SINGLE cohort. With mixed
+        // scopes, "average" is meaningless — hide the footer in that case.
+        const singleCohort = cohorts.size === 1 ? [...cohorts.values()][0] : null
         return (
           <div className="card card-pad" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -959,12 +975,18 @@ export default function TaskDetail() {
                     </thead>
                     <tbody>
                       {quotes.map(q => {
-                        const isLowest = lowest && q.id === lowest.id && priced.length > 1
-                        const diff = (q.amount != null && lowest && lowest.amount > 0)
-                          ? Number(q.amount) - Number(lowest.amount)
+                        // Find this quote's cohort (same building scope)
+                        const cohortKey = cohortKeyForQuote(q)
+                        const cohort = cohorts.get(cohortKey)
+                        // Only show a diff if there are 2+ priced quotes
+                        // sharing this scope. Otherwise nothing to compare.
+                        const hasComparable = cohort && cohort.priced.length > 1
+                        const isLowest = hasComparable && q.id === cohort.lowest.id
+                        const diff = (hasComparable && q.amount != null && cohort.lowest.amount > 0)
+                          ? Number(q.amount) - Number(cohort.lowest.amount)
                           : null
-                        const diffPct = (diff != null && lowest && lowest.amount > 0)
-                          ? (diff / Number(lowest.amount)) * 100
+                        const diffPct = (diff != null && cohort.lowest.amount > 0)
+                          ? (diff / Number(cohort.lowest.amount)) * 100
                           : null
                         const statusStyle = {
                           accepted: { bg: '#EAF3DE', fg: '#27500A' },
@@ -1039,10 +1061,15 @@ export default function TaskDetail() {
                     </tbody>
                   </table>
                 </div>
-                {priced.length >= 2 && (
+                {singleCohort && singleCohort.priced.length >= 2 && (
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text2)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                    <span>Average: £{avg.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    <span>Spread: £{(highest.amount - lowest.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({(((highest.amount - lowest.amount) / lowest.amount) * 100).toFixed(1)}%)</span>
+                    <span>Average: £{singleCohort.avg.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    <span>Spread: £{(singleCohort.highest.amount - singleCohort.lowest.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({(((singleCohort.highest.amount - singleCohort.lowest.amount) / singleCohort.lowest.amount) * 100).toFixed(1)}%)</span>
+                  </div>
+                )}
+                {!singleCohort && cohorts.size > 1 && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                    Quotes cover different scopes — comparison runs separately within each scope.
                   </div>
                 )}
               </>
