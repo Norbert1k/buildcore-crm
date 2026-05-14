@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { resolveBuildings } from '../lib/buildings'
 import { Pill, Spinner } from './ui'
 import FileLightbox from './FileLightbox'
 
@@ -58,6 +59,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
   const [quotes, setQuotes] = useState([])
   const [vendors, setVendors] = useState([])
   const [files, setFiles] = useState([])
+  const [buildings, setBuildings] = useState([])    // multi-building project structure ([] = single-building)
   const [loading, setLoading] = useState(true)
   // Lightbox state — list mode. previewIndex is the index into
   // previewFiles (which is recomputed in render to be all visible-category
@@ -126,6 +128,16 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
           .eq('id', taskRes.data.project_id)
           .single()
         setProject(proj)
+
+        // Resolve multi-building structure. Empty array for single-building
+        // projects — all multi-building UI auto-hides in that case.
+        try {
+          const bs = await resolveBuildings(supabase, taskRes.data.project_id)
+          setBuildings(bs || [])
+        } catch (e) {
+          console.warn('[QuoteDetailDrawer] resolveBuildings error', e)
+          setBuildings([])
+        }
       }
     } catch (e) {
       console.warn('[QuoteDetailDrawer] load error', e)
@@ -252,6 +264,42 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
             <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner /></div>
           ) : (
             <>
+              {/* Multi-building coverage strip — only for multi-building projects. */}
+              {buildings.length > 1 && quotes.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+                    Building coverage
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
+                    {buildings.map(b => {
+                      const coveringCount = quotes.filter(q =>
+                        !q.building_ordinals
+                        || q.building_ordinals.length === 0
+                        || q.building_ordinals.includes(b.ordinal)
+                      ).length
+                      const covered = coveringCount > 0
+                      return (
+                        <div key={b.ordinal}
+                          style={{
+                            flex: 1, minWidth: 0,
+                            background: 'var(--surface2)',
+                            padding: '8px 10px',
+                            borderRadius: 6,
+                            borderLeft: `3px solid ${covered ? '#3B6D11' : 'var(--border)'}`,
+                          }}>
+                          <div style={{ fontSize: 10, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {b.name}
+                          </div>
+                          <div style={{ fontSize: 11, marginTop: 2, color: covered ? '#3B6D11' : 'var(--text3)' }}>
+                            {covered ? `✓ ${coveringCount} quote${coveringCount === 1 ? '' : 's'}` : '— no quote yet'}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </>
+              )}
+
               {/* Quotes section */}
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
                 Quotes <span style={{ color: 'var(--text3)', fontWeight: 400 }}>({quotes.length})</span>
@@ -285,6 +333,20 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                             <td style={{ padding: '8px 10px' }}>
                               <div>{q.vendor_name_text}</div>
                               <div style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{KIND_LABEL[kind]}</div>
+                              {buildings.length > 1 && q.building_ordinals && q.building_ordinals.length > 0 && (
+                                <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                                  {q.building_ordinals.map(ord => {
+                                    const b = buildings.find(b => b.ordinal === ord)
+                                    if (!b) return null
+                                    return (
+                                      <span key={ord} style={{
+                                        background: '#E6F1FB', color: '#0C447C',
+                                        fontSize: 10, padding: '1px 6px', borderRadius: 99,
+                                      }}>{b.name}</span>
+                                    )
+                                  })}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '8px 10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {q.amount != null
