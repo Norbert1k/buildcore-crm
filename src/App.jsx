@@ -192,6 +192,52 @@ function ProtectedLayout() {
     setSidebarOpen(false)
   }, [user, location.pathname])
 
+  // Wheel-event forwarder. Some staff have wide screens where the
+  // .page-content scroll area (max-width 1400px, centered) leaves
+  // empty margins on the sides. Scrolling on those margins does
+  // nothing because the .app-layout has overflow: hidden and there's
+  // no scrollable parent for the wheel event to bubble to.
+  //
+  // This listener catches wheel events that land OUTSIDE .page-content
+  // (and outside the sidebar) and forwards their deltaY to .page-content
+  // so scrolling works anywhere on the main area.
+  //
+  // Skipped when a modal/overlay is open so background scrolling can't
+  // leak through (FileLightbox, Modal, EML viewer all set body
+  // overflow:hidden OR use .modal-overlay; we detect by checking for
+  // those elements in the DOM).
+  useEffect(() => {
+    function handleWheel(e) {
+      // Find the current scroll container.
+      const pageContent = document.querySelector('.page-content')
+      if (!pageContent) return
+
+      const path = e.composedPath ? e.composedPath() : []
+
+      // If the event already happened inside the scroll container,
+      // let the browser handle it natively.
+      if (path.includes(pageContent)) return
+
+      // If the event happened inside the sidebar, leave it alone —
+      // the sidebar has its own overflow-y:auto.
+      const sidebar = document.querySelector('.sidebar')
+      if (sidebar && path.includes(sidebar)) return
+
+      // If a modal or lightbox overlay is open, don't forward —
+      // otherwise the page underneath would scroll while the user
+      // is interacting with the modal.
+      const modalOpen = document.querySelector('.modal-overlay')
+        || document.querySelector('[data-lightbox-open]')
+      if (modalOpen) return
+
+      // Forward the wheel delta to .page-content.
+      pageContent.scrollTop += e.deltaY
+    }
+
+    window.addEventListener('wheel', handleWheel, { passive: true })
+    return () => window.removeEventListener('wheel', handleWheel)
+  }, [])
+
   async function fetchExpCount() {
     const [expiredRes, expiringRes] = await Promise.all([
       supabase.from('documents_with_status').select('id', { count: 'exact', head: true }).eq('status', 'expired'),
