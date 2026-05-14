@@ -271,11 +271,11 @@ export default function Suppliers() {
   )
 }
 
-function SupplierModal({ supplier, onClose, onSaved }) {
+export function SupplierModal({ supplier, onClose, onSaved, prefillName }) {
   const { profile } = useAuth()
   const editing = !!supplier
   const [form, setForm] = useState({
-    company_name: supplier?.company_name || '',
+    company_name: supplier?.company_name || prefillName || '',
     contact_name: supplier?.contact_name || '',
     category: supplier?.category || 'Builders Merchant',
     email: supplier?.email || '',
@@ -305,14 +305,14 @@ function SupplierModal({ supplier, onClose, onSaved }) {
     const payload = { ...form, credit_limit: form.credit_limit ? parseFloat(form.credit_limit) : null }
     let result
     if (editing) {
-      result = await supabase.from('suppliers').update(payload).eq('id', supplier.id)
+      result = await supabase.from('suppliers').update(payload).eq('id', supplier.id).select().single()
     } else {
       payload.created_by = profile?.id
-      result = await supabase.from('suppliers').insert(payload)
+      result = await supabase.from('suppliers').insert(payload).select().single()
     }
     setSaving(false)
     if (result.error) { setError(result.error.message); return }
-    onSaved()
+    onSaved(result.data)
   }
 
   return (
