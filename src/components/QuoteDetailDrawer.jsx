@@ -174,24 +174,31 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop + centered container */}
       <div
-        onClick={onClose}
+        onClick={(e) => { if (e.target === e.currentTarget) onClose && onClose() }}
         style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+          position: 'fixed', inset: 0,
+          background: 'rgba(0,0,0,0.45)',
           zIndex: 900,
-        }}
-      />
-
-      {/* Drawer */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 'min(720px, 92vw)',
-        background: 'var(--surface)',
-        boxShadow: '-8px 0 28px rgba(0,0,0,0.18)',
-        zIndex: 901,
-        display: 'flex', flexDirection: 'column',
-      }}>
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 20,
+        }}>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.18)',
+            width: '100%',
+            maxWidth: 720,
+            maxHeight: '92vh',
+            display: 'flex',
+            flexDirection: 'column',
+          }}>
         {/* Header */}
         <div style={{
           padding: '16px 20px',
@@ -346,6 +353,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
               )}
             </>
           )}
+        </div>
         </div>
       </div>
 
