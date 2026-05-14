@@ -1,46 +1,47 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/utils'
 import { Pill, Spinner, EmptyState } from '../components/ui'
+import QuoteDetailDrawer from '../components/QuoteDetailDrawer'
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Quotes page — cross-project quote index.
+// Quotes page — cross-project quote index, grouped by TASK.
 //
-// Reads from the task_quotes_full SQL view which denormalises:
-//   task_quotes + tasks + projects + suppliers + subcontractors + profiles
+// One row per task (not per quote). The "decision" is the unit of
+// interest: did we accept a quote yet, or are we still deciding?
 //
-// One row per quote. Row click → navigates to the parent task so the user
-// can edit / accept / reject from there. The page is read-only — all
-// quote management still happens inside TaskDetail.
+// Reads from task_quotes_full and aggregates client-side. Click a row →
+// QuoteDetailDrawer slides in with the full breakdown + documents.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STATUS_LABELS = {
-  pending:  'Pending',
-  accepted: 'Accepted',
-  rejected: 'Rejected',
-  expired:  'Expired',
+const TASK_STATUS_PILL = {
+  decided: 'pill-green',
+  pending: 'pill-amber',
+  closed:  'pill-gray',
 }
-const STATUS_PILL = {
-  pending:  'pill-gray',
-  accepted: 'pill-green',
-  rejected: 'pill-red',
-  expired:  'pill-gray',
+const TASK_STATUS_LABEL = {
+  decided: 'Decided',
+  pending: 'Pending',
+  closed:  'Closed',
 }
-const KIND_LABEL = {
-  supplier:      'Supplier',
-  subcontractor: 'Subcontractor',
-  design_team:   'Design Team',
-  freetext:      'Other',
+
+// Compute the task-level decision status from its quotes:
+//   - any accepted              → decided
+//   - any pending               → pending
+//   - all rejected/expired      → closed
+function deriveTaskStatus(quotes) {
+  if (quotes.some(q => q.status === 'accepted')) return 'decided'
+  if (quotes.some(q => q.status === 'pending'))  return 'pending'
+  return 'closed'
 }
 
 export default function Quotes() {
-  const navigate = useNavigate()
-  const [quotes, setQuotes] = useState([])
+  const [rows, setRows] = useState([])           // raw quote rows from view
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [drawerTaskId, setDrawerTaskId] = useState(null)
 
   useEffect(() => { load() }, [])
 
@@ -52,59 +53,90 @@ export default function Quotes() {
       .order('received_date', { ascending: false, nullsLast: true })
     if (error) {
       console.warn('[Quotes] load error', error)
-      setQuotes([])
+      setRows([])
       setLoading(false)
       return
     }
-    setQuotes(data || [])
+    setRows(data || [])
     setLoading(false)
   }
 
-  // Distinct project list for the filter dropdown.
-  const projectOptions = useMemo(() => {
+  // Group quote rows by task_id.
+  const taskGroups = useMemo(() => {
     const map = new Map()
-    for (const q of quotes) {
-      if (q.project_id && !map.has(q.project_id)) {
-        map.set(q.project_id, q.project_name || '(unnamed)')
+    for (const r of rows) {
+      if (!map.has(r.task_id)) {
+        map.set(r.task_id, {
+          task_id:      r.task_id,
+          task_title:   r.task_title,
+          project_id:   r.project_id,
+          project_name: r.project_name,
+          project_ref:  r.project_ref,
+          quotes:       [],
+          latest_received: null,
+        })
+      }
+      const g = map.get(r.task_id)
+      g.quotes.push(r)
+      // Track latest received date for sort.
+      if (r.received_date && (!g.latest_received || r.received_date > g.latest_received)) {
+        g.latest_received = r.received_date
       }
     }
-    return Array.from(map, ([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  }, [quotes])
+    // Sort groups by latest received DESC (nullsLast).
+    return Array.from(map.values()).sort((a, b) => {
+      if (!a.latest_received && !b.latest_received) return 0
+      if (!a.latest_received) return 1
+      if (!b.latest_received) return -1
+      return b.latest_received.localeCompare(a.latest_received)
+    })
+  }, [rows])
 
-  // Filtered list shown in the table.
+  // Project filter options derived from data.
+  const projectOptions = useMemo(() => {
+    const seen = new Map()
+    for (const g of taskGroups) {
+      if (g.project_id && !seen.has(g.project_id)) {
+        seen.set(g.project_id, g.project_name || '(unnamed)')
+      }
+    }
+    return Array.from(seen, ([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [taskGroups])
+
+  // Apply filters to grouped tasks.
   const filtered = useMemo(() => {
-    let list = quotes
-    if (projectFilter !== 'all') list = list.filter(q => q.project_id === projectFilter)
-    if (statusFilter !== 'all')  list = list.filter(q => q.status === statusFilter)
+    let list = taskGroups
+    if (projectFilter !== 'all') list = list.filter(g => g.project_id === projectFilter)
+    if (statusFilter !== 'all') {
+      list = list.filter(g => deriveTaskStatus(g.quotes) === statusFilter)
+    }
     if (search.trim()) {
       const s = search.toLowerCase()
-      list = list.filter(q =>
-        (q.vendor_name || '').toLowerCase().includes(s)
-        || (q.task_title || '').toLowerCase().includes(s)
-        || (q.project_name || '').toLowerCase().includes(s)
-        || (q.project_ref || '').toLowerCase().includes(s)
+      list = list.filter(g =>
+        (g.task_title || '').toLowerCase().includes(s)
+        || (g.project_name || '').toLowerCase().includes(s)
+        || (g.project_ref || '').toLowerCase().includes(s)
+        || g.quotes.some(q => (q.vendor_name || q.vendor_name_text || '').toLowerCase().includes(s))
       )
     }
     return list
-  }, [quotes, projectFilter, statusFilter, search])
+  }, [taskGroups, projectFilter, statusFilter, search])
 
-  // Stat numbers — compute from the full unfiltered list so the cards
-  // always reflect the database, not the current view.
+  // Top stats — based on the full dataset (not the filtered view).
   const stats = useMemo(() => {
-    const byStatus = { pending: [], accepted: [], rejected: [], expired: [] }
-    for (const q of quotes) (byStatus[q.status] ||= []).push(q)
-    const sumOf = (arr) => arr.reduce((s, q) => s + Number(q.amount || 0), 0)
-    // 7 days back
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-    const thisWeek = quotes.filter(q => q.received_date && q.received_date >= weekAgo)
-    return {
-      pending:  { count: byStatus.pending.length,  sum: sumOf(byStatus.pending) },
-      accepted: { count: byStatus.accepted.length, sum: sumOf(byStatus.accepted) },
-      rejected: { count: byStatus.rejected.length, sum: sumOf(byStatus.rejected) },
-      thisWeek: { count: thisWeek.length },
+    let pending = 0, decided = 0, committedSum = 0
+    for (const g of taskGroups) {
+      const s = deriveTaskStatus(g.quotes)
+      if (s === 'pending') pending++
+      else if (s === 'decided') {
+        decided++
+        const accepted = g.quotes.find(q => q.status === 'accepted')
+        if (accepted?.amount != null) committedSum += Number(accepted.amount)
+      }
     }
-  }, [quotes])
+    return { totalTasks: taskGroups.length, pending, decided, committedSum }
+  }, [taskGroups])
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><Spinner /></div>
 
@@ -114,7 +146,7 @@ export default function Quotes() {
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Quotes</h2>
           <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>
-            {quotes.length} quote{quotes.length === 1 ? '' : 's'} across all projects
+            {stats.totalTasks} task{stats.totalTasks === 1 ? '' : 's'} with quotes · {rows.length} quote{rows.length === 1 ? '' : 's'} total
           </p>
         </div>
       </div>
@@ -122,24 +154,20 @@ export default function Quotes() {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
         <div className="stat-card">
-          <div className="stat-label">Pending</div>
-          <div className="stat-value">{stats.pending.count}</div>
-          <div className="stat-sub">{formatCurrency(stats.pending.sum)} total</div>
+          <div className="stat-label">Tasks with quotes</div>
+          <div className="stat-value">{stats.totalTasks}</div>
+        </div>
+        <div className="stat-card" style={{ borderLeftColor: '#ba7517' }}>
+          <div className="stat-label">Pending decision</div>
+          <div className="stat-value">{stats.pending}</div>
         </div>
         <div className="stat-card" style={{ borderLeftColor: '#448a40' }}>
-          <div className="stat-label">Accepted</div>
-          <div className="stat-value">{stats.accepted.count}</div>
-          <div className="stat-sub">{formatCurrency(stats.accepted.sum)} committed</div>
-        </div>
-        <div className="stat-card" style={{ borderLeftColor: '#a32d2d' }}>
-          <div className="stat-label">Rejected</div>
-          <div className="stat-value">{stats.rejected.count}</div>
-          <div className="stat-sub">{formatCurrency(stats.rejected.sum)} declined</div>
+          <div className="stat-label">Decided</div>
+          <div className="stat-value">{stats.decided}</div>
         </div>
         <div className="stat-card" style={{ borderLeftColor: '#185fa5' }}>
-          <div className="stat-label">Last 7 days</div>
-          <div className="stat-value">{stats.thisWeek.count}</div>
-          <div className="stat-sub">new quotes received</div>
+          <div className="stat-label">Total committed</div>
+          <div className="stat-value" style={{ fontSize: 18 }}>{formatCurrency(stats.committedSum)}</div>
         </div>
       </div>
 
@@ -147,7 +175,7 @@ export default function Quotes() {
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', fontSize: 13 }}>🔍</span>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search vendor, task, project..." style={{ paddingLeft: 30, width: 280 }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search task, project, vendor..." style={{ paddingLeft: 30, width: 280 }} />
         </div>
         <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={{ width: 'auto', minWidth: 160 }}>
           <option value="all">All projects</option>
@@ -155,10 +183,9 @@ export default function Quotes() {
         </select>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: 'auto', minWidth: 130 }}>
           <option value="all">All statuses</option>
-          <option value="pending">Pending</option>
-          <option value="accepted">Accepted</option>
-          <option value="rejected">Rejected</option>
-          <option value="expired">Expired</option>
+          <option value="pending">Pending decision</option>
+          <option value="decided">Decided</option>
+          <option value="closed">Closed</option>
         </select>
       </div>
 
@@ -177,49 +204,62 @@ export default function Quotes() {
             <thead>
               <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Project / Task</th>
-                <th style={{ padding: '10px 12px', fontWeight: 600 }}>Vendor</th>
-                <th style={{ padding: '10px 12px', fontWeight: 600, textAlign: 'right' }}>Amount</th>
+                <th style={{ padding: '10px 12px', fontWeight: 600 }}>Quotes</th>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Status</th>
-                <th style={{ padding: '10px 12px', fontWeight: 600 }}>Received</th>
+                <th style={{ padding: '10px 12px', fontWeight: 600, textAlign: 'right' }}>Decision</th>
+                <th style={{ padding: '10px 12px', fontWeight: 600 }}>Latest</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(q => (
-                <tr key={q.id}
-                  onClick={() => navigate(`/tasks/${q.task_id}`)}
-                  style={{ cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                      {q.project_ref ? `${q.project_ref} · ` : ''}{q.project_name || '—'}
-                    </div>
-                    <div style={{ fontWeight: 500 }}>{q.task_title || '(no title)'}</div>
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div>{q.vendor_name || q.vendor_name_text}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                      {KIND_LABEL[q.vendor_kind] || ''}
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {q.amount != null
-                      ? `${q.currency === 'GBP' ? '£' : (q.currency + ' ')}${Number(q.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : <span style={{ color: 'var(--text3)' }}>—</span>}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <Pill cls={STATUS_PILL[q.status] || 'pill-gray'}>
-                      {STATUS_LABELS[q.status] || q.status}
-                    </Pill>
-                  </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 12 }}>
-                    {q.received_date
-                      ? new Date(q.received_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                      : <span style={{ color: 'var(--text3)' }}>—</span>}
-                  </td>
-                </tr>
-              ))}
+              {filtered.map(g => {
+                const status = deriveTaskStatus(g.quotes)
+                const accepted = g.quotes.find(q => q.status === 'accepted')
+                return (
+                  <tr key={g.task_id}
+                    onClick={() => setDrawerTaskId(g.task_id)}
+                    style={{ cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                        {g.project_ref ? `${g.project_ref} · ` : ''}{g.project_name || '—'}
+                      </div>
+                      <div style={{ fontWeight: 500 }}>{g.task_title || '(no title)'}</div>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {g.quotes.length} quote{g.quotes.length === 1 ? '' : 's'}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <Pill cls={TASK_STATUS_PILL[status]}>{TASK_STATUS_LABEL[status]}</Pill>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                      {accepted ? (
+                        <span>
+                          {accepted.amount != null
+                            ? `£${Number(accepted.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : '—'}
+                          <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}>{accepted.vendor_name || accepted.vendor_name_text}</div>
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text3)' }}>{status === 'pending' ? 'awaiting' : '—'}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 12 }}>
+                      {g.latest_received
+                        ? new Date(g.latest_received).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                        : <span style={{ color: 'var(--text3)' }}>—</span>}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {drawerTaskId && (
+        <QuoteDetailDrawer
+          taskId={drawerTaskId}
+          onClose={() => setDrawerTaskId(null)}
+        />
       )}
     </div>
   )
