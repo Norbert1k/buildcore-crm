@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { sortBy, formatDate } from '../lib/utils'
 import { Spinner, Pill, Modal, Field, IconChevron, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
+import FileLightbox from '../components/FileLightbox'
 
 const PRIORITIES = {
   high:   { label: 'High',   color: '#c00' },
@@ -82,6 +83,10 @@ export default function TaskDetail() {
   // Drag-and-drop. Tracks whether files are currently being dragged over
   // the page so we can show a full-page drop overlay.
   const [dragOver, setDragOver] = useState(false)
+  // Inline file preview (PDF/image/Office). Pair of (file, signed url) so
+  // FileLightbox can render. Mirrors the ProjectDocumentation pattern.
+  const [filePreview, setFilePreview] = useState(null)
+  const [filePreviewUrl, setFilePreviewUrl] = useState(null)
 
   useEffect(() => { load() }, [taskId])
 
@@ -607,13 +612,30 @@ export default function TaskDetail() {
 
   async function downloadFile(file) {
     const { data } = await supabase.storage.from('task-files').createSignedUrl(file.storage_path, 60)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+    if (!data?.signedUrl) return
+    // Fetch the bytes and trigger a browser download via an anchor with
+    // the `download` attribute. Plain window.open() navigates instead
+    // of downloading, which is why pressing Download was opening a new
+    // tab. Falls back to a direct anchor-click if blob fetch fails
+    // (e.g. CORS issue) — that still forces download for most servers.
+    try {
+      const res = await fetch(data.signedUrl)
+      const blob = await res.blob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = file.file_name
+      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+    } catch {
+      const a = document.createElement('a')
+      a.href = data.signedUrl; a.download = file.file_name; a.click()
+    }
   }
 
   async function previewFile(file) {
     const isEml = file.file_name.toLowerCase().endsWith('.eml')
     if (isEml) {
-      // Download the EML content and parse it
+      // Download the EML content and parse it for the in-app viewer.
       const { data: urlData } = await supabase.storage.from('task-files').createSignedUrl(file.storage_path, 60)
       if (!urlData?.signedUrl) { alert('Could not load email'); return }
       try {
@@ -625,22 +647,21 @@ export default function TaskDetail() {
       }
       return
     }
-    // PDFs and images: open the signed URL in a new tab so the browser
-    // renders them natively. Falls back to download for other types.
-    const lower = file.file_name.toLowerCase()
-    const isViewable = lower.endsWith('.pdf')
-      || /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/i.test(lower)
-      || (file.mime_type || '').startsWith('image/')
-      || file.mime_type === 'application/pdf'
-    if (isViewable) {
-      const { data } = await supabase.storage.from('task-files').createSignedUrl(file.storage_path, 300)
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank', 'noopener')
-        return
-      }
+    // Open the file inline using FileLightbox — the shared CRM
+    // component used by Project Documentation. Sets filePreview first
+    // so the modal opens immediately with a spinner, then fills in the
+    // signed URL once it arrives. FileLightbox routes by extension:
+    // PDF → native iframe viewer, Office docs → Office Online,
+    // images → <img>, anything else → "cannot preview, download instead".
+    setFilePreview(file)
+    setFilePreviewUrl(null)
+    const { data } = await supabase.storage.from('task-files').createSignedUrl(file.storage_path, 3600)
+    if (data?.signedUrl) {
+      setFilePreviewUrl(data.signedUrl)
+    } else {
+      setFilePreview(null)
+      alert('Could not load file preview')
     }
-    // Fallback: download
-    downloadFile(file)
   }
 
   async function changeStatus(newStatus) {
@@ -1085,13 +1106,16 @@ export default function TaskDetail() {
                                 </select>
                               )}
                               {(() => {
-                                // View button — for PDFs, images, and EMLs.
-                                // PDFs/images open in a new tab via signed URL.
-                                // EML opens in the existing in-app viewer.
+                                // View button — for PDFs, images, Office
+                                // docs, and EMLs. Opens inline via the
+                                // shared FileLightbox component (the same
+                                // one Project Documentation uses). EMLs
+                                // route to the in-app email viewer.
                                 const lower = f.file_name.toLowerCase()
                                 const isViewable = isEml
                                   || lower.endsWith('.pdf')
-                                  || /\.(jpg|jpeg|png|gif|webp|bmp|heic|heif)$/i.test(lower)
+                                  || /\.(jpg|jpeg|png|gif|webp|bmp|svg|heic|heif)$/i.test(lower)
+                                  || /\.(docx?|xlsx?|pptx?)$/i.test(lower)
                                   || (f.mime_type || '').startsWith('image/')
                                   || f.mime_type === 'application/pdf'
                                 if (!isViewable) return null
@@ -1374,6 +1398,16 @@ export default function TaskDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* File preview lightbox — PDFs / images / Office docs */}
+      {filePreview && (
+        <FileLightbox
+          signedUrl={filePreviewUrl}
+          fileName={filePreview.file_name}
+          onClose={() => { setFilePreview(null); setFilePreviewUrl(null) }}
+          onDownload={filePreviewUrl ? () => downloadFile(filePreview) : null}
+        />
       )}
 
       {emlPreview && <EmlViewer file={emlPreview.file} parsed={emlPreview.parsed} onClose={() => setEmlPreview(null)} />}
