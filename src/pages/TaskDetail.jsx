@@ -168,9 +168,12 @@ export default function TaskDetail() {
       const path = `${taskId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
       const { error: upErr } = await supabase.storage.from('task-files').upload(path, f, { upsert: false })
       if (upErr) { errors.push(`${f.name}: ${upErr.message}`); continue }
+      // Detect category from filename + mime. Same logic as the SQL
+      // backfill in step1-schema.sql so client and server stay in sync.
+      const category = detectFileCategory(f.name, f.type || '')
       const { error: dbErr } = await supabase.from('task_files').insert({
         task_id: taskId, file_name: f.name, storage_path: path, file_size: f.size,
-        mime_type: f.type || null, uploaded_by: profile?.id,
+        mime_type: f.type || null, uploaded_by: profile?.id, category,
       })
       if (dbErr) { errors.push(`${f.name}: ${dbErr.message}`); continue }
       await supabase.from('task_activity').insert({
@@ -180,6 +183,22 @@ export default function TaskDetail() {
     }
     if (errors.length) alert('Some uploads failed:\n' + errors.join('\n'))
     setUploading(false)
+    load()
+  }
+
+  // Change the category on an existing file. Called from the dropdown
+  // attached to each file row. Re-loads on success so the file moves
+  // groups in the categorised view.
+  async function changeFileCategory(file, newCategory) {
+    if (file.category === newCategory) return
+    const { error } = await supabase
+      .from('task_files')
+      .update({ category: newCategory })
+      .eq('id', file.id)
+    if (error) {
+      alert('Could not change category: ' + error.message)
+      return
+    }
     load()
   }
 
@@ -465,30 +484,85 @@ export default function TaskDetail() {
             No files uploaded. Drag and drop, or click Upload. Supports any file type including .eml emails.
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {files.map(f => {
-              const isEml = f.file_name.toLowerCase().endsWith('.eml')
-              return (
-                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: 'var(--surface2)', borderRadius: 6 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 4, background: isEml ? '#e3f2fd' : 'var(--surface)', color: isEml ? '#1565c0' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-                    {isEml ? '✉' : '📄'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text3)' }}>
-                      {fmtBytes(f.file_size)} • {f.profiles?.full_name || 'Unknown'} • {new Date(f.uploaded_at).toLocaleDateString('en-GB')}
+          // Categorised view. Each category renders as its own
+          // section: header with name + count, then the file rows.
+          // We pre-group files into a Map<category, files[]> so every
+          // category renders in CATEGORIES order, even those with
+          // zero files (which collapse to just the dim header).
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {(() => {
+              const byCategory = new Map()
+              for (const cat of CATEGORIES) byCategory.set(cat.value, [])
+              for (const f of files) {
+                const key = byCategory.has(f.category) ? f.category : 'other'
+                byCategory.get(key).push(f)
+              }
+              return CATEGORIES.map(cat => {
+                const catFiles = byCategory.get(cat.value) || []
+                if (catFiles.length === 0) return null
+                return (
+                  <div key={cat.value}>
+                    {/* Category header: small caps, count next to label */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: 10, fontWeight: 600, color: 'var(--text2)',
+                      textTransform: 'uppercase', letterSpacing: '.06em',
+                      marginBottom: 6,
+                    }}>
+                      <span style={{ fontSize: 13 }}>{cat.icon}</span>
+                      <span>{cat.label}</span>
+                      <span style={{ color: 'var(--text3)', fontWeight: 400 }}>{catFiles.length}</span>
+                    </div>
+                    {/* File rows in this category */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {catFiles.map(f => {
+                        const isEml = f.file_name.toLowerCase().endsWith('.eml')
+                        return (
+                          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: 'var(--surface2)', borderRadius: 6 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 4, background: isEml ? '#e3f2fd' : 'var(--surface)', color: isEml ? '#1565c0' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                              {isEml ? '✉' : '📄'}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                                {fmtBytes(f.file_size)} • {f.profiles?.full_name || 'Unknown'} • {new Date(f.uploaded_at).toLocaleDateString('en-GB')}
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
+                              {canUpload && (
+                                // Inline category re-assignment. Native
+                                // <select> is the cleanest way to give
+                                // the user a 5-option picker without
+                                // building a custom dropdown component.
+                                <select
+                                  value={f.category || 'other'}
+                                  onChange={(e) => changeFileCategory(f, e.target.value)}
+                                  title="Change category"
+                                  style={{
+                                    fontSize: 11, padding: '3px 4px', borderRadius: 4,
+                                    border: '1px solid var(--border)', background: 'var(--surface)',
+                                    color: 'var(--text2)', cursor: 'pointer',
+                                  }}
+                                  onClick={e => e.stopPropagation()}>
+                                  {CATEGORIES.map(c => (
+                                    <option key={c.value} value={c.value}>{c.label.replace(/s$/, '')}</option>
+                                  ))}
+                                </select>
+                              )}
+                              {isEml && <button className="btn btn-sm" onClick={() => previewFile(f)} title="Read email">Open</button>}
+                              <button className="btn btn-sm" onClick={() => downloadFile(f)} title="Download">⬇</button>
+                              {canDeleteFile(f) && (
+                                <button className="btn btn-sm btn-danger" onClick={() => deleteFile(f)} title="Delete">✕</button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    {isEml && <button className="btn btn-sm" onClick={() => previewFile(f)} title="Read email">Open</button>}
-                    <button className="btn btn-sm" onClick={() => downloadFile(f)} title="Download">⬇</button>
-                    {canDeleteFile(f) && (
-                      <button className="btn btn-sm btn-danger" onClick={() => deleteFile(f)} title="Delete">✕</button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                )
+              }).filter(Boolean)
+            })()}
           </div>
         )}
       </div>
@@ -572,6 +646,32 @@ export default function TaskDetail() {
 }
 
 // ─── Helpers ────────────────────────────────────────────────
+
+// File category metadata. Order here defines display order in the
+// categorised view. Keep this list in sync with the CHECK constraint
+// on task_files.category in step1-schema.sql.
+const CATEGORIES = [
+  { value: 'quote',   label: 'Quotes',   icon: '💷', emptyLabel: 'No quotes attached.' },
+  { value: 'drawing', label: 'Drawings', icon: '📐', emptyLabel: 'No drawings attached.' },
+  { value: 'photo',   label: 'Photos',   icon: '📷', emptyLabel: 'No photos attached.' },
+  { value: 'email',   label: 'Emails',   icon: '✉️', emptyLabel: 'No emails attached.' },
+  { value: 'other',   label: 'Other',    icon: '📁', emptyLabel: 'No other files attached.' },
+]
+
+// Detect a sensible initial category from filename + mime type. Mirror
+// of the SQL backfill in step1-schema.sql — keep them in sync so the
+// server and client agree on what's a 'quote' vs 'drawing'. Returns
+// one of: quote / drawing / photo / email / other.
+function detectFileCategory(fileName, mimeType) {
+  const lower = (fileName || '').toLowerCase()
+  const mime = (mimeType || '').toLowerCase()
+  if (lower.endsWith('.eml') || mime === 'message/rfc822') return 'email'
+  if (mime.startsWith('image/') || /\.(jpg|jpeg|png|heic|heif|webp|gif|bmp)$/i.test(lower)) return 'photo'
+  if (/(quote|estimate|proposal|tender|offer|quotation)/i.test(lower)) return 'quote'
+  if (/\.(dwg|dxf)$/i.test(lower) || /(drawing|^ga[ _-]|layout|plan|elevation|section)/i.test(lower)) return 'drawing'
+  return 'other'
+}
+
 function fmtBytes(b) {
   if (!b) return ''
   if (b < 1024) return b + ' B'
