@@ -21,6 +21,7 @@ import Clients from './pages/Clients'
 import ClientDetail from './pages/ClientDetail'
 import TaskTracker from './pages/TaskTracker'
 import TaskDetail from './pages/TaskDetail'
+import Quotes from './pages/Quotes'
 import { Spinner } from './components/ui'
 
 function HamburgerIcon() {
@@ -272,6 +273,7 @@ function ProtectedLayout() {
     '/projects': 'Projects',
     '/projects/tracker': 'Project Tracker',
     '/suppliers': 'Suppliers',
+    '/quotes': 'Quotes',
     '/settings': 'Settings',
   }
   const title = pageTitles[location.pathname] || 'BuildCore CRM'
@@ -304,6 +306,7 @@ function ProtectedLayout() {
           <Route path="/projects/calendar" element={<ProjectCalendar />} />
             <Route path="/projects/:id" element={<ProjectDetail />} />
             <Route path="/suppliers" element={<Suppliers />} />
+            <Route path="/quotes" element={<Quotes />} />
             <Route path="/settings" element={<Settings />} />
           <Route path="/company-documents" element={<CompanyDocuments />} />
           <Route path="/google-drive" element={<GoogleDrive />} />
