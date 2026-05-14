@@ -1,182 +1,511 @@
-// supabase/functions/parse-quote-pdf/index.ts
-//
-// Receives: {
-//   pdf_base64: string,
-//   buildings?: { ordinal: number, name: string }[]  // optional, multi-building projects only
-// }
-// Returns: { ok, vendor_name, amount, currency, received_date, validity_days, notes, building_ordinals, confidence, raw_response, parse_error }
-//
-// pdf_base64 is the file contents encoded as base64 (no data: prefix).
-// We accept the file directly rather than a storage_path so the browser
-// doesn't need to upload first — keeps the modal flow clean (user can
-// cancel without leaving an orphan file in storage).
-//
-// When `buildings` is supplied (multi-building projects only), the prompt
-// instructs Claude to detect which of the listed buildings the quote
-// covers, and return them in `building_ordinals`. For single-building
-// projects (no buildings param), `building_ordinals` is always null.
-//
-// Run with `supabase functions deploy parse-quote-pdf` OR deploy via
-// the Supabase Dashboard's Code tab.
-// Requires secret ANTHROPIC_API_KEY (already set for the other parsers).
+@import url('https://fonts.googleapis.com/css2?family=Fahkwang:wght@400;600&display=swap');
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+:root {
+  --font: 'Fahkwang', 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --bg: #F5F4F0;
+  --surface: #FFFFFF;
+  --surface2: #F5F4F0;
+  --border: #E2E0D8;
+  --border2: #C8C6BC;
+  --text: #1C1B18;
+  --text2: #5C5A54;
+  --text3: #9C9A94;
+  --accent: #448a40;
+  --accent-dark: #2d6129;
+  --accent-light: #e8f5e7;
+  --red: #A32D2D; --red-bg: #FCEBEB; --red-border: #F7C1C1;
+  --amber: #854F0B; --amber-bg: #FAEEDA; --amber-border: #FAC775;
+  --green: #448a40; --green-bg: #e8f5e7; --green-border: #b8ddb6;
+  --blue: #185FA5; --blue-bg: #E6F1FB; --blue-border: #B5D4F4;
+  --purple: #3C3489; --purple-bg: #EEEDFE; --purple-border: #AFA9EC;
+  --radius: 8px; --radius-lg: 12px;
+  --sidebar-width: 232px;
+  --topbar-height: 56px;
 }
 
-function buildSystemPrompt(buildings: { ordinal: number, name: string }[] | undefined): string {
-  const hasBuildings = Array.isArray(buildings) && buildings.length > 0
+html, body, #root { height: 100%; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 
-  const buildingsBlock = hasBuildings ? `
-This project has multiple buildings. The user may receive a single quote that covers all buildings, or quotes that cover only some.
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
-Available buildings:
-${buildings!.map(b => `  ${b.ordinal}. ${b.name}`).join("\n")}
+input, select, textarea {
+  font-family: var(--font); font-size: 14px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; width: 100%;
+  outline: none; transition: border .15s;
+  -webkit-appearance: none; appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,138,64,.1); }
+input::placeholder { color: var(--text3); }
+label { font-size: 12px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
+textarea { resize: vertical; min-height: 80px; }
 
-Identify which buildings the quote applies to. Look for explicit mentions in the scope-of-works, line items, project description, or pricing breakdown. Examples:
-  - "Piling for Residential Block and Sports Hall" → [1, 2]
-  - "Changing rooms only" → [3]
-  - "All buildings" or no specific building mentioned → []  (empty = covers whole project)
+button { font-family: var(--font); cursor: pointer; border: none; outline: none; transition: all .15s; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600; border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap; }
+.btn:hover { background: var(--surface2); border-color: var(--border2); }
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn-danger { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-icon { padding: 8px; border-radius: var(--radius); }
+button:disabled { opacity: .45; cursor: not-allowed; }
 
-building_ordinals MUST be an array. Use [] (empty) when the quote covers the whole project or you cannot determine which building. NEVER guess — only include an ordinal when the building is explicitly mentioned or strongly implied.
-` : `
-building_ordinals MUST be null for this request — single-building project, no breakdown needed.
-`
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.card-pad { padding: 20px; }
 
-  return `You are a document analyst for a UK construction company. You will receive a PDF that is a quote, estimate, proposal, or tender from a supplier or subcontractor.
+.pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.pill-green { background: var(--green-bg); color: var(--green); }
+.pill-amber { background: var(--amber-bg); color: var(--amber); }
+.pill-red { background: var(--red-bg); color: var(--red); }
+.pill-blue { background: var(--blue-bg); color: var(--blue); }
+.pill-purple { background: var(--purple-bg); color: var(--purple); }
+.pill-gray { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
 
-Your job: extract the key fields used to track the quote in a CRM.
+.app-layout { display: flex; height: 100vh; overflow: hidden; }
 
-Return JSON in this exact shape:
-{
-  "vendor_name": "string" | null,
-  "amount": number | null,
-  "currency": "GBP" | "EUR" | "USD" | null,
-  "received_date": "YYYY-MM-DD" | null,
-  "validity_days": number | null,
-  "notes": "string" | null,
-  "building_ordinals": number[] | null,
-  "confidence": "high" | "medium" | "low"
+.sidebar {
+  width: var(--sidebar-width); min-width: var(--sidebar-width);
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow-y: auto;
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+  z-index: 300;
+}
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.4); z-index: 299;
 }
 
-Field guidance:
-- vendor_name: the company that issued the quote. Look at the letterhead, header, "From" field, or signature block. Use the legal company name as it appears on the document. Don't include "Ltd" / "Limited" suffixes unless they're prominently part of the trading name. Example: "ACME Plumbing Ltd" or "Heatech Engineering".
-- amount: the TOTAL price the customer would pay if they accept this quote. Look for "Total", "Grand Total", "Quote Total", "Sum Total", or the final/largest figure. Include VAT if quoted "VAT inclusive"; otherwise use the ex-VAT total. Return as a plain number (e.g. 4200.50 for £4,200.50). No currency symbol, no commas.
-- currency: GBP for £, EUR for €, USD for $. Default to GBP if a UK company quotes in £ or doesn't specify. If you can't tell, return null.
-- received_date: the date the quote was ISSUED by the supplier (not when it was opened/read). Look for "Date", "Quote Date", "Issue Date" near the header. UK format: DD/MM/YYYY — be careful: 01/02/2026 is 1 February, NOT 2 January.
-- validity_days: how many days the quote is valid for. Often phrased "Valid for X days", "This quote expires DD/MM/YYYY", or "Prices valid until DD/MM/YYYY". If only an expiry date is given, compute days from received_date. Return null if not specified.
-- notes: 1-2 sentences summarising what's included or excluded. Things like warranty period, payment terms, lead time, scope exclusions. Keep under 200 chars. Examples: "Includes 2-year warranty. Excludes commissioning." or "Net 30 payment, 4-week lead time, materials only."
-${buildingsBlock}- confidence: "high" if all expected fields were clearly stated and unambiguous; "medium" if some interpretation was required (e.g. VAT-inclusive vs exclusive unclear, or vendor name had to be inferred from the letterhead); "low" if the document was hand-scanned, ambiguous, or many fields had to be guessed.
+.main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 
-CRITICAL RULES:
-1. Output ONLY valid JSON. No markdown, no fences, no commentary.
-2. UK date format. Default to DD/MM/YYYY interpretation when ambiguous.
-3. If a field is not present or you cannot read it confidently, return null. DO NOT guess.
-4. amount must be a plain number in the document's currency (no commas, no symbol).
-5. vendor_name should be returned as it appears on the letterhead — preserve casing.
-6. building_ordinals must be an array of integers (or empty array, or null per the rules above). Each integer MUST match an ordinal from the provided buildings list — never invent ordinals.`
+.topbar {
+  height: var(--topbar-height); background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
+  position: relative; z-index: 100; overflow: visible;
+}
+.topbar-menu-btn {
+  display: none; padding: 6px; border-radius: var(--radius);
+  background: none; border: 1px solid var(--border);
+  color: var(--text); cursor: pointer; flex-shrink: 0;
+}
+.page-content { flex: 1; overflow-y: auto; padding: 20px; max-width: 1400px; width: 100%; margin: 0 auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.page-content::-webkit-scrollbar { width: 4px; }
+.page-content::-webkit-scrollbar-track { background: transparent; }
+.page-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.page-content::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+.sidebar-logo { padding: 16px; border-bottom: 1px solid var(--border); }
+.nav-section { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; padding: 14px 16px 4px; }
+.nav-item { display: flex; align-items: center; gap: 9px; padding: 10px 12px; margin: 1px 8px; border-radius: var(--radius); font-size: 13px; color: var(--text2); cursor: pointer; transition: all .15s; text-decoration: none; }
+.nav-item:hover { background: var(--accent-light); color: var(--accent-dark); }
+.nav-item.active { background: var(--accent); color: #fff; font-weight: 600; }
+.nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+.nav-item-child { padding-left: 24px; font-size: 12px; margin-left: 8px; margin-right: 8px; opacity: 0.9; }
+.nav-badge { margin-left: auto; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; background: var(--red-bg); color: var(--red); }
+.nav-item.active .nav-badge { background: rgba(255,255,255,.25); color: #fff; }
+.nav-user { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 400; display: flex; align-items: flex-end; justify-content: center; padding: 0; }
+.modal { background: var(--surface); border-radius: var(--radius-lg) var(--radius-lg) 0 0; border: 1px solid var(--border); width: 100%; max-height: 92vh; overflow-y: auto; box-shadow: 0 -8px 40px rgba(0,0,0,.15); }
+.modal-sm { max-width: 100%; }
+.modal-md { max-width: 100%; }
+.modal-lg { max-width: 100%; }
+.modal-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.modal-title { font-size: 15px; font-weight: 600; }
+.modal-body { padding: 16px 20px; }
+.modal-footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; position: sticky; bottom: 0; background: var(--surface); }
+
+.form-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.form-grid .full { grid-column: 1; }
+.form-section { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; padding-top: 6px; border-top: 2px solid var(--accent-light); margin-top: 4px; }
+
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; border-left: 3px solid var(--accent); }
+.stat-label { font-size: 10px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.stat-value { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+.stat-value.red { color: var(--red); }
+.stat-value.amber { color: var(--amber); }
+.stat-value.green { color: var(--green); }
+
+.table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; min-width: 500px; }
+th { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; padding: 10px 14px; background: var(--surface2); border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface2); }
+.td-muted { color: var(--text2); font-size: 12px; }
+
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.avatar-sm { width: 28px; height: 28px; font-size: 10px; }
+.avatar-lg { width: 46px; height: 46px; font-size: 15px; }
+
+.mobile-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; margin-bottom: 10px; cursor: pointer; transition: border-color .15s; }
+.mobile-card:active { border-color: var(--accent); }
+.mobile-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.mobile-card-title { font-weight: 600; font-size: 14px; flex: 1; min-width: 0; }
+.mobile-card-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; color: var(--text2); }
+.mobile-card-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.mobile-card-actions .btn { flex: 1; justify-content: center; }
+
+.divider { height: 1px; background: var(--border); margin: 14px 0; }
+.text-muted { color: var(--text2); }
+.text-sm { font-size: 12px; }
+.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 8px; flex-wrap: wrap; }
+.section-title { font-size: 14px; font-weight: 600; }
+.alert-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius); margin-bottom: 6px; font-size: 13px; }
+.alert-expired { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+.alert-warning { background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--amber); }
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text3); font-size: 13px; }
+.filter-tabs { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid var(--border); flex-wrap: wrap; }
+.filter-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--text2); border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; flex-shrink: 0; background: transparent; display: flex; align-items: center; gap: 6px; transition: color .15s, border-color .15s; }
+.filter-tab .tab-badge { background: var(--surface2); border-radius: 10px; padding: 1px 7px; font-size: 10px; font-weight: 600; color: var(--text3); transition: background .15s, color .15s; }
+.filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.filter-tab.active .tab-badge { background: var(--green-bg); color: var(--green); }
+.filter-tab:hover:not(.active) { color: var(--text); }
+.filter-tab svg { flex-shrink: 0; }
+
+@media (min-width: 640px) {
+  .modal-overlay { align-items: center; padding: 20px; }
+  .modal { border-radius: var(--radius-lg); max-height: 90vh; }
+  .modal-sm { max-width: 440px; }
+  .modal-md { max-width: 580px; }
+  .modal-lg { max-width: 720px; }
+  .form-grid { grid-template-columns: 1fr 1fr; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .form-section { grid-column: 1 / -1; }
+  .stats-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+  .page-content { padding: 24px; }
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS })
+@media (min-width: 768px) {
+  .topbar-menu-btn { display: none !important; }
+  .sidebar { transform: none !important; position: relative !important; }
+  .sidebar-overlay { display: none !important; }
+}
 
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...CORS, "Content-Type": "application/json" },
-    })
+@media (max-width: 767px) {
+  .topbar-menu-btn { display: flex !important; align-items: center; justify-content: center; }
+  .sidebar {
+    position: fixed !important; left: 0; top: 0; height: 100vh;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 24px rgba(0,0,0,.12);
   }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-overlay.open { display: block; }
+  .page-content { padding: 16px; }
+  .topbar { padding: 0 14px; }
+  table { min-width: 600px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+}
 
-  try {
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY secret not set")
+[data-theme="dark"] {
+  --bg:          #0f1117;
+  --surface:     #1a1d27;
+  --surface2:    #22263a;
+  --border:      rgba(255,255,255,0.08);
+  --border2:     rgba(255,255,255,0.15);
+  --text:        #e8e9f0;
+  --text2:       #9a9db0;
+  --text3:       #7a7d92;
+  --green:       #5cb85c;
+  --green-bg:    rgba(68,138,64,0.15);
+  --green-border:rgba(68,138,64,0.3);
+  --red:         #e06c6c;
+  --red-bg:      rgba(224,108,108,0.12);
+  --red-border:  rgba(224,108,108,0.25);
+  --amber:       #e6a23c;
+  --amber-bg:    rgba(230,162,60,0.12);
+  --amber-border:rgba(230,162,60,0.25);
+  --blue:        #5b9bd5;
+  --blue-bg:     rgba(91,155,213,0.12);
+  --blue-border: rgba(91,155,213,0.25);
+  --purple:      #9b87e0;
+  --purple-bg:   rgba(155,135,224,0.12);
+}
 
-    const body = await req.json()
-    const pdfBase64: string | undefined = body?.pdf_base64
-    const buildings: { ordinal: number, name: string }[] | undefined = body?.buildings
+[data-theme="dark"] body { background: var(--bg); color: var(--text); }
+[data-theme="dark"] .sidebar { background: #13151f; border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .nav-item:hover,
+[data-theme="dark"] .nav-item.active { background: rgba(255,255,255,0.06); }
+[data-theme="dark"] .card { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder { color: var(--text3); }
+[data-theme="dark"] .btn { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+[data-theme="dark"] .btn:hover { background: #2a2f45; }
+[data-theme="dark"] .btn-primary { background: var(--green) !important; border-color: var(--green) !important; color: white !important; }
+[data-theme="dark"] .btn-danger { background: var(--red-bg) !important; border-color: var(--red-border) !important; color: var(--red) !important; }
+[data-theme="dark"] table thead tr { background: var(--surface2); }
+[data-theme="dark"] table tbody tr:hover { background: var(--surface2); }
+[data-theme="dark"] .table-wrap { border-color: var(--border); }
+[data-theme="dark"] .filter-tab { color: var(--text2); border-bottom-color: transparent; }
+[data-theme="dark"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="dark"] .filter-tab .tab-badge { background: rgba(255,255,255,0.08); color: var(--text3); }
+[data-theme="dark"] .filter-tab.active .tab-badge { background: var(--green-bg); color: var(--green); }
+[data-theme="dark"] .modal-overlay { background: rgba(0,0,0,0.7); }
+[data-theme="dark"] .modal { background: var(--surface); border-color: var(--border); }
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer { background: var(--surface2); border-color: var(--border); }
+[data-theme="dark"] .topbar { background: #13151f; border-color: rgba(255,255,255,0.07); }
+[data-theme="dark"] .nav-section { color: var(--text3); }
+[data-theme="dark"] .nav-user { border-color: var(--border); background: rgba(255,255,255,0.03); }
 
-    if (!pdfBase64) throw new Error("pdf_base64 is required")
+/* ─── Rose ────────────────────────────────────────────────────────────────
+   Soft pink light theme. Warm cream background, white surfaces, deep berry
+   text. Pink as the primary accent (replaces green for buttons/active nav).
+   For users who want something less stark than plain Light without going
+   dark. Surfaces stay white-ish so most components inherit Light styling
+   with minimal overrides.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme="rose"] {
+  --bg:          #FBF4F1;
+  --surface:     #FFFFFF;
+  --surface2:    #FBEAF0;
+  --border:      #F0DCD3;
+  --border2:     #E2C4BC;
+  --text:        #4A1B0C;
+  --text2:       #712B13;
+  --text3:       #99746E;
+  --accent:      #993556;
+  --accent-dark: #72243E;
+  --accent-light:#FBEAF0;
+  --green:       #639922;       --green-bg:    #EAF3DE;       --green-border:#C0DD97;
+  --red:         #A32D2D;       --red-bg:      #FCEBEB;       --red-border:  #F7C1C1;
+  --amber:       #854F0B;       --amber-bg:    #FAEEDA;       --amber-border:#FAC775;
+  --blue:        #185FA5;       --blue-bg:     #E6F1FB;       --blue-border: #B5D4F4;
+  --purple:      #3C3489;       --purple-bg:   #EEEDFE;       --purple-border:#AFA9EC;
+}
+[data-theme="rose"] body { background: var(--bg); color: var(--text); }
+[data-theme="rose"] .sidebar { background: #FFFFFF; border-color: var(--border); }
+[data-theme="rose"] .nav-item:hover,
+[data-theme="rose"] .nav-item.active { background: rgba(212,83,126,0.10); }
+[data-theme="rose"] .btn-primary { background: var(--accent) !important; border-color: var(--accent) !important; color: white !important; }
+[data-theme="rose"] .btn-primary:hover { background: var(--accent-dark) !important; border-color: var(--accent-dark) !important; }
+[data-theme="rose"] input:focus,
+[data-theme="rose"] select:focus,
+[data-theme="rose"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(153,53,86,.12); }
+[data-theme="rose"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="rose"] .filter-tab .tab-badge { background: var(--surface2); color: var(--text3); }
+[data-theme="rose"] .filter-tab.active .tab-badge { background: rgba(212,83,126,0.15); color: var(--accent); }
+[data-theme="rose"] .topbar { background: #FFFFFF; border-color: var(--border); }
 
-    const systemPrompt = buildSystemPrompt(buildings)
+/* ─── Mint ────────────────────────────────────────────────────────────────
+   Pale teal light theme. Calm, garden-inspired. Teal accent replaces green
+   for primary buttons; the existing green-as-status (active project pills)
+   shifts to a stronger teal so it's still readable.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme="mint"] {
+  --bg:          #EFF5F1;
+  --surface:     #FBFCFB;
+  --surface2:    #E1F5EE;
+  --border:      #D5E5DD;
+  --border2:     #B8D2C5;
+  --text:        #04342C;
+  --text2:       #0F6E56;
+  --text3:       #6B8579;
+  --accent:      #0F6E56;
+  --accent-dark: #085041;
+  --accent-light:#E1F5EE;
+  --green:       #0F6E56;       --green-bg:    #E1F5EE;       --green-border:#9FE1CB;
+  --red:         #A32D2D;       --red-bg:      #FCEBEB;       --red-border:  #F7C1C1;
+  --amber:       #854F0B;       --amber-bg:    #FAEEDA;       --amber-border:#FAC775;
+  --blue:        #185FA5;       --blue-bg:     #E6F1FB;       --blue-border: #B5D4F4;
+  --purple:      #3C3489;       --purple-bg:   #EEEDFE;       --purple-border:#AFA9EC;
+}
+[data-theme="mint"] body { background: var(--bg); color: var(--text); }
+[data-theme="mint"] .sidebar { background: #FBFCFB; border-color: var(--border); }
+[data-theme="mint"] .nav-item:hover,
+[data-theme="mint"] .nav-item.active { background: rgba(29,158,117,0.10); }
+[data-theme="mint"] .btn-primary { background: var(--accent) !important; border-color: var(--accent) !important; color: white !important; }
+[data-theme="mint"] .btn-primary:hover { background: var(--accent-dark) !important; border-color: var(--accent-dark) !important; }
+[data-theme="mint"] input:focus,
+[data-theme="mint"] select:focus,
+[data-theme="mint"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(15,110,86,.12); }
+[data-theme="mint"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="mint"] .filter-tab .tab-badge { background: var(--surface2); color: var(--text3); }
+[data-theme="mint"] .filter-tab.active .tab-badge { background: rgba(29,158,117,0.15); color: var(--accent); }
+[data-theme="mint"] .topbar { background: #FBFCFB; border-color: var(--border); }
 
-    const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } },
-            { type: "text", text: "Extract the fields and return strict JSON only." },
-          ],
-        }],
-      }),
-    })
+/* ─── Sand ────────────────────────────────────────────────────────────────
+   Warm beige light theme. Easy on the eyes for long sessions, paper-like
+   feel. Amber as the primary accent (warm gold) — keeps green for status
+   pills since "active project = green" is universal.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme="sand"] {
+  --bg:          #F4EEDD;
+  --surface:     #FBF7EB;
+  --surface2:    #EFE5C9;
+  --border:      #E2D5B5;
+  --border2:     #C9B98F;
+  --text:        #412402;
+  --text2:       #854F0B;
+  --text3:       #8C7A56;
+  --accent:      #854F0B;
+  --accent-dark: #633806;
+  --accent-light:#FAEEDA;
+  --green:       #639922;       --green-bg:    #EAF3DE;       --green-border:#C0DD97;
+  --red:         #A32D2D;       --red-bg:      #FCEBEB;       --red-border:  #F7C1C1;
+  --amber:       #854F0B;       --amber-bg:    #FAEEDA;       --amber-border:#FAC775;
+  --blue:        #185FA5;       --blue-bg:     #E6F1FB;       --blue-border: #B5D4F4;
+  --purple:      #3C3489;       --purple-bg:   #EEEDFE;       --purple-border:#AFA9EC;
+}
+[data-theme="sand"] body { background: var(--bg); color: var(--text); }
+[data-theme="sand"] .sidebar { background: #FBF7EB; border-color: var(--border); }
+[data-theme="sand"] .nav-item:hover,
+[data-theme="sand"] .nav-item.active { background: rgba(186,117,23,0.10); }
+[data-theme="sand"] .btn-primary { background: var(--accent) !important; border-color: var(--accent) !important; color: white !important; }
+[data-theme="sand"] .btn-primary:hover { background: var(--accent-dark) !important; border-color: var(--accent-dark) !important; }
+[data-theme="sand"] input:focus,
+[data-theme="sand"] select:focus,
+[data-theme="sand"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(133,79,11,.12); }
+[data-theme="sand"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="sand"] .filter-tab .tab-badge { background: var(--surface2); color: var(--text3); }
+[data-theme="sand"] .filter-tab.active .tab-badge { background: rgba(186,117,23,0.15); color: var(--accent); }
+[data-theme="sand"] .topbar { background: #FBF7EB; border-color: var(--border); }
 
-    if (!claudeResp.ok) {
-      const errText = await claudeResp.text()
-      throw new Error(`Claude API error ${claudeResp.status}: ${errText}`)
-    }
+/* ─── Forest ──────────────────────────────────────────────────────────────
+   Green-toned dark theme. Alternative to plain Dark for users who prefer
+   nature tones over the cobalt-blue tech aesthetic. Mirrors the dark block's
+   selector overrides exactly — same structure, swapped palette.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme="forest"] {
+  --bg:          #0F1A14;
+  --surface:     #1B3127;
+  --surface2:    #233F33;
+  --border:      rgba(159,225,203,0.10);
+  --border2:     rgba(159,225,203,0.18);
+  --text:        #E1F5EE;
+  --text2:       #9FE1CB;
+  --text3:       #6BA088;
+  --accent:      #5DCAA5;
+  --accent-dark: #1D9E75;
+  --accent-light:rgba(29,158,117,0.18);
+  --green:       #5DCAA5;       --green-bg:    rgba(29,158,117,0.15);  --green-border:rgba(29,158,117,0.30);
+  --red:         #e06c6c;       --red-bg:      rgba(224,108,108,0.12); --red-border:  rgba(224,108,108,0.25);
+  --amber:       #e6a23c;       --amber-bg:    rgba(230,162,60,0.12);  --amber-border:rgba(230,162,60,0.25);
+  --blue:        #5b9bd5;       --blue-bg:     rgba(91,155,213,0.12);  --blue-border: rgba(91,155,213,0.25);
+  --purple:      #9b87e0;       --purple-bg:   rgba(155,135,224,0.12);
+}
+[data-theme="forest"] body { background: var(--bg); color: var(--text); }
+[data-theme="forest"] .sidebar { background: #14241B; border-color: rgba(159,225,203,0.08); }
+[data-theme="forest"] .nav-item:hover,
+[data-theme="forest"] .nav-item.active { background: rgba(159,225,203,0.07); }
+[data-theme="forest"] .card { background: var(--surface); border-color: var(--border); }
+[data-theme="forest"] input,
+[data-theme="forest"] select,
+[data-theme="forest"] textarea { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+[data-theme="forest"] input::placeholder,
+[data-theme="forest"] textarea::placeholder { color: var(--text3); }
+[data-theme="forest"] input:focus,
+[data-theme="forest"] select:focus,
+[data-theme="forest"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(93,202,165,.15); }
+[data-theme="forest"] .btn { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+[data-theme="forest"] .btn:hover { background: #2D4F3F; }
+[data-theme="forest"] .btn-primary { background: var(--accent-dark) !important; border-color: var(--accent-dark) !important; color: white !important; }
+[data-theme="forest"] .btn-primary:hover { background: #16785A !important; border-color: #16785A !important; }
+[data-theme="forest"] .btn-danger { background: var(--red-bg) !important; border-color: var(--red-border) !important; color: var(--red) !important; }
+[data-theme="forest"] table thead tr { background: var(--surface2); }
+[data-theme="forest"] table tbody tr:hover { background: var(--surface2); }
+[data-theme="forest"] .table-wrap { border-color: var(--border); }
+[data-theme="forest"] .filter-tab { color: var(--text2); border-bottom-color: transparent; }
+[data-theme="forest"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="forest"] .filter-tab .tab-badge { background: rgba(159,225,203,0.08); color: var(--text3); }
+[data-theme="forest"] .filter-tab.active .tab-badge { background: var(--green-bg); color: var(--accent); }
+[data-theme="forest"] .modal-overlay { background: rgba(0,0,0,0.7); }
+[data-theme="forest"] .modal { background: var(--surface); border-color: var(--border); }
+[data-theme="forest"] .modal-header,
+[data-theme="forest"] .modal-footer { background: var(--surface2); border-color: var(--border); }
+[data-theme="forest"] .topbar { background: #14241B; border-color: rgba(159,225,203,0.08); }
+[data-theme="forest"] .nav-section { color: var(--text3); }
+[data-theme="forest"] .nav-user { border-color: var(--border); background: rgba(159,225,203,0.04); }
 
-    const data = await claudeResp.json()
-    const rawText: string = data?.content?.[0]?.text || ""
+/* ─── Slate ───────────────────────────────────────────────────────────────
+   Cool blue-gray dark theme. Professional alternative to plain Dark for
+   users who want a slightly cleaner, more corporate dark mode. Same
+   selector coverage as Forest/Dark.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme="slate"] {
+  --bg:          #1A1E2A;
+  --surface:     #2A3148;
+  --surface2:    #353E5A;
+  --border:      rgba(133,183,235,0.10);
+  --border2:     rgba(133,183,235,0.18);
+  --text:        #E6F1FB;
+  --text2:       #B5D4F4;
+  --text3:       #8090AA;
+  --accent:      #85B7EB;
+  --accent-dark: #378ADD;
+  --accent-light:rgba(55,138,221,0.18);
+  --green:       #5cb85c;       --green-bg:    rgba(68,138,64,0.15);  --green-border:rgba(68,138,64,0.30);
+  --red:         #e06c6c;       --red-bg:      rgba(224,108,108,0.12); --red-border:  rgba(224,108,108,0.25);
+  --amber:       #e6a23c;       --amber-bg:    rgba(230,162,60,0.12);  --amber-border:rgba(230,162,60,0.25);
+  --blue:        #85B7EB;       --blue-bg:     rgba(55,138,221,0.15);  --blue-border: rgba(55,138,221,0.30);
+  --purple:      #9b87e0;       --purple-bg:   rgba(155,135,224,0.12);
+}
+[data-theme="slate"] body { background: var(--bg); color: var(--text); }
+[data-theme="slate"] .sidebar { background: #20253A; border-color: rgba(133,183,235,0.08); }
+[data-theme="slate"] .nav-item:hover,
+[data-theme="slate"] .nav-item.active { background: rgba(133,183,235,0.07); }
+[data-theme="slate"] .card { background: var(--surface); border-color: var(--border); }
+[data-theme="slate"] input,
+[data-theme="slate"] select,
+[data-theme="slate"] textarea { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+[data-theme="slate"] input::placeholder,
+[data-theme="slate"] textarea::placeholder { color: var(--text3); }
+[data-theme="slate"] input:focus,
+[data-theme="slate"] select:focus,
+[data-theme="slate"] textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(133,183,235,.15); }
+[data-theme="slate"] .btn { background: var(--surface2); border-color: var(--border2); color: var(--text); }
+[data-theme="slate"] .btn:hover { background: #404B6E; }
+[data-theme="slate"] .btn-primary { background: var(--accent-dark) !important; border-color: var(--accent-dark) !important; color: white !important; }
+[data-theme="slate"] .btn-primary:hover { background: #2F75BD !important; border-color: #2F75BD !important; }
+[data-theme="slate"] .btn-danger { background: var(--red-bg) !important; border-color: var(--red-border) !important; color: var(--red) !important; }
+[data-theme="slate"] table thead tr { background: var(--surface2); }
+[data-theme="slate"] table tbody tr:hover { background: var(--surface2); }
+[data-theme="slate"] .table-wrap { border-color: var(--border); }
+[data-theme="slate"] .filter-tab { color: var(--text2); border-bottom-color: transparent; }
+[data-theme="slate"] .filter-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="slate"] .filter-tab .tab-badge { background: rgba(133,183,235,0.08); color: var(--text3); }
+[data-theme="slate"] .filter-tab.active .tab-badge { background: var(--blue-bg); color: var(--accent); }
+[data-theme="slate"] .modal-overlay { background: rgba(0,0,0,0.7); }
+[data-theme="slate"] .modal { background: var(--surface); border-color: var(--border); }
+[data-theme="slate"] .modal-header,
+[data-theme="slate"] .modal-footer { background: var(--surface2); border-color: var(--border); }
+[data-theme="slate"] .topbar { background: #20253A; border-color: rgba(133,183,235,0.08); }
+[data-theme="slate"] .nav-section { color: var(--text3); }
+[data-theme="slate"] .nav-user { border-color: var(--border); background: rgba(133,183,235,0.04); }
 
-    // Parse the JSON response. Strip any defensive ``` fences just in case.
-    let parsed: any = null
-    let parseError: string | null = null
-    try {
-      const cleaned = rawText.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "")
-      parsed = JSON.parse(cleaned)
-    } catch (e) {
-      parseError = (e as Error).message
-    }
+/* ─── Pearl White ─────────────────────────────────────────────────────────
+   Minimal variant of Light. Inherits everything from :root (sidebar, cards,
+   text colours, green accent, focus rings, primary button, etc.). Only
+   THREE things change:
+     1. Page background → pure white (#FFFFFF) instead of Light's #F5F4F0
+     2. Warnings (amber) → light-blue
+     3. Danger pills (red) → slightly darker light-blue
+   Delete buttons (.btn-danger) explicitly override back to red because
+   destructive actions need a visual brake regardless of theme.
+   ──────────────────────────────────────────────────────────────────────── */
+[data-theme="pearl"] {
+  --bg:          #FFFFFF;
+  /* Warning (was amber) → mid light-blue */
+  --amber:       #5B9BD5;       --amber-bg:    #EFF6FB;       --amber-border:#C5DEF0;
+  /* Danger pills (was red) → darker light-blue. Note .btn-danger overrides
+     this back to hardcoded red below — destructive buttons stay red. */
+  --red:         #0C447C;       --red-bg:      #DCE9F5;       --red-border: #B5D4F4;
+}
+[data-theme="pearl"] body { background: var(--bg); }
+/* Delete/destructive buttons keep red even though --red has been
+   repurposed for danger pills. Hardcoded values match :root's red so
+   visual behaviour is identical to other themes. */
+[data-theme="pearl"] .btn-danger { background: #FCEBEB !important; border-color: #F7C1C1 !important; color: #A32D2D !important; }
 
-    // Sanitize building_ordinals: only allow ordinals that exist in the
-    // supplied buildings list. Guard against AI hallucinations.
-    let cleanedBuildingOrdinals: number[] | null = null
-    if (Array.isArray(buildings) && buildings.length > 0) {
-      const validOrdinals = new Set(buildings.map(b => b.ordinal))
-      if (Array.isArray(parsed?.building_ordinals)) {
-        cleanedBuildingOrdinals = parsed.building_ordinals
-          .map((n: any) => Number(n))
-          .filter((n: number) => Number.isFinite(n) && validOrdinals.has(n))
-        // Empty array = "covers whole project" — represent that as null
-        // for consistency with NULL in the database.
-        if (cleanedBuildingOrdinals.length === 0) cleanedBuildingOrdinals = null
-      }
-    }
-
-    return new Response(JSON.stringify({
-      ok: !parseError,
-      vendor_name: parsed?.vendor_name || null,
-      amount: parsed?.amount != null ? Number(parsed.amount) : null,
-      currency: parsed?.currency || null,
-      received_date: parsed?.received_date || null,
-      validity_days: parsed?.validity_days != null ? Number(parsed.validity_days) : null,
-      notes: parsed?.notes || null,
-      building_ordinals: cleanedBuildingOrdinals,
-      confidence: parsed?.confidence || "unknown",
-      raw_response: rawText,
-      parse_error: parseError,
-      model: data?.model,
-      usage: data?.usage,
-    }), { headers: { ...CORS, "Content-Type": "application/json" } })
-
-  } catch (err) {
-    console.error("[parse-quote-pdf]", err)
-    return new Response(JSON.stringify({
-      ok: false,
-      error: (err as Error).message,
-    }), { status: 500, headers: { ...CORS, "Content-Type": "application/json" } })
-  }
-})
+html { transition: background-color 0.2s, color 0.2s; }
