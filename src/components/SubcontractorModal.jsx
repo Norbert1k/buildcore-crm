@@ -4,12 +4,12 @@ import { TRADES, DESIGN_TEAM_TRADES, BOTH_TRADES, SUB_STATUSES } from '../lib/ut
 import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
 
-export default function SubcontractorModal({ sub, onClose, onSaved, defaultCategory }) {
+export default function SubcontractorModal({ sub, onClose, onSaved, defaultCategory, prefillName }) {
   const { profile } = useAuth()
   const editing = !!sub
 
   const [form, setForm] = useState({
-    company_name: sub?.company_name || '',
+    company_name: sub?.company_name || prefillName || '',
     contact_name: sub?.contact_name || '',
     contact_role: sub?.contact_role || '',
     trade: sub?.trade || TRADES[0],
@@ -47,14 +47,14 @@ export default function SubcontractorModal({ sub, onClose, onSaved, defaultCateg
     const payload = { ...form }
     let result
     if (editing) {
-      result = await supabase.from('subcontractors').update(payload).eq('id', sub.id)
+      result = await supabase.from('subcontractors').update(payload).eq('id', sub.id).select().single()
     } else {
       payload.created_by = profile?.id
-      result = await supabase.from('subcontractors').insert(payload)
+      result = await supabase.from('subcontractors').insert(payload).select().single()
     }
     setSaving(false)
     if (result.error) { setErrors({ _global: result.error.message }); return }
-    onSaved()
+    onSaved(result.data)
   }
 
   const isDesignTeam = form.category === 'design_team' || defaultCategory === 'design_team'
