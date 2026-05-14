@@ -59,9 +59,10 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
   const [vendors, setVendors] = useState([])
   const [files, setFiles] = useState([])
   const [loading, setLoading] = useState(true)
-  // Inline file preview state — same pattern as TaskDetail.
-  const [filePreview, setFilePreview] = useState(null)
-  const [filePreviewUrl, setFilePreviewUrl] = useState(null)
+  // Lightbox state — list mode. previewIndex is the index into
+  // previewFiles (which is recomputed in render to be all visible-category
+  // files in display order). null means lightbox is closed.
+  const [previewIndex, setPreviewIndex] = useState(null)
 
   // ESC key + body scroll lock.
   useEffect(() => {
@@ -133,13 +134,13 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
     }
   }
 
-  function previewFile(file) {
-    setFilePreview(file)
-    setFilePreviewUrl(null)
-    supabase.storage.from('task-files').createSignedUrl(file.storage_path, 3600).then(({ data }) => {
-      if (data?.signedUrl) setFilePreviewUrl(data.signedUrl)
-      else { setFilePreview(null); alert('Could not load file preview') }
-    })
+  // URL fetcher passed into FileLightbox. Memoized via useRef-style
+  // approach (just an inline function is fine — re-creating on every
+  // render doesn't trigger re-fetch because the lightbox keys URLs by
+  // file.id in its cache).
+  async function getSignedUrl(file) {
+    const { data } = await supabase.storage.from('task-files').createSignedUrl(file.storage_path, 3600)
+    return data?.signedUrl || null
   }
 
   async function downloadFile(file) {
@@ -169,6 +170,12 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
   for (const f of files) {
     if (filesByCategory.has(f.category)) filesByCategory.get(f.category).push(f)
   }
+
+  // Flat list of all visible files in display order (Quotes → Drawings →
+  // Emails). The lightbox list mode navigates through this; clicking a
+  // file gives its index here.
+  const visibleFiles = []
+  for (const cat of VISIBLE_CATEGORIES) visibleFiles.push(...filesByCategory.get(cat.value))
 
   const assigneeNames = assignees.map(a => a.profiles?.full_name).filter(Boolean).join(', ')
 
@@ -338,7 +345,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                                 </div>
                                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                                   {isViewable && (
-                                    <button className="btn btn-sm" onClick={() => previewFile(f)} title="View">👁</button>
+                                    <button className="btn btn-sm" onClick={() => setPreviewIndex(visibleFiles.indexOf(f))} title="View">👁</button>
                                   )}
                                   <button className="btn btn-sm" onClick={() => downloadFile(f)} title="Download">⬇</button>
                                 </div>
@@ -357,13 +364,15 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
         </div>
       </div>
 
-      {/* File preview lightbox */}
-      {filePreview && (
+      {/* File preview lightbox — list mode, flick across all visible-category files */}
+      {previewIndex !== null && (
         <FileLightbox
-          signedUrl={filePreviewUrl}
-          fileName={filePreview.file_name}
-          onClose={() => { setFilePreview(null); setFilePreviewUrl(null) }}
-          onDownload={filePreviewUrl ? () => downloadFile(filePreview) : null}
+          files={visibleFiles}
+          currentIndex={previewIndex}
+          onIndexChange={setPreviewIndex}
+          getSignedUrl={getSignedUrl}
+          onClose={() => setPreviewIndex(null)}
+          onDownload={(file) => downloadFile(file)}
         />
       )}
     </>
