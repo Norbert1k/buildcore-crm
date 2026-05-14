@@ -5,6 +5,8 @@ import { useAuth } from '../lib/auth'
 import { sortBy, formatDate } from '../lib/utils'
 import { Spinner, Pill, Modal, Field, IconChevron, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import FileLightbox from '../components/FileLightbox'
+import { SupplierModal } from './Suppliers'
+import SubcontractorModal from '../components/SubcontractorModal'
 
 const PRIORITIES = {
   high:   { label: 'High',   color: '#c00' },
@@ -80,6 +82,10 @@ export default function TaskDetail() {
   const [quoteModal, setQuoteModal] = useState(null)
   const [savingQuote, setSavingQuote] = useState(false)
   const [extractingQuote, setExtractingQuote] = useState(false)
+  // Vendor creation. When non-null, holds { kind, prefillName } and
+  // triggers SupplierModal or SubcontractorModal to render pre-filled.
+  // kind is 'supplier' | 'subcontractor' | 'design_team'.
+  const [createVendor, setCreateVendor] = useState(null)
   // Drag-and-drop. Tracks whether files are currently being dragged over
   // the page so we can show a full-page drop overlay.
   const [dragOver, setDragOver] = useState(false)
@@ -583,31 +589,40 @@ export default function TaskDetail() {
     load()
   }
 
-  // Create a supplier from the current freetext vendor name, then link
-  // the form to the new supplier_id. Called from the "Create supplier"
-  // button next to the freetext input when vendor_kind === 'freetext'.
-  async function createSupplierFromFreetext() {
+  // Open the inline vendor-creation modal pre-filled with the typed
+  // freetext name. `kind` selects which modal to open. The modal
+  // calls handleVendorCreated when saved, which links the new record
+  // to the in-progress quote.
+  function openVendorCreator(kind) {
     const name = quoteModal?.vendor_name_text?.trim()
     if (!name) return
-    if (!window.confirm(`Create a new supplier "${name}"?`)) return
-    const { data, error } = await supabase
-      .from('suppliers')
-      .insert({ company_name: name, status: 'active', created_by: profile?.id })
-      .select('id, company_name')
-      .single()
-    if (error) {
-      alert('Could not create supplier: ' + error.message)
-      return
-    }
-    // Add to local vendors list so the picker has it immediately, then
-    // switch the form to use the new supplier_id.
-    setVendors(prev => [...prev, { kind: 'supplier', id: data.id, name: data.company_name }])
+    setCreateVendor({ kind, prefillName: name })
+  }
+
+  // Called from SupplierModal / SubcontractorModal onSaved. Receives
+  // the newly-inserted row. We:
+  //  1. Close the creator modal
+  //  2. Add the row to the local vendors picker list
+  //  3. Switch the quote modal to point at the new vendor by id
+  function handleVendorCreated(newRow) {
+    if (!createVendor) return
+    const vendorKind = createVendor.kind === 'design_team' ? 'subcontractor' : createVendor.kind
+    // Add to picker. Design Team is stored as a subcontractor row with
+    // category='design_team', so the picker treats it as 'subcontractor'.
+    setVendors(prev => [...prev, {
+      kind: vendorKind,
+      id: newRow.id,
+      name: newRow.company_name,
+    }])
+    // Update the quote modal to use the new vendor.
     setQuoteModal(prev => prev ? {
       ...prev,
-      vendor_kind: 'supplier',
-      supplier_id: data.id,
-      vendor_name_text: data.company_name,
+      vendor_kind: vendorKind,
+      supplier_id: vendorKind === 'supplier' ? newRow.id : '',
+      subcontractor_id: vendorKind === 'subcontractor' ? newRow.id : '',
+      vendor_name_text: newRow.company_name,
     } : prev)
+    setCreateVendor(null)
   }
 
   async function downloadFile(file) {
@@ -1264,19 +1279,36 @@ export default function TaskDetail() {
                 </select>
               )}
               {quoteModal.vendor_kind === 'freetext' && (
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div>
                   <input
                     type="text"
                     placeholder="Type vendor name"
                     value={quoteModal.vendor_name_text}
                     onChange={e => setQuoteModal(prev => ({ ...prev, vendor_name_text: e.target.value }))}
-                    style={{ flex: 1 }} />
-                  <button className="btn btn-sm" type="button"
-                    onClick={createSupplierFromFreetext}
-                    disabled={!quoteModal.vendor_name_text?.trim()}
-                    title="Add this vendor to your Suppliers list">
-                    + Create supplier
-                  </button>
+                    style={{ width: '100%' }} />
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                    <button className="btn btn-sm" type="button"
+                      onClick={() => openVendorCreator('supplier')}
+                      disabled={!quoteModal.vendor_name_text?.trim()}
+                      title="Add as a supplier (materials, parts, equipment)">
+                      + Add as Supplier
+                    </button>
+                    <button className="btn btn-sm" type="button"
+                      onClick={() => openVendorCreator('subcontractor')}
+                      disabled={!quoteModal.vendor_name_text?.trim()}
+                      title="Add as a subcontractor (labour, trades)">
+                      + Add as Subcontractor
+                    </button>
+                    <button className="btn btn-sm" type="button"
+                      onClick={() => openVendorCreator('design_team')}
+                      disabled={!quoteModal.vendor_name_text?.trim()}
+                      title="Add as a design team member (architect, engineer, consultant)">
+                      + Add as Design Team
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>
+                    Picking one opens a form to fill in the full vendor details. Once saved, this quote will be linked to the new record.
+                  </div>
                 </div>
               )}
             </div>
@@ -1398,6 +1430,34 @@ export default function TaskDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Inline vendor creator (Supplier / Subcontractor / Design Team) */}
+      {createVendor?.kind === 'supplier' && (
+        <SupplierModal
+          supplier={null}
+          prefillName={createVendor.prefillName}
+          onClose={() => setCreateVendor(null)}
+          onSaved={handleVendorCreated}
+        />
+      )}
+      {createVendor?.kind === 'subcontractor' && (
+        <SubcontractorModal
+          sub={null}
+          prefillName={createVendor.prefillName}
+          defaultCategory="subcontractor"
+          onClose={() => setCreateVendor(null)}
+          onSaved={handleVendorCreated}
+        />
+      )}
+      {createVendor?.kind === 'design_team' && (
+        <SubcontractorModal
+          sub={null}
+          prefillName={createVendor.prefillName}
+          defaultCategory="design_team"
+          onClose={() => setCreateVendor(null)}
+          onSaved={handleVendorCreated}
+        />
       )}
 
       {/* File preview lightbox — PDFs / images / Office docs */}
