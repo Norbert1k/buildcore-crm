@@ -3,11 +3,11 @@ import { useNavigate, useParams, useLocation, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { sortBy, formatDate } from '../lib/utils'
+import { resolveBuildings } from '../lib/buildings'
 import { Spinner, Pill, Modal, Field, IconChevron, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import FileLightbox from '../components/FileLightbox'
 import { SupplierModal } from './Suppliers'
 import SubcontractorModal from '../components/SubcontractorModal'
-
 const PRIORITIES = {
   high:   { label: 'High',   color: '#c00' },
   medium: { label: 'Medium', color: '#b87a00' },
@@ -18,13 +18,11 @@ const STATUS_LABELS = {
   working_on:  { label: 'Working On',  cls: 'pill-amber' },
   closed:      { label: 'Closed',      cls: 'pill-gray' },
 }
-
 export default function TaskDetail() {
   const { taskId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const { can, profile } = useAuth()
-
   // Smart back navigation. If we got here from another page in the app
   // (the normal case: user clicked a task row in the Task Tracker), use
   // navigate(-1) so the browser restores the previous URL exactly —
@@ -40,7 +38,6 @@ export default function TaskDetail() {
       navigate('/tasks')
     }
   }
-
   const [task, setTask] = useState(null)
   const [project, setProject] = useState(null)
   const [assignees, setAssignees] = useState([])
@@ -49,7 +46,6 @@ export default function TaskDetail() {
   const [activity, setActivity] = useState([])
   const [allUsers, setAllUsers] = useState([])
   const [loading, setLoading] = useState(true)
-
   const [noteText, setNoteText] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -66,7 +62,6 @@ export default function TaskDetail() {
   const [editingNoteId, setEditingNoteId] = useState(null)
   const [editingNoteText, setEditingNoteText] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
-
   // ─── Quotes state (Step 3) ──────────────────────────────────────────────
   // List of task_quotes for this task, ordered with the lowest amount
   // first so the comparison card naturally shows the cheapest at the
@@ -93,9 +88,11 @@ export default function TaskDetail() {
   // FileLightbox can render. Mirrors the ProjectDocumentation pattern.
   const [filePreview, setFilePreview] = useState(null)
   const [filePreviewUrl, setFilePreviewUrl] = useState(null)
-
+  // Multi-building project structure. Empty array = single-building
+  // project (no per-quote building picker shown). Populated from
+  // resolveBuildings() on load.
+  const [buildings, setBuildings] = useState([])
   useEffect(() => { load() }, [taskId])
-
   async function load() {
     setLoading(true)
     try {
@@ -121,7 +118,6 @@ export default function TaskDetail() {
         supabase.from('subcontractors').select('id, company_name, category').order('company_name'),
       ])
       if (taskRes.error) { console.error('[TaskDetail] task error:', taskRes.error); setLoading(false); return }
-
       setTask(taskRes.data)
       setAssignees(asgRes.data || [])
       setNotes(notesRes.data || [])
@@ -129,7 +125,6 @@ export default function TaskDetail() {
       setActivity(actRes.data || [])
       setAllUsers(sortBy(usersRes.data || [], 'full_name'))
       setQuotes(quotesRes.data || [])
-
       // Tag and merge the vendor lists. The picker renders a single
       // <select> per kind. Subcontractors with category='design_team' go
       // ONLY into the design_team list, subcontractors with 'both' show
@@ -150,17 +145,23 @@ export default function TaskDetail() {
         }
       }
       setVendors([...supplierList, ...subList])
-
       if (taskRes.data?.project_id) {
         const { data: proj } = await supabase.from('projects').select('id, project_name, project_ref, status').eq('id', taskRes.data.project_id).single()
         setProject(proj)
+        // Resolve multi-building structure. [] for single-building.
+        try {
+          const bs = await resolveBuildings(supabase, taskRes.data.project_id)
+          setBuildings(bs || [])
+        } catch (e) {
+          console.warn('[TaskDetail] resolveBuildings error', e)
+          setBuildings([])
+        }
       }
     } catch (e) {
       console.error('[TaskDetail] load error:', e)
     }
     setLoading(false)
   }
-
   const isAssignee = assignees.some(a => a.user_id === profile?.id)
   const isAdmin = profile?.role === 'admin'
   // All task actions require being an assignee (or admin)
@@ -171,7 +172,6 @@ export default function TaskDetail() {
   const canDeleteNote = (note) => note.author_id === profile?.id || isAdmin
   const canEditNote = (note) => note.author_id === profile?.id || isAdmin
   const canDeleteFile = (file) => file.uploaded_by === profile?.id || isAdmin
-
   // Window-level drag-and-drop. Drop files anywhere on the page to
   // upload them. PDFs detected as quotes also trigger AI extraction
   // automatically, so the user can drop a quote PDF and immediately
@@ -183,7 +183,6 @@ export default function TaskDetail() {
   // blanks the whole page.
   useEffect(() => {
     if (!canUpload) return undefined
-
     function handleDragEnter(e) {
       if (e.dataTransfer?.types?.includes('Files')) {
         e.preventDefault()
@@ -226,7 +225,6 @@ export default function TaskDetail() {
         }
       }
     }
-
     window.addEventListener('dragenter', handleDragEnter)
     window.addEventListener('dragover', handleDragOver)
     window.addEventListener('dragleave', handleDragLeave)
@@ -239,17 +237,14 @@ export default function TaskDetail() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId, canUpload])
-
   function startEditNote(note) {
     setEditingNoteId(note.id)
     setEditingNoteText(note.note || '')
   }
-
   function cancelEditNote() {
     setEditingNoteId(null)
     setEditingNoteText('')
   }
-
   async function saveEditNote() {
     if (!editingNoteId) return
     const trimmed = editingNoteText.trim()
@@ -273,7 +268,6 @@ export default function TaskDetail() {
     setSavingEdit(false)
     await load()
   }
-
   async function addNote() {
     if (!noteText.trim()) return
     setSavingNote(true)
@@ -285,13 +279,11 @@ export default function TaskDetail() {
     await load()
     setSavingNote(false)
   }
-
   async function deleteNote(noteId) {
     if (!window.confirm('Delete this note?')) return
     await supabase.from('task_notes').delete().eq('id', noteId)
     load()
   }
-
   async function uploadFiles(fileList) {
     if (!fileList || fileList.length === 0) return
     setUploading(true)
@@ -318,7 +310,6 @@ export default function TaskDetail() {
     setUploading(false)
     load()
   }
-
   // Change the category on an existing file. Called from the dropdown
   // attached to each file row. Re-loads on success so the file moves
   // groups in the categorised view.
@@ -334,7 +325,6 @@ export default function TaskDetail() {
     }
     load()
   }
-
   // AI-extract quote fields from a PDF. Two call paths:
   //   1. After upload of a file in 'quote' category — open modal pre-filled
   //   2. From the modal itself when user has linked a task_file
@@ -358,7 +348,6 @@ export default function TaskDetail() {
       } else {
         throw new Error('No file provided')
       }
-
       // Base64-encode. Use FileReader for browser-safe encoding of binary.
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -371,13 +360,17 @@ export default function TaskDetail() {
         reader.onerror = () => reject(reader.error || new Error('Read failed'))
         reader.readAsDataURL(blob)
       })
-
       const { data, error } = await supabase.functions.invoke('parse-quote-pdf', {
-        body: { pdf_base64: base64 },
+        body: {
+          pdf_base64: base64,
+          // Tell the AI about the buildings for multi-building projects
+          // so it can identify which ones the quote covers. Edge fn
+          // returns null for single-building (when this is empty).
+          buildings: buildings.map(b => ({ ordinal: b.ordinal, name: b.name })),
+        },
       })
       if (error) throw error
       if (!data?.ok) throw new Error(data?.error || data?.parse_error || 'Could not parse the PDF')
-
       // Match extracted vendor name to existing suppliers/subcontractors
       // case-insensitively. If found, switch the form to the matching
       // vendor kind. Otherwise fall back to freetext so the user can
@@ -389,7 +382,6 @@ export default function TaskDetail() {
         matched = vendors.find(v => v.name.toLowerCase() === lc)
           || vendors.find(v => v.name.toLowerCase().includes(lc) || lc.includes(v.name.toLowerCase()))
       }
-
       // Pre-fill the modal. If the modal is already open (user clicked
       // "Extract from PDF" from inside), preserve any id they're editing
       // and merge — otherwise create a fresh form.
@@ -406,6 +398,7 @@ export default function TaskDetail() {
           notes: '',
           task_file_id: '',
           vendor_kind: 'supplier',
+          building_ordinals: [],
         }
         return {
           ...base,
@@ -420,6 +413,13 @@ export default function TaskDetail() {
           currency: data.currency || base.currency || 'GBP',
           received_date: data.received_date || base.received_date,
           notes: data.notes || base.notes,
+          // AI-detected building ordinals. Null = "covers whole project"
+          // or could-not-determine — leave as-is (empty). Otherwise
+          // overwrite with the detected list (sanitized server-side
+          // against the buildings we sent).
+          building_ordinals: Array.isArray(data.building_ordinals) && data.building_ordinals.length > 0
+            ? data.building_ordinals
+            : base.building_ordinals || [],
           // Mark which fields were AI-filled so the modal can badge them.
           _aiFilled: {
             vendor_name: !!extractedName,
@@ -427,6 +427,7 @@ export default function TaskDetail() {
             currency: !!data.currency,
             received_date: !!data.received_date,
             notes: !!data.notes,
+            building_ordinals: Array.isArray(data.building_ordinals) && data.building_ordinals.length > 0,
           },
           _aiConfidence: data.confidence || 'unknown',
         }
@@ -437,16 +438,13 @@ export default function TaskDetail() {
       setExtractingQuote(false)
     }
   }
-
   async function deleteFile(file) {
     if (!window.confirm(`Delete ${file.file_name}?`)) return
     await supabase.storage.from('task-files').remove([file.storage_path])
     await supabase.from('task_files').delete().eq('id', file.id)
     load()
   }
-
   // ─── Quote handlers (Step 3) ────────────────────────────────────────────
-
   // Open the quote modal. If `existing` is passed it's an edit; otherwise
   // a fresh new-quote form. The form state lives inside `quoteModal`
   // so the modal can render a controlled form against it.
@@ -476,6 +474,9 @@ export default function TaskDetail() {
         status: existing.status || 'pending',
         notes: existing.notes || '',
         task_file_id: existing.task_file_id || '',
+        // Multi-building: which buildings does this quote cover.
+        // Empty array = covers whole project (the default).
+        building_ordinals: Array.isArray(existing.building_ordinals) ? [...existing.building_ordinals] : [],
       })
     } else {
       setQuoteModal({
@@ -490,10 +491,10 @@ export default function TaskDetail() {
         status: 'pending',
         notes: '',
         task_file_id: '',
+        building_ordinals: [],   // empty = covers whole project
       })
     }
   }
-
   // Save (insert or update) the quote. Handles:
   //  - resolving vendor_name_text from the picked supplier/subcontractor
   //  - auto-rejecting siblings when status transitions to 'accepted'
@@ -523,14 +524,12 @@ export default function TaskDetail() {
         setSavingQuote(false)
         return
       }
-
       const amountNum = q.amount === '' ? null : Number(q.amount)
       if (q.amount !== '' && (Number.isNaN(amountNum) || amountNum < 0)) {
         alert('Amount must be a positive number, or leave blank.')
         setSavingQuote(false)
         return
       }
-
       const payload = {
         task_id: taskId,
         task_file_id: q.task_file_id || null,
@@ -542,8 +541,12 @@ export default function TaskDetail() {
         received_date: q.received_date || null,
         status: q.status || 'pending',
         notes: q.notes?.trim() || null,
+        // Multi-building: store as INT[] or NULL.
+        // Empty/missing array = covers whole project → store as NULL.
+        building_ordinals: (Array.isArray(q.building_ordinals) && q.building_ordinals.length > 0)
+          ? q.building_ordinals
+          : null,
       }
-
       let savedId = q._id
       if (q._id) {
         const { error } = await supabase.from('task_quotes').update(payload).eq('id', q._id)
@@ -554,7 +557,6 @@ export default function TaskDetail() {
         if (error) throw error
         savedId = data?.id
       }
-
       // Auto-reject sibling quotes when this one is now accepted.
       // We update any sibling on the same task that's still pending or
       // expired (NOT already-rejected — leave history alone) to
@@ -566,7 +568,6 @@ export default function TaskDetail() {
           .neq('id', savedId)
           .in('status', ['pending', 'expired'])
       }
-
       // Log activity so the timeline records the action.
       await supabase.from('task_activity').insert({
         task_id: taskId,
@@ -578,7 +579,6 @@ export default function TaskDetail() {
           status: payload.status,
         },
       })
-
       setQuoteModal(null)
       load()
     } catch (err) {
@@ -587,7 +587,6 @@ export default function TaskDetail() {
       setSavingQuote(false)
     }
   }
-
   // Delete a quote. Confirms first (irreversible).
   async function deleteQuote(quote) {
     if (!window.confirm(`Delete the quote from ${quote.vendor_name_text}?`)) return
@@ -604,7 +603,6 @@ export default function TaskDetail() {
     })
     load()
   }
-
   // Open the inline vendor-creation modal pre-filled with the typed
   // freetext name. `kind` selects which modal to open. The modal
   // calls handleVendorCreated when saved, which links the new record
@@ -614,7 +612,6 @@ export default function TaskDetail() {
     if (!name) return
     setCreateVendor({ kind, prefillName: name })
   }
-
   // Called from SupplierModal / SubcontractorModal onSaved. Receives
   // the newly-inserted row. We:
   //  1. Close the creator modal
@@ -644,7 +641,6 @@ export default function TaskDetail() {
     } : prev)
     setCreateVendor(null)
   }
-
   async function downloadFile(file) {
     const { data } = await supabase.storage.from('task-files').createSignedUrl(file.storage_path, 60)
     if (!data?.signedUrl) return
@@ -666,7 +662,6 @@ export default function TaskDetail() {
       a.href = data.signedUrl; a.download = file.file_name; a.click()
     }
   }
-
   async function previewFile(file) {
     const isEml = file.file_name.toLowerCase().endsWith('.eml')
     if (isEml) {
@@ -698,7 +693,6 @@ export default function TaskDetail() {
       alert('Could not load file preview')
     }
   }
-
   async function changeStatus(newStatus) {
     const updates = { status: newStatus }
     if (newStatus === 'closed') { updates.closed_at = new Date().toISOString(); updates.closed_by = profile?.id }
@@ -709,19 +703,16 @@ export default function TaskDetail() {
     })
     load()
   }
-
   async function claimTask() {
     await supabase.from('task_assignees').insert({ task_id: taskId, user_id: profile?.id })
     await supabase.from('task_activity').insert({ task_id: taskId, actor_id: profile?.id, action: 'claimed' })
     load()
   }
-
   async function unassignSelf() {
     await supabase.from('task_assignees').delete().eq('task_id', taskId).eq('user_id', profile?.id)
     await supabase.from('task_activity').insert({ task_id: taskId, actor_id: profile?.id, action: 'unassigned' })
     load()
   }
-
   async function saveEdit() {
     const { error } = await supabase.from('tasks').update({
       title: editForm.title?.trim(),
@@ -732,18 +723,15 @@ export default function TaskDetail() {
     setShowEdit(false)
     load()
   }
-
   async function deleteTask() {
     const { error } = await supabase.from('tasks').delete().eq('id', taskId)
     if (error) { alert('Delete failed: ' + error.message); return }
     navigate('/tasks')
   }
-
   function openAssignModal() {
     setSelectedAssignees(new Set(assignees.map(a => a.user_id)))
     setShowAssignModal(true)
   }
-
   async function saveAssignees() {
     setSavingAssign(true)
     const current = new Set(assignees.map(a => a.user_id))
@@ -775,7 +763,6 @@ export default function TaskDetail() {
     setSavingAssign(false)
     load()
   }
-
   if (loading) return <Spinner />
   if (!task) return (
     <div>
@@ -783,14 +770,11 @@ export default function TaskDetail() {
       <div className="card card-pad">Task not found.</div>
     </div>
   )
-
   const pri = PRIORITIES[task.priority] || PRIORITIES.medium
   const st = STATUS_LABELS[task.status] || STATUS_LABELS.active
-
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={goBack}><IconChevron size={13} dir="left" /> Back to Task Tracker</button>
-
       {/* Header */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
@@ -820,7 +804,6 @@ export default function TaskDetail() {
             )}
           </div>
         </div>
-
         {project && (
           <div style={{ fontSize: 12, color: 'var(--text2)', paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
             <strong style={{ color: 'var(--text3)' }}>Project:</strong>{' '}
@@ -829,14 +812,12 @@ export default function TaskDetail() {
             </Link>
           </div>
         )}
-
         {task.description && (
           <div style={{ marginTop: 12, padding: 12, background: 'var(--surface2)', borderRadius: 6, fontSize: 13, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
             {task.description}
           </div>
         )}
       </div>
-
       {/* Assignees card */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -861,7 +842,6 @@ export default function TaskDetail() {
           </div>
         )}
       </div>
-
       {/* Notes */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Progress Notes</div>
@@ -929,7 +909,6 @@ export default function TaskDetail() {
           </div>
         )}
       </div>
-
       {/* Quote comparison (Step 3) */}
       {(() => {
         const canManageQuotes = ['admin', 'project_manager', 'operations_manager', 'site_manager', 'document_controller'].includes(profile?.role)
@@ -1009,6 +988,21 @@ export default function TaskDetail() {
                                   : <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Sub</span>
                                 )}
                               </div>
+                              {/* Multi-building chips */}
+                              {buildings.length > 1 && Array.isArray(q.building_ordinals) && q.building_ordinals.length > 0 && (
+                                <div style={{ display: 'flex', gap: 3, marginTop: 3, flexWrap: 'wrap' }}>
+                                  {q.building_ordinals.map(ord => {
+                                    const b = buildings.find(b => b.ordinal === ord)
+                                    if (!b) return null
+                                    return (
+                                      <span key={ord} style={{
+                                        background: '#E6F1FB', color: '#0C447C',
+                                        fontSize: 9, padding: '1px 5px', borderRadius: 99,
+                                      }}>{b.name}</span>
+                                    )
+                                  })}
+                                </div>
+                              )}
                               {q.notes && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{q.notes.length > 80 ? q.notes.slice(0, 80) + '…' : q.notes}</div>}
                             </td>
                             <td style={{ padding: '8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -1056,7 +1050,6 @@ export default function TaskDetail() {
           </div>
         )
       })()}
-
       {/* Files */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -1179,7 +1172,6 @@ export default function TaskDetail() {
           </div>
         )}
       </div>
-
       {/* Activity log */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Activity</div>
@@ -1200,7 +1192,6 @@ export default function TaskDetail() {
           </div>
         )}
       </div>
-
       {/* Edit modal */}
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Task" size="sm"
         footer={<>
@@ -1217,7 +1208,6 @@ export default function TaskDetail() {
           </select></Field>
         </div>
       </Modal>
-
       {/* Assignees modal */}
       <Modal open={showAssignModal} onClose={() => !savingAssign && setShowAssignModal(false)} title="Manage Assignees" size="sm"
         footer={<>
@@ -1249,7 +1239,6 @@ export default function TaskDetail() {
           })}
         </div>
       </Modal>
-
       {/* Quote modal (Step 3) */}
       <Modal open={!!quoteModal} onClose={() => !savingQuote && setQuoteModal(null)}
         title={quoteModal?._id ? 'Edit quote' : 'Add quote'} size="md"
@@ -1353,7 +1342,6 @@ export default function TaskDetail() {
                 </div>
               )}
             </div>
-
             {/* Amount + currency */}
             <Field label="Amount">
               <input type="number" min="0" step="0.01"
@@ -1368,7 +1356,6 @@ export default function TaskDetail() {
                 <option value="USD">USD $</option>
               </select>
             </Field>
-
             {/* Date + status */}
             <Field label="Received date">
               <input type="date" value={quoteModal.received_date}
@@ -1382,7 +1369,6 @@ export default function TaskDetail() {
                 <option value="expired">Expired</option>
               </select>
             </Field>
-
             {/* Attached file (only quote-category files for this task) */}
             <div className="full">
               <Field label="Attached PDF (optional)">
@@ -1409,7 +1395,6 @@ export default function TaskDetail() {
                 Only files in the Quotes category appear here. Upload a quote PDF first if you want to link it.
               </div>
             </div>
-
             {/* AI extraction summary banner */}
             {quoteModal._aiFilled && Object.values(quoteModal._aiFilled).some(Boolean) && (
               <div className="full" style={{
@@ -1424,7 +1409,6 @@ export default function TaskDetail() {
                 <div style={{ marginTop: 2 }}>Review the highlighted fields and adjust before saving.</div>
               </div>
             )}
-
             {/* Notes */}
             <div className="full">
               <Field label={
@@ -1436,7 +1420,65 @@ export default function TaskDetail() {
                   style={{ minHeight: 60 }} />
               </Field>
             </div>
-
+            {/* Building picker — only for multi-building projects.
+                Single-building projects (buildings.length <= 1) skip
+                this entirely so the modal stays compact. */}
+            {buildings.length > 1 && (
+              <div className="full">
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>
+                    Buildings covered
+                    {quoteModal._aiFilled?.building_ordinals && (
+                      <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 9, padding: '1px 6px', borderRadius: 99, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>AI</span>
+                    )}
+                  </span>
+                  <span style={{ color: 'var(--text3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
+                    {(quoteModal.building_ordinals?.length || 0)} of {buildings.length} selected
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {buildings.map(b => {
+                    const sel = (quoteModal.building_ordinals || []).includes(b.ordinal)
+                    return (
+                      <label key={b.ordinal} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '6px 10px',
+                        background: sel ? '#E6F1FB' : 'var(--surface2)',
+                        color: sel ? '#0C447C' : 'var(--text2)',
+                        borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                        border: sel ? '1px solid #B5D4F4' : '1px solid transparent',
+                      }}>
+                        <input type="checkbox"
+                          checked={sel}
+                          onChange={(e) => {
+                            const next = new Set(quoteModal.building_ordinals || [])
+                            if (e.target.checked) next.add(b.ordinal)
+                            else next.delete(b.ordinal)
+                            setQuoteModal(prev => ({
+                              ...prev,
+                              building_ordinals: Array.from(next).sort((a, b) => a - b),
+                              // Clear the AI badge on this field once user
+                              // edits it manually.
+                              _aiFilled: prev._aiFilled
+                                ? { ...prev._aiFilled, building_ordinals: false }
+                                : undefined,
+                            }))
+                          }}
+                          style={{
+                            appearance: 'auto', WebkitAppearance: 'auto',
+                            width: 'auto', padding: 0, margin: 0,
+                            border: 'none', background: 'transparent',
+                          }} />
+                        {b.name}
+                      </label>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>
+                  Leave all unticked if the quote covers the whole project.
+                </div>
+              </div>
+            )}
             {/* Auto-reject hint */}
             {quoteModal.status === 'accepted' && quotes.filter(q => q.id !== quoteModal._id && (q.status === 'pending' || q.status === 'expired')).length > 0 && (
               <div className="full" style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--surface2)', padding: 8, borderRadius: 4, marginTop: -4 }}>
@@ -1448,9 +1490,7 @@ export default function TaskDetail() {
           </div>
         )}
       </Modal>
-
       <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={deleteTask} title="Delete task" message="Permanently delete this task along with all its notes, files, and activity log?" danger />
-
       {/* EML preview overlay */}
       {/* Drag-and-drop overlay */}
       {dragOver && (
@@ -1472,7 +1512,6 @@ export default function TaskDetail() {
           </div>
         </div>
       )}
-
       {/* Inline vendor creator (Supplier / Subcontractor / Design Team) */}
       {createVendor?.kind === 'supplier' && (
         <SupplierModal
@@ -1500,7 +1539,6 @@ export default function TaskDetail() {
           onSaved={handleVendorCreated}
         />
       )}
-
       {/* File preview lightbox — PDFs / images / Office docs */}
       {filePreview && (
         <FileLightbox
@@ -1510,14 +1548,11 @@ export default function TaskDetail() {
           onDownload={filePreviewUrl ? () => downloadFile(filePreview) : null}
         />
       )}
-
       {emlPreview && <EmlViewer file={emlPreview.file} parsed={emlPreview.parsed} onClose={() => setEmlPreview(null)} />}
     </div>
   )
 }
-
 // ─── Helpers ────────────────────────────────────────────────
-
 // File category metadata. Order here defines display order in the
 // categorised view. Keep this list in sync with the CHECK constraint
 // on task_files.category in step1-schema.sql.
@@ -1528,7 +1563,6 @@ const CATEGORIES = [
   { value: 'email',   label: 'Emails',   icon: '✉️', emptyLabel: 'No emails attached.' },
   { value: 'other',   label: 'Other',    icon: '📁', emptyLabel: 'No other files attached.' },
 ]
-
 // Detect a sensible initial category from filename + mime type. Mirror
 // of the SQL backfill in step1-schema.sql — keep them in sync so the
 // server and client agree on what's a 'quote' vs 'drawing'. Returns
@@ -1542,14 +1576,12 @@ function detectFileCategory(fileName, mimeType) {
   if (/\.(dwg|dxf)$/i.test(lower) || /(drawing|^ga[ _-]|layout|plan|elevation|section)/i.test(lower)) return 'drawing'
   return 'other'
 }
-
 function fmtBytes(b) {
   if (!b) return ''
   if (b < 1024) return b + ' B'
   if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB'
   return (b / 1024 / 1024).toFixed(1) + ' MB'
 }
-
 function formatActivityAction(a) {
   const d = a.details || {}
   switch (a.action) {
@@ -1565,7 +1597,6 @@ function formatActivityAction(a) {
     default: return a.action
   }
 }
-
 // Simple RFC 822 email parser — handles plain text and quoted-printable.
 // For complex multipart MIME with base64 attachments, we still show the raw headers + text part.
 function parseEml(text) {
@@ -1573,7 +1604,6 @@ function parseEml(text) {
   if (headerEnd < 0) return { headers: {}, body: text }
   const headerText = text.slice(0, headerEnd)
   const body = text.slice(headerEnd).replace(/^\r?\n\r?\n/, '')
-
   // Parse headers (naive, but good enough)
   const headers = {}
   const lines = headerText.split(/\r?\n/)
@@ -1589,7 +1619,6 @@ function parseEml(text) {
       }
     }
   }
-
   // Try to find text/plain or text/html body
   let displayBody = body
   const contentType = headers['content-type'] || ''
@@ -1607,14 +1636,12 @@ function parseEml(text) {
       displayBody = subEnd >= 0 ? chosen.slice(subEnd).replace(/^\r?\n\r?\n/, '') : chosen
     }
   }
-
   // Decode quoted-printable
   if (/quoted-printable/i.test(headers['content-transfer-encoding'] || '') || /quoted-printable/i.test(contentType)) {
     displayBody = displayBody
       .replace(/=\r?\n/g, '')
       .replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
   }
-
   return {
     from: headers.from || '',
     to: headers.to || '',
@@ -1625,7 +1652,6 @@ function parseEml(text) {
     isHtml: /content-type:\s*text\/html/i.test(contentType) && !/multipart/i.test(contentType),
   }
 }
-
 function EmlViewer({ file, parsed, onClose }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
