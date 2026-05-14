@@ -7,7 +7,6 @@ import ProgressReportEditor, { generateProgressReportPdf } from './ProgressRepor
 import ProjectPhotos from './ProjectPhotos'
 import FileLightbox from './FileLightbox'
 import CffGeneratorModal from './CffGeneratorModal'
-import { resolveBuildings } from '../lib/buildings'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -841,11 +840,15 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
 // ── Files Grid (shared renderer) ─────────────────────────────────────────────
 function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, onSelect, onDrop, onUpload, onGenerateGantt }) {
   if (!files.length) return null
+  // Wrap onPreview so each leaf click also includes the surrounding files
+  // list (for the lightbox's flick-through navigation). Drops the stale url
+  // arg — the lightbox signs URLs itself in list mode.
+  const previewWithList = onPreview ? (file) => onPreview(file, files) : null
   if (viewMode === 'list') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {files.map(f => (
-          <FileListRow key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete}
+          <FileListRow key={f.id} file={f} onPreview={previewWithList} canDelete={canManage} onDelete={onDelete}
             selected={selected.has(f.id)} onSelect={onSelect} />
         ))}
       </div>
@@ -854,7 +857,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8 }}>
       {files.map(f => (
-        <FileCard key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete}
+        <FileCard key={f.id} file={f} onPreview={previewWithList} canDelete={canManage} onDelete={onDelete}
           selected={selected.has(f.id)} onSelect={onSelect} onGenerateGantt={onGenerateGantt} />
       ))}
       {canManage && (
@@ -870,7 +873,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 }
 
 // ── Subfolder Section (recursive — supports nested sub-subfolders) ────────────
-function SubfolderSection({ projectId, projectName, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree, onGenerateGantt = null }) {
+function SubfolderSection({ projectId, projectName, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -1390,8 +1393,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
               subfolder={{ key: cf.folder_key, label: cf.label, custom: true }}
               canManage={canManage} viewMode={viewMode} onPreview={onPreview}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
-              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree}
-              onGenerateGantt={onGenerateGantt} />
+              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree} />
           ))}
 
           {/* Progress Reports (only inside 05-progress-report subfolders, e.g. Merton's Sports Hall) */}
@@ -1484,8 +1486,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             </label>
           ) : files.length > 0 ? (
             <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage}
-              onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles}
-              onGenerateGantt={onGenerateGantt} />
+              onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles} />
           ) : null}
         </div>
       )}
@@ -1538,23 +1539,11 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [files, setFiles] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [selectedSubs, setSelectedSubs] = useState(new Set())
-  const [previewFile, setPreviewFile] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewFiles, setPreviewFiles] = useState(null)  // array of files in the view that's been clicked
+  const [previewIndex, setPreviewIndex] = useState(0)
   const [renamingFolder, setRenamingFolder] = useState(false)
   const [renameFolderVal, setRenameFolderVal] = useState('')
   const [showGantt, setShowGantt] = useState(false)
-  // Multi-building support. projectBuildings is loaded once on mount via
-  // resolveBuildings(); empty array = single-building project (the
-  // current default — clicking Open Live Gantt opens the project-wide
-  // programme directly). When length > 0 the button becomes a dropdown
-  // picker.
-  const [projectBuildings, setProjectBuildings] = useState([])
-  // ganttBuilding is the Building object the user picked, or null for
-  // single-building projects (= project-wide programme).
-  const [ganttBuilding, setGanttBuilding] = useState(null)
-  // Whether the building picker dropdown is open (anchored under the
-  // Open Live Gantt button).
-  const [showBuildingPicker, setShowBuildingPicker] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generatePreview, setGeneratePreview] = useState(null)
   const [pendingGanttTasks, setPendingGanttTasks] = useState(null)
@@ -1575,12 +1564,14 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     try { localStorage.setItem('pdView_' + folder.key, mode) } catch {}
   }
 
-  function openPreview(file, url) {
-    setPreviewFile(file); setPreviewUrl(url || null)
-    if (!url) {
-      supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
-        .then(({ data }) => { if (data?.signedUrl) setPreviewUrl(data.signedUrl) })
-    }
+  function openPreview(file, filesInView) {
+    // filesInView is provided by the FilesGrid wrapper. Find this file's
+    // index in that list; the lightbox in list-mode will let the user
+    // flip through siblings.
+    const list = Array.isArray(filesInView) && filesInView.length > 0 ? filesInView : [file]
+    const idx = Math.max(0, list.findIndex(f => f.id === file.id))
+    setPreviewFiles(list)
+    setPreviewIndex(idx)
   }
 
   const fileCount = allFileCounts?.[folder.key] || 0
@@ -1588,24 +1579,6 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   useEffect(() => { loadCustomSubfolders() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
   useEffect(() => { loadClientVisible() }, [])
-  // Load the per-building structure for this project so the programme
-  // folder's "Open Live Gantt" button knows whether to render a single
-  // direct button (single-building project) or a dropdown picker
-  // (multi-building project). Only fires on the programme folder to
-  // avoid hitting the DB unnecessarily for other folders' card renders.
-  useEffect(() => {
-    if (folder.key !== '06-project-programme') return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const buildings = await resolveBuildings(supabase, projectId)
-        if (!cancelled) setProjectBuildings(buildings)
-      } catch (err) {
-        console.warn('[ProjectDocumentation] resolveBuildings failed:', err)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [projectId, folder.key, treeVersion])
   // Re-fetch when any move happens anywhere in the tree (kills ghost copies)
   useEffect(() => {
     if (treeVersion === 0) return
@@ -1877,14 +1850,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     loadProgressReports()
   }
 
-  async function generateGanttFromPdf(file, building = null) {
+  async function generateGanttFromPdf(file) {
     if (!file?.storage_path) return
-    // Stash the building selection BEFORE kicking off the parser. The
-    // preview modal's "Open in Gantt Editor →" button just calls
-    // setShowGantt(true), which reads ganttBuilding when constructing
-    // the GanttEditor. So setting it here ensures the parsed tasks land
-    // in the right per-building programme. null = project-wide (default).
-    setGanttBuilding(building)
     setGenerating(true)
     try {
       const { data, error } = await supabase.functions.invoke('parse-programme-pdf', {
@@ -2034,78 +2001,13 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   New Progress Report
                 </button>
               )}
-              {folder.key === '06-project-programme' && projectBuildings.length === 0 && (
-                // Single-building project: behave exactly as before.
-                // Opens the project-wide programme (buildingOrdinal=null).
-                <button onClick={(e) => { e.stopPropagation(); setGanttBuilding(null); setShowGantt(true) }}
+              {folder.key === '06-project-programme' && (
+                <button onClick={(e) => { e.stopPropagation(); setShowGantt(true) }}
                   style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
                   title="Open the live editable Gantt chart for this project">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   Open Live Gantt
                 </button>
-              )}
-              {folder.key === '06-project-programme' && projectBuildings.length > 0 && (
-                // Multi-building project: button toggles a dropdown
-                // listing each building. The dropdown is positioned
-                // absolutely below the trigger button; it's contained in
-                // a relatively-positioned wrapper so it follows the
-                // button's location. Click-outside is handled by an
-                // invisible fixed-position overlay underneath.
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setShowBuildingPicker(v => !v) }}
-                    style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4, background: '#534AB7', color: 'white', border: '0.5px solid #534AB7' }}
-                    title="Open the live editable Gantt chart for a building">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    Open Live Gantt
-                    <span style={{ fontSize: 9, opacity: 0.8 }}>▾</span>
-                  </button>
-                  {showBuildingPicker && (
-                    <>
-                      {/* Click-outside catcher. Fixed full-viewport, sits BENEATH
-                          the dropdown menu via lower z-index, closes the menu
-                          when clicked. stopPropagation prevents the click from
-                          re-opening the picker via the parent row handler. */}
-                      <div
-                        onClick={(e) => { e.stopPropagation(); setShowBuildingPicker(false) }}
-                        style={{ position: 'fixed', inset: 0, zIndex: 50 }}
-                      />
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          position: 'absolute', top: 'calc(100% + 4px)', right: 0,
-                          background: 'var(--surface)', border: '0.5px solid var(--border)',
-                          borderRadius: 6, padding: 4, minWidth: 220, zIndex: 51,
-                          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                        }}>
-                        <div style={{ fontSize: 10, color: 'var(--text3)', padding: '6px 10px 4px', fontWeight: 600, letterSpacing: 0.3, textTransform: 'uppercase' }}>
-                          Pick a building
-                        </div>
-                        {projectBuildings.map(b => (
-                          <button
-                            key={b.ordinal}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setGanttBuilding(b)
-                              setShowBuildingPicker(false)
-                              setShowGantt(true)
-                            }}
-                            style={{
-                              display: 'block', width: '100%', textAlign: 'left',
-                              background: 'transparent', border: 0,
-                              borderRadius: 4, padding: '8px 10px',
-                              fontSize: 12, color: 'var(--text)',
-                              cursor: 'pointer',
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface2)' }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
-                            <span style={{ fontWeight: 600 }}>{b.ordinal}. {b.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
               )}
               {folder.key === '02-payment-application' && canManage && fileCount === 0 && (
                 <button onClick={async (e) => {
@@ -2261,26 +2163,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                     if (id === '__folder_deleted__') loadCustomSubfolders()
                     else loadRootFiles()
                   }}
-                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree}
-                  onGenerateGantt={folder.key === '06-project-programme' ? (file) => {
-                    // Detect which building this subfolder belongs to so
-                    // parsed tasks land in the right per-building programme.
-                    // Anchor: the leading ordinal in the subfolder label
-                    // (e.g. "01. Residential" → ordinal 1). Same convention
-                    // used by buildings.js for PA/CSA/CFF matching. If the
-                    // subfolder doesn't match any building (or this is a
-                    // single-building project) the handler runs with
-                    // building=null, which means project-wide programme —
-                    // identical to the top-level button behaviour.
-                    let building = null
-                    const m = (sf.label || '').trim().match(/^(\d{1,3})\s*[.\-)]/)
-                    if (m) {
-                      const ord = parseInt(m[1], 10)
-                      building = projectBuildings.find(b => b.ordinal === ord) || null
-                    }
-                    return generateGanttFromPdf(file, building)
-                  } : null}
-                />
+                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
               </div>
             </div>
           ))}
@@ -2310,12 +2193,20 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
       )}
 
       {/* Preview modal */}
-      {previewFile && (
+      {previewFiles && (
         <FileLightbox
-          signedUrl={previewUrl}
-          fileName={previewFile.file_name}
-          onClose={() => setPreviewFile(null)}
-          onDownload={previewUrl ? () => triggerDownload(previewUrl, previewFile.file_name) : null}
+          files={previewFiles}
+          currentIndex={previewIndex}
+          onIndexChange={setPreviewIndex}
+          getSignedUrl={async (file) => {
+            const { data } = await supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
+            return data?.signedUrl || null
+          }}
+          onClose={() => setPreviewFiles(null)}
+          onDownload={async (file) => {
+            const { data } = await supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 60)
+            if (data?.signedUrl) triggerDownload(data.signedUrl, file.file_name)
+          }}
         />
       )}
 
@@ -2341,11 +2232,9 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         <GanttEditor
           projectId={projectId}
           projectName={projectName || 'Project'}
-          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null); setGanttBuilding(null) }}
+          onClose={() => { setShowGantt(false); setPendingGanttTasks(null); setGeneratePreview(null) }}
           canEdit={canManage}
           initialTasks={pendingGanttTasks}
-          buildingOrdinal={ganttBuilding?.ordinal ?? null}
-          buildingLabel={ganttBuilding?.name ?? null}
         />
       )}
 
