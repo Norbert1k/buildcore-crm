@@ -115,9 +115,10 @@ export default function TaskDetail() {
           .order('amount', { ascending: true, nullsLast: true }),
         // Combined vendor picker source: all suppliers + subcontractors
         // by name. Each list fetched separately so we can preserve the
-        // 'kind' tag client-side.
+        // 'kind' tag client-side. Subcontractor `category` lets us split
+        // design-team members into their own picker bucket.
         supabase.from('suppliers').select('id, company_name').order('company_name'),
-        supabase.from('subcontractors').select('id, company_name').order('company_name'),
+        supabase.from('subcontractors').select('id, company_name, category').order('company_name'),
       ])
       if (taskRes.error) { console.error('[TaskDetail] task error:', taskRes.error); setLoading(false); return }
 
@@ -130,14 +131,24 @@ export default function TaskDetail() {
       setQuotes(quotesRes.data || [])
 
       // Tag and merge the vendor lists. The picker renders a single
-      // <select> but groups options into <optgroup>s by kind. Storing
-      // them as one list with a `kind` field makes that trivial.
+      // <select> per kind. Subcontractors with category='design_team' go
+      // ONLY into the design_team list, subcontractors with 'both' show
+      // in both subcontractor AND design_team, everyone else is just
+      // 'subcontractor'.
       const supplierList = (suppliersRes.data || []).map(s => ({
         kind: 'supplier', id: s.id, name: s.company_name,
       }))
-      const subList = (subsRes.data || []).map(s => ({
-        kind: 'subcontractor', id: s.id, name: s.company_name,
-      }))
+      const subList = []
+      for (const s of (subsRes.data || [])) {
+        if (s.category === 'design_team') {
+          subList.push({ kind: 'design_team', id: s.id, name: s.company_name })
+        } else if (s.category === 'both') {
+          subList.push({ kind: 'subcontractor', id: s.id, name: s.company_name })
+          subList.push({ kind: 'design_team', id: s.id, name: s.company_name })
+        } else {
+          subList.push({ kind: 'subcontractor', id: s.id, name: s.company_name })
+        }
+      }
       setVendors([...supplierList, ...subList])
 
       if (taskRes.data?.project_id) {
@@ -403,7 +414,7 @@ export default function TaskDetail() {
           task_file_id: source.task_file_id || base.task_file_id || '',
           vendor_kind: matched ? matched.kind : 'freetext',
           supplier_id: matched?.kind === 'supplier' ? matched.id : '',
-          subcontractor_id: matched?.kind === 'subcontractor' ? matched.id : '',
+          subcontractor_id: (matched?.kind === 'subcontractor' || matched?.kind === 'design_team') ? matched.id : '',
           vendor_name_text: extractedName || base.vendor_name_text,
           amount: data.amount != null ? String(data.amount) : base.amount,
           currency: data.currency || base.currency || 'GBP',
@@ -445,11 +456,16 @@ export default function TaskDetail() {
       // on `_id` so the save handler knows to UPDATE not INSERT.
       setQuoteModal({
         _id: existing.id,
-        // vendor_kind = 'supplier' | 'subcontractor' | 'freetext'
+        // vendor_kind = 'supplier' | 'subcontractor' | 'design_team' | 'freetext'
+        // For a subcontractor-linked quote, decide whether it should open
+        // as 'subcontractor' or 'design_team' based on how that row is
+        // tagged in our local vendors list (which was split by category
+        // at load time).
         vendor_kind: existing.supplier_id
           ? 'supplier'
           : existing.subcontractor_id
-            ? 'subcontractor'
+            ? (vendors.find(v => v.id === existing.subcontractor_id && v.kind === 'design_team')
+                ? 'design_team' : 'subcontractor')
             : 'freetext',
         supplier_id: existing.supplier_id || '',
         subcontractor_id: existing.subcontractor_id || '',
@@ -497,9 +513,9 @@ export default function TaskDetail() {
         supplierId = q.supplier_id
         const v = vendors.find(v => v.kind === 'supplier' && v.id === q.supplier_id)
         vendorName = v?.name || vendorName
-      } else if (q.vendor_kind === 'subcontractor' && q.subcontractor_id) {
+      } else if ((q.vendor_kind === 'subcontractor' || q.vendor_kind === 'design_team') && q.subcontractor_id) {
         subcontractorId = q.subcontractor_id
-        const v = vendors.find(v => v.kind === 'subcontractor' && v.id === q.subcontractor_id)
+        const v = vendors.find(v => (v.kind === 'subcontractor' || v.kind === 'design_team') && v.id === q.subcontractor_id)
         vendorName = v?.name || vendorName
       }
       if (!vendorName) {
@@ -606,20 +622,24 @@ export default function TaskDetail() {
   //  3. Switch the quote modal to point at the new vendor by id
   function handleVendorCreated(newRow) {
     if (!createVendor) return
-    const vendorKind = createVendor.kind === 'design_team' ? 'subcontractor' : createVendor.kind
-    // Add to picker. Design Team is stored as a subcontractor row with
-    // category='design_team', so the picker treats it as 'subcontractor'.
+    const kind = createVendor.kind  // supplier | subcontractor | design_team
+    // Add to picker tagged with its actual kind. Design Team is stored
+    // as a subcontractor row with category='design_team' in the DB, but
+    // we keep it as kind='design_team' in the local list so the picker
+    // dropdown shows it separately.
     setVendors(prev => [...prev, {
-      kind: vendorKind,
+      kind,
       id: newRow.id,
       name: newRow.company_name,
     }])
-    // Update the quote modal to use the new vendor.
+    // Update the quote modal to use the new vendor. The DB column is
+    // supplier_id for kind=supplier, subcontractor_id for both
+    // subcontractor and design_team.
     setQuoteModal(prev => prev ? {
       ...prev,
-      vendor_kind: vendorKind,
-      supplier_id: vendorKind === 'supplier' ? newRow.id : '',
-      subcontractor_id: vendorKind === 'subcontractor' ? newRow.id : '',
+      vendor_kind: kind,
+      supplier_id: kind === 'supplier' ? newRow.id : '',
+      subcontractor_id: (kind === 'subcontractor' || kind === 'design_team') ? newRow.id : '',
       vendor_name_text: newRow.company_name,
     } : prev)
     setCreateVendor(null)
@@ -984,7 +1004,10 @@ export default function TaskDetail() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span>{q.vendor_name_text}</span>
                                 {q.supplier_id && <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Supplier</span>}
-                                {q.subcontractor_id && <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Sub</span>}
+                                {q.subcontractor_id && (vendors.find(v => v.id === q.subcontractor_id && v.kind === 'design_team')
+                                  ? <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Design Team</span>
+                                  : <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Sub</span>
+                                )}
                               </div>
                               {q.notes && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{q.notes.length > 80 ? q.notes.slice(0, 80) + '…' : q.notes}</div>}
                             </td>
@@ -1241,10 +1264,11 @@ export default function TaskDetail() {
             {/* Vendor picker. Radio for kind, then the appropriate input. */}
             <div className="full">
               <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>Vendor</div>
-              <div style={{ display: 'flex', gap: 14, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
                 {[
                   { v: 'supplier',      label: 'Supplier' },
                   { v: 'subcontractor', label: 'Subcontractor' },
+                  { v: 'design_team',   label: 'Design Team' },
                   { v: 'freetext',      label: 'Not in system' },
                 ].map(opt => (
                   <label key={opt.v} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
@@ -1256,8 +1280,17 @@ export default function TaskDetail() {
                         // so we don't end up with stale supplier_id +
                         // a typed freetext name confusing the save.
                         supplier_id: opt.v === 'supplier' ? prev.supplier_id : '',
-                        subcontractor_id: opt.v === 'subcontractor' ? prev.subcontractor_id : '',
-                      }))} />
+                        subcontractor_id: (opt.v === 'subcontractor' || opt.v === 'design_team')
+                          ? prev.subcontractor_id : '',
+                      }))}
+                      // Override the CRM's global `input { width: 100%; padding;
+                      // border; appearance: none }` style so radios render as
+                      // actual circles, not full-width pill-shaped boxes.
+                      style={{
+                        appearance: 'auto', WebkitAppearance: 'auto',
+                        width: 'auto', padding: 0, margin: 0,
+                        marginRight: 4, border: 'none', background: 'transparent',
+                      }} />
                     {opt.label}
                   </label>
                 ))}
@@ -1274,6 +1307,14 @@ export default function TaskDetail() {
                 <select value={quoteModal.subcontractor_id} onChange={e => setQuoteModal(prev => ({ ...prev, subcontractor_id: e.target.value }))} style={{ width: '100%' }}>
                   <option value="">— Pick a subcontractor —</option>
                   {vendors.filter(v => v.kind === 'subcontractor').map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              )}
+              {quoteModal.vendor_kind === 'design_team' && (
+                <select value={quoteModal.subcontractor_id} onChange={e => setQuoteModal(prev => ({ ...prev, subcontractor_id: e.target.value }))} style={{ width: '100%' }}>
+                  <option value="">— Pick a design team member —</option>
+                  {vendors.filter(v => v.kind === 'design_team').map(v => (
                     <option key={v.id} value={v.id}>{v.name}</option>
                   ))}
                 </select>
