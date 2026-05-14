@@ -92,6 +92,9 @@ export default function TaskDetail() {
   // project (no per-quote building picker shown). Populated from
   // resolveBuildings() on load.
   const [buildings, setBuildings] = useState([])
+  // Activity log: collapsed by default, shows latest 3. User toggles
+  // 'Show all' / 'Show less' to reveal everything when the log grows.
+  const [showAllActivity, setShowAllActivity] = useState(false)
   useEffect(() => { load() }, [taskId])
   async function load() {
     setLoading(true)
@@ -504,6 +507,10 @@ export default function TaskDetail() {
     const q = quoteModal
     setSavingQuote(true)
     try {
+      // Capture the PRE-save status so we can detect the "transitioned
+      // into accepted" case below. For a new quote there's no previous
+      // row, so null. For an edit, look it up in the in-memory list.
+      const prevStatus = q._id ? (quotes.find(qq => qq.id === q._id)?.status || null) : null
       // Resolve vendor identity. Exactly one of supplier_id /
       // subcontractor_id should be set; the freetext fallback always
       // populates vendor_name_text.
@@ -567,6 +574,94 @@ export default function TaskDetail() {
           .eq('task_id', taskId)
           .neq('id', savedId)
           .in('status', ['pending', 'expired'])
+      }
+      // Auto-link the accepted quote to the project's subcontractor
+      // list. Only triggers on a fresh transition INTO accepted
+      // (skipping re-saves of an already-accepted quote, so we don't
+      // double-count). Skips supplier + freetext quotes — those don't
+      // belong on the subcontractor tab.
+      const transitionedToAccepted = payload.status === 'accepted' && prevStatus !== 'accepted'
+      const canAutolink = transitionedToAccepted
+        && (q.vendor_kind === 'subcontractor' || q.vendor_kind === 'design_team')
+        && subcontractorId
+        && amountNum != null
+        && amountNum > 0
+        && task?.project_id
+      if (canAutolink) {
+        try {
+          // Look up the subcontractor's own trade for trade_on_project default.
+          const { data: subRow } = await supabase
+            .from('subcontractors')
+            .select('trade')
+            .eq('id', subcontractorId)
+            .single()
+          const defaultTrade = subRow?.trade || ''
+          const category = q.vendor_kind === 'design_team' ? 'design_team' : 'contractual_work'
+          // Existing row on this project for this subcontractor?
+          const { data: existing } = await supabase
+            .from('project_subcontractors')
+            .select('id, contract_value, variation_amount, variation_notes')
+            .eq('project_id', task.project_id)
+            .eq('subcontractor_id', subcontractorId)
+            .maybeSingle()
+          if (existing) {
+            // Add as a variation rather than overwriting contract_value.
+            // Matches how the existing Variation flow in ProjectDetail
+            // works, so the audit trail stays consistent.
+            const currentVariation = parseFloat(existing.variation_amount) || 0
+            const newVariation = currentVariation + amountNum
+            const noteLine = `${new Date().toLocaleDateString('en-GB')}: £${amountNum.toLocaleString('en-GB')} — Added from accepted quote on task "${task.title}"`
+            const newNotes = existing.variation_notes
+              ? existing.variation_notes + '\n' + noteLine
+              : noteLine
+            await supabase.from('project_subcontractors').update({
+              variation_amount: newVariation,
+              variation_notes: newNotes,
+            }).eq('id', existing.id)
+            await supabase.from('task_activity').insert({
+              task_id: taskId,
+              actor_id: profile?.id,
+              action: 'quote_autolinked',
+              details: {
+                vendor: vendorName,
+                amount: amountNum,
+                mode: 'variation_added',
+                project_id: task.project_id,
+              },
+            })
+          } else {
+            // Fresh assignment.
+            const { error: psErr } = await supabase.from('project_subcontractors').insert({
+              project_id: task.project_id,
+              subcontractor_id: subcontractorId,
+              category,
+              trade_on_project: defaultTrade,
+              contract_value: amountNum,
+              variation_amount: 0,
+              variation_notes: `Created from accepted quote on task "${task.title}"`,
+            })
+            if (!psErr) {
+              await supabase.from('task_activity').insert({
+                task_id: taskId,
+                actor_id: profile?.id,
+                action: 'quote_autolinked',
+                details: {
+                  vendor: vendorName,
+                  amount: amountNum,
+                  mode: 'new_assignment',
+                  project_id: task.project_id,
+                },
+              })
+            } else {
+              // Don't fail the whole save if the project_subcontractors
+              // insert fails — just warn in console. The quote is still
+              // saved correctly.
+              console.warn('[saveQuote] project_subcontractors insert failed:', psErr)
+            }
+          }
+        } catch (autoErr) {
+          console.warn('[saveQuote] auto-link error:', autoErr)
+        }
       }
       // Log activity so the timeline records the action.
       await supabase.from('task_activity').insert({
@@ -1201,22 +1296,44 @@ export default function TaskDetail() {
       </div>
       {/* Activity log */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Activity</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>
+            Activity{activity.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{activity.length}</span>}
+          </div>
+        </div>
         {activity.length === 0 ? (
           <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No activity yet.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {activity.map(a => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, padding: '4px 0' }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text3)', flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <strong style={{ color: 'var(--text)' }}>{a.profiles?.full_name || 'Someone'}</strong>{' '}
-                  <span style={{ color: 'var(--text2)' }}>{formatActivityAction(a)}</span>
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {(showAllActivity ? activity : activity.slice(0, 3)).map(a => (
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, padding: '4px 0' }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text3)', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ color: 'var(--text)' }}>{a.profiles?.full_name || 'Someone'}</strong>{' '}
+                    <span style={{ color: 'var(--text2)' }}>{formatActivityAction(a)}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(a.created_at).toLocaleString('en-GB')}</div>
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(a.created_at).toLocaleString('en-GB')}</div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+            {activity.length > 3 && (
+              <button
+                type="button"
+                onClick={() => setShowAllActivity(v => !v)}
+                style={{
+                  marginTop: 8, padding: '6px 10px',
+                  fontSize: 11, fontWeight: 500,
+                  background: 'transparent', border: '1px solid var(--border)',
+                  borderRadius: 4, color: 'var(--text2)', cursor: 'pointer',
+                  width: '100%',
+                }}>
+                {showAllActivity
+                  ? `▲ Show less`
+                  : `▼ Show all activity (${activity.length})`}
+              </button>
+            )}
+          </>
         )}
       </div>
       {/* Edit modal */}
@@ -1621,6 +1738,10 @@ function formatActivityAction(a) {
     case 'quote_added': return `added a quote from ${d.vendor || 'a vendor'}${d.amount != null ? ` (£${Number(d.amount).toLocaleString('en-GB')})` : ''}`
     case 'quote_updated': return `updated the quote from ${d.vendor || 'a vendor'}${d.status ? ` (now ${d.status})` : ''}`
     case 'quote_deleted': return `deleted the quote from ${d.vendor || 'a vendor'}`
+    case 'quote_autolinked':
+      return d.mode === 'variation_added'
+        ? `auto-added £${Number(d.amount || 0).toLocaleString('en-GB')} variation to ${d.vendor || 'a vendor'} on the project`
+        : `auto-assigned ${d.vendor || 'a vendor'} to the project (£${Number(d.amount || 0).toLocaleString('en-GB')})`
     default: return a.action
   }
 }
