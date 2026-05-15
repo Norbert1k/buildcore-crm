@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { sortBy, formatDate } from '../lib/utils'
 import { resolveBuildings } from '../lib/buildings'
+import { parseEml } from '../lib/emlParser'
 import { Spinner, Pill, Modal, Field, IconChevron, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import FileLightbox from '../components/FileLightbox'
 import { SupplierModal } from './Suppliers'
@@ -1820,61 +1821,7 @@ function formatActivityAction(a) {
     default: return a.action
   }
 }
-// Simple RFC 822 email parser — handles plain text and quoted-printable.
-// For complex multipart MIME with base64 attachments, we still show the raw headers + text part.
-function parseEml(text) {
-  const headerEnd = text.search(/\r?\n\r?\n/)
-  if (headerEnd < 0) return { headers: {}, body: text }
-  const headerText = text.slice(0, headerEnd)
-  const body = text.slice(headerEnd).replace(/^\r?\n\r?\n/, '')
-  // Parse headers (naive, but good enough)
-  const headers = {}
-  const lines = headerText.split(/\r?\n/)
-  let current = null
-  for (const line of lines) {
-    if (/^\s/.test(line) && current) {
-      headers[current] += ' ' + line.trim()
-    } else {
-      const m = line.match(/^([^:]+):\s*(.*)$/)
-      if (m) {
-        current = m[1].toLowerCase()
-        headers[current] = m[2]
-      }
-    }
-  }
-  // Try to find text/plain or text/html body
-  let displayBody = body
-  const contentType = headers['content-type'] || ''
-  if (contentType.includes('multipart/')) {
-    const m = contentType.match(/boundary="?([^";]+)"?/)
-    if (m) {
-      const parts = body.split('--' + m[1])
-      let plainPart = null, htmlPart = null
-      for (const p of parts) {
-        if (/content-type:\s*text\/plain/i.test(p)) plainPart = p
-        else if (/content-type:\s*text\/html/i.test(p)) htmlPart = p
-      }
-      const chosen = plainPart || htmlPart || ''
-      const subEnd = chosen.search(/\r?\n\r?\n/)
-      displayBody = subEnd >= 0 ? chosen.slice(subEnd).replace(/^\r?\n\r?\n/, '') : chosen
-    }
-  }
-  // Decode quoted-printable
-  if (/quoted-printable/i.test(headers['content-transfer-encoding'] || '') || /quoted-printable/i.test(contentType)) {
-    displayBody = displayBody
-      .replace(/=\r?\n/g, '')
-      .replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-  }
-  return {
-    from: headers.from || '',
-    to: headers.to || '',
-    cc: headers.cc || '',
-    subject: headers.subject || '(no subject)',
-    date: headers.date || '',
-    body: displayBody.trim(),
-    isHtml: /content-type:\s*text\/html/i.test(contentType) && !/multipart/i.test(contentType),
-  }
-}
+// EML parsing lives in src/lib/emlParser.js — shared with ProjectDocumentation.
 function EmlViewer({ file, parsed, onClose }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
