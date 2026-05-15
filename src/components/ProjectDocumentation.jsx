@@ -1541,6 +1541,10 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   const [selectedSubs, setSelectedSubs] = useState(new Set())
   const [previewFiles, setPreviewFiles] = useState(null)  // array of files in the view that's been clicked
   const [previewIndex, setPreviewIndex] = useState(0)
+  // EML preview state — separate from lightbox because we render a
+  // bespoke email viewer (From/To/Subject/Body) rather than the
+  // generic file viewer.
+  const [emlPreview, setEmlPreview] = useState(null)
   const [renamingFolder, setRenamingFolder] = useState(false)
   const [renameFolderVal, setRenameFolderVal] = useState('')
   const [showGantt, setShowGantt] = useState(false)
@@ -1564,7 +1568,24 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     try { localStorage.setItem('pdView_' + folder.key, mode) } catch {}
   }
 
-  function openPreview(file, filesInView) {
+  async function openPreview(file, filesInView) {
+    // EML files get a dedicated reader (parsed From/To/Subject/Body)
+    // rather than going through the generic FileLightbox which can't
+    // render emails.
+    const isEml = (file.file_name || '').toLowerCase().endsWith('.eml')
+    if (isEml) {
+      try {
+        const { data: urlData } = await supabase.storage
+          .from('project-docs').createSignedUrl(file.storage_path, 60)
+        if (!urlData?.signedUrl) { alert('Could not load email'); return }
+        const resp = await fetch(urlData.signedUrl)
+        const text = await resp.text()
+        setEmlPreview({ file, parsed: parseEml(text) })
+      } catch (e) {
+        alert('Email parse failed: ' + e.message)
+      }
+      return
+    }
     // filesInView is provided by the FilesGrid wrapper. Find this file's
     // index in that list; the lightbox in list-mode will let the user
     // flip through siblings.
@@ -2210,6 +2231,21 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         />
       )}
 
+      {/* EML viewer — separate from FileLightbox because emails need
+          structured rendering (From/To/Subject/Body) rather than raw
+          file display. */}
+      {emlPreview && (
+        <EmlViewer
+          file={emlPreview.file}
+          parsed={emlPreview.parsed}
+          onClose={() => setEmlPreview(null)}
+          onDownload={async () => {
+            const { data } = await supabase.storage.from('project-docs').createSignedUrl(emlPreview.file.storage_path, 60)
+            if (data?.signedUrl) triggerDownload(data.signedUrl, emlPreview.file.file_name)
+          }}
+        />
+      )}
+
       {/* Live Gantt editor (programme folder only) */}
       {/* Progress Report editor — root-level reports (subfolderKey=null) */}
       {showProgressEditor && folder.key === '05-progress-report' && (
@@ -2507,6 +2543,93 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
         ))}
       </div>
       {canAddFolders && <AddTopFolderButton onAdd={addTopFolder} />}
+    </div>
+  )
+}
+
+// ─── EML helpers ──────────────────────────────────────────────────────
+// Mirrors the parser + viewer used in TaskDetail. RFC 822 emails come
+// in many shapes; this handles the common cases (plain text, HTML
+// multipart, quoted-printable). For anything weirder, the user can
+// still download the raw .eml from the header bar.
+
+function parseEml(text) {
+  const headerEnd = text.search(/\r?\n\r?\n/)
+  if (headerEnd < 0) return { headers: {}, body: text }
+  const headerText = text.slice(0, headerEnd)
+  const body = text.slice(headerEnd).replace(/^\r?\n\r?\n/, '')
+  const headers = {}
+  const lines = headerText.split(/\r?\n/)
+  let current = null
+  for (const line of lines) {
+    if (/^\s/.test(line) && current) {
+      headers[current] += ' ' + line.trim()
+    } else {
+      const m = line.match(/^([^:]+):\s*(.*)$/)
+      if (m) {
+        current = m[1].toLowerCase()
+        headers[current] = m[2]
+      }
+    }
+  }
+  let displayBody = body
+  const contentType = headers['content-type'] || ''
+  if (contentType.includes('multipart/')) {
+    const m = contentType.match(/boundary="?([^";]+)"?/)
+    if (m) {
+      const parts = body.split('--' + m[1])
+      let plainPart = null, htmlPart = null
+      for (const p of parts) {
+        if (/content-type:\s*text\/plain/i.test(p)) plainPart = p
+        else if (/content-type:\s*text\/html/i.test(p)) htmlPart = p
+      }
+      const chosen = plainPart || htmlPart || ''
+      const subEnd = chosen.search(/\r?\n\r?\n/)
+      displayBody = subEnd >= 0 ? chosen.slice(subEnd).replace(/^\r?\n\r?\n/, '') : chosen
+    }
+  }
+  if (/quoted-printable/i.test(headers['content-transfer-encoding'] || '') || /quoted-printable/i.test(contentType)) {
+    displayBody = displayBody
+      .replace(/=\r?\n/g, '')
+      .replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
+  }
+  return {
+    from: headers.from || '',
+    to: headers.to || '',
+    cc: headers.cc || '',
+    subject: headers.subject || '(no subject)',
+    date: headers.date || '',
+    body: displayBody.trim(),
+    isHtml: /content-type:\s*text\/html/i.test(contentType) && !/multipart/i.test(contentType),
+  }
+}
+
+function EmlViewer({ file, parsed, onClose, onDownload }) {
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 8, maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: 14, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {file.file_name}</div>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {onDownload && <button className="btn btn-sm" onClick={onDownload}>⬇ Download</button>}
+            <button className="btn btn-sm" onClick={onClose}>Close</button>
+          </div>
+        </div>
+        <div style={{ padding: 14, fontSize: 12, borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
+          <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>From:</strong> {parsed.from}</div>
+          <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>To:</strong> {parsed.to}</div>
+          {parsed.cc && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Cc:</strong> {parsed.cc}</div>}
+          {parsed.date && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Date:</strong> {parsed.date}</div>}
+          <div><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Subject:</strong> <span style={{ fontWeight: 600 }}>{parsed.subject}</span></div>
+        </div>
+        <div style={{ padding: 14, fontSize: 13, lineHeight: 1.6, flex: 1, overflow: 'auto' }}>
+          {parsed.isHtml ? (
+            <iframe srcDoc={parsed.body} sandbox="" style={{ width: '100%', height: '60vh', border: '1px solid var(--border)', borderRadius: 4, background: 'white' }} />
+          ) : (
+            <pre style={{ fontFamily: 'inherit', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{parsed.body}</pre>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
