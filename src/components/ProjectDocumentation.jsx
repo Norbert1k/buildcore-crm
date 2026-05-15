@@ -6,6 +6,7 @@ import GanttEditor from './Gantt/GanttEditor'
 import ProgressReportEditor, { generateProgressReportPdf } from './ProgressReportEditor'
 import ProjectPhotos from './ProjectPhotos'
 import FileLightbox from './FileLightbox'
+import { parseEml } from '../lib/emlParser'
 import CffGeneratorModal from './CffGeneratorModal'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
@@ -2547,62 +2548,9 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
   )
 }
 
-// ─── EML helpers ──────────────────────────────────────────────────────
-// Mirrors the parser + viewer used in TaskDetail. RFC 822 emails come
-// in many shapes; this handles the common cases (plain text, HTML
-// multipart, quoted-printable). For anything weirder, the user can
-// still download the raw .eml from the header bar.
-
-function parseEml(text) {
-  const headerEnd = text.search(/\r?\n\r?\n/)
-  if (headerEnd < 0) return { headers: {}, body: text }
-  const headerText = text.slice(0, headerEnd)
-  const body = text.slice(headerEnd).replace(/^\r?\n\r?\n/, '')
-  const headers = {}
-  const lines = headerText.split(/\r?\n/)
-  let current = null
-  for (const line of lines) {
-    if (/^\s/.test(line) && current) {
-      headers[current] += ' ' + line.trim()
-    } else {
-      const m = line.match(/^([^:]+):\s*(.*)$/)
-      if (m) {
-        current = m[1].toLowerCase()
-        headers[current] = m[2]
-      }
-    }
-  }
-  let displayBody = body
-  const contentType = headers['content-type'] || ''
-  if (contentType.includes('multipart/')) {
-    const m = contentType.match(/boundary="?([^";]+)"?/)
-    if (m) {
-      const parts = body.split('--' + m[1])
-      let plainPart = null, htmlPart = null
-      for (const p of parts) {
-        if (/content-type:\s*text\/plain/i.test(p)) plainPart = p
-        else if (/content-type:\s*text\/html/i.test(p)) htmlPart = p
-      }
-      const chosen = plainPart || htmlPart || ''
-      const subEnd = chosen.search(/\r?\n\r?\n/)
-      displayBody = subEnd >= 0 ? chosen.slice(subEnd).replace(/^\r?\n\r?\n/, '') : chosen
-    }
-  }
-  if (/quoted-printable/i.test(headers['content-transfer-encoding'] || '') || /quoted-printable/i.test(contentType)) {
-    displayBody = displayBody
-      .replace(/=\r?\n/g, '')
-      .replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16)))
-  }
-  return {
-    from: headers.from || '',
-    to: headers.to || '',
-    cc: headers.cc || '',
-    subject: headers.subject || '(no subject)',
-    date: headers.date || '',
-    body: displayBody.trim(),
-    isHtml: /content-type:\s*text\/html/i.test(contentType) && !/multipart/i.test(contentType),
-  }
-}
+// ─── EML viewer ──────────────────────────────────────────────────────
+// Renders parsed email as a centred modal. parseEml lives in
+// src/lib/emlParser.js — shared with TaskDetail.
 
 function EmlViewer({ file, parsed, onClose, onDownload }) {
   return (
