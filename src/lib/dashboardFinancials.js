@@ -3,8 +3,9 @@
 //
 // Aggregates real financial data across ACTIVE projects for the Projects page
 // dashboard. Combines:
-//   • PAs   (paExtractor.fetchAllProjectPas + per-PA extracted totals/variations)
-//   • CFFs  (cffReader.fetchLatestCff for forecast curves)
+//   • PAs   (paExtractor.fetchAllProjectPas      — latest only, for totals)
+//   • PAs   (paGroupExtractor.fetchAllProjectPas — full history, for monthly actuals)
+//   • CFFs  (cffReader.fetchLatestCff           — for forecast curves)
 //
 // Returns a single shape:
 //   {
@@ -12,39 +13,47 @@
 //     loading_count:    number    // projects still being fetched
 //     totals: {
 //       total_contract:    number,
+//       planned_to_date:   number,   // sum of CFF months ≤ current month
 //       claimed_to_date:   number,
 //       variations_total:  number,
 //       variations_count:  number,
+//       variance_to_date:  number,   // claimed_to_date − planned_to_date (signed)
 //       remaining:         number,
 //     },
 //     monthly_forecast: [{ date: 'YYYY-MM-01', amount: number }, ...],
+//     monthly_actual:   [{ date: 'YYYY-MM-01', amount: number }, ...],
+//     likely_ratio:     number | null,   // last-3mo actual / last-3mo planned
 //     billings: [
-//       { date: 'YYYY-MM-01', amount: number },   // Next valuation (this month)
-//       { date: 'YYYY-MM-01', amount: number },   // Following (next month)
-//       { date: 'YYYY-MM-01', amount: number },   // Third upcoming (month after)
+//       { date: 'YYYY-MM-01', planned: number, likely: number }, x3
 //     ],
 //     projects: [
 //       { id, project_name, project_ref, total_contract, claimed_to_date,
-//         pct_claimed, has_real_data }, ...
+//         planned_to_date, variance_to_date, pct_claimed, has_real_data }, ...
 //     ]
 //   }
 //
 // Caching strategy
 // ────────────────
 // Each project's parsed financials are cached in localStorage under
-//   buildcore:dashFin:v1:<projectId>
+//   buildcore:dashFin:v2:<projectId>
 // with key = latest_pa_created_at + latest_cff_created_at + a short hash of
 // the file names. Cache is invalidated automatically when any new PA or CFF
 // is uploaded (created_at changes → key changes).
 // TTL: 30 days as a safety bound. Below that, cache is honoured.
 //
+// Version bumped to v2 in this revision because the per-project payload now
+// includes the monthly_actual series and variance fields. Old v1 cache hits
+// would deserialise without those fields and the roll-up would treat them
+// as missing — bumping the prefix forces a one-time re-fetch.
+//
 // Pattern: try cache first; if miss, fetch + parse; write back to cache.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { fetchAllProjectPas, aggregateFinancials } from './paExtractor'
+import { fetchAllProjectPas as fetchLatestPas, aggregateFinancials } from './paExtractor'
+import { fetchAllProjectPas as fetchPaHistory } from './paGroupExtractor'
 import { fetchLatestCff, projectCffOnCalendar } from './cffReader'
 
-const CACHE_PREFIX = 'buildcore:dashFin:v1:'
+const CACHE_PREFIX = 'buildcore:dashFin:v2:'
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000   // 30 days
 
 // ── localStorage cache helpers ────────────────────────────────────────────
@@ -101,10 +110,17 @@ async function computeProjectSignature(supabase, projectId) {
 async function fetchAndParseProject(supabase, project) {
   const projectId = project.id
 
-  // Fire PA + CFF in parallel — independent fetches.
-  const [paList, cffExtract] = await Promise.all([
-    fetchAllProjectPas(supabase, projectId).catch(err => {
-      console.warn(`[dashFin] PA fetch failed for ${projectId}:`, err)
+  // Fire latest PAs, PA history, and CFF in parallel — three independent
+  // fetches. Each one is wrapped so a failure doesn't kill the others.
+  // latest PAs gives variations + contract figures (the current paExtractor
+  // path); PA history gives the cumulative-by-PA series for monthly actuals.
+  const [paList, paHistory, cffExtract] = await Promise.all([
+    fetchLatestPas(supabase, projectId).catch(err => {
+      console.warn(`[dashFin] PA latest fetch failed for ${projectId}:`, err)
+      return []
+    }),
+    fetchPaHistory(supabase, projectId).catch(err => {
+      console.warn(`[dashFin] PA history fetch failed for ${projectId}:`, err)
       return []
     }),
     fetchLatestCff(supabase, projectId).catch(err => {
@@ -113,7 +129,7 @@ async function fetchAndParseProject(supabase, project) {
     }),
   ])
 
-  // ── Aggregate PAs ────────────────────────────────────────────────────
+  // ── Aggregate latest PAs (variations + contract figures) ─────────────
   // paExtractor.aggregateFinancials gives total_value (original + variations)
   // and variations_total/_count. It does NOT roll up cumulative — we sum
   // that ourselves across sub-buildings.
@@ -162,15 +178,68 @@ async function fetchAndParseProject(supabase, project) {
     ? projectCffOnCalendar(cffExtract, project.start_date)
     : []
 
+  // ── Project monthly actuals from PA history onto calendar dates ──────
+  //
+  // Each PA in paHistory has { index, total_cumulative } where index is the
+  // parsed PA number (PA01 → 1, PA02 → 2, ...). The convention (matching
+  // CffGeneratorModal): PA-index N corresponds to month-from-start (N − 1).
+  // So PA01 lands on project.start_date, PA02 the next month, etc.
+  //
+  // monthly delta = cum[N] − cum[N-1], clamped to 0 to handle the
+  // PA-cumulative-non-monotonic edge case (rare data-entry glitches where
+  // a later PA reports a lower cumulative than the previous one).
+  //
+  // If PA indices have gaps (e.g. PA01, PA03 but no PA02), the full delta
+  // is attributed to PA03's month and PA02's calendar slot is left at 0.
+  // This is the simplest defensible behaviour — a more elaborate "spread
+  // the gap" interpretation would require knowing why the gap exists.
+  let monthly_actual = []
+  if (paHistory.length > 0 && project.start_date) {
+    const startDate = new Date(project.start_date)
+    if (!isNaN(startDate.getTime())) {
+      startDate.setDate(1)
+      // Sort defensively — paGroupExtractor already sorts ASC by PA number
+      // but we don't want a misordering bug to silently produce negatives.
+      const sortedHistory = [...paHistory].sort((a, b) => (a.index || 0) - (b.index || 0))
+      let prevCum = 0
+      for (const pa of sortedHistory) {
+        const idx = pa.index
+        if (!Number.isFinite(idx) || idx < 1) continue
+        const cum = Number.isFinite(pa.total_cumulative) ? pa.total_cumulative : 0
+        const delta = Math.max(0, cum - prevCum)
+        const d = new Date(startDate.getFullYear(), startDate.getMonth() + (idx - 1), 1)
+        const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+        monthly_actual.push({ date: ymd, amount: delta })
+        prevCum = cum
+      }
+    }
+  }
+
+  // Compute planned_to_date for this project (sum of CFF months ≤ current).
+  const todayKey = monthStartKey(new Date())
+  let planned_to_date = 0
+  for (const pt of monthly_forecast) {
+    if (pt.date <= todayKey) planned_to_date += pt.amount || 0
+  }
+
+  // variance_to_date is signed: positive = ahead of plan, negative = behind.
+  // Uses claimed_to_date (which is the project's running total) rather than
+  // summing monthly_actual, because claimed_to_date reflects the latest PA's
+  // own cumulative (more authoritative when intermediate PAs are missing).
+  const variance_to_date = claimed_to_date - planned_to_date
+
   return {
     id: projectId,
     project_name: project.project_name,
     project_ref: project.project_ref,
     total_contract,
     claimed_to_date,
+    planned_to_date,
+    variance_to_date,
     variations_total,
     variations_count,
     monthly_forecast,
+    monthly_actual,
     has_real_data,
     pct_claimed: total_contract > 0 ? (claimed_to_date / total_contract) * 100 : 0,
   }
@@ -205,12 +274,16 @@ export async function loadDashboardFinancials(supabase, activeProjects, onProgre
       loading_count: 0,
       totals: {
         total_contract: 0,
+        planned_to_date: 0,
         claimed_to_date: 0,
         variations_total: 0,
         variations_count: 0,
+        variance_to_date: 0,
         remaining: 0,
       },
       monthly_forecast: [],
+      monthly_actual: [],
+      likely_ratio: null,
       billings: zeroBillings(),
       projects: [],
     }
@@ -243,9 +316,12 @@ export async function loadDashboardFinancials(supabase, activeProjects, onProgre
         project_ref: project.project_ref,
         total_contract: parseFloat(project.value) || 0,
         claimed_to_date: 0,
+        planned_to_date: 0,
+        variance_to_date: 0,
         variations_total: 0,
         variations_count: 0,
         monthly_forecast: [],
+        monthly_actual: [],
         has_real_data: false,
         pct_claimed: 0,
       }
@@ -268,59 +344,100 @@ function zeroBillings() {
   for (let offset = 0; offset < 3; offset++) {
     const target = new Date(today.getFullYear(), today.getMonth() + offset, 1)
     const targetKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-01`
-    out.push({ date: targetKey, amount: 0 })
+    out.push({ date: targetKey, planned: 0, likely: 0 })
   }
   return out
+}
+
+// Helper: YYYY-MM-01 string for the first day of a Date's month.
+function monthStartKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
 // ── Roll-up: merge per-project shapes into the dashboard shape ────────────
 function rollUp(projects) {
   const totals = projects.reduce((acc, p) => ({
     total_contract:    acc.total_contract    + (p.total_contract || 0),
+    planned_to_date:   acc.planned_to_date   + (p.planned_to_date || 0),
     claimed_to_date:   acc.claimed_to_date   + (p.claimed_to_date || 0),
     variations_total:  acc.variations_total  + (p.variations_total || 0),
     variations_count:  acc.variations_count  + (p.variations_count || 0),
-  }), { total_contract: 0, claimed_to_date: 0, variations_total: 0, variations_count: 0 })
+  }), {
+    total_contract: 0, planned_to_date: 0, claimed_to_date: 0,
+    variations_total: 0, variations_count: 0,
+  })
+  totals.variance_to_date = totals.claimed_to_date - totals.planned_to_date
   totals.remaining = Math.max(0, totals.total_contract - totals.claimed_to_date)
 
   // Combine all per-project forecasts onto the calendar. Sum amounts that
   // share a calendar month across projects.
-  const byMonth = new Map()
+  const forecastByMonth = new Map()
   for (const p of projects) {
     for (const point of (p.monthly_forecast || [])) {
-      byMonth.set(point.date, (byMonth.get(point.date) || 0) + (point.amount || 0))
+      forecastByMonth.set(point.date, (forecastByMonth.get(point.date) || 0) + (point.amount || 0))
     }
   }
-  const monthly_forecast = Array.from(byMonth.entries())
+  const monthly_forecast = Array.from(forecastByMonth.entries())
     .map(([date, amount]) => ({ date, amount }))
     .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
 
-  // Upcoming valuations — next 3 PA submissions across the portfolio.
+  // Same roll-up for actuals.
+  const actualByMonth = new Map()
+  for (const p of projects) {
+    for (const point of (p.monthly_actual || [])) {
+      actualByMonth.set(point.date, (actualByMonth.get(point.date) || 0) + (point.amount || 0))
+    }
+  }
+  const monthly_actual = Array.from(actualByMonth.entries())
+    .map(([date, amount]) => ({ date, amount }))
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+
+  // ── Likely-ratio for forward forecast ────────────────────────────────
+  //
+  // Computed from the last 3 completed months (i.e. months strictly before
+  // the current month) of planned vs actual. Defined as
+  //   sum(last 3 mo actual) / sum(last 3 mo planned)
+  // Returns null when there aren't 3 months of data with non-zero planned —
+  // the UI will fall back to displaying planned as-is in that case.
+  //
+  // We exclude the current month from the trend because mid-month it's
+  // typically half-claimed and would drag the ratio artificially low.
+  const today = new Date()
+  const currentKey = monthStartKey(today)
+  const pastForecast = monthly_forecast.filter(p => p.date < currentKey).slice(-3)
+  let plannedSum = 0
+  let actualSum = 0
+  for (const p of pastForecast) {
+    plannedSum += p.amount || 0
+    const actMatch = monthly_actual.find(a => a.date === p.date)
+    actualSum += actMatch ? (actMatch.amount || 0) : 0
+  }
+  const likely_ratio = (pastForecast.length === 3 && plannedSum > 0)
+    ? actualSum / plannedSum
+    : null
+
+  // ── Upcoming valuations — next 3 PA submissions across the portfolio ─
   //
   // Each PA is submitted roughly monthly per project. The CFF's monthly
   // forecast for a given calendar month is the expected gross valuation
-  // for that month's PA. We pick:
-  //   • Next valuation       = forecast for the CURRENT month (the PA
-  //                             you're about to submit for this month's
-  //                             work — typically end-of-month submission)
-  //   • Following valuation  = next calendar month
-  //   • Third upcoming       = month after that
+  // for that month's PA.
   //
-  // Months in monthly_forecast are keyed YYYY-MM-01. We find the bucket
-  // whose date >= today's month-start, then take that and the next 2.
-  // If a project has no CFF its contribution is 0 — the figure is the
-  // sum across whatever projects HAVE forecast data for that month.
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
+  // For each of the next 3 months we expose:
+  //   • planned — sum of monthly_forecast amounts at that calendar month
+  //   • likely  — planned × likely_ratio (the trend extrapolation). If
+  //               likely_ratio is null we set likely = planned so the
+  //               column has a fallback value the UI can still show.
   const billings = []
   for (let offset = 0; offset < 3; offset++) {
     const target = new Date(today.getFullYear(), today.getMonth() + offset, 1)
-    const targetKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-01`
+    const targetKey = monthStartKey(target)
     const found = monthly_forecast.find(p => p.date === targetKey)
+    const planned = found ? found.amount : 0
+    const likely = likely_ratio !== null ? planned * likely_ratio : planned
     billings.push({
       date: targetKey,
-      amount: found ? found.amount : 0,
+      planned,
+      likely,
     })
   }
 
@@ -329,6 +446,8 @@ function rollUp(projects) {
     loading_count: 0,
     totals,
     monthly_forecast,
+    monthly_actual,
+    likely_ratio,
     billings,
     projects: projects.slice().sort((a, b) =>
       (b.total_contract || 0) - (a.total_contract || 0)
@@ -344,10 +463,13 @@ export function buildInstantFallback(activeProjects) {
       loaded: false,
       loading_count: 0,
       totals: {
-        total_contract: 0, claimed_to_date: 0,
-        variations_total: 0, variations_count: 0, remaining: 0,
+        total_contract: 0, planned_to_date: 0, claimed_to_date: 0,
+        variations_total: 0, variations_count: 0, variance_to_date: 0,
+        remaining: 0,
       },
       monthly_forecast: [],
+      monthly_actual: [],
+      likely_ratio: null,
       billings: zeroBillings(),
       projects: [],
     }
@@ -362,9 +484,12 @@ export function buildInstantFallback(activeProjects) {
       project_ref: p.project_ref,
       total_contract: v,
       claimed_to_date: 0,
+      planned_to_date: 0,
+      variance_to_date: 0,
       variations_total: 0,
       variations_count: 0,
       monthly_forecast: [],
+      monthly_actual: [],
       has_real_data: false,
       pct_claimed: 0,
     }
@@ -374,12 +499,16 @@ export function buildInstantFallback(activeProjects) {
     loading_count: activeProjects.length,
     totals: {
       total_contract: total,
+      planned_to_date: 0,
       claimed_to_date: 0,
       variations_total: 0,
       variations_count: 0,
+      variance_to_date: 0,
       remaining: total,
     },
     monthly_forecast: [],
+    monthly_actual: [],
+    likely_ratio: null,
     billings: zeroBillings(),
     projects: projects.sort((a, b) => b.total_contract - a.total_contract),
   }
