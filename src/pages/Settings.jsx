@@ -5,6 +5,129 @@ import { ROLES, ROLE_PERMISSIONS, sortBy } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, PasswordInput } from '../components/ui'
 import { useAuth } from '../lib/auth'
 
+// Reusable collapsible section.
+//
+// Wraps a chunk of Settings content with an always-visible header bar.
+// The bar carries the section title + a small status summary string so the
+// user can see meaningful state without expanding. Clicking the bar toggles
+// the content. State persists in localStorage when `storageKey` is provided
+// (default: collapsed across visits matches the page-level convention of
+// "all collapsed by default" agreed with Norbert).
+//
+// Props
+//   title       — section title (e.g. "CCG Team")
+//   summary     — single-line muted string shown in header (e.g. "8 members · 1 admin")
+//   icon        — optional inline SVG node rendered before the title
+//   statusBadge — optional right-aligned pill node (e.g. green "Connected")
+//   headerAction — optional node placed at the right edge of the header bar
+//                  (button-like, e.g. "+ Add member"). Stops propagation so
+//                  clicking the action doesn't toggle the section.
+//   defaultOpen — boolean, default false. Used as the initial value when
+//                 there's nothing in localStorage.
+//   storageKey  — optional. When set, the open/closed state is persisted in
+//                 localStorage under `settings:collapse:${storageKey}`.
+//   children    — content rendered below the header when expanded.
+function CollapsibleSection({
+  title, summary, icon, statusBadge, headerAction,
+  defaultOpen = false, storageKey, children,
+}) {
+  const fullKey = storageKey ? `settings:collapse:${storageKey}` : null
+  const [open, setOpen] = useState(() => {
+    if (!fullKey) return defaultOpen
+    try {
+      const saved = localStorage.getItem(fullKey)
+      if (saved === null) return defaultOpen
+      return saved === '1'
+    } catch { return defaultOpen }
+  })
+
+  function toggle() {
+    setOpen(prev => {
+      const next = !prev
+      if (fullKey) {
+        try { localStorage.setItem(fullKey, next ? '1' : '0') } catch {}
+      }
+      return next
+    })
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 12, overflow: 'hidden' }}>
+      <div
+        onClick={toggle}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '14px 18px',
+          cursor: 'pointer',
+          userSelect: 'none',
+          background: open ? 'var(--surface2)' : 'transparent',
+          transition: 'background 0.15s',
+        }}
+      >
+        {icon && (
+          <div style={{ display: 'flex', alignItems: 'center', color: 'var(--text2)', flexShrink: 0 }}>
+            {icon}
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
+            {statusBadge}
+          </div>
+          {summary && (
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {summary}
+            </div>
+          )}
+        </div>
+        {headerAction && (
+          <div onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0 }}>
+            {headerAction}
+          </div>
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          style={{ color: 'var(--text3)', flexShrink: 0, transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'none' }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </div>
+      {open && (
+        <div style={{ padding: '14px 18px 16px', borderTop: '1px solid var(--border)' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Small inline icons used in the collapsible section headers. Kept here rather
+// than in components/ui to avoid bloating the shared icon set with one-off
+// settings glyphs. All 16px stroke-icons matching the codebase convention.
+const IconTeam = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+  </svg>
+)
+const IconExternal = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>
+  </svg>
+)
+const IconShield = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>
+  </svg>
+)
+const IconPlug = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 2v6"/><path d="M15 2v6"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v5"/>
+  </svg>
+)
+
 // Domain that identifies internal CCG staff. Anyone whose email is NOT under
 // this domain is treated as an "external" user (consultants, EAs, clients
 // invited per-project, etc.) and grouped into the second table. Comparison
@@ -355,27 +478,48 @@ export default function Settings() {
         // per render — projects list rarely changes mid-session.
         const projectMap = new Map(projects.map(p => [p.id, p]))
 
+        // Build a summary line for the CCG Team header: count + top 2 role
+        // distributions. Uses ROLES labels so it stays in sync if roles get
+        // renamed. Skips the role breakdown when empty / loading.
+        const roleCounts = {}
+        internalUsers.forEach(u => { roleCounts[u.role] = (roleCounts[u.role] || 0) + 1 })
+        const roleBreakdown = Object.entries(roleCounts)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([r, n]) => `${n} ${ROLES[r]?.label || r}`)
+          .join(' · ')
+        const internalSummary = loading
+          ? 'Loading…'
+          : `${internalUsers.length} member${internalUsers.length === 1 ? '' : 's'}${roleBreakdown ? ' · ' + roleBreakdown : ''}`
+
+        // External summary: count + how many distinct projects they cover.
+        const externalProjectIds = new Set()
+        externalUsers.forEach(u => (u.projectIds || []).forEach(id => externalProjectIds.add(id)))
+        const externalSummary = loading
+          ? 'Loading…'
+          : externalUsers.length === 0
+            ? 'No external users yet'
+            : `${externalUsers.length} portal user${externalUsers.length === 1 ? '' : 's'} · across ${externalProjectIds.size} project${externalProjectIds.size === 1 ? '' : 's'}`
+
+        // Role reference summary: just the count.
+        const roleSummary = `${Object.keys(ROLES).length} roles configured`
+
         return (
           <div>
-            <div className="section-header">
-              <div className="section-title">Team Members ({users.length} / 100)</div>
-              <button className="btn btn-primary btn-sm" onClick={() => { setShowAddUser(true); setAddError(''); setAddSuccess('') }}>
-                <IconPlus size={13} /> Add User
-              </button>
-            </div>
-
-            {loading ? <Spinner /> : (
-              <>
-                {/* ── Internal CCG Team table ──────────────────────────── */}
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ fontSize: 14, fontWeight: 600 }}>CCG Team</span>
-                    <span style={{ fontSize: 11, color: 'var(--text3)', padding: '2px 8px', background: 'var(--surface2)', borderRadius: 99 }}>
-                      {internalUsers.length} internal
-                    </span>
-                  </div>
-                </div>
-                <div className="table-wrap" style={{ marginBottom: 24 }}>
+            {/* ── CCG Team (collapsible) ──────────────────────────────────── */}
+            <CollapsibleSection
+              title="CCG Team"
+              summary={internalSummary}
+              icon={<IconTeam />}
+              storageKey="ccg-team"
+              headerAction={
+                <button className="btn btn-primary btn-sm" onClick={() => { setShowAddUser(true); setAddError(''); setAddSuccess('') }}>
+                  <IconPlus size={13} /> Add User
+                </button>
+              }
+            >
+              {loading ? <Spinner /> : (
+                <div className="table-wrap">
                   <table>
                     <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Access</th><th>Added</th><th></th></tr></thead>
                     <tbody>
@@ -393,72 +537,79 @@ export default function Settings() {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </CollapsibleSection>
 
-                {/* ── External Users table ─────────────────────────────────
-                    Only rendered if there are external users — otherwise
-                    the empty header would feel out of place. */}
-                {externalUsers.length > 0 && (
-                  <>
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>External Users</span>
-                        <span style={{ fontSize: 11, color: 'var(--text3)', padding: '2px 8px', background: 'var(--surface2)', borderRadius: 99 }}>
-                          {externalUsers.length} external · project-allocated
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-                        People outside CCG who've been granted access to specific projects (e.g. Employer's Agents, clients, consultants).
-                      </div>
-                    </div>
-                    <div className="table-wrap" style={{ marginBottom: 16 }}>
-                      <table>
-                        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Projects</th><th>Added</th><th></th></tr></thead>
-                        <tbody>
-                          {externalUsers.map(u => (
-                            <TeamRow key={u.id} u={u}
-                              mode="external"
-                              profile={profile}
-                              projectMap={projectMap}
-                              onNavigateProject={(id) => navigate(`/projects/${id}`)}
-                          onNavigateClient={(id) => navigate(`/clients/${id}`)}
-                              onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
-                              onDelete={() => setShowDeleteUser({
-                                user: u,
-                                // Portal-only users (synthetic rows from
-                                // client_users) get the lighter
-                                // 'client_user' mode = revoke portal
-                                // access only. Real profile-backed users
-                                // get full hard-delete.
-                                mode: u._portalOnly ? 'client_user' : 'profile',
-                              })}
-                            />
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-
-                {/* Role reference */}
-                <div className="card card-pad">
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Role Permissions</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-                    {Object.entries(ROLES).map(([key, r]) => (
-                      <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <Pill cls={r.cls}>{r.label}</Pill>
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>{r.desc}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
-                        Nav: {ROLE_PERMISSIONS[key]?.nav?.join(', ')}
-                      </div>
-                    </div>
-                  ))}
+            {/* ── External Users (collapsible) ─────────────────────────────
+                Always rendered (not gated on externalUsers.length > 0) so
+                admin can see "No external users yet" and understand why the
+                section is empty. */}
+            <CollapsibleSection
+              title="External Users"
+              summary={externalSummary}
+              icon={<IconExternal />}
+              storageKey="external-users"
+            >
+              {loading ? <Spinner /> : externalUsers.length === 0 ? (
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                  No external users yet. Add a user with a non-{INTERNAL_DOMAIN} email and grant project access to see them here.
                 </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+                    People outside CCG who've been granted access to specific projects (e.g. Employer's Agents, clients, consultants).
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Projects</th><th>Added</th><th></th></tr></thead>
+                      <tbody>
+                        {externalUsers.map(u => (
+                          <TeamRow key={u.id} u={u}
+                            mode="external"
+                            profile={profile}
+                            projectMap={projectMap}
+                            onNavigateProject={(id) => navigate(`/projects/${id}`)}
+                            onNavigateClient={(id) => navigate(`/clients/${id}`)}
+                            onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
+                            onDelete={() => setShowDeleteUser({
+                              user: u,
+                              // Portal-only users (synthetic rows from
+                              // client_users) get the lighter 'client_user'
+                              // mode = revoke portal access only. Real
+                              // profile-backed users get full hard-delete.
+                              mode: u._portalOnly ? 'client_user' : 'profile',
+                            })}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </CollapsibleSection>
+
+            {/* ── Role Permissions reference (collapsible) ────────────────── */}
+            <CollapsibleSection
+              title="Role Permissions"
+              summary={roleSummary}
+              icon={<IconShield />}
+              storageKey="role-permissions"
+            >
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+                {Object.entries(ROLES).map(([key, r]) => (
+                  <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <Pill cls={r.cls}>{r.label}</Pill>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>{r.desc}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                      Nav: {ROLE_PERMISSIONS[key]?.nav?.join(', ')}
+                    </div>
+                  </div>
+                ))}
               </div>
-            </>
-          )}
-        </div>
+            </CollapsibleSection>
+          </div>
         )
       })()}
 
@@ -1264,10 +1415,43 @@ function XeroIntegrationSection() {
     return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
-  return (
-    <div className="card card-pad" style={{ marginBottom: 20 }}>
-      <div className="section-title" style={{ marginBottom: 14 }}>Xero Integration</div>
+  // Build the summary string + status badge for the collapsed header.
+  // Three states: loading (no badge, "Loading..."), disconnected (amber dot,
+  // "Not connected"), connected (green dot, tenant name + bill count + last sync).
+  let summaryLine
+  let statusBadge
+  if (loading) {
+    summaryLine = 'Loading…'
+    statusBadge = null
+  } else if (!connection) {
+    summaryLine = 'Not connected — click to set up'
+    statusBadge = (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text3)' }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text3)', display: 'inline-block' }} />
+        Disconnected
+      </span>
+    )
+  } else {
+    const parts = [connection.tenant_name]
+    if (lastSync?.bills_upserted) parts.push(`${lastSync.bills_upserted.toLocaleString()} bills`)
+    if (lastSync?.finished_at) parts.push(`synced ${fmtTime(lastSync.finished_at)}`)
+    summaryLine = parts.join(' · ')
+    statusBadge = (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#448a40' }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#448a40', display: 'inline-block' }} />
+        Connected
+      </span>
+    )
+  }
 
+  return (
+    <CollapsibleSection
+      title="Xero Integration"
+      summary={summaryLine}
+      icon={<IconPlug />}
+      statusBadge={statusBadge}
+      storageKey="xero-integration"
+    >
       {loading ? (
         <Spinner />
       ) : !connection ? (
@@ -1355,6 +1539,6 @@ function XeroIntegrationSection() {
           {syncResult.message}
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   )
 }
