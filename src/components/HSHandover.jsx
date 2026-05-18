@@ -525,6 +525,29 @@ function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
   )
 }
 
+// Styled confirmation dialog used when deleting a custom subfolder. Same
+// pattern as the one inline in ProjectDocumentation.jsx and SubcontractorDocs.jsx
+// — kept local to this file so HSHandover stays self-contained.
+//
+// Why this exists: the delete-folder button on a custom subfolder previously
+// rendered <ConfirmDlg ...> on line ~1165 but the component was never imported
+// or defined here. React treated `<ConfirmDlg>` as an undefined component and
+// threw, blanking the page. Defining it locally matches the convention used
+// by the two other doc-tree components in the codebase.
+function ConfirmDlg({ message, onOk, onCancel }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
+      <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={Btn}>Cancel</button>
+          <button onClick={onOk} style={BtnR}>Delete</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function fmtSize(b) {
   if (!b) return ''
   if (b < 1024) return b + 'B'
