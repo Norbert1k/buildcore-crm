@@ -462,6 +462,13 @@ export default function Settings() {
         )
       })()}
 
+      {/* ── Xero Integration ─────────────────────────────────────────────
+          Admin-only. Shows connection status + lets admin connect, sync,
+          and disconnect Xero. Hidden for non-admins entirely. The
+          XeroIntegrationSection component handles all data loading; this
+          page just decides whether to render it. */}
+      {profile?.role === 'admin' && <XeroIntegrationSection />}
+
       {/* Change Password Modal */}
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
 
@@ -1107,5 +1114,247 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
         )}
       </div>
     </Modal>
+  )
+}
+
+// ─── Xero Integration ──────────────────────────────────────────────────────
+//
+// Admin-only section that lets you connect/disconnect Xero and trigger
+// syncs. Two buttons:
+//   • Test sync — fetches 1 bill, writes raw JSON to xero_sync_log.
+//                 Used to verify the description parser works before
+//                 turning on real syncing. No data is written to
+//                 xero_bills/xero_bill_lines.
+//   • Sync now — full sync. Pulls bills modified since last successful
+//                sync (or 12 months ago first time). Writes to all tables.
+//
+// Connection state is read from xero_connections_safe view (which excludes
+// the access/refresh tokens — only metadata is exposed to the client).
+// The Connect/Disconnect actions go via edge functions; this component
+// never sees a token.
+function XeroIntegrationSection() {
+  const [connection, setConnection] = useState(null)  // null = not connected
+  const [loading, setLoading] = useState(true)
+  const [lastSync, setLastSync] = useState(null)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)  // {ok, message} or {error}
+  const [mappings, setMappings] = useState([])
+
+  useEffect(() => {
+    loadStatus()
+    loadMappings()
+    // Listen for the OAuth callback popup posting back success/failure
+    function onMessage(e) {
+      if (e.data?.source === 'xero-oauth-callback') {
+        loadStatus()
+        if (e.data.success) {
+          setSyncResult({ ok: true, message: e.data.message })
+        } else {
+          setSyncResult({ ok: false, message: e.data.message })
+        }
+      }
+    }
+    window.addEventListener('message', onMessage)
+    return () => window.removeEventListener('message', onMessage)
+  }, [])
+
+  async function loadStatus() {
+    setLoading(true)
+    const { data } = await supabase.from('xero_connections_safe').select('*').limit(1).maybeSingle()
+    setConnection(data || null)
+    const { data: lastLog } = await supabase.from('xero_sync_log')
+      .select('id, started_at, finished_at, mode, status, bills_upserted, lines_matched, lines_unmatched, error_message')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setLastSync(lastLog || null)
+    setLoading(false)
+  }
+
+  async function loadMappings() {
+    const { data } = await supabase.from('xero_project_mapping')
+      .select('xero_project_name, project_id, projects:project_id(project_name)')
+      .order('xero_project_name')
+    setMappings(data || [])
+  }
+
+  // Connect flow:
+  //   1. Get the user's JWT from the Supabase session
+  //   2. Open a popup pointing at the OAuth start function with the JWT
+  //      passed as a one-shot query param. The function validates the JWT,
+  //      generates a signed state, and 302-redirects the popup to Xero.
+  //   3. User authorises on Xero. Xero bounces back to the callback function.
+  //   4. The callback renders an HTML page that postMessage's the parent
+  //      window. Our message handler reloads connection status.
+  async function startConnect() {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      setSyncResult({ ok: false, message: 'Not signed in.' })
+      return
+    }
+    const baseUrl = import.meta.env.VITE_SUPABASE_URL || ''
+    if (!baseUrl) {
+      setSyncResult({ ok: false, message: 'VITE_SUPABASE_URL not set in env.' })
+      return
+    }
+    // Pass JWT as query param because popups can't carry custom headers
+    // on the initial GET. Server validates the token same as if it were
+    // in the Authorization header.
+    const url = `${baseUrl}/functions/v1/xero-oauth-start?return_to=/settings&jwt=${encodeURIComponent(session.access_token)}`
+    window.open(url, 'xero-oauth', 'width=600,height=750')
+  }
+
+  async function disconnect() {
+    if (!window.confirm('Disconnect Xero? You will need to re-authorise to sync again. Existing synced bills are NOT deleted.')) return
+    const { error } = await supabase.from('xero_connections').delete().eq('id', connection.id)
+    if (error) {
+      setSyncResult({ ok: false, message: `Failed to disconnect: ${error.message}` })
+      return
+    }
+    setConnection(null)
+    setSyncResult({ ok: true, message: 'Disconnected. Synced bills are still in the database.' })
+  }
+
+  async function runSync(mode) {
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Not signed in')
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1/xero-sync`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mode }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        setSyncResult({ ok: false, message: data.error || `HTTP ${res.status}` })
+      } else {
+        let summary
+        if (mode === 'test') {
+          summary = `Test fetched ${data.bills_fetched} bill(s). ` +
+            (data.first_bill_number ? `First bill: ${data.first_bill_number}. ` : '') +
+            `Check xero_sync_log (id ${data.log_id?.slice(0, 8)}…) for the raw JSON payload.`
+        } else {
+          summary = `Synced ${data.bills_upserted} bills, ${data.lines_upserted} lines ` +
+            `(${data.lines_matched} matched to CRM projects, ${data.lines_unmatched} unmatched).`
+        }
+        setSyncResult({ ok: true, message: summary })
+        loadStatus()
+      }
+    } catch (err) {
+      setSyncResult({ ok: false, message: String(err.message || err) })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    const diffMin = Math.round((Date.now() - d.getTime()) / 60000)
+    if (diffMin < 1) return 'just now'
+    if (diffMin < 60) return `${diffMin} min ago`
+    if (diffMin < 24 * 60) return `${Math.round(diffMin / 60)} hr ago`
+    return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  }
+
+  return (
+    <div className="card card-pad" style={{ marginBottom: 20 }}>
+      <div className="section-title" style={{ marginBottom: 14 }}>Xero Integration</div>
+
+      {loading ? (
+        <Spinner />
+      ) : !connection ? (
+        <>
+          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+            Connect Xero to sync supplier bills per project. Outgoings sync hourly once connected.
+          </div>
+          <button className="btn btn-primary" onClick={startConnect}>Connect Xero</button>
+        </>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Connected to</div>
+              <div style={{ fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#448a40', display: 'inline-block' }} />
+                {connection.tenant_name}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                Since {new Date(connection.connected_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </div>
+              {connection.has_refresh_error && (
+                <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>
+                  ⚠ Last token refresh failed — disconnect + reconnect if syncs fail
+                </div>
+              )}
+            </div>
+            <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Last sync</div>
+              <div style={{ fontSize: 14, fontWeight: 500 }}>
+                {lastSync ? fmtTime(lastSync.started_at) : 'Never'}
+              </div>
+              {lastSync && (
+                <div style={{ fontSize: 11, color: lastSync.status === 'error' ? 'var(--red)' : 'var(--text3)', marginTop: 4 }}>
+                  {lastSync.status === 'error'
+                    ? `Error: ${(lastSync.error_message || '').slice(0, 80)}`
+                    : `${lastSync.mode} · ${lastSync.bills_upserted || 0} bills · ${lastSync.lines_matched || 0} matched`}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+            <button className="btn" onClick={() => runSync('test')} disabled={syncing}>
+              {syncing ? 'Working…' : 'Test sync (1 bill)'}
+            </button>
+            <button className="btn btn-primary" onClick={() => runSync('full')} disabled={syncing}>
+              {syncing ? 'Syncing…' : 'Sync now (full)'}
+            </button>
+            <button className="btn" onClick={disconnect} style={{ marginLeft: 'auto', color: 'var(--red)' }}>
+              Disconnect
+            </button>
+          </div>
+
+          {/* Mapping table — read-only in session 1. UI for editing comes in session 2. */}
+          <div style={{ background: 'var(--surface2)', borderRadius: 6, padding: 12, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
+              Project mappings ({mappings.length})
+            </div>
+            {mappings.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>No mappings yet.</div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, fontSize: 12 }}>
+                {mappings.map(m => (
+                  <div key={m.xero_project_name} style={{ display: 'contents' }}>
+                    <div style={{ color: 'var(--text2)' }}>{m.xero_project_name}</div>
+                    <div style={{ color: m.projects?.project_name ? 'var(--text)' : 'var(--red)' }}>
+                      → {m.projects?.project_name || '(no CRM project linked)'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {syncResult && (
+        <div style={{
+          marginTop: 10, padding: '8px 12px', borderRadius: 6, fontSize: 12,
+          background: syncResult.ok ? 'var(--green-bg, rgba(72,138,64,0.12))' : 'var(--red-bg, rgba(163,45,45,0.12))',
+          color: syncResult.ok ? 'var(--green, #448a40)' : 'var(--red, #A32D2D)',
+          border: `0.5px solid ${syncResult.ok ? 'rgba(72,138,64,0.3)' : 'rgba(163,45,45,0.3)'}`,
+        }}>
+          {syncResult.message}
+        </div>
+      )}
+    </div>
   )
 }
