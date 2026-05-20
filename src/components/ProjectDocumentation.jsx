@@ -257,6 +257,16 @@ async function publishProgressReportToFolder({ reportId, projectId, projectName,
 }
 
 // ── Folder drop reader (reads dropped folders recursively via webkitGetAsEntry) ─
+//
+// Browser gotcha: DirectoryReader.readEntries() returns AT MOST 100 entries
+// per call. To read a folder fully you must call readEntries() repeatedly on
+// the SAME reader until it returns an empty array. The previous version called
+// it once, so any folder with >100 files was silently truncated (and large
+// folders could return 0 on the first call, dropping everything).
+//
+// Both readEntries() and entry.file() take an error callback. We pass them so a
+// permission error / read failure rejects the promise instead of hanging the
+// drop handler forever.
 async function readDropEntries(e) {
   const items = e.dataTransfer?.items
   if (!items) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
@@ -267,17 +277,43 @@ async function readDropEntries(e) {
   }
   if (!entries.length) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
   const result = { files: [], folders: new Set() }
+
+  // Read EVERY entry in a directory by draining the reader. readEntries gives
+  // back batches of up to 100; an empty batch signals the end.
+  function readAllEntries(reader) {
+    return new Promise((resolve, reject) => {
+      const all = []
+      function readBatch() {
+        reader.readEntries(
+          (batch) => {
+            if (!batch.length) { resolve(all); return }
+            all.push(...batch)
+            readBatch()  // keep going until an empty batch
+          },
+          (err) => reject(err),
+        )
+      }
+      readBatch()
+    })
+  }
+
   async function walk(entry, path) {
-    if (entry.isFile) {
-      const file = await new Promise(r => entry.file(r))
-      result.files.push({ file, path })
-      if (path) result.folders.add(path)
-    } else if (entry.isDirectory) {
-      const dirPath = path ? path + '/' + entry.name : entry.name
-      result.folders.add(dirPath)
-      const reader = entry.createReader()
-      const children = await new Promise(r => reader.readEntries(r))
-      for (const child of children) await walk(child, dirPath)
+    try {
+      if (entry.isFile) {
+        const file = await new Promise((res, rej) => entry.file(res, rej))
+        result.files.push({ file, path })
+        if (path) result.folders.add(path)
+      } else if (entry.isDirectory) {
+        const dirPath = path ? path + '/' + entry.name : entry.name
+        result.folders.add(dirPath)
+        const reader = entry.createReader()
+        const children = await readAllEntries(reader)
+        for (const child of children) await walk(child, dirPath)
+      }
+    } catch (err) {
+      // One unreadable file or directory shouldn't sink the whole drop.
+      // Log it and carry on — the user still gets everything else.
+      console.warn('[readDropEntries] skipped unreadable entry:', entry?.name, err)
     }
   }
   for (const entry of entries) await walk(entry, '')
