@@ -1207,12 +1207,22 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         keyMap[fp] = key
         await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || subfolder.key, folder_key: key, label })
       }
-      for (const { file, path } of drop.files) {
+      // Upload the files with progress feedback — same UploadProgress overlay
+      // the loose-file path uses. Without this, dropping a folder uploaded
+      // silently with no loading bar.
+      const dropFiles = drop.files
+      setUploadProgress({ active: true, files: dropFiles.map(x => x.file.name), current: 0, total: dropFiles.length, errors: [] })
+      const folderErrors = []
+      for (let i = 0; i < dropFiles.length; i++) {
+        const { file, path } = dropFiles[i]
+        setUploadProgress(prev => ({ ...prev, current: i }))
         const sfKey = path ? keyMap[path] : subfolder.key
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (error) { folderErrors.push(file.name); continue }
+        await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
+      setUploadProgress({ active: false, files: dropFiles.map(x => x.file.name), current: dropFiles.length, total: dropFiles.length, errors: folderErrors })
       loadChildFolders(); loadFiles()
     } else {
       const f = drop.files.map(x => x.file)
@@ -1833,12 +1843,19 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         keyMap[fp] = key
         await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || folder.key, folder_key: key, label })
       }
-      for (const { file, path } of drop.files) {
+      const dropFiles = drop.files
+      setUploadProgress({ active: true, files: dropFiles.map(x => x.file.name), current: 0, total: dropFiles.length, errors: [] })
+      const folderErrors = []
+      for (let i = 0; i < dropFiles.length; i++) {
+        const { file, path } = dropFiles[i]
+        setUploadProgress(prev => ({ ...prev, current: i }))
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (error) { folderErrors.push(file.name); continue }
+        await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
+      setUploadProgress({ active: false, files: dropFiles.map(x => x.file.name), current: dropFiles.length, total: dropFiles.length, errors: folderErrors })
       loadCustomSubfolders(); loadRootFiles()
     } else {
       const f = drop.files.map(x => x.file)
@@ -1917,12 +1934,19 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         keyMap[fp] = key
         await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || folder.key, folder_key: key, label })
       }
-      for (const { file, path } of drop.files) {
+      const dropFiles = drop.files
+      setUploadProgress({ active: true, files: dropFiles.map(x => x.file.name), current: 0, total: dropFiles.length, errors: [] })
+      const folderErrors = []
+      for (let i = 0; i < dropFiles.length; i++) {
+        const { file, path } = dropFiles[i]
+        setUploadProgress(prev => ({ ...prev, current: i }))
         const sfKey = path ? keyMap[path] : null
         const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
-        if (!error) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
+        if (error) { folderErrors.push(file.name); continue }
+        await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
       }
+      setUploadProgress({ active: false, files: dropFiles.map(x => x.file.name), current: dropFiles.length, total: dropFiles.length, errors: folderErrors })
       loadCustomSubfolders(); loadRootFiles()
     } else {
       const f = drop.files.map(x => x.file)
