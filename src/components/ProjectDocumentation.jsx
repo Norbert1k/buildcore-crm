@@ -170,6 +170,13 @@ function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4
 function naturalSort(arr) {
   return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' }))
 }
+// Folder rows (project_doc_folders) have `label`, not `file_name`. Sort them
+// the same numeric-aware way so a "00." prefix sorts before "01." regardless
+// of when each folder was created. Used for custom subfolders, which the user
+// names with numeric prefixes to control order.
+function naturalSortFolders(arr) {
+  return [...arr].sort((a, b) => (a.label || '').localeCompare(b.label || '', undefined, { numeric: true, sensitivity: 'base' }))
+}
 async function triggerDownload(signedUrl, fileName) {
   try {
     const res = await fetch(signedUrl)
@@ -1069,8 +1076,8 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
 
   async function loadChildFolders() {
     const { data } = await supabase.from('project_doc_folders').select('*')
-      .eq('project_id', projectId).eq('parent_key', subfolder.key).order('created_at')
-    setChildFolders(data || [])
+      .eq('project_id', projectId).eq('parent_key', subfolder.key)
+    setChildFolders(naturalSortFolders(data || []))
   }
 
   // Load this sub-building's progress reports. Filter is exact match on the
@@ -1689,8 +1696,10 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
 
   async function loadCustomSubfolders() {
     const { data } = await supabase.from('project_doc_folders').select('*')
-      .eq('project_id', projectId).eq('parent_key', folder.key).order('created_at')
-    const custom = (data || []).map(d => ({ key: d.folder_key, label: d.label, custom: true }))
+      .eq('project_id', projectId).eq('parent_key', folder.key)
+    // Template subfolders keep their fixed declared order (01-12). Only the
+    // custom subfolders are label-sorted, so a "00." prefix sorts first.
+    const custom = naturalSortFolders(data || []).map(d => ({ key: d.folder_key, label: d.label, custom: true }))
     setSubfolders([...(folder.subfolders || []), ...custom])
   }
 
