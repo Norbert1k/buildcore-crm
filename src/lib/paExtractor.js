@@ -398,6 +398,17 @@ export async function fetchAllProjectPas(supabase, projectId) {
         })
       })
     )
+    // Promise.all resolves its callbacks in completion order, so `results` is
+    // pushed in whatever order each PA's async download/extract finished — not
+    // a stable order. Sort by the leading ordinal in the building label
+    // ("01. …", "02. …") so the By Sub-building breakdown always reads in
+    // numeric order. Root-level PA (null label) sorts last.
+    const ordinalOf = (label) => {
+      if (!label) return 999
+      const m = String(label).trim().match(/^(\d{1,3})\s*[.\-)]/)
+      return m ? parseInt(m[1], 10) : 998
+    }
+    results.sort((a, b) => ordinalOf(a.subfolder_label) - ordinalOf(b.subfolder_label))
     return results
   } catch (err) {
     console.warn('[paExtractor] fetchAllProjectPas failed:', err)
