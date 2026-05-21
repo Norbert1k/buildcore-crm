@@ -19,6 +19,35 @@ const STATUS_LABELS = {
   working_on:  { label: 'Working On',  cls: 'pill-amber' },
   closed:      { label: 'Closed',      cls: 'pill-gray' },
 }
+
+// ── VAT breakdown helper ─────────────────────────────────────────────────────
+// Given the headline amount, whether that amount is net or gross, and the VAT
+// rate (0/5/20), returns { net, vat, gross } all rounded to 2dp.
+//
+//   basis = 'gross' → amount already includes VAT; net = amount / (1 + rate)
+//   basis = 'net'   → amount excludes VAT;        gross = amount * (1 + rate)
+//
+// Returns null members when the amount isn't a usable number, so callers can
+// store NULLs (the "VAT not recorded" state) rather than 0s.
+function computeVatBreakdown(amountStr, basis, ratePct) {
+  const amt = amountStr === '' || amountStr == null ? NaN : Number(amountStr)
+  const rate = Number(ratePct)
+  if (Number.isNaN(amt) || amt < 0 || Number.isNaN(rate)) {
+    return { net: null, vat: null, gross: null }
+  }
+  const r2 = (n) => Math.round(n * 100) / 100
+  const f = rate / 100
+  let net, gross
+  if (basis === 'net') {
+    net = amt
+    gross = amt * (1 + f)
+  } else {
+    gross = amt
+    net = f === -1 ? amt : amt / (1 + f)
+  }
+  return { net: r2(net), vat: r2(gross - net), gross: r2(gross) }
+}
+
 export default function TaskDetail() {
   const { taskId } = useParams()
   const navigate = useNavigate()
@@ -403,6 +432,8 @@ export default function TaskDetail() {
           task_file_id: '',
           vendor_kind: 'supplier',
           building_ordinals: [],
+          vat_rate: '20',
+          vat_basis: 'gross',
         }
         return {
           ...base,
@@ -424,6 +455,16 @@ export default function TaskDetail() {
           building_ordinals: Array.isArray(data.building_ordinals) && data.building_ordinals.length > 0
             ? data.building_ordinals
             : base.building_ordinals || [],
+          // VAT extracted from the PDF. The edge function returns vat_rate
+          // (0/5/20) and vat_basis ('gross'|'net') describing what `amount`
+          // represents. When the PDF has no VAT line, these come back null
+          // and we keep the existing modal values.
+          vat_rate: (data.vat_rate === 0 || data.vat_rate === 5 || data.vat_rate === 20)
+            ? String(data.vat_rate)
+            : base.vat_rate || '20',
+          vat_basis: (data.vat_basis === 'net' || data.vat_basis === 'gross')
+            ? data.vat_basis
+            : base.vat_basis || 'gross',
           // Mark which fields were AI-filled so the modal can badge them.
           _aiFilled: {
             vendor_name: !!extractedName,
@@ -432,6 +473,7 @@ export default function TaskDetail() {
             received_date: !!data.received_date,
             notes: !!data.notes,
             building_ordinals: Array.isArray(data.building_ordinals) && data.building_ordinals.length > 0,
+            vat: (data.vat_rate === 0 || data.vat_rate === 5 || data.vat_rate === 20),
           },
           _aiConfidence: data.confidence || 'unknown',
         }
@@ -481,6 +523,15 @@ export default function TaskDetail() {
         // Multi-building: which buildings does this quote cover.
         // Empty array = covers whole project (the default).
         building_ordinals: Array.isArray(existing.building_ordinals) ? [...existing.building_ordinals] : [],
+        // VAT. vat_basis tells the modal whether `amount` is gross or net so
+        // the breakdown can be derived. Stored rows don't carry vat_basis
+        // (it's a UI-only concept) — we infer it: if amount matches the
+        // stored gross, basis is 'gross'; otherwise default to 'gross' (the
+        // most common case for quote PDFs).
+        vat_rate: existing.vat_rate != null ? String(existing.vat_rate) : '20',
+        vat_basis: (existing.amount_net != null && existing.amount != null
+          && Number(existing.amount) === Number(existing.amount_net))
+          ? 'net' : 'gross',
       })
     } else {
       setQuoteModal({
@@ -496,6 +547,8 @@ export default function TaskDetail() {
         notes: '',
         task_file_id: '',
         building_ordinals: [],   // empty = covers whole project
+        vat_rate: '20',          // default to standard UK rate
+        vat_basis: 'gross',      // most quote PDFs show a gross/total figure
       })
     }
   }
@@ -538,6 +591,11 @@ export default function TaskDetail() {
         setSavingQuote(false)
         return
       }
+      // VAT breakdown. Derived from the headline amount + the modal's
+      // net/gross basis + rate. When amount is blank, all four are NULL
+      // ("VAT not recorded"). `amount` itself is stored unchanged.
+      const vb = computeVatBreakdown(q.amount, q.vat_basis || 'gross', q.vat_rate || '20')
+      const vatRateNum = q.amount === '' ? null : Number(q.vat_rate || '20')
       const payload = {
         task_id: taskId,
         task_file_id: q.task_file_id || null,
@@ -554,6 +612,11 @@ export default function TaskDetail() {
         building_ordinals: (Array.isArray(q.building_ordinals) && q.building_ordinals.length > 0)
           ? q.building_ordinals
           : null,
+        // VAT breakdown — new columns, additive. NULL when no amount.
+        vat_rate:     vatRateNum,
+        amount_net:   vb.net,
+        amount_vat:   vb.vat,
+        amount_gross: vb.gross,
       }
       let savedId = q._id
       if (q._id) {
@@ -1568,6 +1631,60 @@ export default function TaskDetail() {
                 <option value="USD">USD $</option>
               </select>
             </Field>
+            {/* ── VAT block ──────────────────────────────────────────────
+                Added field. Lets the user record whether the Amount above
+                is gross or net, pick the VAT rate, and see the net/VAT/
+                gross breakdown computed live. Stored into the four new
+                task_quotes columns on save. The existing `amount` column
+                is left exactly as the user typed it — comparison and
+                project-sync still read `amount` unchanged. */}
+            <div className="full">
+              {(() => {
+                const vb = computeVatBreakdown(
+                  quoteModal.amount, quoteModal.vat_basis || 'gross', quoteModal.vat_rate || '20')
+                const ccy = quoteModal.currency === 'EUR' ? '€'
+                  : quoteModal.currency === 'USD' ? '$' : '£'
+                const fmt = (n) => n == null ? '—'
+                  : ccy + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                const aiVat = quoteModal._aiFilled?.vat
+                return (
+                  <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface2)' }}>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>
+                      VAT
+                      {aiVat && <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 9, padding: '1px 6px', borderRadius: 99, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>AI</span>}
+                    </div>
+                    <div className="form-grid">
+                      <Field label="Amount entered is">
+                        <select value={quoteModal.vat_basis || 'gross'}
+                          onChange={e => setQuoteModal(prev => ({ ...prev, vat_basis: e.target.value, _aiFilled: prev._aiFilled ? { ...prev._aiFilled, vat: false } : undefined }))}>
+                          <option value="gross">Gross (inc VAT)</option>
+                          <option value="net">Net (ex VAT)</option>
+                        </select>
+                      </Field>
+                      <Field label="VAT rate">
+                        <select value={quoteModal.vat_rate || '20'}
+                          onChange={e => setQuoteModal(prev => ({ ...prev, vat_rate: e.target.value, _aiFilled: prev._aiFilled ? { ...prev._aiFilled, vat: false } : undefined }))}>
+                          <option value="20">20%</option>
+                          <option value="5">5%</option>
+                          <option value="0">0%</option>
+                        </select>
+                      </Field>
+                    </div>
+                    <div style={{ background: 'var(--surface)', borderRadius: 6, padding: '8px 12px', marginTop: 4 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', padding: '3px 0' }}>
+                        <span>Net (ex VAT)</span><span>{fmt(vb.net)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', padding: '3px 0' }}>
+                        <span>VAT @ {quoteModal.vat_rate || '20'}%</span><span>{fmt(vb.vat)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, padding: '5px 0 0', marginTop: 3, borderTop: '0.5px solid var(--border)' }}>
+                        <span>Gross total</span><span style={{ color: '#448a40' }}>{fmt(vb.gross)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
             {/* Date + status */}
             <Field label="Received date">
               <input type="date" value={quoteModal.received_date}
