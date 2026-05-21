@@ -78,6 +78,17 @@ function showsClientVisibilityToggle(folderKey, subfolderKey) {
   return PORTAL_TILE_TARGETS.some(([fk, esk]) => fk === folderKey && esk === sk)
 }
 
+// The set of template SUBFOLDER keys that map to a client-portal tile
+// (csa, cff, reports, meetings, photos). A custom subfolder created inside
+// one of these — at any depth — is meant to reach the client, so it should
+// be created client_visible=true. A custom subfolder anywhere else stays
+// hidden (the project_doc_folders.client_visible column defaults to false),
+// because no portal route surfaces it. Derived from PORTAL_TILE_TARGETS so
+// the two never drift.
+const PORTAL_TILE_SUBFOLDER_KEYS = new Set(
+  PORTAL_TILE_TARGETS.filter(([, sk]) => sk != null).map(([, sk]) => sk)
+)
+
 // ── Folder icons (per folder key) ─────────────────────────────────────────────
 const FOLDER_ICONS = {
   '00-project-information': ({ color, size }) => (
@@ -911,7 +922,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
 }
 
 // ── Subfolder Section (recursive — supports nested sub-subfolders) ────────────
-function SubfolderSection({ projectId, projectName, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree }) {
+function SubfolderSection({ projectId, projectName, folder, subfolder, canManage, viewMode, onPreview, onReload, depth = 0, treeVersion, refreshTree, portalTileRoot = null }) {
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [childFolders, setChildFolders] = useState([])
@@ -1133,7 +1144,16 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
     if (!newSubName.trim()) return
     setSavingSub(true)
     const key = subfolder.key + '-sub-' + Date.now()
-    await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: subfolder.key, folder_key: key, label: newSubName.trim() })
+    // A custom subfolder created inside a portal-tile master folder (Meetings,
+    // CSA, CFF, Surveys & Reports, Photos) — at any depth — is meant to reach
+    // the client, so create it client_visible=true. portalTileRoot is non-null
+    // whenever this SubfolderSection sits anywhere under such a tile. Anywhere
+    // else, omit the field and let the column default (false) keep it private.
+    const insertRow = {
+      project_id: projectId, parent_key: subfolder.key, folder_key: key, label: newSubName.trim(),
+    }
+    if (portalTileRoot) insertRow.client_visible = true
+    await supabase.from('project_doc_folders').insert(insertRow)
     setNewSubName(''); setShowAddSub(false); setSavingSub(false); loadChildFolders()
   }
 
@@ -1221,7 +1241,11 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         const parentKey = parentPath ? keyMap[parentPath] : subfolder.key
         const key = (parentKey || subfolder.key) + '-sub-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
         keyMap[fp] = key
-        await supabase.from('project_doc_folders').insert({ project_id: projectId, parent_key: parentKey || subfolder.key, folder_key: key, label })
+        // Same rule as addChildFolder: folders dropped into a portal-tile
+        // master folder are client-visible; elsewhere they stay private.
+        const dropRow = { project_id: projectId, parent_key: parentKey || subfolder.key, folder_key: key, label }
+        if (portalTileRoot) dropRow.client_visible = true
+        await supabase.from('project_doc_folders').insert(dropRow)
       }
       // Upload the files with progress feedback — same UploadProgress overlay
       // the loose-file path uses. Without this, dropping a folder uploaded
@@ -1396,7 +1420,8 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
               subfolder={{ key: cf.folder_key, label: cf.label, custom: true }}
               canManage={canManage} viewMode={viewMode} onPreview={onPreview}
               onReload={id => { if (id === '__folder_deleted__') loadChildFolders(); else setFiles(prev => prev.filter(f => f.id !== id)) }}
-              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree} />
+              depth={depth + 1} treeVersion={treeVersion} refreshTree={refreshTree}
+              portalTileRoot={portalTileRoot} />
           ))}
 
           {/* Progress Reports (only inside 05-progress-report subfolders, e.g. Merton's Sports Hall) */}
@@ -2201,7 +2226,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                     if (id === '__folder_deleted__') loadCustomSubfolders()
                     else loadRootFiles()
                   }}
-                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree} />
+                  depth={0} treeVersion={treeVersion} refreshTree={refreshTree}
+                  portalTileRoot={PORTAL_TILE_SUBFOLDER_KEYS.has(sf.key) ? sf.key : null} />
               </div>
             </div>
           ))}
