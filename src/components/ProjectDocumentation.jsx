@@ -67,6 +67,7 @@ const PORTAL_TILE_TARGETS = [
   ['00-project-information', 'csa'],
   ['00-project-information', 'cff'],
   ['00-project-information', 'reports'],   // → "Surveys & Reports" tile
+  ['00-project-information', 'meetings'],  // → "Meeting Minutes" tile
   ['00-project-information', 'photos'],
 ]
 
@@ -1041,27 +1042,6 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
     setTogglingVisible(false)
   }
 
-  // Toggle for custom subfolders — writes to project_doc_folders.client_visible
-  // (the column already exists; we're just adding the UI to flip it).
-  async function toggleCustomSubfolderVisibility(e) {
-    if (e) e.stopPropagation()
-    if (togglingVisible || !subfolder.custom) return
-    setTogglingVisible(true)
-    const newValue = !clientVisible
-    setClientVisible(newValue)  // optimistic
-    try {
-      const { error } = await supabase.from('project_doc_folders')
-        .update({ client_visible: newValue })
-        .eq('project_id', projectId)
-        .eq('folder_key', subfolder.key)
-      if (error) throw error
-    } catch (err) {
-      setClientVisible(!newValue)  // revert
-      alert('Could not update visibility: ' + err.message)
-    }
-    setTogglingVisible(false)
-  }
-
   async function loadFileCount() {
     const { count } = await supabase.from('project_doc_files').select('id', { count: 'exact', head: true })
       .eq('project_id', projectId).eq('subfolder_key', subfolder.key)
@@ -1326,39 +1306,15 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             {clientVisible ? 'Visible to client' : 'Hidden'}
           </button>
         )}
-        {/* Custom subfolders (user-created child folders) get their OWN
-            visibility toggle. Previously these inherited from their parent
-            template, but you wanted independent control per request:
-            "subfolders + files + template subfolders too" — so each custom
-            subfolder is now toggleable on its own. The portal applies
-            parent-hides-children semantics, so a hidden parent still hides
-            this folder regardless of its own setting. */}
-        {isCustom && canManage && (
-          <button
-            onClick={toggleCustomSubfolderVisibility}
-            disabled={togglingVisible}
-            title={clientVisible ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
-            style={{
-              fontSize: 10,
-              padding: '3px 8px',
-              borderRadius: 12,
-              border: '0.5px solid var(--border)',
-              background: clientVisible ? '#448a4020' : 'transparent',
-              color: clientVisible ? '#448a40' : 'var(--text3)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: clientVisible ? '#448a40' : 'var(--text3)',
-            }} />
-            {clientVisible ? 'Visible to client' : 'Hidden'}
-          </button>
-        )}
+        {/* Custom (user-created) subfolders do NOT get their own client
+            visibility toggle. Only template subfolders that map to a portal
+            tile (csa, cff, reports, meetings, photos) are toggleable — see
+            PORTAL_TILE_TARGETS / showsClientVisibilityToggle above. A custom
+            subfolder's portal visibility is inherited from its template
+            parent: if the parent tile is visible, the custom folder shows
+            through it; if not, it's hidden. There's no portal route that
+            reads a standalone custom folder, so an independent toggle here
+            would have no effect anyway and only cause confusion. */}
         {canManage && !isPhotosSubfolder && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
             {!renaming && (
