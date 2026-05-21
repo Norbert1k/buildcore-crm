@@ -1203,7 +1203,9 @@ export default function TaskDetail() {
                     <thead>
                       <tr style={{ color: 'var(--text3)', fontWeight: 400, textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                         <th style={{ padding: '6px 8px', fontWeight: 500 }}>Vendor</th>
-                        <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>Amount</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>Amount (net)</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>VAT</th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>Gross</th>
                         <th style={{ padding: '6px 8px', fontWeight: 500 }}>Status</th>
                         <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>vs Lowest</th>
                         <th style={{ padding: '6px 8px', fontWeight: 500, width: 60 }}></th>
@@ -1265,6 +1267,25 @@ export default function TaskDetail() {
                             </td>
                             <td style={{ padding: '8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {q.amount != null ? `${q.currency === 'GBP' ? '£' : (q.currency + ' ')}${Number(q.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </td>
+                            {/* VAT amount + rate. Pulled from the stored VAT
+                                columns. A quote saved before VAT existed has
+                                amount_vat NULL → shows a dash. */}
+                            <td style={{ padding: '8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
+                              {q.amount_vat != null ? (
+                                <>
+                                  {`${q.currency === 'GBP' ? '£' : (q.currency + ' ')}${Number(q.amount_vat).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                  {q.vat_rate != null && <div style={{ fontSize: 9, color: 'var(--text3)' }}>{q.vat_rate}%</div>}
+                                </>
+                              ) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                            </td>
+                            {/* Gross (inc VAT). NULL for pre-VAT quotes. */}
+                            <td style={{ padding: '8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                              {q.amount_gross != null ? (
+                                <span style={{ color: '#448a40', fontWeight: 600 }}>
+                                  {`${q.currency === 'GBP' ? '£' : (q.currency + ' ')}${Number(q.amount_gross).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                </span>
+                              ) : <span style={{ color: 'var(--text3)' }}>—</span>}
                             </td>
                             <td style={{ padding: '8px' }}>
                               <span style={{
