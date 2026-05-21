@@ -523,15 +523,14 @@ export default function TaskDetail() {
         // Multi-building: which buildings does this quote cover.
         // Empty array = covers whole project (the default).
         building_ordinals: Array.isArray(existing.building_ordinals) ? [...existing.building_ordinals] : [],
-        // VAT. vat_basis tells the modal whether `amount` is gross or net so
-        // the breakdown can be derived. Stored rows don't carry vat_basis
-        // (it's a UI-only concept) — we infer it: if amount matches the
-        // stored gross, basis is 'gross'; otherwise default to 'gross' (the
-        // most common case for quote PDFs).
+        // VAT. `amount` is stored as the NET total (Path A), so when the
+        // modal re-opens, the Amount field shows the net and the basis is
+        // 'net'. The VAT block then re-derives VAT + gross from it. A quote
+        // saved before VAT existed has vat_rate NULL — default the rate to
+        // 20% for the picker, but the breakdown is informational until the
+        // user saves (which is what populates the VAT columns).
         vat_rate: existing.vat_rate != null ? String(existing.vat_rate) : '20',
-        vat_basis: (existing.amount_net != null && existing.amount != null
-          && Number(existing.amount) === Number(existing.amount_net))
-          ? 'net' : 'gross',
+        vat_basis: 'net',
       })
     } else {
       setQuoteModal({
@@ -591,18 +590,24 @@ export default function TaskDetail() {
         setSavingQuote(false)
         return
       }
-      // VAT breakdown. Derived from the headline amount + the modal's
-      // net/gross basis + rate. When amount is blank, all four are NULL
-      // ("VAT not recorded"). `amount` itself is stored unchanged.
+      // VAT breakdown. Derived from the entered figure + the modal's
+      // net/gross basis + rate. When amount is blank, all four are NULL.
       const vb = computeVatBreakdown(q.amount, q.vat_basis || 'gross', q.vat_rate || '20')
       const vatRateNum = q.amount === '' ? null : Number(q.vat_rate || '20')
+      // `amount` is stored as the NET total — this is the figure Quote
+      // comparison ranks on, so every quote must compare net-vs-net
+      // regardless of whether the user typed a gross or net figure.
+      // computeVatBreakdown already derived the net from the entered
+      // figure + basis. Fall back to the raw entered number only when
+      // there's no VAT info at all (vb.net is null → amount blank).
+      const amountNet = vb.net != null ? vb.net : amountNum
       const payload = {
         task_id: taskId,
         task_file_id: q.task_file_id || null,
         supplier_id: supplierId,
         subcontractor_id: subcontractorId,
         vendor_name_text: vendorName,
-        amount: amountNum,
+        amount: amountNet,
         currency: q.currency || 'GBP',
         received_date: q.received_date || null,
         status: q.status || 'pending',
@@ -713,7 +718,7 @@ export default function TaskDetail() {
     // task_id only. Use the joined query.
     const { data: acceptedRows, error: sumErr } = await supabase
       .from('task_quotes')
-      .select('amount, tasks!inner(project_id)')
+      .select('amount, amount_gross, tasks!inner(project_id)')
       .eq('subcontractor_id', subcontractorId)
       .eq('status', 'accepted')
       .eq('tasks.project_id', task.project_id)
@@ -721,7 +726,12 @@ export default function TaskDetail() {
       console.warn('[recompute] sum query error:', sumErr)
       return { changed: false, mode: 'noop', total: 0 }
     }
-    const total = (acceptedRows || []).reduce((s, r) => s + Number(r.amount || 0), 0)
+    // The project should reflect the GROSS figure (what's actually
+    // payable). `amount` is stored net (Path A), so sum amount_gross
+    // instead. Quotes saved before VAT existed have amount_gross NULL —
+    // fall back to `amount` for those so the legacy total still syncs.
+    const total = (acceptedRows || []).reduce(
+      (s, r) => s + Number(r.amount_gross != null ? r.amount_gross : (r.amount || 0)), 0)
     // Look up existing row.
     const { data: existing } = await supabase
       .from('project_subcontractors')
@@ -1357,8 +1367,16 @@ export default function TaskDetail() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                       {catFiles.map(f => {
                         const isEml = f.file_name.toLowerCase().endsWith('.eml')
+                        // Linked quote record, if one was created from this
+                        // file (task_quotes.task_file_id → this file's id).
+                        // Shows the VAT breakdown inline on the file row.
+                        const linkedQuote = quotes.find(qq => qq.task_file_id === f.id)
+                        const hasVat = linkedQuote && linkedQuote.amount_gross != null
+                        const qCcy = linkedQuote?.currency === 'EUR' ? '€'
+                          : linkedQuote?.currency === 'USD' ? '$' : '£'
+                        const qFmt = (n) => qCcy + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                         return (
-                          <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 8, background: 'var(--surface2)', borderRadius: 6 }}>
+                          <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 8, background: 'var(--surface2)', borderRadius: 6 }}>
                             <div style={{ width: 28, height: 28, borderRadius: 4, background: isEml ? '#e3f2fd' : 'var(--surface)', color: isEml ? '#1565c0' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                               {isEml ? '✉' : '📄'}
                             </div>
@@ -1367,6 +1385,23 @@ export default function TaskDetail() {
                               <div style={{ fontSize: 10, color: 'var(--text3)' }}>
                                 {fmtBytes(f.file_size)} • {f.profiles?.full_name || 'Unknown'} • {new Date(f.uploaded_at).toLocaleDateString('en-GB')}
                               </div>
+                              {/* VAT breakdown — only when a quote record is
+                                  linked to this file and carries VAT data.
+                                  Files with no linked quote, or quotes saved
+                                  before VAT existed, simply omit this line. */}
+                              {hasVat && (
+                                <div style={{ display: 'flex', gap: 12, marginTop: 3, fontSize: 10, flexWrap: 'wrap' }}>
+                                  <span style={{ color: 'var(--text3)' }}>
+                                    Net <span style={{ color: 'var(--text2)' }}>{qFmt(linkedQuote.amount_net)}</span>
+                                  </span>
+                                  <span style={{ color: 'var(--text3)' }}>
+                                    VAT {linkedQuote.vat_rate != null ? linkedQuote.vat_rate + '%' : ''} <span style={{ color: 'var(--text2)' }}>{qFmt(linkedQuote.amount_vat)}</span>
+                                  </span>
+                                  <span style={{ color: 'var(--text3)' }}>
+                                    Gross <span style={{ color: '#448a40', fontWeight: 500 }}>{qFmt(linkedQuote.amount_gross)}</span>
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'center' }}>
                               {canUpload && (
