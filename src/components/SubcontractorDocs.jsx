@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
 import UploadProgress from './UploadProgress'
+import GeneratePOModal from './GeneratePOModal'
 
 const SUB_DOC_FOLDERS = [
   { key: 'purchase-order',       label: '01. Purchase Order',             color: '#185FA5', bg: '#E6F1FB' },
@@ -218,6 +219,8 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   const [files, setFiles] = useState([])
   const [selected, setSelected] = useState(new Set())
   const [fileCount, setFileCount] = useState(0)
+  // Generate PO — only used by the 'purchase-order' folder.
+  const [showPOModal, setShowPOModal] = useState(false)
   const { profile } = useAuth()
 
   useEffect(() => { loadCustomSubfolders(); loadFileCount() }, [])
@@ -285,6 +288,12 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
             <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
           </> : <>
             <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip all</button>
+            {folder.key === 'purchase-order' && canManage && (
+              <button onClick={() => setShowPOModal(true)} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Generate PO
+              </button>
+            )}
             {canManage && <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>}
             {canManage && <label style={BtnG}>{uploading ? '...' : '+ Upload'}<input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} /></label>}
             {open && <ViewToggle viewMode={viewMode} setView={setView} />}
@@ -303,6 +312,15 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
             </label>
           ) : <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage} onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDropFolder} onUpload={uploadToFolder} />}
         </div>
+      )}
+      {showPOModal && (
+        <GeneratePOModal
+          projectId={projectId}
+          projectSubId={projectSubId}
+          existingPO={null}
+          onClose={() => setShowPOModal(false)}
+          onSaved={() => { loadRootFiles(); loadFileCount() }}
+        />
       )}
     </div>
   )
