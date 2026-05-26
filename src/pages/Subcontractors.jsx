@@ -153,6 +153,10 @@ function AllSubcontractorsTab({ designTeam }) {
   const [showModal, setShowModal] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [editing, setEditing] = useState(null)
+  // Click-to-sort state for the table headers. Defaults to company_name
+  // ascending — the order the list loaded in before sorting existed.
+  const [sortKey, setSortKey] = useState('company_name')
+  const [sortDir, setSortDir] = useState('asc')
   const navigate = useNavigate()
   const { can } = useAuth()
 
@@ -181,6 +185,17 @@ function AllSubcontractorsTab({ designTeam }) {
     setLoading(false)
   }
 
+  // Toggle sort: clicking the active column flips direction; a new column
+  // sorts ascending.
+  function toggleSort(key) {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
   function filtered() {
     let list = subs
     if (filter === 'blacklisted') list = list.filter(s => s.blacklisted)
@@ -196,7 +211,9 @@ function AllSubcontractorsTab({ designTeam }) {
         s.city?.toLowerCase().includes(q)
       )
     }
-    return list
+    // sortBy sorts ascending (nulls last); reverse for descending.
+    const sorted = sortBy(list, sortKey)
+    return sortDir === 'desc' ? sorted.reverse() : sorted
   }
 
   // Unique trades present in the current tab, alphabetical — used for the dropdown
@@ -277,11 +294,25 @@ function AllSubcontractorsTab({ designTeam }) {
           <table>
             <thead>
               <tr>
-                <th>Company</th>
-                <th>Trade</th>
-                <th>Contact</th>
-                <th>Location</th>
-                <th>Status</th>
+                {[
+                  ['Company', 'company_name'],
+                  ['Trade', 'trade'],
+                  ['Contact', 'contact_name'],
+                  ['Location', 'city'],
+                  ['Status', 'status'],
+                ].map(([label, key]) => (
+                  <th key={key}
+                    onClick={() => toggleSort(key)}
+                    style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                    title={`Sort by ${label}`}>
+                    {label}
+                    <span style={{ marginLeft: 4, fontSize: 9, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
+                      {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : '▲'}
+                    </span>
+                  </th>
+                ))}
+                {/* Documents and Rating are derived values, not plain
+                    columns — left non-sortable for now. */}
                 <th>Documents</th>
                 <th>Rating</th>
                 <th></th>
