@@ -91,6 +91,10 @@ export default function Sidebar({ expCounts = {}, open, onClose }) {
     { to: '/clients',           key: 'clients',  label: 'Clients',      icon: <IconClients /> },
     { to: '/suppliers',         key: 'suppliers', label: 'Suppliers',    icon: <IconBuilding /> },
     { to: '/company-documents', key: 'company',  label: 'Company Docs', icon: <IconDoc /> },
+    { to: '/web-search',        key: 'websearch', label: 'Web Search',
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><path d="M11 8a3 3 0 0 0-3 3"/></svg>
+    },
+    { to: '/google-drive',      key: 'gdrive',   label: 'Google Drive', icon: <IconProject /> },
   ]
 
   const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))
