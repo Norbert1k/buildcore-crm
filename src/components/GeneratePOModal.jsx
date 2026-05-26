@@ -92,8 +92,23 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
     subName: '', subAddress: '', subContact: '', subContactTel: '',
     siteName: '', siteAddress: '',
     pmName: '', pmEmail: '',
+    directorName: '',
     contractValue: '', quoteReference: '', quoteDate: '',
   })
+
+  // Project Manager — list of selectable PMs (role = project_manager).
+  // The PO auto-fills the project's PM but the PM is overridable per-PO.
+  const [pmOptions, setPmOptions] = useState([])
+  const [selectedPmId, setSelectedPmId] = useState('')
+
+  // Programme — files available in the project's "06. Project Programme"
+  // folder; the PM picks one to reference in the PO.
+  const [programmeFiles, setProgrammeFiles] = useState([])
+  const [selectedProgrammeId, setSelectedProgrammeId] = useState('')
+
+  // Order number — generated once on open for a new PO so it can be shown
+  // locked. Existing POs use their stored number.
+  const [orderNumber, setOrderNumber] = useState('')
 
   // Editable form state
   const [form, setForm] = useState({
@@ -112,7 +127,6 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
     contact2_tel: '',
   })
   const [attendance, setAttendance] = useState(ATTENDANCE_DEFAULTS)
-  const [milestones, setMilestones] = useState([])
 
   const valuationDates = buildValuationDates(form.commencement_date)
 
@@ -131,7 +145,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
       const project = link?.projects || {}
       const sub = link?.subcontractors || {}
 
-      // Project Manager — the "Project Assigned To" profile.
+      // Project Manager — the assigned PM (projects.project_manager_id).
       let pmName = '', pmEmail = ''
       if (project.project_manager_id) {
         const { data: pm } = await supabase
@@ -141,6 +155,17 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           .single()
         pmName = pm?.full_name || ''
         pmEmail = pm?.email || ''
+      }
+      // Project Director — the person the project is "Assigned To"
+      // (projects.project_director_id).
+      let directorName = ''
+      if (project.project_director_id) {
+        const { data: dir } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', project.project_director_id)
+          .single()
+        directorName = dir?.full_name || ''
       }
 
       // Accepted quote for this subcontractor on this project, if any —
@@ -169,9 +194,35 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         siteName: project.project_name || '',
         siteAddress,
         pmName, pmEmail,
+        directorName,
         contractValue: link?.contract_value != null ? String(link.contract_value) : '',
         quoteReference, quoteDate,
       })
+
+      // Project Manager options — all profiles with the project_manager role.
+      const { data: pms } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('role', 'project_manager')
+        .order('full_name')
+      setPmOptions(pms || [])
+
+      // Programme files — from the project's "06. Project Programme" folder.
+      const { data: progFiles } = await supabase
+        .from('project_doc_files')
+        .select('id, file_name, storage_path, created_at')
+        .eq('project_id', projectId)
+        .eq('folder_key', '06-project-programme')
+        .order('created_at', { ascending: false })
+      setProgrammeFiles(progFiles || [])
+
+      // Order number. Existing PO → its stored number. New PO → generate now
+      // so it can be shown locked in the form.
+      if (existingPO) {
+        setOrderNumber(existingPO.order_number || '')
+      } else {
+        setOrderNumber(await nextOrderNumber())
+      }
 
       // Editing an existing PO — seed the form from it.
       if (existingPO) {
@@ -194,7 +245,11 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         if (Array.isArray(existingPO.attendance) && existingPO.attendance.length) {
           setAttendance(existingPO.attendance)
         }
-        if (Array.isArray(existingPO.milestones)) setMilestones(existingPO.milestones)
+        setSelectedPmId(existingPO.pm_id || project.project_manager_id || '')
+        setSelectedProgrammeId(existingPO.programme_file_id || '')
+      } else {
+        // New PO — default the PM to the project's assigned PM (overridable).
+        setSelectedPmId(project.project_manager_id || '')
       }
     } catch (err) {
       setError('Could not load project / subcontractor details: ' + err.message)
@@ -206,16 +261,6 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
 
   function toggleAttendance(i) {
     setAttendance(prev => prev.map((row, idx) => idx === i ? { ...row, ccg: !row.ccg } : row))
-  }
-
-  function addMilestone() {
-    setMilestones(prev => [...prev, { desc: '', date: '' }])
-  }
-  function setMilestone(i, key, value) {
-    setMilestones(prev => prev.map((m, idx) => idx === i ? { ...m, [key]: value } : m))
-  }
-  function removeMilestone(i) {
-    setMilestones(prev => prev.filter((_, idx) => idx !== i))
   }
 
   // Generate the order number: CCG-PO-<year>-<4-digit sequence>.
@@ -250,6 +295,8 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         project_sub_id: projectSubId,
         order_date: form.order_date || null,
         commencement_date: form.commencement_date || null,
+        site_manager_name: form.site_manager_name.trim() || null,
+        site_manager_tel: form.site_manager_tel.trim() || null,
         contract_value: ctx.contractValue ? Number(ctx.contractValue) : null,
         quote_reference: ctx.quoteReference || null,
         quote_date: ctx.quoteDate || null,
@@ -261,11 +308,17 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         statutory_compliance_requirements: form.statutory_compliance_requirements.trim() || null,
         contact2_name: form.contact2_name.trim() || null,
         contact2_tel: form.contact2_tel.trim() || null,
-        pm_name: ctx.pmName || null,
-        pm_email: ctx.pmEmail || null,
+        // Project Manager — overridable per-PO; snapshot id + name/email.
+        pm_id: selectedPmId || null,
+        pm_name: (pmOptions.find(p => p.id === selectedPmId)?.full_name) || ctx.pmName || null,
+        pm_email: (pmOptions.find(p => p.id === selectedPmId)?.email) || ctx.pmEmail || null,
         pm_tel: form.pm_tel.trim() || null,
+        director_name: ctx.directorName || null,
+        // Programme — the chosen file from the project's 06. Project Programme
+        // folder. Stores the id + name so the PO references a real document.
+        programme_file_id: selectedProgrammeId || null,
+        programme_file_name: (programmeFiles.find(f => f.id === selectedProgrammeId)?.file_name) || null,
         attendance,
-        milestones,
         valuation_dates: valuationDates,
         status: issue ? 'issued' : 'draft',
       }
@@ -312,7 +365,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           ...basePayload,
           subcontractor_id: link?.subcontractor_id,
           created_by: profile?.id || null,
-          order_number: await nextOrderNumber(),
+          order_number: orderNumber || await nextOrderNumber(),
           revision: '',
         }
         const { data, error: e } = await supabase
@@ -378,14 +431,26 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
             {/* Auto-filled context */}
             <div style={sectionTitle}>Auto-filled — from project &amp; subcontractor</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <span style={label}>Order Number — auto-generated, locked</span>
+                <div style={{ ...roBox, fontWeight: 600, color: 'var(--text)', letterSpacing: '0.02em' }}>
+                  {orderNumber || '—'}{existingPO?.revision ? ' Rev ' + existingPO.revision : ''}
+                </div>
+              </div>
+              <div><span style={label}>Project Director (Assigned To)</span><div style={roBox}>{ctx.directorName || '—'}</div></div>
               <div><span style={label}>Sub-Contractor</span><div style={roBox}>{ctx.subName || '—'}</div></div>
               <div><span style={label}>Sub-Contractor Address</span><div style={roBox}>{ctx.subAddress || '—'}</div></div>
               <div><span style={label}>Site / Project</span><div style={roBox}>{ctx.siteName || '—'}</div></div>
               <div><span style={label}>Site / Delivery Address</span><div style={roBox}>{ctx.siteAddress || '—'}</div></div>
               <div><span style={label}>Contract Value (excl. VAT)</span><div style={roBox}>{ctx.contractValue ? '£' + Number(ctx.contractValue).toLocaleString('en-GB') : '—'}</div></div>
               <div><span style={label}>Quote Reference / Date</span><div style={roBox}>{ctx.quoteReference || '—'}{ctx.quoteDate ? ' · ' + fmtDate(ctx.quoteDate) : ''}</div></div>
-              <div><span style={label}>Project Manager (Assigned To)</span><div style={roBox}>{ctx.pmName || '—'}{ctx.pmEmail ? ' · ' + ctx.pmEmail : ''}</div></div>
-              <div><span style={label}>Project Director</span><div style={roBox}>Norbert Lenktys</div></div>
+              <div>
+                <span style={label}>Project Manager — auto-filled, can override</span>
+                <select value={selectedPmId} onChange={e => setSelectedPmId(e.target.value)} style={{ width: '100%' }}>
+                  <option value="">— Select Project Manager —</option>
+                  {pmOptions.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                </select>
+              </div>
             </div>
 
             {/* Dates */}
@@ -466,21 +531,22 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
               </div>
             </div>
 
-            {/* Programme milestones */}
-            <div style={sectionTitle}>Programme — milestones</div>
-            {milestones.length === 0 && (
-              <div style={{ ...roBox, color: 'var(--text3)', marginBottom: 8 }}>No milestones added. Use “+ Add milestone” to build the programme.</div>
-            )}
-            {milestones.map((m, i) => (
-              <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-                <input value={m.desc} onChange={e => setMilestone(i, 'desc', e.target.value)} placeholder="Milestone description" style={{ flex: 1 }} />
-                <input type="date" value={m.date} onChange={e => setMilestone(i, 'date', e.target.value)} style={{ width: 160 }} />
-                <button onClick={() => removeMilestone(i)} style={{ background: 'none', border: '0.5px solid var(--border)', borderRadius: 6, padding: '0 10px', cursor: 'pointer', color: 'var(--text3)' }}>✕</button>
+            {/* Programme — pick a file from the project's 06. Project Programme folder */}
+            <div style={sectionTitle}>Programme — select from project documents</div>
+            {programmeFiles.length === 0 ? (
+              <div style={{ ...roBox, color: 'var(--text3)' }}>
+                No files found in the project’s “06. Project Programme” folder. Upload the programme there first, then it will appear here to attach to the PO.
               </div>
-            ))}
-            <button onClick={addMilestone} style={{ fontSize: 12, padding: '5px 12px', borderRadius: 6, border: '0.5px solid var(--border)', background: 'var(--surface2)', cursor: 'pointer', marginTop: 4 }}>
-              + Add milestone
-            </button>
+            ) : (
+              <select value={selectedProgrammeId} onChange={e => setSelectedProgrammeId(e.target.value)} style={{ width: '100%' }}>
+                <option value="">— No programme attached —</option>
+                {programmeFiles.map(f => (
+                  <option key={f.id} value={f.id}>
+                    {f.file_name}{f.created_at ? '  ·  ' + fmtDate(f.created_at) : ''}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {/* Attendance table */}
             <div style={sectionTitle}>General &amp; Specific Attendance — tap to toggle CCG / Sub-Con</div>
