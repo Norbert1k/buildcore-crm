@@ -92,7 +92,7 @@ export default function Projects() {
     setLoading(true)
     const { data, error } = await supabase
       .from('projects')
-      .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
+      .select('*, director:profiles!projects_project_director_id_fkey(full_name), manager:profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
       // Order by the project reference ("2026-006" … "2026-001") descending,
       // so the list always reads in project-ID order regardless of when each
       // row was created. project_ref is a zero-padded YYYY-NNN string, so a
@@ -181,7 +181,7 @@ export default function Projects() {
                       <tr>
                         <th>Project</th>
                         <th>Client</th>
-                        <th>Project Manager</th>
+                        <th>Assigned To</th>
                         <th>Start</th>
                         <th>End</th>
                         <th>Duration</th>
@@ -204,7 +204,7 @@ export default function Projects() {
                               : (p.client_name || '—')
                             }
                           </td>
-                          <td>{p.profiles?.full_name || '—'}</td>
+                          <td>{p.director?.full_name || '—'}</td>
                           <td className="td-muted">{formatDate(p.start_date)}</td>
                           <td className="td-muted">{formatDate(p.end_date)}</td>
                           <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
@@ -252,7 +252,7 @@ export default function Projects() {
                       <tr>
                         <th>Project</th>
                         <th>Client</th>
-                        <th>Project Manager</th>
+                        <th>Assigned To</th>
                         <th>Start</th>
                         <th>End</th>
                         <th>Duration</th>
@@ -274,7 +274,7 @@ export default function Projects() {
                               : (p.client_name || '—')
                             }
                           </td>
-                          <td>{p.profiles?.full_name || '—'}</td>
+                          <td>{p.director?.full_name || '—'}</td>
                           <td className="td-muted">{formatDate(p.start_date)}</td>
                           <td className="td-muted">{formatDate(p.end_date)}</td>
                           <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
