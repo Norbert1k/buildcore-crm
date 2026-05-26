@@ -4,7 +4,7 @@ export const TRADES = [
   'Agency','Architects','Asbestos Surveys','Balcony Specialists','Bike Storage','Borehole Investigations','Brickwork','Building Control','Carpentry','Civil Engineers','Cladding',
   'Consultant','Core Drilling & Sawing','Demolition','Drainage','Dryliners','Ecologist','Electrical',
   'Fire Consultants','Fire Engineer','Fire Protection','Flood Risk Consultants','Flooring','General Builders','Glazing','Ground Investigation','Groundworks',
-  'HVAC','Insulation','Landscaping','Lift Installation','Lighting Consultants','Mastic Man','MEP Consultants',
+  'HVAC','Insulation','Landscaping','Landscape Surveyors','Lift Installation','Lighting Consultants','Mastic Man','MEP Consultants',
   'Noise Consultants','Nurse Call System','Painting & Decorating','Piling','Planning Consultants','Plastering','Plumbing','Precast Concrete B&B','Principle Designers',
   'Roofing','Roofing & Cladding','Roofing Trusses','Scaffolding','Screeding',
   'Setting Out Engineer','SFS Engineers','Solar Panels','Sprinkler System','Steel Erection','Stone Masonry',
@@ -45,6 +45,7 @@ export const DOCUMENT_TYPES = {
   iso_14001: 'ISO 14001 Environmental',
   iso_45001: 'ISO 45001 Health & Safety',
   f10_notification: 'F10 CDM Notification',
+  waste_carrier_licence: 'Waste Carrier Licence',
   trade_certificate: 'Trade Certificate',
   other: 'Other Document',
 }
@@ -76,11 +77,11 @@ export const ROLES = {
 }
  
 export const ROLE_PERMISSIONS = {
-  admin:               { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
-  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
-  operations_manager:  { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
-  director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
-  accountant:          { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
+  admin:               { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  operations_manager:  { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
+  accountant:          { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','gdrive','settings'], financials: true, performance: true },
   site_manager:        { nav: ['dashboard','subcontractors','projects','tasks','suppliers','quotes','company','settings'], financials: false, performance: true },
   document_controller: { nav: ['dashboard','subcontractors','documents','projects','tasks','clients','quotes','company'], financials: false, performance: false },
   viewer:              { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','quotes','company'], financials: false, performance: false },
