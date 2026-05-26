@@ -21,6 +21,9 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     status: project?.status || 'active',
     start_date: project?.start_date || '',
     end_date: project?.end_date || '',
+    // project_director_id = the person the project is "Assigned To".
+    // project_manager_id = the assigned Project Manager (new field).
+    project_director_id: project?.project_director_id || '',
     project_manager_id: project?.project_manager_id || '',
     value: project?.value || '',
     description: project?.description || '',
@@ -77,6 +80,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       ...form,
       project_ref: form.project_ref.trim() || null,
       value: form.value ? parseFloat(form.value) : null,
+      project_director_id: form.project_director_id || null,
       project_manager_id: form.project_manager_id || null,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
@@ -191,10 +195,18 @@ export default function ProjectModal({ project, onClose, onSaved }) {
             {Object.entries(PROJECT_STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </Field>
-        <Field label="Project Assigned To">
-          <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
+        <Field label="Project Assigned To (Project Director)">
+          <select value={form.project_director_id} onChange={e => set('project_director_id', e.target.value)}>
             <option value="">— Unassigned —</option>
             {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+          </select>
+        </Field>
+        <Field label="Project Manager">
+          <select value={form.project_manager_id} onChange={e => set('project_manager_id', e.target.value)}>
+            <option value="">— Unassigned —</option>
+            {managers.filter(m => m.role === 'project_manager').map(m => (
+              <option key={m.id} value={m.id}>{m.full_name}</option>
+            ))}
           </select>
         </Field>
         <Field label="Contract Value (£)">
