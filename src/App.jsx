@@ -16,6 +16,8 @@ import Suppliers from './pages/Suppliers'
 import GlobalSearch from './components/GlobalSearch'
 import Settings from './pages/Settings'
 import CompanyDocuments from './pages/CompanyDocuments'
+import WebSearch from './pages/WebSearch'
+import GoogleDrive from './pages/GoogleDrive'
 import Clients from './pages/Clients'
 import ClientDetail from './pages/ClientDetail'
 import TaskTracker from './pages/TaskTracker'
@@ -308,6 +310,8 @@ function ProtectedLayout() {
             <Route path="/quotes" element={<Quotes />} />
             <Route path="/settings" element={<Settings />} />
           <Route path="/company-documents" element={<CompanyDocuments />} />
+          <Route path="/web-search" element={<WebSearch />} />
+          <Route path="/google-drive" element={<GoogleDrive />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/:id" element={<ClientDetail />} />
           <Route path="/tasks" element={<TaskTracker />} />
