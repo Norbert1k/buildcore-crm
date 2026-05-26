@@ -195,49 +195,47 @@ export default function WebSearch() {
                 const isBest = i === 0 && r._ppm2 != null
                 return (
                   <div key={i} style={isBest ? cardBest : card}>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      {/* Thumbnail */}
-                      <div style={{ width: 88, height: 88, flexShrink: 0, borderRadius: 8, background: 'var(--surface2)', border: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                        {r.image_url
-                          ? <img src={r.image_url} alt={r.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={e => { e.target.style.display = 'none'; e.target.parentNode.innerHTML = '<span style="color:var(--text3);font-size:22px">▦</span>' }} />
-                          : <span style={{ color: 'var(--text3)', fontSize: 22 }}>▦</span>}
-                      </div>
-                      {/* Detail */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+                      {/* Left — product detail */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {isBest && (
                           <span style={{ background: '#E6F1FB', color: '#185FA5', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 5 }}>Lowest guide price / m²</span>
                         )}
-                        <div style={{ fontSize: 14, fontWeight: 500, marginTop: isBest ? 4 : 0 }}>{r.name || 'Unnamed product'}</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginTop: 3 }}>{r.supplier || 'Unknown supplier'}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>
+                        <div style={{ fontSize: 15, fontWeight: 500, marginTop: isBest ? 6 : 0 }}>{r.name || 'Unnamed product'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3 }}>
                           {[r.size, r.coverage_m2 ? r.coverage_m2 + 'm² per sheet' : null].filter(Boolean).join(' · ') || 'Size not stated'}
                         </div>
-                        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                           <div style={priceBox}>
                             <div style={{ fontSize: 11, color: 'var(--text2)' }}>Guide / sheet</div>
-                            <div style={{ fontSize: 15, fontWeight: 500, color: sheet.value == null ? 'var(--text3)' : 'var(--text)' }}>
+                            <div style={{ fontSize: 16, fontWeight: 500, color: sheet.value == null ? 'var(--text3)' : 'var(--text)' }}>
                               {sheet.value == null ? 'Not shown' : money(sheet.value)}
                             </div>
                           </div>
                           <div style={priceBox}>
                             <div style={{ fontSize: 11, color: 'var(--text2)' }}>Guide / m²</div>
-                            <div style={{ fontSize: 15, fontWeight: 500, color: ppm2 == null ? 'var(--text3)' : 'var(--text)' }}>
+                            <div style={{ fontSize: 16, fontWeight: 500, color: ppm2 == null ? 'var(--text3)' : 'var(--text)' }}>
                               {ppm2 == null ? '—' : money(ppm2)}
                             </div>
                           </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                            {r.url
-                              ? <a href={r.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#185FA5', whiteSpace: 'nowrap' }}>↗ View</a>
-                              : <span style={{ fontSize: 12, color: 'var(--text3)' }}>No link</span>}
-                            {r.datasheet_url
-                              ? <a href={r.datasheet_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#185FA5', whiteSpace: 'nowrap' }}>▤ Datasheet</a>
-                              : <span style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap' }}>No datasheet</span>}
-                          </div>
                         </div>
                         {sheet.note && (
-                          <div style={{ fontSize: 11, color: '#854F0B', marginTop: 4 }}>{sheet.note} — shown as listed.</div>
+                          <div style={{ fontSize: 11, color: '#854F0B', marginTop: 6 }}>{sheet.note} — shown as listed.</div>
                         )}
+                      </div>
+                      {/* Right — supplier name above action buttons */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, flexShrink: 0, minWidth: 150 }}>
+                        <div style={{ fontSize: 14, fontWeight: 500, textAlign: 'right' }}>{r.supplier || 'Unknown supplier'}</div>
+                        {r.url
+                          ? <a href={r.url} target="_blank" rel="noreferrer"
+                              style={{ display: 'block', width: '100%', boxSizing: 'border-box', textAlign: 'center', fontSize: 13, fontWeight: 500, padding: '8px 14px', borderRadius: 8, background: '#185FA5', color: '#fff', textDecoration: 'none' }}>
+                              ↗ View product</a>
+                          : <span style={{ display: 'block', width: '100%', boxSizing: 'border-box', textAlign: 'center', fontSize: 13, padding: '8px 14px', borderRadius: 8, background: 'var(--surface2)', color: 'var(--text3)' }}>No link</span>}
+                        {r.datasheet_url
+                          ? <a href={r.datasheet_url} target="_blank" rel="noreferrer"
+                              style={{ display: 'block', width: '100%', boxSizing: 'border-box', textAlign: 'center', fontSize: 13, fontWeight: 500, padding: '8px 14px', borderRadius: 8, background: 'var(--surface)', border: '0.5px solid var(--border)', color: '#185FA5', textDecoration: 'none' }}>
+                              ▤ Datasheet</a>
+                          : <span style={{ display: 'block', width: '100%', boxSizing: 'border-box', textAlign: 'center', fontSize: 13, padding: '8px 14px', borderRadius: 8, background: 'var(--surface2)', color: 'var(--text3)' }}>No datasheet</span>}
                       </div>
                     </div>
                   </div>
