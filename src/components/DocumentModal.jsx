@@ -6,6 +6,11 @@ import { useAuth } from '../lib/auth'
 
 const INSURANCE_TYPES = ['public_liability', 'employers_liability', 'professional_indemnity']
 
+// Document types that MUST have an expiry date but are NOT insurances — so
+// they require an expiry date without asking for a cover amount. Insurance
+// types already require expiry via INSURANCE_TYPES; this covers the rest.
+const EXPIRY_REQUIRED_TYPES = ['waste_carrier_licence']
+
 export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }) {
   const { profile } = useAuth()
   const editing = !!doc
@@ -176,12 +181,15 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
   }
 
   const hasInsurance = types.some(t => INSURANCE_TYPES.includes(t))
+  // True when any selected type requires an expiry date — insurances, plus
+  // the non-insurance expiry-required types (e.g. Waste Carrier Licence).
+  const expiryRequired = hasInsurance || types.some(t => EXPIRY_REQUIRED_TYPES.includes(t))
 
   function validate() {
     const e = {}
     if (types.length === 0) e.types = 'Select at least one document type'
     if (!form.document_name.trim()) e.document_name = 'Document name is required'
-    if (hasInsurance && !form.expiry_date) e.expiry_date = 'Expiry date is required for insurance documents'
+    if (expiryRequired && !form.expiry_date) e.expiry_date = 'Expiry date is required for this document type'
     // Cover amount required for every selected insurance type
     for (const t of types) {
       if (INSURANCE_TYPES.includes(t)) {
@@ -593,7 +601,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
           <input type="date" value={form.issue_date} onChange={e => { setForm(f => ({ ...f, issue_date: e.target.value })); clearAutoFilled('issue_date') }} />
           {autoFilledFields.has('issue_date') && <AutoFilledHint />}
         </Field>
-        <Field label={hasInsurance ? 'Expiry Date *' : 'Expiry Date'} error={errors.expiry_date}>
+        <Field label={expiryRequired ? 'Expiry Date *' : 'Expiry Date'} error={errors.expiry_date}>
           <input type="date" value={form.expiry_date} onChange={e => { setForm(f => ({ ...f, expiry_date: e.target.value })); clearAutoFilled('expiry_date') }} />
           {autoFilledFields.has('expiry_date') && <AutoFilledHint />}
         </Field>
