@@ -89,7 +89,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
 
   // Auto-filled context (read-only in the form)
   const [ctx, setCtx] = useState({
-    subName: '', subAddress: '', subContact: '', subContactTel: '',
+    subName: '', subAddress: '', subContact: '', subContactTel: '', subTrade: '',
     siteName: '', siteAddress: '',
     pmName: '', pmEmail: '',
     directorName: '',
@@ -191,6 +191,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         subAddress,
         subContact: sub.contact_name || '',
         subContactTel: sub.phone || '',
+        subTrade: link?.trade_on_project || sub.trade || '',
         siteName: project.project_name || '',
         siteAddress,
         pmName, pmEmail,
@@ -261,6 +262,43 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
 
   function toggleAttendance(i) {
     setAttendance(prev => prev.map((row, idx) => idx === i ? { ...row, ccg: !row.ccg } : row))
+  }
+
+  // AI fill — generates trade-specific draft text for one of the three
+  // clause sections via the generate-po-clause edge function. Result is a
+  // DRAFT that drops into the textarea for the PM to review and edit.
+  const [aiBusy, setAiBusy] = useState('')   // which section is generating
+  const [aiError, setAiError] = useState('')
+
+  // Maps the form field key → the edge-function section identifier.
+  const AI_SECTION = {
+    practical_completion_items: 'practical_completion',
+    quality_control_requirements: 'quality_control',
+    statutory_compliance_requirements: 'statutory_compliance',
+  }
+
+  async function aiFill(fieldKey) {
+    setAiError('')
+    const section = AI_SECTION[fieldKey]
+    if (!section) return
+    if (!ctx.subTrade) {
+      setAiError('This subcontractor has no trade set, so AI fill cannot tailor the text. Set a trade on the subcontractor first.')
+      return
+    }
+    setAiBusy(fieldKey)
+    try {
+      const { data, error: e } = await supabase.functions.invoke('generate-po-clause', {
+        body: { section, trade: ctx.subTrade, sub_name: ctx.subName },
+      })
+      if (e) throw e
+      if (!data?.ok || !data?.text) {
+        throw new Error(data?.error || 'The AI did not return any text. Try again.')
+      }
+      set(fieldKey, data.text)
+    } catch (err) {
+      setAiError('AI fill failed: ' + (err.message || 'unknown error'))
+    }
+    setAiBusy('')
   }
 
   // Generate the order number: CCG-PO-<year>-<4-digit sequence>.
@@ -510,13 +548,37 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
               ['practical_completion_items', 'Practical Completion Items', 3],
               ['quality_control_requirements', 'Quality Control Requirements', 2],
               ['statutory_compliance_requirements', 'Statutory Compliance Requirements', 2],
-            ].map(([key, lbl, rows]) => (
-              <div key={key} style={{ marginBottom: 10 }}>
-                <span style={label}>{lbl}</span>
-                <textarea value={form[key]} onChange={e => set(key, e.target.value)} rows={rows}
-                  style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }} />
-              </div>
-            ))}
+            ].map(([key, lbl, rows]) => {
+              const aiEligible = !!AI_SECTION[key]
+              return (
+                <div key={key} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={label}>{lbl}</span>
+                    {aiEligible && (
+                      <button type="button" onClick={() => aiFill(key)} disabled={!!aiBusy}
+                        title={`Generate a trade-specific draft for ${ctx.subTrade || 'this trade'}`}
+                        style={{
+                          fontSize: 11, padding: '2px 9px', borderRadius: 5, cursor: aiBusy ? 'default' : 'pointer',
+                          border: '0.5px solid #448a40', background: aiBusy === key ? '#E1F5EE' : 'transparent',
+                          color: '#448a40', fontWeight: 600, marginBottom: 4,
+                        }}>
+                        {aiBusy === key ? 'Generating…' : '✨ AI fill'}
+                      </button>
+                    )}
+                  </div>
+                  <textarea value={form[key]} onChange={e => set(key, e.target.value)} rows={rows}
+                    style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }} />
+                  {aiEligible && (
+                    <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>
+                      AI fill produces a draft based on the trade — review and edit before issuing.
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {aiError && (
+              <div style={{ marginTop: 4, padding: '8px 11px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{aiError}</div>
+            )}
 
             {/* 2nd director */}
             <div style={sectionTitle}>Sub-Contractor — 2nd Director (optional)</div>
