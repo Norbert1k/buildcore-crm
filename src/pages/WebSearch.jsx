@@ -79,7 +79,7 @@ export default function WebSearch() {
       })
       if (error) throw error
       if (!data?.ok) throw new Error(data?.error || 'Search failed — please try again.')
-      setSResults(data.results || [])
+      setSResults((data.results || []).slice(0, 5))
       setSNotes(data.notes || '')
     } catch (err) {
       setSError(err.message || 'Search failed.')
@@ -99,7 +99,7 @@ export default function WebSearch() {
       if (a._ppm2 == null) return 1
       if (b._ppm2 == null) return -1
       return a._ppm2 - b._ppm2
-    })
+    }).slice(0, 5)   // top 5 only
   }
 
   // ── Styles ─────────────────────────────────────────────────────────────────
