@@ -11,7 +11,7 @@ const CATEGORIES = [
   'Insulation', 'Ironmongery', 'Kitchens', 'Landscaping', 'Lifts',
   'Painting & Decorating', 'Plant & Tool Hire', 'Plumbing & Heating',
   'Recycling', 'Roofing Materials', 'Safety & PPE', 'Scaffolding',
-  'Tiling', 'Timber & Sheet', 'Wardrobes', 'Windows & Glazing'
+  'Skip Hire', 'Tiling', 'Timber & Sheet', 'Wardrobes', 'Windows & Glazing'
 ]
 
 const PAYMENT_TERMS = ['7 days', '14 days', '30 days', '60 days', '90 days', 'Proforma', 'Credit card', 'Cash on delivery']
