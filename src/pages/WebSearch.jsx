@@ -153,7 +153,7 @@ export default function WebSearch() {
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
             <div style={caveat}>
-              <span>ℹ</span> Results from the web. Prices, images and datasheets shown where visible — verify before ordering.
+              <span>ℹ</span> Prices are a guide from web search and may be out of date — always check the live price on the supplier's site before ordering or quoting.
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 0, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 6, padding: 2 }}>
               {[['Excl VAT', false], ['Inc VAT', true]].map(([lbl, val]) => (
@@ -206,22 +206,22 @@ export default function WebSearch() {
                       {/* Detail */}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         {isBest && (
-                          <span style={{ background: '#E6F1FB', color: '#185FA5', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 5 }}>Lowest per m²</span>
+                          <span style={{ background: '#E6F1FB', color: '#185FA5', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 5 }}>Lowest guide price / m²</span>
                         )}
                         <div style={{ fontSize: 14, fontWeight: 500, marginTop: isBest ? 4 : 0 }}>{r.name || 'Unnamed product'}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{r.supplier || 'Unknown supplier'}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginTop: 3 }}>{r.supplier || 'Unknown supplier'}</div>
                         <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>
                           {[r.size, r.coverage_m2 ? r.coverage_m2 + 'm² per sheet' : null].filter(Boolean).join(' · ') || 'Size not stated'}
                         </div>
                         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
                           <div style={priceBox}>
-                            <div style={{ fontSize: 11, color: 'var(--text2)' }}>Per sheet</div>
+                            <div style={{ fontSize: 11, color: 'var(--text2)' }}>Guide / sheet</div>
                             <div style={{ fontSize: 15, fontWeight: 500, color: sheet.value == null ? 'var(--text3)' : 'var(--text)' }}>
                               {sheet.value == null ? 'Not shown' : money(sheet.value)}
                             </div>
                           </div>
                           <div style={priceBox}>
-                            <div style={{ fontSize: 11, color: 'var(--text2)' }}>Per m²</div>
+                            <div style={{ fontSize: 11, color: 'var(--text2)' }}>Guide / m²</div>
                             <div style={{ fontSize: 15, fontWeight: 500, color: ppm2 == null ? 'var(--text3)' : 'var(--text)' }}>
                               {ppm2 == null ? '—' : money(ppm2)}
                             </div>
@@ -293,7 +293,7 @@ export default function WebSearch() {
                 <div key={i} style={card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500 }}>{r.name || 'Unnamed company'}</div>
+                      <div style={{ fontSize: 16, fontWeight: 600 }}>{r.name || 'Unnamed company'}</div>
                       <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{r.location || 'Location not stated'}</div>
                       {r.summary && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>{r.summary}</div>}
                       <div style={{ display: 'flex', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
