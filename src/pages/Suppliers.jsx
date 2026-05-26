@@ -24,6 +24,10 @@ export default function Suppliers() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [viewing, setViewing] = useState(null)
+  // Click-to-sort state for the table headers. Defaults to company_name
+  // ascending — the same order the list loaded in before sorting existed.
+  const [sortKey, setSortKey] = useState('company_name')
+  const [sortDir, setSortDir] = useState('asc')
   const [showPasswords, setShowPasswords] = useState({})
   const [confirmDelete, setConfirmDelete] = useState(null)
   const { can } = useAuth()
@@ -43,6 +47,17 @@ export default function Suppliers() {
     load()
   }
 
+  // Toggle sort: clicking the active column flips direction; clicking a new
+  // column sorts it ascending.
+  function toggleSort(key) {
+    if (sortKey === key) {
+      setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
   function filtered() {
     let list = suppliers
     if (filter !== 'all') list = list.filter(s => s.status === filter)
@@ -55,7 +70,9 @@ export default function Suppliers() {
         s.account_number?.toLowerCase().includes(q)
       )
     }
-    return list
+    // sortBy sorts ascending (nulls last); reverse for descending.
+    const sorted = sortBy(list, sortKey)
+    return sortDir === 'desc' ? sorted.reverse() : sorted
   }
 
   const list = filtered()
@@ -115,13 +132,25 @@ export default function Suppliers() {
           <table>
             <thead>
               <tr>
-                <th>Supplier</th>
-                <th>Category</th>
-                <th>Contact</th>
-                <th>Account No.</th>
-                {can('view_supplier_credit') && <th>Credit Limit</th>}
-                <th>Payment Terms</th>
-                <th>Status</th>
+                {[
+                  ['Supplier', 'company_name'],
+                  ['Category', 'category'],
+                  ['Contact', 'contact_name'],
+                  ['Account No.', 'account_number'],
+                  ...(can('view_supplier_credit') ? [['Credit Limit', 'credit_limit']] : []),
+                  ['Payment Terms', 'payment_terms'],
+                  ['Status', 'status'],
+                ].map(([label, key]) => (
+                  <th key={key}
+                    onClick={() => toggleSort(key)}
+                    style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                    title={`Sort by ${label}`}>
+                    {label}
+                    <span style={{ marginLeft: 4, fontSize: 9, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
+                      {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : '▲'}
+                    </span>
+                  </th>
+                ))}
                 <th></th>
               </tr>
             </thead>
