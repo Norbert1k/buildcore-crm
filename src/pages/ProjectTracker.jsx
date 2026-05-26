@@ -242,7 +242,7 @@ export default function ProjectTracker() {
     setLoading(true)
     const { data, error } = await supabase
       .from('projects')
-      .select('id, project_name, project_ref, client_name, status, value, site_address, city, postcode, start_date, end_date, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
+      .select('id, project_name, project_ref, client_name, status, value, site_address, city, postcode, start_date, end_date, director:profiles!projects_project_director_id_fkey(full_name), project_subcontractors(id)')
       .order('created_at', { ascending: false })
     if (error) console.error('[ProjectTracker] load error:', error)
 
@@ -360,7 +360,7 @@ export default function ProjectTracker() {
           <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555;">
             ${p.client_name ? `<div><span style="color:#999;">Client:</span> ${p.client_name}</div>` : ''}
             ${location ? `<div><span style="color:#999;">Location:</span> ${location}</div>` : ''}
-            ${p.profiles?.full_name ? `<div><span style="color:#999;">PM:</span> ${p.profiles.full_name}</div>` : ''}
+            ${p.director?.full_name ? `<div><span style="color:#999;">Assigned:</span> ${p.director.full_name}</div>` : ''}
             ${value ? `<div><span style="color:#999;">Value:</span> <strong>${value}</strong></div>` : ''}
           </div>
           <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
