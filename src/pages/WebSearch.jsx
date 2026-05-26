@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import PriceListTab from './PriceListTab'
 
 // ── Web Search ───────────────────────────────────────────────────────────────
 // Two research tools backed by the `web-search` edge function:
@@ -124,7 +125,7 @@ export default function WebSearch() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '0.5px solid var(--border)', marginBottom: 16 }}>
-        {[['products', 'Products'], ['suppliers', 'Suppliers']].map(([k, lbl]) => (
+        {[['products', 'Products'], ['suppliers', 'Suppliers'], ['pricelist', 'Price List']].map(([k, lbl]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{
               padding: '8px 14px', fontSize: 14, cursor: 'pointer',
@@ -311,6 +312,9 @@ export default function WebSearch() {
           )}
         </div>
       )}
+
+      {/* ── PRICE LIST ─────────────────────────────────────────────────────── */}
+      {tab === 'pricelist' && <PriceListTab />}
     </div>
   )
 }
