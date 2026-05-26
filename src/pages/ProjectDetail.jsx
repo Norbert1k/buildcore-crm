@@ -258,7 +258,7 @@ export default function ProjectDetail() {
   async function load() {
     setLoading(true)
     const [projRes, subsRes, allSubsRes, eaRes, allEARes, teamRes] = await Promise.all([
-      supabase.from('projects').select('*, profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
+      supabase.from('projects').select('*, director:profiles!projects_project_director_id_fkey(full_name), manager:profiles!projects_project_manager_id_fkey(full_name)').eq('id', id).single(),
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name)').eq('project_id', id),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
@@ -842,10 +842,16 @@ export default function ProjectDetail() {
                   )}
                 </div>
               )}
-              {project.profiles?.full_name && (
+              {project.director?.full_name && (
                 <div>
                   <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Project Assigned To</div>
-                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{project.profiles.full_name}</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{project.director.full_name}</span>
+                </div>
+              )}
+              {project.manager?.full_name && (
+                <div>
+                  <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Project Manager</div>
+                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>{project.manager.full_name}</span>
                 </div>
               )}
               {(() => {
