@@ -92,12 +92,8 @@ export default function Projects() {
     setLoading(true)
     const { data, error } = await supabase
       .from('projects')
-      .select('*, director:profiles!projects_project_director_id_fkey(full_name), manager:profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
-      // Order by the project reference ("2026-006" … "2026-001") descending,
-      // so the list always reads in project-ID order regardless of when each
-      // row was created. project_ref is a zero-padded YYYY-NNN string, so a
-      // plain string sort is correct. Projects with no ref sort to the end.
-      .order('project_ref', { ascending: false, nullsFirst: false })
+      .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
+      .order('created_at', { ascending: false })
     if (error) console.error('[Projects] load error:', error)
     setProjects(data || [])
     setLoading(false)
@@ -181,7 +177,7 @@ export default function Projects() {
                       <tr>
                         <th>Project</th>
                         <th>Client</th>
-                        <th>Assigned To</th>
+                        <th>Project Manager</th>
                         <th>Start</th>
                         <th>End</th>
                         <th>Duration</th>
@@ -204,7 +200,7 @@ export default function Projects() {
                               : (p.client_name || '—')
                             }
                           </td>
-                          <td>{p.director?.full_name || '—'}</td>
+                          <td>{p.profiles?.full_name || '—'}</td>
                           <td className="td-muted">{formatDate(p.start_date)}</td>
                           <td className="td-muted">{formatDate(p.end_date)}</td>
                           <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
@@ -252,7 +248,7 @@ export default function Projects() {
                       <tr>
                         <th>Project</th>
                         <th>Client</th>
-                        <th>Assigned To</th>
+                        <th>Project Manager</th>
                         <th>Start</th>
                         <th>End</th>
                         <th>Duration</th>
@@ -274,7 +270,7 @@ export default function Projects() {
                               : (p.client_name || '—')
                             }
                           </td>
-                          <td>{p.director?.full_name || '—'}</td>
+                          <td>{p.profiles?.full_name || '—'}</td>
                           <td className="td-muted">{formatDate(p.start_date)}</td>
                           <td className="td-muted">{formatDate(p.end_date)}</td>
                           <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
@@ -317,23 +313,27 @@ export default function Projects() {
 
 // ─── Projects Dashboard ─────────────────────────────────────────────────────
 //
-// Renders the new portfolio summary block at the top of the Projects page:
+// Renders the portfolio summary block at the top of the Projects page:
 //   • Status pills row (Active / Tender / On Hold / Completed)
-//   • 4-card KPI strip (Total contract / Claimed / Variations / Remaining)
-//   • Monthly cashflow chart (next 12 months, summed across active projects)
-//   • Expected billings panel (next 30/60/90 days)
-//   • Per-project rows (clickable → navigates to project detail)
+//   • 4-card KPI strip: Total contract / Planned to date / Claimed to date /
+//     Variance vs CFF (positive = ahead, negative = behind)
+//   • Mid row (60/40): Monthly cashflow chart (planned vs actual overlay) +
+//     Upcoming valuations (with Likely-forecast column)
+//   • Detail row (50/50): Variance by month table + Per-project bars (with
+//     variance pill per row)
 //
 // All data flows from the `dashFin` prop populated by dashboardFinancials.js.
 // While the async fetch is in progress, dashFin.loaded is false and a
 // "loading live data" indicator appears in the KPI strip.
 function ProjectsDashboard({ counts, dashFin, canViewValue, onProjectClick }) {
   const totals = dashFin?.totals || {
-    total_contract: 0, claimed_to_date: 0,
-    variations_total: 0, variations_count: 0, remaining: 0,
+    total_contract: 0, planned_to_date: 0, claimed_to_date: 0,
+    variations_total: 0, variations_count: 0, variance_to_date: 0, remaining: 0,
   }
   const billings = dashFin?.billings || []
   const monthlyForecast = dashFin?.monthly_forecast || []
+  const monthlyActual = dashFin?.monthly_actual || []
+  const likelyRatio = dashFin?.likely_ratio ?? null
   const projects = dashFin?.projects || []
   const isLoading = dashFin && !dashFin.loaded
 
@@ -370,31 +370,56 @@ function ProjectsDashboard({ counts, dashFin, canViewValue, onProjectClick }) {
 
       {canViewValue && (
         <>
-          {/* KPI strip */}
+          {/* KPI strip — variance-aware. The "Variations" card from the
+              previous design is folded into the Total contract caption
+              ("incl. £X variations") and replaced by Variance vs CFF. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-            <KpiCard label="Total contract" value={fmtMoney(totals.total_contract)} />
-            <KpiCard label="Claimed to date" value={fmtMoney(totals.claimed_to_date)} accent="green"
-              caption={totals.total_contract > 0
-                ? `${Math.round((totals.claimed_to_date / totals.total_contract) * 100)}% of total`
-                : null} />
-            <KpiCard label="Variations" value={fmtMoney(totals.variations_total)}
+            <KpiCard
+              label="Total contract"
+              value={fmtMoney(totals.total_contract)}
               caption={totals.variations_count > 0
-                ? `${totals.variations_count} VO${totals.variations_count === 1 ? '' : 's'}`
-                : 'None issued'} />
-            <KpiCard label="Remaining" value={fmtMoney(totals.remaining)}
-              caption={`across ${counts.active} active`} />
+                ? `incl. ${fmtMoney(totals.variations_total)} variations (${totals.variations_count})`
+                : 'No variations issued'}
+            />
+            <KpiCard
+              label="Planned to date"
+              value={fmtMoney(totals.planned_to_date)}
+              accent="blue"
+              caption={totals.total_contract > 0
+                ? `per CFF · ${Math.round((totals.planned_to_date / totals.total_contract) * 100)}% of total`
+                : 'No CFF data yet'}
+            />
+            <KpiCard
+              label="Claimed to date"
+              value={fmtMoney(totals.claimed_to_date)}
+              accent="green"
+              caption={totals.total_contract > 0
+                ? `per accepted PAs · ${Math.round((totals.claimed_to_date / totals.total_contract) * 100)}% of total`
+                : null}
+            />
+            <VarianceKpiCard
+              variance={totals.variance_to_date}
+              planned={totals.planned_to_date}
+              claimed={totals.claimed_to_date}
+            />
           </div>
 
-          {/* Cashflow chart + billings panel side-by-side. Stacks on narrow. */}
+          {/* Mid row — chart + upcoming valuations. Side-by-side at 60/40
+              like the previous design; stacks on narrow. */}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)', gap: 10 }}>
-            <CashflowChartCard data={monthlyForecast} />
-            <BillingsCard billings={billings} />
+            <CashflowChartCard forecast={monthlyForecast} actual={monthlyActual} />
+            <BillingsCard billings={billings} likelyRatio={likelyRatio} />
           </div>
 
-          {/* Per-project bars */}
-          {projects.length > 0 && (
-            <PerProjectBars projects={projects} onProjectClick={onProjectClick} />
-          )}
+          {/* Detail row — variance table + per-project bars at 50/50.
+              The two tell complementary stories: the table shows WHEN you
+              drifted from plan; the bars show WHICH project drove it. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+            <VarianceTable forecast={monthlyForecast} actual={monthlyActual} />
+            {projects.length > 0 && (
+              <PerProjectBars projects={projects} onProjectClick={onProjectClick} />
+            )}
+          </div>
         </>
       )}
 
@@ -433,8 +458,14 @@ function StatusPill({ label, accent }) {
   )
 }
 
-// 4-up KPI card. Optional accent tint on the value (green for claimed).
+// 4-up KPI card. Optional accent tint on the value (blue for planned,
+// green for claimed; variance gets its own component because its colouring
+// depends on sign and needs special rendering).
 function KpiCard({ label, value, accent, caption }) {
+  const colorMap = {
+    green: 'var(--green)',
+    blue: '#85B7EB',
+  }
   return (
     <div style={{
       background: 'var(--surface)',
@@ -447,7 +478,7 @@ function KpiCard({ label, value, accent, caption }) {
       </div>
       <div style={{
         fontSize: 20, fontWeight: 600,
-        color: accent === 'green' ? 'var(--green)' : 'var(--text)',
+        color: colorMap[accent] || 'var(--text)',
       }}>
         {value}
       </div>
@@ -458,27 +489,87 @@ function KpiCard({ label, value, accent, caption }) {
   )
 }
 
-// Monthly cashflow chart — vertical bars showing monthly forecast (gross
-// valuation) summed across active projects, for the next 12 months from
-// today. Past months are darker green (claimed already), future months
-// lighter (forecast). For now we treat everything in monthly_forecast as
-// forecast since CFFs don't carry actuals. Past-vs-future tint comes from
-// whether the bucket is before or after today's month.
-function CashflowChartCard({ data }) {
-  // Slice to the next 12 months from today's month onwards, plus the
-  // immediately-prior 1 for context. If the underlying data has fewer
-  // than 12 months we just show what's there.
+// Variance KPI card — the headline number. Tinted red when behind plan,
+// green when ahead, neutral when no plan-to-date data exists. The accent
+// is on the whole card (border + bg) rather than just the text so the
+// variance reads as the focal point of the strip.
+function VarianceKpiCard({ variance, planned, claimed }) {
+  // No plan data yet → render a neutral "—" card so the strip stays 4-wide.
+  if (!planned || planned === 0) {
+    return (
+      <div style={{
+        background: 'var(--surface)',
+        border: '0.5px solid var(--border)',
+        borderRadius: 8,
+        padding: '10px 14px',
+      }}>
+        <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+          Variance vs CFF
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--text3)' }}>—</div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>No CFF data to date</div>
+      </div>
+    )
+  }
+
+  const isBehind = variance < 0
+  const isAhead = variance > 0
+  const pctOfPlan = Math.round((claimed / planned) * 100)
+  const accentColor = isBehind ? '#E24B4A' : (isAhead ? '#448a40' : 'var(--text)')
+  const accentBg = isBehind ? 'rgba(226, 75, 74, 0.06)' : (isAhead ? 'rgba(72, 138, 64, 0.06)' : 'var(--surface)')
+  const accentBorder = isBehind ? 'rgba(226, 75, 74, 0.4)' : (isAhead ? 'rgba(72, 138, 64, 0.4)' : 'var(--border)')
+  const signedValue = (variance >= 0 ? '+' : '−') + fmtMoney(Math.abs(variance)).replace(/^£/, '£')
+  const status = isBehind ? 'behind' : (isAhead ? 'ahead' : 'on plan')
+
+  return (
+    <div style={{
+      background: accentBg,
+      border: `0.5px solid ${accentBorder}`,
+      borderRadius: 8,
+      padding: '10px 14px',
+    }}>
+      <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+        Variance vs CFF
+      </div>
+      <div style={{ fontSize: 20, fontWeight: 600, color: accentColor }}>
+        {signedValue}
+      </div>
+      <div style={{ fontSize: 11, color: accentColor, marginTop: 2 }}>
+        {pctOfPlan}% of plan · {status}
+      </div>
+    </div>
+  )
+}
+
+// Monthly cashflow chart — vertical bars showing CFF forecast summed across
+// active projects, for ~12 months around today. Past months get the actual
+// PA delta overlaid as a darker bar (or amber for the current month, since
+// it's incomplete). Future months show planned only.
+function CashflowChartCard({ forecast, actual }) {
   const today = new Date()
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
-  const sliced = useMemo(() => {
-    if (!data || data.length === 0) return []
-    // Find the index of today's month, then take that ± window
-    const todayIdx = data.findIndex(p => p.date >= todayKey)
-    const start = todayIdx === -1 ? 0 : Math.max(0, todayIdx - 1)
-    return data.slice(start, start + 12)
-  }, [data, todayKey])
 
-  const maxAmount = sliced.reduce((m, p) => Math.max(m, p.amount), 0) || 1
+  // Slice to a 12-month window around today (1 month context before, 11 ahead
+  // if there's that much forecast). If the underlying data has fewer than 12
+  // months we just show what's there.
+  const sliced = useMemo(() => {
+    if (!forecast || forecast.length === 0) return []
+    const todayIdx = forecast.findIndex(p => p.date >= todayKey)
+    const start = todayIdx === -1 ? 0 : Math.max(0, todayIdx - 1)
+    return forecast.slice(start, start + 12)
+  }, [forecast, todayKey])
+
+  // Build a quick lookup of actual values by date.
+  const actualByDate = useMemo(() => {
+    const m = new Map()
+    for (const p of (actual || [])) m.set(p.date, p.amount)
+    return m
+  }, [actual])
+
+  const maxAmount = sliced.reduce((m, p) => {
+    const a = actualByDate.get(p.date) || 0
+    return Math.max(m, p.amount, a)
+  }, 0) || 1
 
   return (
     <div style={{
@@ -488,10 +579,21 @@ function CashflowChartCard({ data }) {
       padding: '12px 14px',
       minHeight: 130,
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 600 }}>Monthly cashflow forecast</div>
-        <div style={{ fontSize: 10, color: 'var(--text3)' }}>
-          {sliced.length > 0 ? `${sliced.length} month${sliced.length === 1 ? '' : 's'}` : 'No CFF data yet'}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>Monthly cashflow · planned vs actual</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 10, color: 'var(--text3)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 9, height: 9, background: 'rgba(133, 183, 235, 0.4)', borderRadius: 2 }} /> Planned
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 9, height: 9, background: '#378ADD', borderRadius: 2 }} /> Actual
+          </span>
+          {sliced.length > 0 && (
+            <>
+              <span style={{ color: 'var(--text3)' }}>·</span>
+              <span>{sliced.length}mo</span>
+            </>
+          )}
         </div>
       </div>
       {sliced.length === 0 ? (
@@ -500,28 +602,64 @@ function CashflowChartCard({ data }) {
         </div>
       ) : (
         <>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 70 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 70, position: 'relative' }}>
             {sliced.map(point => {
-              const heightPct = Math.max(2, (point.amount / maxAmount) * 100)
               const isPast = point.date < todayKey
+              const isCurrent = point.date === todayKey
+              const plannedHeightPct = Math.max(2, (point.amount / maxAmount) * 100)
+              const actualAmount = actualByDate.get(point.date) || 0
+              const actualHeightPct = actualAmount > 0 ? Math.max(2, (actualAmount / maxAmount) * 100) : 0
+              // Current month uses amber for the actual overlay — signals
+              // "in progress" so the user knows it's not a complete claim.
+              const actualColor = isCurrent ? '#EF9F27' : '#378ADD'
               return (
-                <div key={point.date} title={`${fmtMonth(point.date)}: ${fmtMoney(point.amount)}`}
+                <div key={point.date}
+                  title={`${fmtMonth(point.date)} · planned ${fmtMoney(point.amount)}${actualAmount > 0 ? ` · actual ${fmtMoney(actualAmount)}` : ''}`}
                   style={{
                     flex: 1,
-                    background: isPast ? '#448a40' : '#86b67e',
-                    height: `${heightPct}%`,
+                    height: '100%',
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                  }}>
+                  {/* Planned bar — full-width, lighter tint */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0, left: 0, right: 0,
+                    background: 'rgba(133, 183, 235, 0.35)',
+                    height: `${plannedHeightPct}%`,
                     borderRadius: '2px 2px 0 0',
                     minHeight: 2,
                   }} />
+                  {/* Actual bar — overlaid, narrower, darker. Only for past
+                      and current months with non-zero actual data. */}
+                  {(isPast || isCurrent) && actualAmount > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0, left: '15%', right: '15%',
+                      background: actualColor,
+                      height: `${actualHeightPct}%`,
+                      borderRadius: '2px 2px 0 0',
+                      minHeight: 2,
+                    }} />
+                  )}
+                </div>
               )
             })}
           </div>
           <div style={{ display: 'flex', gap: 3, marginTop: 4 }}>
-            {sliced.map(point => (
-              <div key={point.date} style={{ flex: 1, fontSize: 9, color: 'var(--text3)', textAlign: 'center' }}>
-                {fmtMonthShort(point.date)}
-              </div>
-            ))}
+            {sliced.map(point => {
+              const isCurrent = point.date === todayKey
+              return (
+                <div key={point.date} style={{
+                  flex: 1, fontSize: 9, textAlign: 'center',
+                  color: isCurrent ? '#EF9F27' : 'var(--text3)',
+                  fontWeight: isCurrent ? 600 : 400,
+                }}>
+                  {fmtMonthShort(point.date)}
+                </div>
+              )
+            })}
           </div>
         </>
       )}
@@ -529,11 +667,11 @@ function CashflowChartCard({ data }) {
   )
 }
 
-// Upcoming valuations panel — next 3 PA submissions across the portfolio,
-// sourced from each project's CFF monthly forecast. Each row represents
-// one calendar month. The first row (current month) gets the green accent
-// since that's the PA you're about to submit; the next two are upcoming.
-function BillingsCard({ billings }) {
+// Upcoming valuations panel — next 3 PA submissions across the portfolio.
+// Now has two columns: Planned (from CFF directly) and Likely (planned ×
+// trailing-3-month actual:planned ratio). When likelyRatio is null
+// (insufficient history) the Likely column shows "—" and a hint.
+function BillingsCard({ billings, likelyRatio }) {
   // Defensive: if data layer hasn't populated yet billings might be missing
   // or the wrong shape. Fall back to 3 zero entries dated to current/+1/+2.
   const rows = Array.isArray(billings) && billings.length === 3
@@ -542,10 +680,11 @@ function BillingsCard({ billings }) {
         const today = new Date()
         const target = new Date(today.getFullYear(), today.getMonth() + offset, 1)
         const targetKey = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-01`
-        return { date: targetKey, amount: 0 }
+        return { date: targetKey, planned: 0, likely: 0 }
       })
 
   const labels = ['Next valuation', 'Following', 'Third upcoming']
+  const hasLikely = likelyRatio !== null
 
   return (
     <div style={{
@@ -554,14 +693,41 @@ function BillingsCard({ billings }) {
       borderRadius: 8,
       padding: '12px 14px',
     }}>
-      <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Upcoming valuations</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>Upcoming valuations</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+          {hasLikely
+            ? `Likely = trend × planned (${Math.round(likelyRatio * 100)}%)`
+            : 'Likely needs 3mo of PA history'}
+        </div>
+      </div>
+
+      {/* Column headers — tight 1fr / 80 / 80 grid so the numbers line up. */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 80px 80px',
+        gap: 8,
+        padding: '6px 0',
+        fontSize: 9,
+        color: 'var(--text3)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        borderBottom: '0.5px solid var(--border)',
+      }}>
+        <div></div>
+        <div style={{ textAlign: 'right' }}>Planned</div>
+        <div style={{ textAlign: 'right' }}>Likely</div>
+      </div>
+
       {rows.map((row, idx) => (
         <BillingsRow
           key={row.date}
           label={labels[idx]}
           subtitle={fmtMonth(row.date)}
-          value={row.amount}
-          accent={idx === 0 ? 'green' : null}
+          planned={row.planned}
+          likely={row.likely}
+          hasLikely={hasLikely}
+          accentPlanned={idx === 0}
           isLast={idx === rows.length - 1}
         />
       ))}
@@ -569,34 +735,209 @@ function BillingsCard({ billings }) {
   )
 }
 
-function BillingsRow({ label, subtitle, value, accent, isLast }) {
+function BillingsRow({ label, subtitle, planned, likely, hasLikely, accentPlanned, isLast }) {
   return (
     <div style={{
-      display: 'flex',
-      justifyContent: 'space-between',
+      display: 'grid',
+      gridTemplateColumns: '1fr 80px 80px',
+      gap: 8,
       alignItems: 'center',
-      padding: '6px 0',
+      padding: '9px 0',
       borderBottom: isLast ? 'none' : '0.5px solid var(--border)',
     }}>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <span style={{ fontSize: 11, color: 'var(--text2)', fontWeight: 500 }}>{label}</span>
+        <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 500 }}>{label}</span>
         {subtitle && (
           <span style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{subtitle}</span>
         )}
       </div>
       <span style={{
+        textAlign: 'right',
         fontSize: 13,
         fontWeight: 600,
-        color: accent === 'green' ? 'var(--green)' : 'var(--text)',
+        color: accentPlanned ? '#85B7EB' : 'var(--text)',
       }}>
-        {fmtMoney(value)}
+        {fmtMoney(planned)}
+      </span>
+      <span style={{
+        textAlign: 'right',
+        fontSize: 13,
+        fontWeight: 600,
+        color: hasLikely ? '#EF9F27' : 'var(--text3)',
+      }}>
+        {hasLikely ? fmtMoney(likely) : '—'}
       </span>
     </div>
   )
 }
 
-// Per-project rows with progress bars showing claimed-vs-total. Each row
-// is clickable and navigates to the project's detail page on click.
+// Variance by month table — 6 past + 2 future. Past months show planned,
+// actual, signed variance pill, and cumulative running variance. Future
+// months show only planned (with actual / variance / cumulative as "—").
+//
+// The pivot is "today's month": months strictly before today are "past",
+// today's month is highlighted as current (so the user can see the
+// in-progress state), and months after are "future / forecast only".
+function VarianceTable({ forecast, actual }) {
+  const today = new Date()
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`
+
+  // Build a unified list of months covering 6 past + current + 2 future
+  // (so up to 9 rows total). Defensive: if forecast is empty we render a
+  // skeleton row to convey "no data yet".
+  const rows = useMemo(() => {
+    if (!forecast || forecast.length === 0) return []
+    const actualByDate = new Map()
+    for (const p of (actual || [])) actualByDate.set(p.date, p.amount || 0)
+
+    // Find the index of today's month in the forecast array.
+    let todayIdx = forecast.findIndex(p => p.date >= todayKey)
+    if (todayIdx === -1) todayIdx = forecast.length    // today is past the forecast end
+    const start = Math.max(0, todayIdx - 6)
+    const end = Math.min(forecast.length, todayIdx + 3)  // +2 future months + today's month
+    const window = forecast.slice(start, end)
+
+    // Walk through to compute cumulative variance through past + current.
+    let cum = 0
+    return window.map(point => {
+      const isFuture = point.date > todayKey
+      const isCurrent = point.date === todayKey
+      const planned = point.amount || 0
+      const act = actualByDate.get(point.date) || 0
+      const hasActual = !isFuture && actualByDate.has(point.date)
+      const variance = hasActual ? (act - planned) : null
+      if (variance !== null) cum += variance
+      return {
+        date: point.date,
+        planned,
+        actual: hasActual ? act : null,
+        variance,
+        cumulative: hasActual ? cum : null,
+        isCurrent,
+        isFuture,
+      }
+    })
+  }, [forecast, actual, todayKey])
+
+  const cellStyle = {
+    padding: '7px 6px',
+    fontSize: 11,
+  }
+  const headerStyle = {
+    ...cellStyle,
+    fontSize: 9,
+    color: 'var(--text3)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    borderBottom: '0.5px solid var(--border)',
+  }
+
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '0.5px solid var(--border)',
+      borderRadius: 8,
+      padding: '12px 14px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>Variance by month</div>
+        <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+          {rows.length > 0 ? '6mo back · 2mo forecast' : 'No data yet'}
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 11, color: 'var(--text3)', padding: '20px 0', textAlign: 'center' }}>
+          Generate a CFF for any active project to populate this table.
+        </div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...headerStyle, textAlign: 'left' }}>Month</th>
+              <th style={{ ...headerStyle, textAlign: 'right' }}>Planned</th>
+              <th style={{ ...headerStyle, textAlign: 'right' }}>Actual</th>
+              <th style={{ ...headerStyle, textAlign: 'right' }}>Var.</th>
+              <th style={{ ...headerStyle, textAlign: 'right' }}>Cum.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const rowBg = r.isCurrent ? 'rgba(239, 159, 39, 0.06)' : 'transparent'
+              return (
+                <tr key={r.date} style={{ background: rowBg }}>
+                  <td style={{ ...cellStyle, color: r.isFuture ? 'var(--text3)' : 'var(--text2)' }}>
+                    {r.isCurrent && (
+                      <span style={{
+                        display: 'inline-block', width: 5, height: 5, borderRadius: '50%',
+                        background: '#EF9F27', marginRight: 5, verticalAlign: 'middle',
+                      }} />
+                    )}
+                    {fmtMonth(r.date)}
+                  </td>
+                  <td style={{ ...cellStyle, textAlign: 'right', color: r.isFuture ? 'var(--text3)' : 'var(--text)' }}>
+                    {fmtMoney(r.planned)}
+                  </td>
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>
+                    {r.actual !== null ? fmtMoney(r.actual) : <span style={{ color: 'var(--text3)' }}>—</span>}
+                  </td>
+                  <td style={{ ...cellStyle, textAlign: 'right' }}>
+                    {r.variance !== null ? <VariancePill value={r.variance} /> : <span style={{ color: 'var(--text3)' }}>—</span>}
+                  </td>
+                  <td style={{ ...cellStyle, textAlign: 'right', color: r.cumulative !== null && r.cumulative < 0 ? '#F09595' : 'var(--text3)' }}>
+                    {r.cumulative !== null ? signedMoney(r.cumulative) : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
+// Small inline pill rendering a signed money variance. Red on negative,
+// green on positive, neutral when exactly zero. Used by the variance
+// table and the per-project bars.
+function VariancePill({ value }) {
+  const isZero = value === 0 || (Math.abs(value) < 1)  // round-to-£1 tolerance
+  if (isZero) {
+    return (
+      <span style={{
+        display: 'inline-block',
+        padding: '2px 7px',
+        borderRadius: 4,
+        background: 'rgba(255, 255, 255, 0.04)',
+        color: 'var(--text3)',
+        fontSize: 10,
+        fontWeight: 500,
+      }}>
+        on plan
+      </span>
+    )
+  }
+  const isNegative = value < 0
+  const bg = isNegative ? 'rgba(226, 75, 74, 0.14)' : 'rgba(151, 196, 89, 0.16)'
+  const color = isNegative ? '#F09595' : '#C0DD97'
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 7px',
+      borderRadius: 4,
+      background: bg,
+      color,
+      fontSize: 10,
+      fontWeight: 500,
+    }}>
+      {signedMoney(value)}
+    </span>
+  )
+}
+
+// Per-project rows with progress bars showing claimed-vs-total, plus a
+// variance pill telling you whether the project is ahead or behind plan.
+// Each row is clickable and navigates to the project's detail page.
 function PerProjectBars({ projects, onProjectClick }) {
   return (
     <div style={{
@@ -606,38 +947,46 @@ function PerProjectBars({ projects, onProjectClick }) {
       padding: '12px 14px',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 600 }}>Per-project: claimed vs total</div>
+        <div style={{ fontSize: 12, fontWeight: 600 }}>Per-project · claimed vs plan</div>
         <div style={{ fontSize: 10, color: 'var(--text3)' }}>{projects.length} active</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-        {projects.map(p => (
-          <div key={p.id}
-            onClick={() => onProjectClick(p.id)}
-            style={{
-              cursor: 'pointer',
-              padding: '4px 6px',
-              borderRadius: 6,
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface2)'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
-              <span style={{ fontWeight: 500 }}>{p.project_name}</span>
-              <span style={{ color: 'var(--text3)' }}>
-                {fmtMoney(p.claimed_to_date)} / {fmtMoney(p.total_contract)} ({Math.round(p.pct_claimed)}%)
-              </span>
+        {projects.map(p => {
+          const hasPlanData = p.planned_to_date && p.planned_to_date > 0
+          return (
+            <div key={p.id}
+              onClick={() => onProjectClick(p.id)}
+              style={{
+                cursor: 'pointer',
+                padding: '5px 6px',
+                borderRadius: 6,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface2)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontWeight: 500, fontSize: 12 }}>{p.project_name}</span>
+                {hasPlanData
+                  ? <VariancePill value={p.variance_to_date} />
+                  : <span style={{ fontSize: 10, color: 'var(--text3)' }}>no plan</span>
+                }
+              </div>
+              <div style={{ height: 5, borderRadius: 3, background: 'var(--surface2)', overflow: 'hidden', marginBottom: 3 }}>
+                <div style={{
+                  height: '100%',
+                  width: `${Math.max(0, Math.min(100, p.pct_claimed))}%`,
+                  background: '#448a40',
+                  transition: 'width 0.3s ease',
+                }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text3)' }}>
+                <span>{fmtMoney(p.claimed_to_date)} claimed</span>
+                <span>{fmtMoney(p.total_contract)} total ({Math.round(p.pct_claimed)}%)</span>
+              </div>
             </div>
-            <div style={{ height: 5, borderRadius: 3, background: 'var(--surface2)', overflow: 'hidden' }}>
-              <div style={{
-                height: '100%',
-                width: `${Math.max(0, Math.min(100, p.pct_claimed))}%`,
-                background: '#448a40',
-                transition: 'width 0.3s ease',
-              }} />
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
@@ -646,9 +995,19 @@ function PerProjectBars({ projects, onProjectClick }) {
 // ── Helpers ──────────────────────────────────────────────────────────────
 function fmtMoney(n) {
   if (!n || !Number.isFinite(n)) return '£0'
-  if (Math.abs(n) >= 1_000_000) return `£${(n / 1_000_000).toFixed(1)}M`
-  if (Math.abs(n) >= 1_000) return `£${(n / 1_000).toFixed(0)}K`
-  return `£${Math.round(n).toLocaleString()}`
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000) return `£${(abs / 1_000_000).toFixed(1)}M`
+  if (abs >= 1_000) return `£${(abs / 1_000).toFixed(0)}K`
+  return `£${Math.round(abs).toLocaleString()}`
+}
+
+// Signed money — used for variance values where the sign matters. Renders
+// "+£100K" / "−£500K" / "£0". The leading minus is a unicode minus sign so
+// it's visually distinct from a hyphen.
+function signedMoney(n) {
+  if (!n || !Number.isFinite(n) || Math.abs(n) < 1) return '£0'
+  const sign = n >= 0 ? '+' : '−'
+  return sign + fmtMoney(n)
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
