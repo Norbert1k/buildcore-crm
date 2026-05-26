@@ -42,7 +42,7 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
       } else {
         // Pre-fill from project + subcontractors
         const { data: project } = await supabase.from('projects')
-          .select('*, profiles:project_manager_id(full_name)')
+          .select('*, profiles:project_director_id(full_name)')
           .eq('id', projectId).maybeSingle()
         const { data: subs } = await supabase.from('project_subcontractors')
           .select('*, subcontractors(company_name, trade)')
