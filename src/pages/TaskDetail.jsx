@@ -287,15 +287,31 @@ export default function TaskDetail() {
       return
     }
     setSavingEdit(true)
-    const { error } = await supabase
+    // .select() is important here: under RLS, an UPDATE the user isn't
+    // permitted to make returns success with zero rows touched — no
+    // error is raised. Without .select() we'd happily clear the editor
+    // and reload, only for the note to come back unchanged. With it,
+    // `data` is the array of rows actually updated; an empty array means
+    // the write didn't happen and we surface that to the user.
+    const { data, error } = await supabase
       .from('task_notes')
       .update({ note: trimmed })
       .eq('id', editingNoteId)
+      .select('*, profiles(id, full_name)')
     if (error) {
       alert('Could not save edit: ' + error.message)
       setSavingEdit(false)
       return
     }
+    if (!data || data.length === 0) {
+      alert('Could not save edit: the note was not updated. You may not have permission to edit this note, or it may have been deleted.')
+      setSavingEdit(false)
+      return
+    }
+    // Update the local state from the returned row so the UI reflects
+    // the new text immediately, independent of the subsequent reload.
+    const updated = data[0]
+    setNotes(prev => prev.map(n => n.id === updated.id ? { ...n, ...updated } : n))
     setEditingNoteId(null)
     setEditingNoteText('')
     setSavingEdit(false)
