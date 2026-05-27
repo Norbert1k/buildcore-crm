@@ -101,6 +101,12 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
   const [pmOptions, setPmOptions] = useState([])
   const [selectedPmId, setSelectedPmId] = useState('')
 
+  // Project Director — list of all profiles (mirrors ProjectModal, which
+  // also lets any profile be the "Assigned To" / Project Director). The PO
+  // auto-fills the project's assigned director but is overridable per-PO.
+  const [directorOptions, setDirectorOptions] = useState([])
+  const [selectedDirectorId, setSelectedDirectorId] = useState('')
+
   // Programme — files available in the project's "06. Project Programme"
   // folder; the PM picks one to reference in the PO.
   const [programmeFiles, setProgrammeFiles] = useState([])
@@ -157,9 +163,13 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         pmEmail = pm?.email || ''
       }
       // Project Director — the person the project is "Assigned To"
-      // (projects.project_director_id).
+      // (projects.project_director_id). Defensive: the column may not yet
+      // exist in live (migration 013 still pending) — if it's undefined we
+      // just leave the field blank and let the user pick from the dropdown.
       let directorName = ''
+      let initialDirectorId = ''
       if (project.project_director_id) {
+        initialDirectorId = project.project_director_id
         const { data: dir } = await supabase
           .from('profiles')
           .select('full_name')
@@ -208,6 +218,15 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         .order('full_name')
       setPmOptions(pms || [])
 
+      // Project Director options — ALL profiles (mirrors ProjectModal, which
+      // doesn't filter by role for the "Assigned To" / Project Director
+      // dropdown). Profiles already created for admins, directors, PMs, etc.
+      const { data: dirs } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .order('full_name')
+      setDirectorOptions(dirs || [])
+
       // Programme files — from the project's "06. Project Programme" folder.
       const { data: progFiles } = await supabase
         .from('project_doc_files')
@@ -247,10 +266,21 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           setAttendance(existingPO.attendance)
         }
         setSelectedPmId(existingPO.pm_id || project.project_manager_id || '')
+        // Director — prefer the existing PO's stored director (by name lookup
+        // since the schema only stores director_name), else the project's
+        // assigned director.
+        if (existingPO.director_name) {
+          const match = (dirs || []).find(d => d.full_name === existingPO.director_name)
+          setSelectedDirectorId(match?.id || initialDirectorId || '')
+        } else {
+          setSelectedDirectorId(initialDirectorId || '')
+        }
         setSelectedProgrammeId(existingPO.programme_file_id || '')
       } else {
-        // New PO — default the PM to the project's assigned PM (overridable).
+        // New PO — default the PM and Director to the project's assigned ones
+        // (both overridable in the dropdowns).
         setSelectedPmId(project.project_manager_id || '')
+        setSelectedDirectorId(initialDirectorId || '')
       }
     } catch (err) {
       setError('Could not load project / subcontractor details: ' + err.message)
@@ -351,7 +381,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         pm_name: (pmOptions.find(p => p.id === selectedPmId)?.full_name) || ctx.pmName || null,
         pm_email: (pmOptions.find(p => p.id === selectedPmId)?.email) || ctx.pmEmail || null,
         pm_tel: form.pm_tel.trim() || null,
-        director_name: ctx.directorName || null,
+        director_name: (directorOptions.find(d => d.id === selectedDirectorId)?.full_name) || ctx.directorName || null,
         // Programme — the chosen file from the project's 06. Project Programme
         // folder. Stores the id + name so the PO references a real document.
         programme_file_id: selectedProgrammeId || null,
@@ -446,9 +476,12 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
       ? `Revise PO — ${existingPO.order_number} (creating Rev ${NEXT_REVISION(existingPO.revision)})`
       : `Edit PO — ${existingPO.order_number}${existingPO.revision ? ' Rev ' + existingPO.revision : ''}`
 
+  // Backdrop does NOT close the modal — closing only via ✕ or Cancel.
+  // This avoids losing all typed data on an accidental outside click
+  // (or a click-and-drag selection that releases over the overlay).
   return (
-    <div style={overlay} onClick={onClose}>
-      <div style={panel} onClick={e => e.stopPropagation()}>
+    <div style={overlay}>
+      <div style={panel}>
         {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '0.5px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{heading}</div>
@@ -475,7 +508,13 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
                   {orderNumber || '—'}{existingPO?.revision ? ' Rev ' + existingPO.revision : ''}
                 </div>
               </div>
-              <div><span style={label}>Project Director (Assigned To)</span><div style={roBox}>{ctx.directorName || '—'}</div></div>
+              <div>
+                <span style={label}>Project Director (Assigned To) — auto-filled, can override</span>
+                <select value={selectedDirectorId} onChange={e => setSelectedDirectorId(e.target.value)} style={{ width: '100%' }}>
+                  <option value="">— Select Project Director —</option>
+                  {directorOptions.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                </select>
+              </div>
               <div><span style={label}>Sub-Contractor</span><div style={roBox}>{ctx.subName || '—'}</div></div>
               <div><span style={label}>Sub-Contractor Address</span><div style={roBox}>{ctx.subAddress || '—'}</div></div>
               <div><span style={label}>Site / Project</span><div style={roBox}>{ctx.siteName || '—'}</div></div>
