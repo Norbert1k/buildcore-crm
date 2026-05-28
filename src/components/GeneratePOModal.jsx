@@ -440,21 +440,23 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
 
       // Generate the PDF document from the saved PO and drop it into the
       // Purchase Order folder. We do this after the row is confirmed saved.
-      // A failure here should NOT lose the user's PO (it's already saved) —
-      // we surface a soft warning but still close, since the record exists
-      // and the PDF can be regenerated.
-      if (savedRow?.id) {
+      // Generate the 1:1 PDF ONLY when issuing (finalising) the order. Draft
+      // saves never produce a PDF — a draft stays editable and re-openable as
+      // many times as needed; the document is only created when the user
+      // chooses to Issue the PO. (A failure here should NOT lose the PO: it's
+      // already saved, so we surface a soft warning and keep the record.)
+      if (issue && savedRow?.id) {
         try {
           const { error: genErr } = await supabase.functions.invoke('generate-po-document', {
             body: { purchase_order_id: savedRow.id },
           })
           if (genErr) {
-            setError('Purchase order saved, but the PDF could not be generated: ' + genErr.message + ' — you can try again from the folder.')
+            setError('Order issued and saved, but the PDF could not be generated: ' + genErr.message + ' — you can re-issue to try again.')
             setSaving(false)
             return
           }
         } catch (genEx) {
-          setError('Purchase order saved, but the PDF could not be generated: ' + genEx.message)
+          setError('Order issued and saved, but the PDF could not be generated: ' + genEx.message)
           setSaving(false)
           return
         }
