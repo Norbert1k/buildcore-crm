@@ -370,6 +370,8 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         status: issue ? 'issued' : 'draft',
       }
 
+      let savedRow = null
+
       if (existingPO && existingPO.status === 'draft') {
         // Editing a draft — update the same row in place.
         const { data, error: e } = await supabase
@@ -377,9 +379,14 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           .update(basePayload)
           .eq('id', existingPO.id)
           .select()
-          .single()
         if (e) throw e
-        onSaved?.(data)
+        if (!data || data.length === 0) {
+          // RLS or a missing row meant nothing was actually written. Do NOT
+          // close — keep the user's data on screen and tell them.
+          throw new Error('the update did not affect any row. You may not have permission to edit this purchase order.')
+        }
+        savedRow = data[0]
+        onSaved?.(savedRow)
       } else if (existingPO && existingPO.status === 'issued') {
         // Editing an issued PO — create the next revision, supersede the old.
         const newRow = {
@@ -394,23 +401,30 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           .from('purchase_orders')
           .insert(newRow)
           .select()
-          .single()
         if (e) throw e
+        if (!data || data.length === 0) {
+          throw new Error('the revision was not created (no row returned). You may not have permission to create purchase orders.')
+        }
+        savedRow = data[0]
         // Mark the prior revision superseded.
         await supabase.from('purchase_orders')
           .update({ status: 'superseded' })
           .eq('id', existingPO.id)
-        onSaved?.(data)
+        onSaved?.(savedRow)
       } else {
         // Brand-new PO.
-        const { data: link } = await supabase
+        const { data: link, error: linkErr } = await supabase
           .from('project_subcontractors')
           .select('subcontractor_id')
           .eq('id', projectSubId)
           .single()
+        if (linkErr) throw linkErr
+        if (!link?.subcontractor_id) {
+          throw new Error('could not resolve the sub-contractor for this PO. Please reopen the modal and try again.')
+        }
         const newRow = {
           ...basePayload,
-          subcontractor_id: link?.subcontractor_id,
+          subcontractor_id: link.subcontractor_id,
           created_by: profile?.id || null,
           order_number: orderNumber || await nextOrderNumber(),
           revision: '',
@@ -419,10 +433,17 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           .from('purchase_orders')
           .insert(newRow)
           .select()
-          .single()
         if (e) throw e
-        onSaved?.(data)
+        if (!data || data.length === 0) {
+          throw new Error('the purchase order was not saved (no row returned). You may not have permission to create purchase orders.')
+        }
+        savedRow = data[0]
+        onSaved?.(savedRow)
       }
+
+      // Only reached if a row was genuinely written and returned. Closing
+      // here — and ONLY here — guarantees the modal never disappears while
+      // losing the user's data.
       onClose?.()
     } catch (err) {
       setError('Could not save the purchase order: ' + err.message)
