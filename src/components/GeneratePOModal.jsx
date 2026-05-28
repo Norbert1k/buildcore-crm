@@ -386,7 +386,6 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           throw new Error('the update did not affect any row. You may not have permission to edit this purchase order.')
         }
         savedRow = data[0]
-        onSaved?.(savedRow)
       } else if (existingPO && existingPO.status === 'issued') {
         // Editing an issued PO — create the next revision, supersede the old.
         const newRow = {
@@ -410,7 +409,6 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         await supabase.from('purchase_orders')
           .update({ status: 'superseded' })
           .eq('id', existingPO.id)
-        onSaved?.(savedRow)
       } else {
         // Brand-new PO.
         const { data: link, error: linkErr } = await supabase
@@ -438,8 +436,30 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           throw new Error('the purchase order was not saved (no row returned). You may not have permission to create purchase orders.')
         }
         savedRow = data[0]
-        onSaved?.(savedRow)
       }
+
+      // Generate the PDF document from the saved PO and drop it into the
+      // Purchase Order folder. We do this after the row is confirmed saved.
+      // A failure here should NOT lose the user's PO (it's already saved) —
+      // we surface a soft warning but still close, since the record exists
+      // and the PDF can be regenerated.
+      if (savedRow?.id) {
+        try {
+          const { error: genErr } = await supabase.functions.invoke('generate-po-document', {
+            body: { purchase_order_id: savedRow.id },
+          })
+          if (genErr) {
+            setError('Purchase order saved, but the PDF could not be generated: ' + genErr.message + ' — you can try again from the folder.')
+            setSaving(false)
+            return
+          }
+        } catch (genEx) {
+          setError('Purchase order saved, but the PDF could not be generated: ' + genEx.message)
+          setSaving(false)
+          return
+        }
+      }
+      onSaved?.(savedRow)
 
       // Only reached if a row was genuinely written and returned. Closing
       // here — and ONLY here — guarantees the modal never disappears while
