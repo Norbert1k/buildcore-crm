@@ -723,7 +723,7 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }
                 </>
             }
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(file.file_size)}{file.file_size ? ' · ' : ''}{new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
             <button onClick={e => { e.stopPropagation(); download() }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
@@ -806,7 +806,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
                     </button>
                   )}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
               </div>
             )
           }
