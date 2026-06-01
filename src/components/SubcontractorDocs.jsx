@@ -135,7 +135,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
                   </button>}
                 </>}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {url && <button onClick={e => { e.stopPropagation(); onPreview(file, url) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
             {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
@@ -178,7 +178,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
                   <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
                   {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename" style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
               </div>}
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -221,24 +221,10 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   const [fileCount, setFileCount] = useState(0)
   // Generate PO — only used by the 'purchase-order' folder.
   const [showPOModal, setShowPOModal] = useState(false)
-  const [editingPO, setEditingPO] = useState(null)   // null = new PO; object = edit that PO
-  const [poList, setPoList] = useState([])           // saved POs for this subcontractor/folder
   const { profile } = useAuth()
 
   useEffect(() => { loadCustomSubfolders(); loadFileCount() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
-  useEffect(() => { if (open && folder.key === 'purchase-order') loadPOs() }, [open])
-
-  async function loadPOs() {
-    // List the saved purchase_orders for this sub-contractor link, newest first.
-    // Drafts are editable; issued/superseded are shown read-only for reference.
-    const { data } = await supabase
-      .from('purchase_orders')
-      .select('*')
-      .eq('project_sub_id', projectSubId)
-      .order('created_at', { ascending: false })
-    setPoList(data || [])
-  }
 
   async function loadFileCount() { const { count } = await supabase.from('project_sub_files').select('id', { count: 'exact', head: true }).eq('project_sub_id', projectSubId).eq('folder_key', folder.key); setFileCount(count || 0) }
   async function loadCustomSubfolders() { const { data } = await supabase.from('project_sub_folders').select('*').eq('project_sub_id', projectSubId).eq('parent_key', folder.key).order('created_at'); setSubfolders((data || []).map(d => ({ key: d.folder_key, label: d.label, custom: true }))) }
@@ -303,7 +289,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           </> : <>
             <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip all</button>
             {folder.key === 'purchase-order' && canManage && (
-              <button onClick={() => { setEditingPO(null); setShowPOModal(true) }} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={() => setShowPOModal(true)} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 Generate PO
               </button>
@@ -318,39 +304,6 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       {open && (
         <div onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
-          {folder.key === 'purchase-order' && poList.length > 0 && (
-            <div style={{ marginBottom: 10, border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-              <div style={{ padding: '7px 12px', background: 'var(--surface2)', fontSize: 11, fontWeight: 600, color: 'var(--text2)' }}>
-                Saved Purchase Orders
-              </div>
-              {poList.map(po => {
-                const ref = po.revision ? `${po.order_number} Rev ${po.revision}` : po.order_number
-                const isDraft = po.status === 'draft'
-                const badge = isDraft
-                  ? { label: 'Draft', bg: '#FEF3C7', fg: '#92400E' }
-                  : po.status === 'issued'
-                    ? { label: 'Issued', bg: '#DCFCE7', fg: '#166534' }
-                    : { label: 'Superseded', bg: '#F1F1F1', fg: '#777' }
-                return (
-                  <div key={po.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderTop: '0.5px solid var(--border)' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{ref}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {po.scope_of_works ? po.scope_of_works.slice(0, 70) : 'No scope yet'}
-                      </div>
-                    </div>
-                    <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: badge.bg, color: badge.fg, flexShrink: 0 }}>{badge.label}</span>
-                    {canManage && isDraft && (
-                      <button onClick={() => { setEditingPO(po); setShowPOModal(true) }} style={{ ...Btn, flexShrink: 0 }}>Edit</button>
-                    )}
-                    {canManage && !isDraft && (
-                      <button onClick={() => { setEditingPO(po); setShowPOModal(true) }} style={{ ...Btn, flexShrink: 0 }}>View</button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
           {subfolders.map(sf => <SubFolder key={sf.key} sf={sf} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadCustomSubfolders(); loadRootFiles() }} />)}
           {files.length === 0 && subfolders.length === 0 ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 80, border: '0.5px dashed var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
@@ -364,9 +317,9 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
         <GeneratePOModal
           projectId={projectId}
           projectSubId={projectSubId}
-          existingPO={editingPO}
-          onClose={() => { setShowPOModal(false); setEditingPO(null) }}
-          onSaved={() => { loadRootFiles(); loadFileCount(); loadPOs() }}
+          existingPO={null}
+          onClose={() => setShowPOModal(false)}
+          onSaved={() => { loadRootFiles(); loadFileCount() }}
         />
       )}
     </div>
