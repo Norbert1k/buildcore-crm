@@ -53,7 +53,7 @@ import { fetchAllProjectPas as fetchLatestPas, aggregateFinancials } from './paE
 import { fetchAllPasAcrossSubfolders as fetchPaHistory } from './paGroupExtractor'
 import { fetchLatestCff, projectCffOnCalendar } from './cffReader'
 
-const CACHE_PREFIX = 'buildcore:dashFin:v4:'
+const CACHE_PREFIX = 'buildcore:dashFin:v5:'
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000   // 30 days
 
 // ── localStorage cache helpers ────────────────────────────────────────────
@@ -208,29 +208,62 @@ async function fetchAndParseProject(supabase, project) {
 
     for (const [, group] of bySubfolder.entries()) {
       const sortedHistory = [...group].sort((a, b) => (a.index || 0) - (b.index || 0))
+
+      // ── Date anchoring ─────────────────────────────────────────────────
+      // Upload timestamps are NOT a reliable signal of when a PA's work was
+      // actually claimed — back-dated batch uploads (PA01-PA03 all uploaded
+      // on the same day after a catch-up) would otherwise collapse into
+      // one month.
+      //
+      // Rule: use the LATEST PA's upload month as the anchor; each earlier
+      // PA is attributed one calendar month back per index step. So if
+      // PA03 was uploaded in May, PA02 lands in April and PA01 in March,
+      // regardless of when they were actually uploaded.
+      //
+      // Why latest-as-anchor (not earliest, not project-start): the most
+      // recently uploaded PA is most likely to have been uploaded close
+      // to its real period. As newer PAs come in, the anchor moves with
+      // them and the back-attribution stays internally consistent.
+      let anchorMonthStart = null  // Date object on the 1st of the anchor month
+      let anchorIndex = null
+      for (let i = sortedHistory.length - 1; i >= 0; i--) {
+        const pa = sortedHistory[i]
+        if (!Number.isFinite(pa.index) || pa.index < 1) continue
+        if (!pa.created_at) continue
+        const d = new Date(pa.created_at)
+        if (isNaN(d.getTime())) continue
+        anchorMonthStart = new Date(d.getFullYear(), d.getMonth(), 1)
+        anchorIndex = pa.index
+        break
+      }
+      // Fallback anchor: project.start_date if no PA has a usable timestamp.
+      let fallbackStart = null
+      if (!anchorMonthStart && project.start_date) {
+        const sd = new Date(project.start_date)
+        if (!isNaN(sd.getTime())) {
+          fallbackStart = new Date(sd.getFullYear(), sd.getMonth(), 1)
+        }
+      }
+
       let prevCum = 0
       for (const pa of sortedHistory) {
         const idx = pa.index
         if (!Number.isFinite(idx) || idx < 1) continue
         const cum = Number.isFinite(pa.total_cumulative) ? pa.total_cumulative : 0
         const delta = Math.max(0, cum - prevCum)
-        // Use the PA file's upload timestamp as the calendar slot. Fallback
-        // to project start + index only if created_at is missing (very rare).
+
         let ymd = null
-        if (pa.created_at) {
-          const d = new Date(pa.created_at)
-          if (!isNaN(d.getTime())) {
-            ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-          }
+        if (anchorMonthStart && anchorIndex != null) {
+          // Anchor: latest PA's upload month. Step back (anchorIndex − idx).
+          const monthsBack = anchorIndex - idx
+          const d = new Date(anchorMonthStart.getFullYear(), anchorMonthStart.getMonth() - monthsBack, 1)
+          ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+        } else if (fallbackStart) {
+          // Last-resort: project start + (idx - 1) months.
+          const d = new Date(fallbackStart.getFullYear(), fallbackStart.getMonth() + (idx - 1), 1)
+          ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
         }
-        if (!ymd && project.start_date) {
-          const sd = new Date(project.start_date)
-          if (!isNaN(sd.getTime())) {
-            sd.setDate(1)
-            const d = new Date(sd.getFullYear(), sd.getMonth() + (idx - 1), 1)
-            ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-          }
-        }
+
         if (ymd) monthly_actual.push({ date: ymd, amount: delta })
         pa_entries.push({
           pa_index: idx,
