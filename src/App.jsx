@@ -162,6 +162,7 @@ function NotificationBell() {
 function ProtectedLayout() {
   const { user, loading, mfaVerified } = useAuth()
   const [expCounts, setExpCounts] = useState({ expired: 0, expiring: 0 })
+  const [reminderCount, setReminderCount] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mfaCheck, setMfaCheck] = useState({ done: false, needed: false, factorId: null })
   const location = useLocation()
@@ -190,8 +191,17 @@ function ProtectedLayout() {
 
   useEffect(() => {
     if (user) fetchExpCount()
+    if (user) fetchReminderCount()
     setSidebarOpen(false)
   }, [user, location.pathname])
+
+  // Poll reminder count every 60s so the sidebar dot stays current without
+  // requiring navigation. Cleaned up on unmount / user change.
+  useEffect(() => {
+    if (!user) return
+    const id = setInterval(fetchReminderCount, 60_000)
+    return () => clearInterval(id)
+  }, [user])
 
   // Wheel-event forwarder. Some staff have wide screens where the
   // .page-content scroll area (max-width 1400px, centered) leaves
@@ -250,6 +260,19 @@ function ProtectedLayout() {
     })
   }
 
+  // Count of un-dismissed task reminders for the current user whose time has
+  // arrived. Drives the dot on the "Task Tracker" sidebar nav. RLS already
+  // limits the rows to the current user, so a simple count is enough.
+  async function fetchReminderCount() {
+    const { count, error } = await supabase
+      .from('task_reminders')
+      .select('id', { count: 'exact', head: true })
+      .is('dismissed_at', null)
+      .lte('remind_at', new Date().toISOString())
+    if (error) { console.warn('[App] reminder count fetch:', error.message); return }
+    setReminderCount(count || 0)
+  }
+
   if (loading || !mfaCheck.done) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
@@ -280,7 +303,7 @@ function ProtectedLayout() {
 
   return (
     <div className="app-layout">
-      <Sidebar expCounts={expCounts} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar expCounts={expCounts} reminderCount={reminderCount} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="main-area">
         <div className="topbar">
           <button className="topbar-menu-btn" onClick={() => setSidebarOpen(o => !o)}>
