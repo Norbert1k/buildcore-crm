@@ -26,6 +26,7 @@ export default function Projects() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('proj_live_open') === 'true')
   const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('proj_tender_open') === 'true')
+  const [financialsOpen, setFinancialsOpen] = useState(() => localStorage.getItem('proj_financials_open') === 'true')
   // Dashboard financials — null until first projects load completes. Once
   // projects are loaded, dashFin starts as the buildInstantFallback shape
   // (instant, derived from project.value column) then gets replaced by the
@@ -37,6 +38,7 @@ export default function Projects() {
 
   function toggleLive() { setLiveOpen(v => { localStorage.setItem('proj_live_open', !v); return !v }) }
   function toggleTender() { setTenderOpen(v => { localStorage.setItem('proj_tender_open', !v); return !v }) }
+  function toggleFinancials() { setFinancialsOpen(v => { localStorage.setItem('proj_financials_open', !v); return !v }) }
 
   useEffect(() => { load() }, [])
 
@@ -284,16 +286,39 @@ export default function Projects() {
         </>
       )}
 
-      {/* Portfolio financial dashboard — KPIs, monthly cashflow, upcoming
-          valuations, variance by month, per-project claimed-vs-plan bars.
-          Sits below Live + Tender so the project lists read first. All data
-          flows from PAs (claimed) and CFFs (forecast) via dashboardFinancials.js. */}
-      <ProjectsDashboard
-        counts={counts}
-        dashFin={dashFin}
-        canViewValue={can('view_project_value')}
-        onProjectClick={(id) => navigate(`/projects/${id}`)}
-      />
+      {/* ─── Project Financials ───────────────────────────────────────
+          Wraps the existing ProjectsDashboard in the same collapsible
+          section pattern as Live + Tender so all three sit at consistent
+          vertical rhythm. Dashboard data still loads in the background
+          when active projects change (loadDashboardFinancials in the
+          useEffect above), independently of whether this section is open
+          — so opening it is instant if the data is ready, or shows the
+          existing two-stage fallback otherwise. */}
+      <div style={{ marginBottom: 16 }}>
+        <div className="section-header" onClick={toggleFinancials}
+          style={{ marginBottom: financialsOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
+          <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: financialsOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5b9bd5', display: 'inline-block' }} />
+            Project Financials
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>portfolio overview</span>
+            {!financialsOpen && (
+              <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
+            )}
+          </div>
+        </div>
+        {financialsOpen && (
+          <ProjectsDashboard
+            counts={counts}
+            dashFin={dashFin}
+            canViewValue={can('view_project_value')}
+            onProjectClick={(id) => navigate(`/projects/${id}`)}
+          />
+        )}
+      </div>
 
       {showModal && <ProjectModal project={editing} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}
 
