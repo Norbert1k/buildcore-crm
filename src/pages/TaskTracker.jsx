@@ -23,6 +23,13 @@ export default function TaskTracker() {
   const [tasks, setTasks] = useState([])
   const [assignees, setAssignees] = useState({})
   const [users, setUsers] = useState([])
+  // Reminders the current user has set on themselves (assignees-only flow).
+  // `reminders` holds every un-dismissed row; `dueReminders` is the subset
+  // whose remind_at has passed — these drive the banner. Re-checked every
+  // 60s so banner updates without a refresh.
+  const [reminders, setReminders] = useState([])
+  // Popover state: { taskId, assigneeIds } when open, null otherwise.
+  const [notifyFor, setNotifyFor] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -56,6 +63,27 @@ export default function TaskTracker() {
   const setViewMode       = (v) => updateFilter('view',     v, 'open')
 
   useEffect(() => { load() }, [])
+
+  // Load reminders for the current user; poll every 60s so the due banner
+  // appears without a manual refresh. Unmount cleans up the interval.
+  useEffect(() => {
+    if (!profile?.id) return
+    loadReminders()
+    const id = setInterval(loadReminders, 60_000)
+    return () => clearInterval(id)
+  }, [profile?.id])
+
+  async function loadReminders() {
+    if (!profile?.id) return
+    const { data, error } = await supabase
+      .from('task_reminders')
+      .select('id, task_id, user_id, remind_at, created_at, dismissed_at')
+      .eq('user_id', profile.id)
+      .is('dismissed_at', null)
+      .order('remind_at', { ascending: true })
+    if (error) { console.error('[TaskTracker] reminders:', error); return }
+    setReminders(data || [])
+  }
 
   async function load() {
     setLoading(true)
@@ -168,6 +196,36 @@ export default function TaskTracker() {
       details: { to: newStatus }
     })
     load()
+  }
+
+  // ── Reminders ──────────────────────────────────────────────────────────────
+  // Per spec: only people ASSIGNED to a task may be reminded about it. The
+  // popover is opened from the row's Notify button; saving inserts a row in
+  // task_reminders. RLS enforces the "assignees only" rule at the DB level
+  // even if the client misbehaves.
+  async function setReminder(taskId, userId, remindAt) {
+    if (!taskId || !userId || !remindAt) return
+    const { error } = await supabase.from('task_reminders').insert({
+      task_id: taskId, user_id: userId, remind_at: remindAt, created_by: profile?.id,
+    })
+    if (error) { alert('Could not set reminder: ' + error.message); return }
+    setNotifyFor(null)
+    if (userId === profile?.id) loadReminders()
+  }
+
+  // Snooze pushes remind_at forward by N hours from now (so the banner clears
+  // immediately and reappears later). Dismiss closes the reminder for good.
+  async function snoozeReminder(reminderId, hours) {
+    const next = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString()
+    const { error } = await supabase.from('task_reminders').update({ remind_at: next }).eq('id', reminderId)
+    if (error) { alert('Snooze failed: ' + error.message); return }
+    loadReminders()
+  }
+
+  async function dismissReminder(reminderId) {
+    const { error } = await supabase.from('task_reminders').update({ dismissed_at: new Date().toISOString() }).eq('id', reminderId)
+    if (error) { alert('Dismiss failed: ' + error.message); return }
+    loadReminders()
   }
 
   // Export tasks as PDF — landscape, CCG letterhead.
@@ -435,6 +493,13 @@ export default function TaskTracker() {
     return { ref: p.project_ref || '', name: p.project_name || '—' }
   }
 
+  // Reminders whose moment has arrived — drive the banner. The interval poll
+  // refreshes `reminders`; this filter re-runs every render so the cutoff is
+  // always "now". Map by id for stable banner rows.
+  const now = Date.now()
+  const dueReminders = reminders.filter(r => new Date(r.remind_at).getTime() <= now)
+  const taskById = new Map(tasks.map(t => [t.id, t]))
+
   if (loading) return <Spinner />
 
   return (
@@ -464,6 +529,32 @@ export default function TaskTracker() {
           )}
         </div>
       </div>
+
+      {dueReminders.length > 0 && (
+        <div style={{ background: 'var(--surface2)', border: '1px solid var(--blue-border)', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--blue)' }}>{dueReminders.length} reminder{dueReminders.length === 1 ? '' : 's'}</span>
+          </div>
+          {dueReminders.map(r => {
+            const t = taskById.get(r.task_id)
+            if (!t) return null
+            const { ref, name } = projectDisplay(t.project_id)
+            const setOn = new Date(r.created_at)
+            const setOnLabel = new Date().toDateString() === setOn.toDateString() ? 'today' : setOn.toLocaleDateString('en-GB')
+            return (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '0.5px solid var(--blue-border)', fontSize: 12 }}>
+                <span style={{ cursor: 'pointer', fontWeight: 500 }} onClick={() => navigate(`/tasks/${t.id}`)}>{t.title}</span>
+                <span style={{ color: 'var(--text3)', fontSize: 11 }}>· {ref ? ref + ' ' : ''}{name} · set {setOnLabel}</span>
+                <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <button className="btn btn-sm" onClick={() => snoozeReminder(r.id, 24)} title="Remind me again tomorrow">Snooze 1d</button>
+                  <button className="btn btn-sm" onClick={() => dismissReminder(r.id)} title="Dismiss this reminder">Dismiss</button>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {projects.length > 0 && (() => {
         const activeProjs = projects.filter(p => p.status === 'active')
@@ -617,6 +708,9 @@ export default function TaskTracker() {
                         {canChangeStatus && t.status === 'closed' && (
                           <button className="btn btn-sm" onClick={() => changeStatus(t.id, 'active')} title="Reopen">Reopen</button>
                         )}
+                        {isAssignee && t.status !== 'closed' && (
+                          <button className="btn btn-sm" onClick={() => setNotifyFor(t.id)} title="Set a personal reminder">Notify</button>
+                        )}
                         {canDelete && (
                           <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(t.id)} title="Delete task">✕</button>
                         )}
@@ -671,6 +765,14 @@ export default function TaskTracker() {
         </div>
       </Modal>
 
+      <NotifyPopover
+        open={!!notifyFor}
+        taskId={notifyFor}
+        currentUserId={profile?.id}
+        onClose={() => setNotifyFor(null)}
+        onSave={setReminder}
+      />
+
       <ConfirmDialog
         open={!!confirmDelete}
         onClose={() => setConfirmDelete(null)}
@@ -680,5 +782,65 @@ export default function TaskTracker() {
         danger
       />
     </div>
+  )
+}
+
+// ─── Notify Popover ─────────────────────────────────────────────────────────
+// Compact modal for setting a reminder on the current task. Per the
+// assignees-only rule, the only "who" option is the current user — keeping
+// the UI simple and matching the RLS policy (someone trying to notify a
+// non-assignee would be rejected by the DB anyway).
+//
+// Three quick-pick buttons (Tomorrow / In 3 days / In a week) plus a date
+// input for custom dates. Saving calls onSave(taskId, userId, remind_at).
+function NotifyPopover({ open, taskId, currentUserId, onClose, onSave }) {
+  const [whenISO, setWhenISO] = useState('')
+
+  // Reset state when the popover opens for a new task
+  useEffect(() => {
+    if (open) {
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+      tomorrow.setHours(9, 0, 0, 0)
+      setWhenISO(tomorrow.toISOString().slice(0, 10))
+    }
+  }, [open, taskId])
+
+  if (!open) return null
+
+  const quickPick = (days) => {
+    const d = new Date(Date.now() + days * 24 * 60 * 60 * 1000)
+    d.setHours(9, 0, 0, 0)
+    setWhenISO(d.toISOString().slice(0, 10))
+  }
+
+  const save = () => {
+    if (!whenISO || !taskId || !currentUserId) return
+    // Use 09:00 local time on the chosen day so reminders feel "morning of"
+    // rather than midnight.
+    const dt = new Date(whenISO + 'T09:00:00')
+    onSave(taskId, currentUserId, dt.toISOString())
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Remind me about this task" size="sm"
+      footer={<>
+        <button className="btn" onClick={onClose}>Cancel</button>
+        <button className="btn btn-primary" onClick={save}>Set reminder</button>
+      </>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Field label="When">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+            <button type="button" className="btn btn-sm" onClick={() => quickPick(1)}>Tomorrow</button>
+            <button type="button" className="btn btn-sm" onClick={() => quickPick(3)}>In 3 days</button>
+            <button type="button" className="btn btn-sm" onClick={() => quickPick(7)}>In a week</button>
+          </div>
+          <input type="date" value={whenISO} onChange={e => setWhenISO(e.target.value)}
+            min={new Date().toISOString().slice(0, 10)} />
+        </Field>
+        <p style={{ fontSize: 11, color: 'var(--text3)', margin: 0 }}>
+          You'll see a banner at the top of Task Tracker on that day. Only people assigned to a task can be reminded about it.
+        </p>
+      </div>
+    </Modal>
   )
 }
