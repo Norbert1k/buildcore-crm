@@ -53,7 +53,7 @@ import { fetchAllProjectPas as fetchLatestPas, aggregateFinancials } from './paE
 import { fetchAllProjectPas as fetchPaHistory } from './paGroupExtractor'
 import { fetchLatestCff, projectCffOnCalendar } from './cffReader'
 
-const CACHE_PREFIX = 'buildcore:dashFin:v2:'
+const CACHE_PREFIX = 'buildcore:dashFin:v3:'
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000   // 30 days
 
 // ── localStorage cache helpers ────────────────────────────────────────────
@@ -180,38 +180,63 @@ async function fetchAndParseProject(supabase, project) {
 
   // ── Project monthly actuals from PA history onto calendar dates ──────
   //
-  // Each PA in paHistory has { index, total_cumulative } where index is the
-  // parsed PA number (PA01 → 1, PA02 → 2, ...). The convention (matching
-  // CffGeneratorModal): PA-index N corresponds to month-from-start (N − 1).
-  // So PA01 lands on project.start_date, PA02 the next month, etc.
+  // Each PA in paHistory has { index, total_cumulative, created_at,
+  // retention_pct, retention_amount } where index is the parsed PA number.
   //
   // monthly delta = cum[N] − cum[N-1], clamped to 0 to handle the
   // PA-cumulative-non-monotonic edge case (rare data-entry glitches where
   // a later PA reports a lower cumulative than the previous one).
   //
-  // If PA indices have gaps (e.g. PA01, PA03 but no PA02), the full delta
-  // is attributed to PA03's month and PA02's calendar slot is left at 0.
-  // This is the simplest defensible behaviour — a more elaborate "spread
-  // the gap" interpretation would require knowing why the gap exists.
+  // monthly_actual uses the PA file UPLOAD DATE as the calendar slot (the
+  // Monthly Payments report needs PAs grouped by actual upload month, not
+  // by sequential index from project start).
+  //
+  // pa_entries is a parallel array carrying the full per-PA shape needed
+  // by the Monthly Payments tab — upload date, delta, retention info,
+  // PA number, file name.
   let monthly_actual = []
-  if (paHistory.length > 0 && project.start_date) {
-    const startDate = new Date(project.start_date)
-    if (!isNaN(startDate.getTime())) {
-      startDate.setDate(1)
-      // Sort defensively — paGroupExtractor already sorts ASC by PA number
-      // but we don't want a misordering bug to silently produce negatives.
-      const sortedHistory = [...paHistory].sort((a, b) => (a.index || 0) - (b.index || 0))
-      let prevCum = 0
-      for (const pa of sortedHistory) {
-        const idx = pa.index
-        if (!Number.isFinite(idx) || idx < 1) continue
-        const cum = Number.isFinite(pa.total_cumulative) ? pa.total_cumulative : 0
-        const delta = Math.max(0, cum - prevCum)
-        const d = new Date(startDate.getFullYear(), startDate.getMonth() + (idx - 1), 1)
-        const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-        monthly_actual.push({ date: ymd, amount: delta })
-        prevCum = cum
+  let pa_entries = []
+  if (paHistory.length > 0) {
+    const sortedHistory = [...paHistory].sort((a, b) => (a.index || 0) - (b.index || 0))
+    let prevCum = 0
+    for (const pa of sortedHistory) {
+      const idx = pa.index
+      if (!Number.isFinite(idx) || idx < 1) continue
+      const cum = Number.isFinite(pa.total_cumulative) ? pa.total_cumulative : 0
+      const delta = Math.max(0, cum - prevCum)
+      // Use the PA file's upload timestamp as the calendar slot. Fallback
+      // to project start + index only if created_at is missing (very rare).
+      let ymd = null
+      if (pa.created_at) {
+        const d = new Date(pa.created_at)
+        if (!isNaN(d.getTime())) {
+          ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+        }
       }
+      if (!ymd && project.start_date) {
+        const sd = new Date(project.start_date)
+        if (!isNaN(sd.getTime())) {
+          sd.setDate(1)
+          const d = new Date(sd.getFullYear(), sd.getMonth() + (idx - 1), 1)
+          ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+        }
+      }
+      if (ymd) monthly_actual.push({ date: ymd, amount: delta })
+      // pa_entries carries the full per-PA detail for the Monthly Payments
+      // report. retention_pct/_amount may be null when the parser couldn't
+      // read them — the UI then falls back to the project's admin override.
+      pa_entries.push({
+        pa_index: idx,
+        pa_label: pa.pa_label || `PA${String(idx).padStart(2, '0')}`,
+        file_name: pa.file_name || null,
+        uploaded_at: pa.created_at || null,
+        date: ymd,
+        amount: delta,
+        cumulative: cum,
+        retention_pct: pa.retention_pct ?? null,
+        retention_amount: pa.retention_amount ?? null,
+      })
+      prevCum = cum
     }
   }
 
@@ -240,6 +265,7 @@ async function fetchAndParseProject(supabase, project) {
     variations_count,
     monthly_forecast,
     monthly_actual,
+    pa_entries,
     has_real_data,
     pct_claimed: total_contract > 0 ? (claimed_to_date / total_contract) * 100 : 0,
   }
@@ -283,6 +309,7 @@ export async function loadDashboardFinancials(supabase, activeProjects, onProgre
       },
       monthly_forecast: [],
       monthly_actual: [],
+      pa_entries: [],
       likely_ratio: null,
       billings: zeroBillings(),
       projects: [],
@@ -322,6 +349,7 @@ export async function loadDashboardFinancials(supabase, activeProjects, onProgre
         variations_count: 0,
         monthly_forecast: [],
         monthly_actual: [],
+        pa_entries: [],
         has_real_data: false,
         pct_claimed: 0,
       }
@@ -469,6 +497,7 @@ export function buildInstantFallback(activeProjects) {
       },
       monthly_forecast: [],
       monthly_actual: [],
+      pa_entries: [],
       likely_ratio: null,
       billings: zeroBillings(),
       projects: [],
@@ -490,6 +519,7 @@ export function buildInstantFallback(activeProjects) {
       variations_count: 0,
       monthly_forecast: [],
       monthly_actual: [],
+      pa_entries: [],
       has_real_data: false,
       pct_claimed: 0,
     }
@@ -508,6 +538,7 @@ export function buildInstantFallback(activeProjects) {
     },
     monthly_forecast: [],
     monthly_actual: [],
+    pa_entries: [],
     likely_ratio: null,
     billings: zeroBillings(),
     projects: projects.sort((a, b) => b.total_contract - a.total_contract),
