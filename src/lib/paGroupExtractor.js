@@ -319,3 +319,99 @@ export async function fetchAllProjectPas(supabase, projectId, paSubfolderKey = n
   }))
   return parsed.filter(p => p !== null)
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// fetchAllPasAcrossSubfolders(supabase, projectId)
+//   → [{ subfolder_key, subfolder_label, index, pa_label, file_name,
+//        created_at, contract_sum, total_cumulative, groups,
+//        retention_pct, retention_amount }, ...]
+//
+// Multi-building variant of fetchAllProjectPas. Returns ALL PAs across the
+// project's 02-payment-application folder — both root (single-building
+// layout, subfolder_key=null) AND any custom subfolders (multi-building
+// layout, e.g. Merton's Residential / Sports Hall / Changing Rooms).
+//
+// Each PA carries subfolder_key + subfolder_label so the caller can
+// segregate PAs per building (important when computing per-PA deltas:
+// PA01 of Residential and PA01 of Sports Hall are independent sequences,
+// not consecutive).
+//
+// dashboardFinancials uses this for monthly_actual / pa_entries so multi-
+// building projects are correctly represented. The original
+// fetchAllProjectPas signature is preserved unchanged for CFF generator
+// callers that target one specific subfolder.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function fetchAllPasAcrossSubfolders(supabase, projectId) {
+  // Pull all PA files for the project regardless of subfolder.
+  const { data: rows, error } = await supabase
+    .from('project_doc_files')
+    .select('id, file_name, storage_path, created_at, subfolder_key')
+    .eq('project_id', projectId)
+    .eq('folder_key', '02-payment-application')
+  if (error) throw error
+  if (!rows || rows.length === 0) return []
+  const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name))
+  if (xlsxRows.length === 0) return []
+
+  // Build a label map so each PA shows a friendly building name in the UI
+  // (e.g. "Sports Hall") instead of the raw folder_key.
+  const subfolderKeys = [...new Set(xlsxRows.map(r => r.subfolder_key).filter(k => k != null))]
+  let labelMap = {}
+  if (subfolderKeys.length > 0) {
+    const { data: folders } = await supabase
+      .from('project_doc_folders')
+      .select('folder_key, label')
+      .eq('project_id', projectId)
+      .in('folder_key', subfolderKeys)
+    labelMap = Object.fromEntries((folders || []).map(f => [f.folder_key, f.label]))
+  }
+
+  // Group by subfolder_key, sort each group by PA number, parse in parallel.
+  const groupsByKey = new Map()
+  for (const row of xlsxRows) {
+    const k = row.subfolder_key == null ? '__root__' : row.subfolder_key
+    if (!groupsByKey.has(k)) groupsByKey.set(k, [])
+    groupsByKey.get(k).push(row)
+  }
+
+  const out = []
+  for (const [k, groupRows] of groupsByKey.entries()) {
+    const sorted = sortPaRowsByPaNumber(groupRows, 'asc')
+    const subfolderKey = k === '__root__' ? null : k
+    const subfolderLabel = subfolderKey ? (labelMap[subfolderKey] || subfolderKey) : null
+
+    const parsedGroup = await Promise.all(sorted.map(async (row, arrayIdx) => {
+      try {
+        const { data: signed } = await supabase
+          .storage
+          .from('project-docs')
+          .createSignedUrl(row.storage_path, 600)
+        if (!signed?.signedUrl) return null
+        const res = await fetch(signed.signedUrl)
+        if (!res.ok) return null
+        const blob = await res.blob()
+        const extract = await extractPaGroups(blob)
+        const paNum = paNumberFromFilename(row.file_name)
+        const index = paNum ?? (arrayIdx + 1)
+        return {
+          subfolder_key: subfolderKey,
+          subfolder_label: subfolderLabel,
+          index,
+          pa_label: `PA${String(index).padStart(2, '0')}`,
+          file_name: row.file_name,
+          created_at: row.created_at,
+          contract_sum: extract.contract_sum,
+          total_cumulative: extract.contract_cumulative,
+          groups: extract.groups,
+          retention_pct: extract.retention_pct,
+          retention_amount: extract.retention_amount,
+        }
+      } catch (err) {
+        console.warn('PA parse failed:', row.file_name, err)
+        return null
+      }
+    }))
+    for (const p of parsedGroup) if (p) out.push(p)
+  }
+  return out
+}
