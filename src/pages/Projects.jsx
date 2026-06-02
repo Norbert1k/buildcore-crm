@@ -211,7 +211,7 @@ export default function Projects() {
           </div>
 
           {/* ─── Tender Projects ──────────────────────────────────── */}
-          <div>
+          <div style={{ marginBottom: 16 }}>
             <div className="section-header" onClick={toggleTender}
               style={{ marginBottom: tenderOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
               <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
