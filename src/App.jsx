@@ -1,5 +1,5 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
 import Sidebar from './components/Sidebar'
@@ -178,6 +178,9 @@ function ProtectedLayout() {
   const { user, loading, mfaVerified } = useAuth()
   const [expCounts, setExpCounts] = useState({ expired: 0, expiring: 0 })
   const [reminderCount, setReminderCount] = useState(0)
+  // The next reminder that's due AND hasn't been popped up to the user yet.
+  // Drives the live popup modal. Set to null when no popup needs to show.
+  const [pendingPopup, setPendingPopup] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [mfaCheck, setMfaCheck] = useState({ done: false, needed: false, factorId: null })
   const location = useLocation()
@@ -275,17 +278,28 @@ function ProtectedLayout() {
     })
   }
 
-  // Count of un-dismissed task reminders for the current user whose time has
-  // arrived. Drives the dot on the "Task Tracker" sidebar nav. RLS already
-  // limits the rows to the current user, so a simple count is enough.
+  // Fetches every reminder that's currently due AND un-dismissed. Two
+  // outputs from one query:
+  //   • reminderCount  — drives the sidebar dot (any due reminder = dot)
+  //   • pendingPopup   — the OLDEST due-and-not-yet-notified reminder, joined
+  //                      with its task for the live popup. Once popped, the
+  //                      row's notified_at is set so it never re-fires.
+  // Joining tasks(title, project_id) and projects(project_name, project_ref)
+  // in one query keeps the popup zero-flicker — all data ready before render.
   async function fetchReminderCount() {
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .from('task_reminders')
-      .select('id', { count: 'exact', head: true })
+      .select('id, task_id, remind_at, created_at, notified_at, tasks(title, project_id, projects(project_name, project_ref))')
       .is('dismissed_at', null)
       .lte('remind_at', new Date().toISOString())
-    if (error) { console.warn('[App] reminder count fetch:', error.message); return }
-    setReminderCount(count || 0)
+      .order('remind_at', { ascending: true })
+    if (error) { console.warn('[App] reminder fetch:', error.message); return }
+    const rows = data || []
+    setReminderCount(rows.length)
+    // First un-notified row becomes the popup. If all due reminders have
+    // already been notified, no popup — they live in the Task Tracker banner.
+    const next = rows.find(r => !r.notified_at)
+    setPendingPopup(next || null)
   }
 
   if (loading || !mfaCheck.done) {
@@ -360,6 +374,104 @@ function ProtectedLayout() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
+        </div>
+      </div>
+
+      <LiveReminderPopup
+        reminder={pendingPopup}
+        onClose={() => setPendingPopup(null)}
+        onAfterAction={fetchReminderCount}
+      />
+    </div>
+  )
+}
+
+// ─── Live reminder popup ────────────────────────────────────────────────────
+// Modal that appears anywhere in the CRM when a task reminder becomes due.
+// Server-tracked: setting notified_at=now() marks the reminder as "seen" so
+// it won't pop again. The user can:
+//   • Open task    — navigate to TaskDetail, mark notified, dismiss banner
+//   • Snooze 1h    — push remind_at forward an hour, re-arm (notified_at=null)
+//   • Dismiss      — close the reminder for good
+//
+// Closing via backdrop click is intentionally NOT allowed — the user must
+// explicitly choose an action so they don't accidentally lose the reminder.
+function LiveReminderPopup({ reminder, onClose, onAfterAction }) {
+  const navigate = useNavigate()
+  // Mark the reminder as notified the moment the popup actually mounts.
+  // This means even if the user navigates away without clicking anything,
+  // the popup never re-fires on the next 60s poll. The reminder still lives
+  // on the Task Tracker banner (where notified_at doesn't matter) until the
+  // user explicitly dismisses or opens it.
+  useEffect(() => {
+    if (!reminder?.id) return
+    let cancelled = false
+    supabase.from('task_reminders').update({ notified_at: new Date().toISOString() }).eq('id', reminder.id)
+      .then(({ error }) => { if (error && !cancelled) console.warn('[ReminderPopup] mark notified:', error.message) })
+    return () => { cancelled = true }
+  }, [reminder?.id])
+
+  if (!reminder) return null
+
+  const task = reminder.tasks
+  const project = task?.projects
+  const projectLabel = project ? `${project.project_ref ? project.project_ref + ' · ' : ''}${project.project_name || ''}` : ''
+
+  const createdAgo = (() => {
+    const diff = Date.now() - new Date(reminder.created_at).getTime()
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000))
+    if (days === 0) return 'earlier today'
+    if (days === 1) return '1 day ago'
+    return `${days} days ago`
+  })()
+
+  const goToTask = async () => {
+    await supabase.from('task_reminders').update({ dismissed_at: new Date().toISOString() }).eq('id', reminder.id)
+    navigate(`/tasks/${reminder.task_id}`)
+    onClose()
+    onAfterAction && onAfterAction()
+  }
+
+  const snoozeHour = async () => {
+    const next = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    // notified_at=null re-arms it so the popup fires again in an hour.
+    await supabase.from('task_reminders').update({ remind_at: next, notified_at: null }).eq('id', reminder.id)
+    onClose()
+    onAfterAction && onAfterAction()
+  }
+
+  const dismiss = async () => {
+    await supabase.from('task_reminders').update({ dismissed_at: new Date().toISOString() }).eq('id', reminder.id)
+    onClose()
+    onAfterAction && onAfterAction()
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div style={{
+        background: 'var(--surface)', border: '1px solid var(--blue-border, rgba(91,155,213,0.4))',
+        borderRadius: 10, width: 380, maxWidth: '100%',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+      }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--blue, #5b9bd5)" stroke="var(--blue, #5b9bd5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Task reminder</span>
+        </div>
+        <div style={{ padding: '16px 18px' }}>
+          {projectLabel && <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{projectLabel}</div>}
+          <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--text)', marginBottom: 10 }}>{task?.title || 'Task'}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)' }}>You set this reminder {createdAgo}.</div>
+        </div>
+        <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+          <button className="btn btn-sm" onClick={snoozeHour}>Snooze 1h</button>
+          <button className="btn btn-sm" onClick={dismiss}>Dismiss</button>
+          <button className="btn btn-sm btn-primary" onClick={goToTask}>Open task →</button>
         </div>
       </div>
     </div>
