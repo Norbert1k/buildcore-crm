@@ -77,7 +77,7 @@ export default function TaskTracker() {
     if (!profile?.id) return
     const { data, error } = await supabase
       .from('task_reminders')
-      .select('id, task_id, user_id, remind_at, created_at, dismissed_at')
+      .select('id, task_id, user_id, remind_at, created_at, notified_at, dismissed_at')
       .eq('user_id', profile.id)
       .is('dismissed_at', null)
       .order('remind_at', { ascending: true })
@@ -211,6 +211,16 @@ export default function TaskTracker() {
     if (error) { alert('Could not set reminder: ' + error.message); return }
     setNotifyFor(null)
     if (userId === profile?.id) loadReminders()
+  }
+
+  // Update an existing reminder's time. Re-arms notified_at = null so the
+  // popup will fire again at the new time even if it already fired once.
+  async function updateReminder(reminderId, remindAt) {
+    if (!reminderId || !remindAt) return
+    const { error } = await supabase.from('task_reminders').update({ remind_at: remindAt, notified_at: null }).eq('id', reminderId)
+    if (error) { alert('Could not update reminder: ' + error.message); return }
+    setNotifyFor(null)
+    loadReminders()
   }
 
   // Snooze pushes remind_at forward by N hours from now (so the banner clears
@@ -500,6 +510,13 @@ export default function TaskTracker() {
   const dueReminders = reminders.filter(r => new Date(r.remind_at).getTime() <= now)
   const taskById = new Map(tasks.map(t => [t.id, t]))
 
+  // Quick lookup: "does the current user have an active reminder on this task?"
+  // Keyed by task_id → reminder row. Drives the bell indicator on each row
+  // and the popover's "you have an existing reminder" state. The RLS policy
+  // already filters reminders to the current user, so `reminders` only
+  // contains this user's rows — no extra check needed here.
+  const reminderByTaskId = new Map(reminders.map(r => [r.task_id, r]))
+
   if (loading) return <Spinner />
 
   return (
@@ -674,7 +691,34 @@ export default function TaskTracker() {
                         <span style={{ fontSize: 11, fontWeight: 600, color: pri.color }}>{pri.label}</span>
                       </div>
                     </td>
-                    <td style={{ fontWeight: 500 }}>{t.title}</td>
+                    <td style={{ fontWeight: 500 }}>
+                      {t.title}
+                      {(() => {
+                        const r = reminderByTaskId.get(t.id)
+                        if (!r) return null
+                        const remindMs = new Date(r.remind_at).getTime()
+                        const isDue = remindMs <= now
+                        const dayLabel = new Date(r.remind_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                        return (
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setNotifyFor(t.id) }}
+                            title={isDue ? 'Reminder is due — click to edit' : `Reminder set for ${dayLabel} — click to edit`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 8, cursor: 'pointer', verticalAlign: 'middle' }}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24"
+                              fill={isDue ? 'var(--blue, #5b9bd5)' : 'none'}
+                              stroke={isDue ? 'var(--blue, #5b9bd5)' : 'var(--text3)'}
+                              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg>
+                            <span style={{ fontSize: 10, color: isDue ? 'var(--blue, #5b9bd5)' : 'var(--text3)', fontWeight: isDue ? 500 : 400 }}>
+                              {isDue ? 'due now' : dayLabel}
+                            </span>
+                          </span>
+                        )
+                      })()}
+                    </td>
                     <td className="td-muted">
                       {(() => { const { ref, name } = projectDisplay(t.project_id); return (
                         <>
@@ -708,7 +752,7 @@ export default function TaskTracker() {
                         {canChangeStatus && t.status === 'closed' && (
                           <button className="btn btn-sm" onClick={() => changeStatus(t.id, 'active')} title="Reopen">Reopen</button>
                         )}
-                        {isAssignee && t.status !== 'closed' && (
+                        {isAssignee && t.status !== 'closed' && !reminderByTaskId.has(t.id) && (
                           <button className="btn btn-sm" onClick={() => setNotifyFor(t.id)} title="Set a personal reminder">Notify</button>
                         )}
                         {canDelete && (
@@ -769,8 +813,11 @@ export default function TaskTracker() {
         open={!!notifyFor}
         taskId={notifyFor}
         currentUserId={profile?.id}
+        existingReminder={notifyFor ? reminderByTaskId.get(notifyFor) : null}
         onClose={() => setNotifyFor(null)}
         onSave={setReminder}
+        onUpdate={updateReminder}
+        onCancel={(id) => { dismissReminder(id); setNotifyFor(null) }}
       />
 
       <ConfirmDialog
@@ -786,24 +833,34 @@ export default function TaskTracker() {
 }
 
 // ─── Notify Popover ─────────────────────────────────────────────────────────
-// Compact modal for setting a reminder on the current task. Per the
-// assignees-only rule, the only "who" option is the current user — keeping
-// the UI simple and matching the RLS policy (someone trying to notify a
-// non-assignee would be rejected by the DB anyway).
+// Compact modal for setting OR editing a personal reminder on the current
+// task. Per the assignees-only rule, the only "who" option is the current
+// user — keeping the UI simple and matching the RLS policy (someone trying
+// to notify a non-assignee would be rejected by the DB anyway).
+//
+// Two modes:
+//   • Create mode (existingReminder is null) — Set reminder button
+//   • Edit mode   (existingReminder is set)  — Update + Cancel reminder
 //
 // Three quick-pick buttons (Tomorrow / In 3 days / In a week) plus a date
-// input for custom dates. Saving calls onSave(taskId, userId, remind_at).
-function NotifyPopover({ open, taskId, currentUserId, onClose, onSave }) {
+// input for custom dates.
+function NotifyPopover({ open, taskId, currentUserId, existingReminder, onClose, onSave, onUpdate, onCancel }) {
   const [whenISO, setWhenISO] = useState('')
+  const isEdit = !!existingReminder
 
-  // Reset state when the popover opens for a new task
+  // Reset state when the popover opens. If editing, pre-fill with the
+  // existing reminder's date so the user sees what's currently set; if
+  // creating, default to 9am tomorrow.
   useEffect(() => {
-    if (open) {
+    if (!open) return
+    if (existingReminder?.remind_at) {
+      setWhenISO(new Date(existingReminder.remind_at).toISOString().slice(0, 10))
+    } else {
       const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
       tomorrow.setHours(9, 0, 0, 0)
       setWhenISO(tomorrow.toISOString().slice(0, 10))
     }
-  }, [open, taskId])
+  }, [open, taskId, existingReminder?.id])
 
   if (!open) return null
 
@@ -818,17 +875,45 @@ function NotifyPopover({ open, taskId, currentUserId, onClose, onSave }) {
     // Use 09:00 local time on the chosen day so reminders feel "morning of"
     // rather than midnight.
     const dt = new Date(whenISO + 'T09:00:00')
-    onSave(taskId, currentUserId, dt.toISOString())
+    if (isEdit) {
+      onUpdate(existingReminder.id, dt.toISOString())
+    } else {
+      onSave(taskId, currentUserId, dt.toISOString())
+    }
   }
 
+  // Format the existing date for the subtitle (e.g. "5 Jun 2026")
+  const existingLabel = existingReminder
+    ? new Date(existingReminder.remind_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : ''
+
   return (
-    <Modal open={open} onClose={onClose} title="Remind me about this task" size="sm"
-      footer={<>
-        <button className="btn" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save}>Set reminder</button>
-      </>}>
+    <Modal open={open} onClose={onClose}
+      title={isEdit ? 'Reminder for this task' : 'Remind me about this task'}
+      size="sm"
+      footer={
+        isEdit ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', gap: 6 }}>
+            <button className="btn btn-sm btn-danger" onClick={() => onCancel(existingReminder.id)}>Cancel reminder</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn" onClick={onClose}>Close</button>
+              <button className="btn btn-primary" onClick={save}>Update</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button className="btn" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary" onClick={save}>Set reminder</button>
+          </>
+        )
+      }>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Field label="When">
+        {isEdit && (
+          <p style={{ fontSize: 11, color: 'var(--text3)', margin: 0 }}>
+            Currently set for {existingLabel}.
+          </p>
+        )}
+        <Field label={isEdit ? 'Change to' : 'When'}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
             <button type="button" className="btn btn-sm" onClick={() => quickPick(1)}>Tomorrow</button>
             <button type="button" className="btn btn-sm" onClick={() => quickPick(3)}>In 3 days</button>
@@ -837,9 +922,11 @@ function NotifyPopover({ open, taskId, currentUserId, onClose, onSave }) {
           <input type="date" value={whenISO} onChange={e => setWhenISO(e.target.value)}
             min={new Date().toISOString().slice(0, 10)} />
         </Field>
-        <p style={{ fontSize: 11, color: 'var(--text3)', margin: 0 }}>
-          You'll see a banner at the top of Task Tracker on that day. Only people assigned to a task can be reminded about it.
-        </p>
+        {!isEdit && (
+          <p style={{ fontSize: 11, color: 'var(--text3)', margin: 0 }}>
+            You'll see a banner at the top of Task Tracker on that day. Only people assigned to a task can be reminded about it.
+          </p>
+        )}
       </div>
     </Modal>
   )
