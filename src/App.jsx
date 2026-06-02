@@ -1,28 +1,43 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { supabase } from './lib/supabase'
 import Sidebar from './components/Sidebar'
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Subcontractors from './pages/Subcontractors'
-import SubcontractorDetail from './pages/SubcontractorDetail'
-import Documents from './pages/Documents'
-import Projects from './pages/Projects'
-import ProjectCalendar from './pages/ProjectCalendar'
-import ProjectDetail from './pages/ProjectDetail'
-import ProjectTracker from './pages/ProjectTracker'
-import Suppliers from './pages/Suppliers'
 import GlobalSearch from './components/GlobalSearch'
-import Settings from './pages/Settings'
-import CompanyDocuments from './pages/CompanyDocuments'
-import WebSearch from './pages/WebSearch'
-import Clients from './pages/Clients'
-import ClientDetail from './pages/ClientDetail'
-import TaskTracker from './pages/TaskTracker'
-import TaskDetail from './pages/TaskDetail'
-import Quotes from './pages/Quotes'
 import { Spinner } from './components/ui'
+
+// ── Code-split routes ──────────────────────────────────────────────────────
+// Each page is downloaded only when first visited rather than included in
+// the initial JS bundle. This dramatically reduces the time-to-interactive
+// on first load — instead of parsing the entire app (33k+ lines, including
+// 2000+ line pages like TaskDetail, ProjectDocumentation, CffGeneratorModal),
+// the user only downloads the entry shell + the page they actually open.
+//
+// Subsequent navigation between pages triggers a tiny JS fetch per route,
+// which Vercel's edge cache serves in <50ms after the first visit.
+//
+// Login is NOT lazy — it's the very first thing logged-out users see, and
+// lazy-loading it would add a Suspense fallback flash before the login form
+// appears. Sidebar + GlobalSearch stay eager because they render on every
+// authenticated page.
+const Dashboard         = lazy(() => import('./pages/Dashboard'))
+const Subcontractors    = lazy(() => import('./pages/Subcontractors'))
+const SubcontractorDetail = lazy(() => import('./pages/SubcontractorDetail'))
+const Documents         = lazy(() => import('./pages/Documents'))
+const Projects          = lazy(() => import('./pages/Projects'))
+const ProjectCalendar   = lazy(() => import('./pages/ProjectCalendar'))
+const ProjectDetail     = lazy(() => import('./pages/ProjectDetail'))
+const ProjectTracker    = lazy(() => import('./pages/ProjectTracker'))
+const Suppliers         = lazy(() => import('./pages/Suppliers'))
+const Settings          = lazy(() => import('./pages/Settings'))
+const CompanyDocuments  = lazy(() => import('./pages/CompanyDocuments'))
+const WebSearch         = lazy(() => import('./pages/WebSearch'))
+const Clients           = lazy(() => import('./pages/Clients'))
+const ClientDetail      = lazy(() => import('./pages/ClientDetail'))
+const TaskTracker       = lazy(() => import('./pages/TaskTracker'))
+const TaskDetail        = lazy(() => import('./pages/TaskDetail'))
+const Quotes            = lazy(() => import('./pages/Quotes'))
 
 function HamburgerIcon() {
   return (
@@ -317,28 +332,34 @@ function ProtectedLayout() {
           </div>
         </div>
         <div className="page-content">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/subcontractors" element={<Subcontractors />} />
-            <Route path="/subcontractors/ea" element={<Subcontractors />} />
-            <Route path="/subcontractors/design-team" element={<Subcontractors />} />
-            <Route path="/subcontractors/compliance" element={<Subcontractors />} />
-            <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/tracker" element={<ProjectTracker />} />
-          <Route path="/projects/calendar" element={<ProjectCalendar />} />
-            <Route path="/projects/:id" element={<ProjectDetail />} />
-            <Route path="/suppliers" element={<Suppliers />} />
-            <Route path="/quotes" element={<Quotes />} />
-            <Route path="/settings" element={<Settings />} />
-          <Route path="/company-documents" element={<CompanyDocuments />} />
-          <Route path="/web-search" element={<WebSearch />} />
-          <Route path="/clients" element={<Clients />} />
-          <Route path="/clients/:id" element={<ClientDetail />} />
-          <Route path="/tasks" element={<TaskTracker />} />
-          <Route path="/tasks/:taskId" element={<TaskDetail />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Suspense fallback={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200, padding: 40 }}>
+              <Spinner size={32} />
+            </div>
+          }>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/subcontractors" element={<Subcontractors />} />
+              <Route path="/subcontractors/ea" element={<Subcontractors />} />
+              <Route path="/subcontractors/design-team" element={<Subcontractors />} />
+              <Route path="/subcontractors/compliance" element={<Subcontractors />} />
+              <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/tracker" element={<ProjectTracker />} />
+              <Route path="/projects/calendar" element={<ProjectCalendar />} />
+              <Route path="/projects/:id" element={<ProjectDetail />} />
+              <Route path="/suppliers" element={<Suppliers />} />
+              <Route path="/quotes" element={<Quotes />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/company-documents" element={<CompanyDocuments />} />
+              <Route path="/web-search" element={<WebSearch />} />
+              <Route path="/clients" element={<Clients />} />
+              <Route path="/clients/:id" element={<ClientDetail />} />
+              <Route path="/tasks" element={<TaskTracker />} />
+              <Route path="/tasks/:taskId" element={<TaskDetail />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
         </div>
       </div>
     </div>
