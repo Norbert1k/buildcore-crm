@@ -27,6 +27,11 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     project_manager_id: project?.project_manager_id || '',
     value: project?.value || '',
     description: project?.description || '',
+    // Admin-only retention fallback. Stored as decimal in DB (0.03 = 3%),
+    // edited here as percent string (3 / 5 / 5.5) for usability.
+    retention_pct_override: project?.retention_pct_override != null
+      ? String(project.retention_pct_override * 100)
+      : '',
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
@@ -80,6 +85,9 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       ...form,
       project_ref: form.project_ref.trim() || null,
       value: form.value ? parseFloat(form.value) : null,
+      retention_pct_override: form.retention_pct_override !== ''
+        ? Math.max(0, Math.min(parseFloat(form.retention_pct_override) / 100, 1))
+        : null,
       project_director_id: form.project_director_id || null,
       project_manager_id: form.project_manager_id || null,
       start_date: form.start_date || null,
@@ -212,6 +220,18 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <Field label="Contract Value (£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
+        {profile?.role === 'admin' && (
+          <Field label="Retention fallback (%) — admin only">
+            <input type="number" value={form.retention_pct_override}
+              onChange={e => set('retention_pct_override', e.target.value)}
+              placeholder="leave blank if PAs are readable"
+              min="0" max="100" step="0.1" />
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+              Used only when a PA file's LESS RETENTION row can't be parsed.
+              When the PA file is readable, its rate is used regardless of this value.
+            </div>
+          </Field>
+        )}
         <div className="form-section">Dates</div>
         <Field label="Start Date">
           <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
