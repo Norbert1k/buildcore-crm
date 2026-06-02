@@ -627,13 +627,14 @@ function MonthlyPaymentsTab({ projects }) {
 
   function exportCsv() {
     const rows = []
-    rows.push(['Month', 'Project ref', 'Project', 'PA', 'Uploaded', 'Applied', 'Retention rate', 'Retention amount', 'Net due', 'Rate source'])
+    rows.push(['Month', 'Project ref', 'Project', 'Building', 'PA', 'Uploaded', 'Applied', 'Retention rate', 'Retention amount', 'Net due', 'Rate source'])
     for (const m of monthRows) {
       for (const e of m.entries) {
         rows.push([
           fmtMonthYM(m.ym),
           e.project_ref || '',
           e.project_name || '',
+          e.subfolder_label || '',
           e.pa_label || '',
           e.uploaded_at ? new Date(e.uploaded_at).toLocaleDateString('en-GB') : '',
           Math.round(e.amount || 0),
@@ -751,7 +752,10 @@ function MonthlyPaymentsTab({ projects }) {
                       }}>
                       <span></span>
                       <span style={{ display: 'flex', flexDirection: 'column' }}>
-                        <span style={{ color: 'var(--text)' }}>{e.project_name} · {e.pa_label}</span>
+                        <span style={{ color: 'var(--text)' }}>
+                          {e.project_name} · {e.pa_label}
+                          {e.subfolder_label && <span style={{ color: 'var(--text3)', fontWeight: 400 }}> · {e.subfolder_label}</span>}
+                        </span>
                         <span style={{ fontSize: 10, color: 'var(--text3)' }}>
                           {e.project_ref}
                           {e.uploaded_at && ` · uploaded ${new Date(e.uploaded_at).toLocaleDateString('en-GB').replace(/\//g, '.')}`}
