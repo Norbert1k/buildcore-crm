@@ -24,7 +24,7 @@ function isDarkTheme() {
   return DARK_THEMES.has(t)
 }
 
-export default function Sidebar({ expCounts = {}, open, onClose }) {
+export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClose }) {
   const { profile } = useAuth()
   const [isDark, setIsDark] = useState(isDarkTheme())
   const location = useLocation()
@@ -83,7 +83,8 @@ export default function Sidebar({ expCounts = {}, open, onClose }) {
       ]
     },
     { to: '/tasks', key: 'tasks', label: 'Task Tracker',
-      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
+      reminderDot: reminderCount > 0,
     },
     { to: '/quotes',            key: 'quotes', label: 'Quotes',
       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
@@ -133,6 +134,9 @@ export default function Sidebar({ expCounts = {}, open, onClose }) {
                 <NavLink to={item.to} end={item.to === '/'} className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`} onClick={handleNav}>
                   {item.icon}
                   {item.label}
+                  {item.reminderDot && (
+                    <span title="You have task reminders" style={{ marginLeft: 'auto', width: 8, height: 8, borderRadius: '50%', background: 'var(--blue, #5b9bd5)', display: 'inline-block', flexShrink: 0 }} />
+                  )}
                   {item.badge && <span className="nav-badge">{item.badge}</span>}
                 </NavLink>
               )}
