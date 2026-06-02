@@ -93,6 +93,7 @@ export default function Projects() {
     const { data, error } = await supabase
       .from('projects')
       .select('*, profiles!projects_project_manager_id_fkey(full_name), project_subcontractors(id)')
+      .order('project_ref', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
     if (error) console.error('[Projects] load error:', error)
     setProjects(data || [])
@@ -131,20 +132,6 @@ export default function Projects() {
           )}
         </div>
       </div>
-
-      {/* Status pills + portfolio dashboard. Replaces the previous 5-stat
-          card row. Status counts are now compact pills at the top; below
-          them sits a four-card KPI strip (total contract / claimed /
-          variations / remaining), a monthly cashflow chart, an expected-
-          billings panel, and a clickable per-project bars list. All
-          financial data is pulled from PAs (claimed) and CFFs (forecast)
-          and aggregated client-side via dashboardFinancials.js. */}
-      <ProjectsDashboard
-        counts={counts}
-        dashFin={dashFin}
-        canViewValue={can('view_project_value')}
-        onProjectClick={(id) => navigate(`/projects/${id}`)}
-      />
 
       {loading ? <Spinner /> : projects.length === 0 ? (
         <EmptyState icon="🏗️" title="No projects" message="Create your first project to start assigning subcontractors." action={can('manage_projects') && <button className="btn btn-primary" onClick={() => setShowModal(true)}><IconPlus size={14}/> New Project</button>} />
@@ -296,6 +283,17 @@ export default function Projects() {
           </div>
         </>
       )}
+
+      {/* Portfolio financial dashboard — KPIs, monthly cashflow, upcoming
+          valuations, variance by month, per-project claimed-vs-plan bars.
+          Sits below Live + Tender so the project lists read first. All data
+          flows from PAs (claimed) and CFFs (forecast) via dashboardFinancials.js. */}
+      <ProjectsDashboard
+        counts={counts}
+        dashFin={dashFin}
+        canViewValue={can('view_project_value')}
+        onProjectClick={(id) => navigate(`/projects/${id}`)}
+      />
 
       {showModal && <ProjectModal project={editing} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}
 
