@@ -63,6 +63,74 @@ function findHeaderRow(rows) {
   return -1
 }
 
+// Scan rows AFTER the header for a "LESS RETENTION" row and extract the
+// rate and deducted amount. Returns { pct, amount } or { pct: null, amount: null }
+// if we can't confidently read it (the UI then falls back to per-project
+// admin override).
+//
+// Rate sources, in order of confidence:
+//   1. A "%" token in the description (e.g. "Less Retention 3%", "Less Retention @ 5.00%")
+//   2. A decimal between 0 and 0.2 anywhere on the row (likely the rate as a fraction)
+//   3. Computed: |amount| / cumulative_total — only if we have a CONTRACT SUM cumulative
+//
+// Amount: the row's largest absolute-valued non-rate number, expected negative
+// in a Less-Retention row. We store the absolute value.
+function extractRetention(rows, headerRowIdx) {
+  // First pass: locate CONTRACT SUM cumulative for fallback rate calc
+  let contractCumForCalc = 0
+  for (let r = headerRowIdx + 1; r < rows.length; r++) {
+    const a = (rows[r] || [])[0]
+    if (typeof a === 'string' && a.trim().toUpperCase() === 'CONTRACT SUM') {
+      const h = (rows[r] || [])[7]
+      if (typeof h === 'number') contractCumForCalc = h
+      break
+    }
+  }
+
+  for (let r = headerRowIdx + 1; r < rows.length; r++) {
+    const row = rows[r] || []
+    const descCells = [row[0], row[1]].map(c => (typeof c === 'string' ? c.trim() : ''))
+    const descJoined = descCells.join(' ').toLowerCase()
+    if (!/(^|\s)less\s+retention\b/.test(descJoined) && !/^retention\b/.test(descJoined)) continue
+
+    // Found a candidate row. Extract amount: largest absolute number in any cell.
+    let amount = null
+    for (const cell of row) {
+      if (typeof cell !== 'number') continue
+      const abs = Math.abs(cell)
+      if (abs > 1 && (amount == null || abs > amount)) amount = abs
+    }
+
+    // Rate source 1: percentage in description text
+    let pct = null
+    for (const cell of row) {
+      if (typeof cell !== 'string') continue
+      const m = cell.match(/(\d+(?:\.\d+)?)\s*%/)
+      if (m) {
+        const v = parseFloat(m[1]) / 100
+        if (v > 0 && v < 1) { pct = v; break }
+      }
+    }
+
+    // Rate source 2: decimal between 0 and 0.2 in any numeric cell
+    if (pct == null) {
+      for (const cell of row) {
+        if (typeof cell !== 'number') continue
+        if (cell > 0 && cell < 0.2) { pct = cell; break }
+      }
+    }
+
+    // Rate source 3: compute from amount vs contract cumulative
+    if (pct == null && amount != null && contractCumForCalc > 0) {
+      const ratio = amount / contractCumForCalc
+      if (ratio > 0 && ratio < 0.2) pct = Math.round(ratio * 10000) / 10000
+    }
+
+    return { pct, amount }
+  }
+  return { pct: null, amount: null }
+}
+
 export async function extractPaGroups(file) {
   const XLSX = await loadSheetJs()
   const arrayBuffer = await file.arrayBuffer()
@@ -77,6 +145,12 @@ export async function extractPaGroups(file) {
 
   const headerRowIdx = findHeaderRow(rows)
   if (headerRowIdx < 0) throw new Error('Could not locate header row in PA')
+
+  // Retention scan — runs once per file, captures from the first LESS RETENTION
+  // row encountered. Defensive: tries multiple places the rate can live.
+  // Sets retention to null if we can't confidently extract it (UI then falls
+  // back to the per-project admin override).
+  const retention = extractRetention(rows, headerRowIdx)
 
   // Walk rows applying the same group-detection rules as csaExtractor
   let currentSection = null
@@ -162,6 +236,8 @@ export async function extractPaGroups(file) {
     contract_sum: contractSumF,
     contract_cumulative: contractCumulativeH || 0,
     groups: groupAcc,
+    retention_pct: retention.pct,        // null if unreadable
+    retention_amount: retention.amount,   // null if unreadable
   }
 }
 
@@ -233,6 +309,8 @@ export async function fetchAllProjectPas(supabase, projectId, paSubfolderKey = n
         contract_sum: extract.contract_sum,
         total_cumulative: extract.contract_cumulative,
         groups: extract.groups,
+        retention_pct: extract.retention_pct,
+        retention_amount: extract.retention_amount,
       }
     } catch (err) {
       console.warn('PA parse failed:', row.file_name, err)
