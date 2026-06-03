@@ -525,10 +525,10 @@ function AccessModal({ clientUser, client, onClose }) {
                       background: isOn ? 'rgba(91,155,213,0.05)' : 'transparent',
                     }}>
                     <input type="checkbox" checked={isOn} readOnly
-                      style={{ flexShrink: 0, accentColor: 'var(--blue, #5b9bd5)' }} />
+                      style={{ width: 16, height: 16, flexShrink: 0, appearance: 'auto', WebkitAppearance: 'auto', accentColor: 'var(--blue, #5b9bd5)', pointerEvents: 'none' }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{p.project_name}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.project_name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {p.project_ref || '—'} · {p.status}
                       </div>
                     </div>
