@@ -26,7 +26,7 @@ export default function RateLibraryTab() {
     setLoading(true); setError('')
     const [{ data, error: e }, { data: log }] = await Promise.all([
       supabase.from('rate_library')
-        .select('id, section, description, qty, unit, unit_norm, rate, total, material_rate, labour_rate, project_name, csa_date')
+        .select('id, section, description, qty, unit, unit_norm, rate, total, material_rate, labour_rate, project_name, source_file, csa_date')
         .order('section').order('description'),
       supabase.from('rate_library_harvest_log').select('run_at, files_seen, rows_upserted').order('run_at', { ascending: false }).limit(1),
     ])
@@ -61,7 +61,8 @@ export default function RateLibraryTab() {
       if (!needle) return true
       return (r.description || '').toLowerCase().includes(needle) ||
              (r.section || '').toLowerCase().includes(needle) ||
-             (r.project_name || '').toLowerCase().includes(needle)
+             (r.project_name || '').toLowerCase().includes(needle) ||
+             (r.source_file || '').toLowerCase().includes(needle)
     })
   }, [rows, q, unitFilter])
 
@@ -122,8 +123,8 @@ function RateRow({ r, onSave, saving }) {
       <input type="number" value={mat} onChange={e => setMat(e.target.value)} placeholder="—" style={{ fontSize: 11, textAlign: 'right', padding: '4px 6px' }} />
       <input type="number" value={lab} onChange={e => setLab(e.target.value)} placeholder="—" style={{ fontSize: 11, textAlign: 'right', padding: '4px 6px' }} />
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <span style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${r.project_name || ''} ${r.csa_date || ''}`}>
-          {r.project_name || '—'}
+        <span style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${r.project_name || r.source_file || ''} ${r.csa_date || ''}`}>
+          {r.project_name || r.source_file || '—'}
         </span>
         {dirty && <button className="btn btn-sm" disabled={saving} onClick={() => onSave(r.id, mat, lab)} style={{ flexShrink: 0, fontSize: 10, padding: '2px 8px' }}>{saving ? '…' : 'Save'}</button>}
       </span>
