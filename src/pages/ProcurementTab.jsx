@@ -6,10 +6,29 @@ import { supabase } from '../lib/supabase'
 // template. Each trade tracks materials/labour procured, who from, status,
 // target date and notes. Stages and trades can be added, deleted and reordered.
 //
+// Merton is a special case: 3 buildings in one project (Residential Block,
+// Sports Hall, Changing Room), each with its own independent tracker shown
+// under sub-tabs.
+//
+// Auto-feed: "Procured from" can be filled by matching a trade name to an
+// appointed subcontractor / design-team company already on the project.
+//
 // Persistence: the whole tracker is one JSONB document in project_procurement.
+//   • normal project:      { stages: [...] }
+//   • multi-building (Merton): { buildings: { residential: {stages}, ... } }
 // Autosaves shortly after any edit.
 
 const STATUS_OPTIONS = ['Not started', 'Quoting', 'Ordered', 'On site', 'Complete']
+
+// Merton's fixed building set. Detected by project name containing "Merton".
+const MERTON_BUILDINGS = [
+  { key: 'residential', label: 'Residential Block' },
+  { key: 'sports_hall', label: 'Sports Hall' },
+  { key: 'changing_room', label: 'Changing Room' },
+]
+function isMerton(project) {
+  return /merton/i.test(project?.project_name || '')
+}
 
 // Default template — mirrors CCG_Procurement_Tracker_Template.xlsx. Seeded the
 // first time a project's Procurement tab is opened.
@@ -35,8 +54,10 @@ function buildTemplate() {
   return { stages: TEMPLATE.map(([name, trades]) => ({ id: uid(), name, trades: trades.map(makeTrade) })) }
 }
 
-export default function ProcurementTab({ projectId }) {
-  const [data, setData] = useState(null)
+export default function ProcurementTab({ projectId, project, appointed = [] }) {
+  const merton = isMerton(project)
+  const [activeBuilding, setActiveBuilding] = useState(MERTON_BUILDINGS[0].key)
+  const [doc, setDoc] = useState(null)          // full persisted document
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saveState, setSaveState] = useState('')   // '', 'saving', 'saved'
@@ -44,17 +65,22 @@ export default function ProcurementTab({ projectId }) {
   const saveTimer = useRef(null)
   const firstLoad = useRef(true)
 
+  // The active stages array depends on whether this is a multi-building project.
+  const data = merton
+    ? (doc?.buildings?.[activeBuilding] || { stages: [] })
+    : (doc || { stages: [] })
+
   useEffect(() => { load() }, [projectId])
 
-  // Autosave shortly after any data change (skip the very first set from load).
+  // Autosave shortly after any doc change (skip the very first set from load).
   useEffect(() => {
     if (firstLoad.current) { firstLoad.current = false; return }
-    if (!data) return
+    if (!doc) return
     setSaveState('saving')
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(save, 800)
     return () => clearTimeout(saveTimer.current)
-  }, [data])
+  }, [doc])
 
   async function load() {
     setLoading(true); setError('')
@@ -65,12 +91,17 @@ export default function ProcurementTab({ projectId }) {
       .maybeSingle()
     if (e) { setError('Could not load procurement: ' + e.message); setLoading(false); return }
     firstLoad.current = true
-    if (row?.data?.stages?.length) {
-      setData(row.data)
+    if (merton) {
+      // Seed any missing buildings with the template.
+      const existing = row?.data?.buildings || {}
+      const buildings = {}
+      for (const b of MERTON_BUILDINGS) {
+        buildings[b.key] = existing[b.key]?.stages?.length ? existing[b.key] : buildTemplate()
+      }
+      setDoc({ buildings })
     } else {
-      // First open — seed the template (not yet persisted; saves on first edit
-      // or via the explicit Save button).
-      setData(buildTemplate())
+      if (row?.data?.stages?.length) setDoc(row.data)
+      else setDoc(buildTemplate())
     }
     setLoading(false)
   }
@@ -78,61 +109,138 @@ export default function ProcurementTab({ projectId }) {
   async function save() {
     const { error: e } = await supabase
       .from('project_procurement')
-      .upsert({ project_id: projectId, data, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
+      .upsert({ project_id: projectId, data: doc, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
     if (e) { setError('Save failed: ' + e.message); setSaveState(''); return }
     setSaveState('saved')
     setTimeout(() => setSaveState(''), 1500)
   }
 
-  // ── Mutators (all produce a fresh object so autosave fires) ──
-  function updateTrade(si, ti, field, value) {
-    setData(d => {
-      const stages = d.stages.map((s, i) => i !== si ? s : {
-        ...s, trades: s.trades.map((t, j) => j !== ti ? t : { ...t, [field]: value }),
-      })
-      return { ...d, stages }
+  // Write a new stages array back into the document, respecting building shape.
+  function setStages(updater) {
+    setDoc(d => {
+      if (merton) {
+        const cur = d.buildings[activeBuilding] || { stages: [] }
+        const nextStages = typeof updater === 'function' ? updater(cur.stages) : updater
+        return { ...d, buildings: { ...d.buildings, [activeBuilding]: { stages: nextStages } } }
+      } else {
+        const nextStages = typeof updater === 'function' ? updater(d.stages) : updater
+        return { ...d, stages: nextStages }
+      }
     })
   }
+
+  // ── Mutators (all produce a fresh object so autosave fires) ──
+  function updateTrade(si, ti, field, value) {
+    setStages(stages => stages.map((s, i) => i !== si ? s : {
+      ...s, trades: s.trades.map((t, j) => j !== ti ? t : { ...t, [field]: value }),
+    }))
+  }
   function addTrade(si) {
-    setData(d => ({ ...d, stages: d.stages.map((s, i) => i !== si ? s : { ...s, trades: [...s.trades, makeTrade('')] }) }))
+    setStages(stages => stages.map((s, i) => i !== si ? s : { ...s, trades: [...s.trades, makeTrade('')] }))
   }
   function removeTrade(si, ti) {
-    setData(d => ({ ...d, stages: d.stages.map((s, i) => i !== si ? s : { ...s, trades: s.trades.filter((_, j) => j !== ti) }) }))
+    setStages(stages => stages.map((s, i) => i !== si ? s : { ...s, trades: s.trades.filter((_, j) => j !== ti) }))
   }
   function moveTrade(si, ti, dir) {
-    setData(d => {
-      const s = d.stages[si]; const arr = [...s.trades]; const ni = ti + dir
-      if (ni < 0 || ni >= arr.length) return d
+    setStages(stages => {
+      const s = stages[si]; const arr = [...s.trades]; const ni = ti + dir
+      if (ni < 0 || ni >= arr.length) return stages
       ;[arr[ti], arr[ni]] = [arr[ni], arr[ti]]
-      return { ...d, stages: d.stages.map((x, i) => i === si ? { ...x, trades: arr } : x) }
+      return stages.map((x, i) => i === si ? { ...x, trades: arr } : x)
     })
   }
   function addStage() {
-    setData(d => ({ ...d, stages: [...d.stages, { id: uid(), name: `Stage ${d.stages.length + 1} · New stage`, trades: [] }] }))
+    setStages(stages => [...stages, { id: uid(), name: `Stage ${stages.length + 1} · New stage`, trades: [] }])
   }
   function removeStage(si) {
     if (!confirm('Delete this whole stage and its trades?')) return
-    setData(d => ({ ...d, stages: d.stages.filter((_, i) => i !== si) }))
+    setStages(stages => stages.filter((_, i) => i !== si))
   }
   function renameStage(si, name) {
-    setData(d => ({ ...d, stages: d.stages.map((s, i) => i === si ? { ...s, name } : s) }))
+    setStages(stages => stages.map((s, i) => i === si ? { ...s, name } : s))
   }
   function moveStage(si, dir) {
-    setData(d => {
-      const arr = [...d.stages]; const ni = si + dir
-      if (ni < 0 || ni >= arr.length) return d
+    setStages(stages => {
+      const arr = [...stages]; const ni = si + dir
+      if (ni < 0 || ni >= arr.length) return stages
       ;[arr[si], arr[ni]] = [arr[ni], arr[si]]
-      return { ...d, stages: arr }
+      return arr
     })
   }
   function resetToTemplate() {
-    if (!confirm('Reset to the default CCG template? This replaces the current list for this project.')) return
+    if (!confirm('Reset to the default CCG template? This replaces the current list for this' + (merton ? ' building.' : ' project.'))) return
     firstLoad.current = false
-    setData(buildTemplate())
+    setStages(buildTemplate().stages)
+  }
+
+  // Auto-feed: fill empty "Procured from" by matching the trade name to an
+  // appointed company. Never overwrites an existing value.
+  function autoFeed() {
+    setStages(stages => stages.map(s => ({
+      ...s,
+      trades: s.trades.map(t => {
+        if (t.procured_from && t.procured_from.trim()) return t
+        const match = matchAppointed(t.name, appointed)
+        return match ? { ...t, procured_from: match } : t
+      }),
+    })))
+  }
+
+  // ── Exports ──
+  function exportCSV() {
+    const rows = [['Stage', 'Trade / element', 'Materials', 'Labour', 'Procured from', 'Status', 'Target date', 'Notes']]
+    for (const s of data.stages) for (const t of s.trades) {
+      rows.push([s.name, t.name, t.materials ? 'Y' : 'N', t.labour ? 'Y' : 'N', t.procured_from || '', t.status || '', t.target_date || '', t.notes || ''])
+    }
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(project?.project_name || 'project')}_procurement${merton ? '_' + activeBuilding : ''}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function exportPDF() {
+    try {
+      if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
+      if (!window.jspdf?.jsPDF?.API?.autoTable) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js')
+      const { jsPDF } = window.jspdf
+      const docPdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const pageW = docPdf.internal.pageSize.getWidth()
+      docPdf.setFont('helvetica', 'bold'); docPdf.setFontSize(14); docPdf.setTextColor(45, 45, 45)
+      docPdf.text('City Construction Group', 15, 16)
+      docPdf.setFont('helvetica', 'normal'); docPdf.setFontSize(7.5); docPdf.setTextColor(90, 90, 90)
+      docPdf.text('One Canada Square, Canary Wharf, London E14 5AA', 15, 22)
+      docPdf.setFont('helvetica', 'bold'); docPdf.setFontSize(11); docPdf.setTextColor(68, 138, 64)
+      const heading = `Procurement — ${project?.project_name || ''}${merton ? ' · ' + (MERTON_BUILDINGS.find(b => b.key === activeBuilding)?.label || '') : ''}`
+      docPdf.text(heading, 15, 32)
+
+      const body = []
+      for (const s of data.stages) {
+        body.push([{ content: s.name, colSpan: 7, styles: { fontStyle: 'bold', fillColor: [232, 240, 231], textColor: [47, 94, 44] } }])
+        for (const t of s.trades) {
+          body.push([t.name, t.materials ? 'Y' : '', t.labour ? 'Y' : '', t.procured_from || '', t.status || '', t.target_date || '', t.notes || ''])
+        }
+      }
+      docPdf.autoTable({
+        startY: 38,
+        head: [['Trade / element', 'Mat', 'Lab', 'Procured from', 'Status', 'Target', 'Notes']],
+        body,
+        styles: { fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: [68, 138, 64], textColor: 255, fontSize: 8 },
+        columnStyles: { 1: { halign: 'center', cellWidth: 12 }, 2: { halign: 'center', cellWidth: 12 } },
+        margin: { left: 15, right: 15 },
+      })
+      docPdf.save(`${(project?.project_name || 'project')}_procurement${merton ? '_' + activeBuilding : ''}.pdf`)
+    } catch (e) {
+      setError('PDF export failed: ' + e.message)
+    }
   }
 
   if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13 }}>Loading procurement…</div>
-  if (!data) return null
+  if (!doc) return null
 
   // Progress: count materials+labour ticks done vs total.
   let done = 0, total = 0
@@ -143,21 +251,42 @@ export default function ProcurementTab({ projectId }) {
     <div style={{ padding: '4px 0 24px' }}>
       {error && <div style={{ padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>}
 
+      {/* Merton building sub-tabs */}
+      {merton && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 14, borderBottom: '0.5px solid var(--border)' }}>
+          {MERTON_BUILDINGS.map(b => (
+            <div key={b.key} onClick={() => setActiveBuilding(b.key)}
+              style={{
+                padding: '7px 14px', fontSize: 13, cursor: 'pointer',
+                fontWeight: activeBuilding === b.key ? 600 : 400,
+                color: activeBuilding === b.key ? 'var(--text)' : 'var(--text3)',
+                borderBottom: activeBuilding === b.key ? '2px solid #185FA5' : '2px solid transparent',
+              }}>
+              {b.label}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Header + progress */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ flex: 1, height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: 'var(--green, #5cb85c)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ flex: 1, height: 10, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', minWidth: pct > 0 ? 4 : 0, background: pct === 100 ? 'var(--green, #5cb85c)' : '#185FA5', transition: 'width .2s' }} />
             </div>
-            <span style={{ fontSize: 12, color: 'var(--text2)', whiteSpace: 'nowrap' }}>{pct}% procured</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: pct > 0 ? 'var(--text)' : 'var(--text2)', whiteSpace: 'nowrap' }}>{pct}%</span>
+            <span style={{ fontSize: 11, color: 'var(--text3)', whiteSpace: 'nowrap' }}>{done}/{total} procured</span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {saveState === 'saving' && <span style={{ fontSize: 11, color: 'var(--text3)' }}>Saving…</span>}
           {saveState === 'saved' && <span style={{ fontSize: 11, color: 'var(--green)' }}>Saved</span>}
+          {appointed.length > 0 && <button className="btn btn-sm" onClick={autoFeed} title="Fill 'Procured from' from the appointed team & subcontractors">⤵ Auto-fill from team</button>}
+          <button className="btn btn-sm" onClick={exportCSV}>Export Excel</button>
+          <button className="btn btn-sm" onClick={exportPDF}>Export PDF</button>
           <button className="btn btn-sm" onClick={addStage}>+ Stage</button>
-          <button className="btn btn-sm" onClick={resetToTemplate}>Reset template</button>
+          <button className="btn btn-sm" onClick={resetToTemplate}>Reset</button>
         </div>
       </div>
 
@@ -254,3 +383,32 @@ const iconBtn = {
   background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)',
   fontSize: 12, padding: '2px 4px', lineHeight: 1,
 }
+
+// Match a trade name to an appointed company by overlapping words against the
+// company's trade/role. `appointed` = [{ company, trade }]. Returns the best
+// company name or null. Conservative: needs a real word overlap, ignores
+// short/common words.
+function matchAppointed(tradeName, appointed) {
+  if (!tradeName || !appointed?.length) return null
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
+  const stop = new Set(['and', 'the', 'of', 'to', 'for', 'works', 'work', 'fix', 'first', 'second', 'below', 'above', 'ground', 'external', 'internal'])
+  const tnWords = new Set(norm(tradeName).split(/\s+/).filter(w => w.length > 2 && !stop.has(w)))
+  if (tnWords.size === 0) return null
+  let best = null, bestScore = 0
+  for (const a of appointed) {
+    const roleWords = norm(a.trade).split(/\s+/).filter(w => w.length > 2 && !stop.has(w))
+    let score = 0
+    for (const w of roleWords) if (tnWords.has(w)) score++
+    if (score > bestScore) { bestScore = score; best = a.company }
+  }
+  return bestScore >= 1 ? best : null
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = src; s.onload = resolve; s.onerror = reject
+    document.head.appendChild(s)
+  })
+}
+
