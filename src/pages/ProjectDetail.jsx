@@ -1322,7 +1322,11 @@ export default function ProjectDetail() {
           project={project}
           appointed={(subs || []).map(ps => ({
             company: ps.subcontractors?.company_name || '',
-            trade: ps.subcontractors?.trade || ps.trade_on_project || '',
+            // Match on BOTH the company's recorded trade AND the role on this
+            // project (design team rows usually carry their role here, e.g.
+            // "Architect", "Structural engineer"). Joined so either can match.
+            trade: [ps.subcontractors?.trade, ps.trade_on_project].filter(Boolean).join(' '),
+            category: ps.category || 'contractual_work',
           })).filter(a => a.company)}
         />
       )}
