@@ -453,39 +453,43 @@ const iconBtn = {
 // short/common words.
 function matchAppointed(tradeName, appointed) {
   if (!tradeName || !appointed?.length) return null
+  // De-pluralise only longer words so acronyms (SFS, MEP, QS) survive intact.
+  const stem = w => w.length > 4 ? w.replace(/(ies)$/, 'y').replace(/(es|s)$/, '') : w
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
-  const stop = new Set(['and', 'the', 'of', 'to', 'for', 'works', 'work', 'fix', 'first', 'second'])
-  // Synonym groups — any word in a group counts as a match for the others.
-  // Helps design-team roles and trades match across wording variants.
+  // Generic words appear across many roles — they shouldn't alone decide a
+  // match (otherwise "engineer" makes a structural firm win every engineer row).
+  const GENERIC = new Set(['engineer', 'consultant', 'design', 'designer', 'specialist', 'contractor', 'service', 'solution', 'consultancy', 'office', 'site', 'plan', 'environmental', 'creative', 'idea', 'management'])
+  const stop = new Set(['and', 'the', 'of', 'to', 'for', 'works', 'work', 'fix', 'first', 'second', 'ltd', 'limited'])
+  // Synonym groups of SPECIFIC discipline words. Covers the real CCG trade
+  // names (e.g. SFS = structural, principle/principal designer = CDM).
   const SYN = [
-    ['mechanical', 'electrical', 'me', 'mep', 'services', 'mande'],
-    ['structural', 'structure', 'frame', 'steelwork', 'steel'],
+    ['mechanical', 'electrical', 'mep'],
+    ['structural', 'sfs', 'steelwork', 'steel', 'frame'],
     ['architect', 'architectural', 'architecture'],
-    ['civil', 'civils', 'groundworks', 'groundwork'],
-    ['quantity', 'surveyor', 'qs', 'survey'],
-    ['drainage', 'drains', 'plumbing'],
-    ['scaffold', 'scaffolding'],
-    ['demolition', 'demolish'],
-    ['roofing', 'roof'],
-    ['carpentry', 'joinery', 'carpenter'],
-    ['plastering', 'drylining', 'plaster'],
-    ['landscaping', 'landscape', 'paving'],
-    ['cladding', 'render', 'facade'],
+    ['civil', 'groundwork'],
+    ['quantity', 'surveyor'],
+    ['drainage', 'plumbing', 'plumber'],
+    ['scaffold'], ['demolition'], ['roofing', 'roof'],
+    ['carpentry', 'joinery', 'carpenter'], ['plastering', 'drylining', 'plaster'],
+    ['landscaping', 'landscape', 'paving'], ['cladding', 'render', 'facade'],
+    ['principal', 'principle', 'cdm'], ['fire'], ['planning', 'planner'],
+    ['topographical', 'topographic', 'survey'], ['asbestos'], ['acoustic'],
   ]
   const expand = words => {
-    const out = new Set(words)
-    for (const w of words) for (const g of SYN) if (g.includes(w)) g.forEach(x => out.add(x))
+    const out = new Set()
+    for (let w of words) { w = stem(w); out.add(w); for (const g of SYN) if (g.includes(w)) g.forEach(x => out.add(x)) }
     return out
   }
-  const tnWords = expand([...new Set(norm(tradeName).split(/\s+/).filter(w => w.length > 2 && !stop.has(w)))])
+  const tnWords = expand(norm(tradeName).split(/\s+/).filter(w => w.length > 1 && !stop.has(w)))
   if (tnWords.size === 0) return null
   let best = null, bestScore = 0
   for (const a of appointed) {
-    const roleWords = norm(a.trade).split(/\s+/).filter(w => w.length > 2 && !stop.has(w))
+    const roleWords = norm(a.trade).split(/\s+/).filter(w => w.length > 1 && !stop.has(w)).map(stem)
     let score = 0
-    for (const w of roleWords) if (tnWords.has(w)) score++
+    for (const w of roleWords) { if (!tnWords.has(w)) continue; score += GENERIC.has(w) ? 0.2 : 1 }
     if (score > bestScore) { bestScore = score; best = a.company }
   }
+  // Need at least one SPECIFIC word match (score >= 1), not just generic overlap.
   return bestScore >= 1 ? best : null
 }
 
