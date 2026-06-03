@@ -1317,7 +1317,14 @@ export default function ProjectDetail() {
       )}
 
       {activeTab === 'procurement' && (
-        <ProcurementTab projectId={id} />
+        <ProcurementTab
+          projectId={id}
+          project={project}
+          appointed={(subs || []).map(ps => ({
+            company: ps.subcontractors?.company_name || '',
+            trade: ps.subcontractors?.trade || ps.trade_on_project || '',
+          })).filter(a => a.company)}
+        />
       )}
 
       {activeTab === 'ccg_team' && (() => {
