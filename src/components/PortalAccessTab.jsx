@@ -30,7 +30,10 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
   const [confirmRevoke, setConfirmRevoke] = useState(null)
   // Per-project access modal: { id, email, full_name } of the client_user
   // being edited, or null when closed.
+  // Per-user project access: client_user_id → [project names]. Empty array
+  // or missing key = full access (no restriction).
   const [showAccess, setShowAccess] = useState(null)
+  const [accessMap, setAccessMap] = useState({})
 
   const isAdmin = profile?.role === 'admin'
 
@@ -38,12 +41,36 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
 
   async function load() {
     setLoading(true)
-    const [usersRes, invsRes] = await Promise.all([
+    const [usersRes, invsRes, projsRes] = await Promise.all([
       supabase.from('client_users').select('*').eq('client_id', client.id).order('created_at'),
       supabase.from('client_invitations').select('*').eq('client_id', client.id).is('accepted_at', null).order('created_at', { ascending: false }),
+      supabase.from('projects').select('id, project_name, project_ref').eq('client_id', client.id),
     ])
-    setUsers(usersRes.data || [])
+    const userRows = usersRes.data || []
+    setUsers(userRows)
     setInvitations(invsRes.data || [])
+
+    // Fetch per-user project access so each row can show what they're
+    // restricted to. One query for all this client's users, then group
+    // by client_user_id. Empty (no rows) = full access.
+    const projById = {}
+    for (const p of (projsRes.data || [])) projById[p.id] = p
+    const userIds = userRows.map(u => u.id)
+    if (userIds.length > 0) {
+      const { data: accessRows } = await supabase
+        .from('client_user_project_access')
+        .select('client_user_id, project_id')
+        .in('client_user_id', userIds)
+      const map = {}
+      for (const r of (accessRows || [])) {
+        if (!map[r.client_user_id]) map[r.client_user_id] = []
+        const p = projById[r.project_id]
+        map[r.client_user_id].push(p ? (p.project_name || p.project_ref || 'project') : 'project')
+      }
+      setAccessMap(map)
+    } else {
+      setAccessMap({})
+    }
     setLoading(false)
   }
 
@@ -116,6 +143,31 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 500 }}>{cu.full_name || cu.email}</div>
                   <div style={{ fontSize: 10, color: 'var(--text3)' }}>{cu.email} · {cu.role}{cu.last_login_at ? ` · last login ${new Date(cu.last_login_at).toLocaleDateString('en-GB')}` : ' · never logged in'}</div>
+                  {(() => {
+                    const names = accessMap[cu.id] || []
+                    const restricted = names.length > 0
+                    return (
+                      <div style={{ marginTop: 3 }}>
+                        <span style={{
+                          display: 'inline-block',
+                          fontSize: 10,
+                          padding: '1px 7px',
+                          borderRadius: 999,
+                          background: restricted ? 'rgba(91,155,213,0.12)' : 'rgba(92,184,92,0.12)',
+                          color: restricted ? 'var(--blue, #5b9bd5)' : 'var(--green, #5cb85c)',
+                        }}>
+                          {restricted
+                            ? `${names.length === 1 ? names[0] : names.length + ' projects'}`
+                            : 'All projects'}
+                        </span>
+                        {restricted && names.length > 1 && (
+                          <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>
+                            {names.join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </div>
                 {isAdmin && (
                   <>
@@ -171,7 +223,7 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
         <AccessModal
           clientUser={showAccess}
           client={client}
-          onClose={() => setShowAccess(null)}
+          onClose={() => { setShowAccess(null); load() }}
         />
       )}
     </div>
