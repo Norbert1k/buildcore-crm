@@ -187,19 +187,81 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
   }
 
   // ── Exports ──
-  function exportCSV() {
-    const rows = [['Stage', 'Trade / element', 'Materials', 'Labour', 'Procured from', 'Status', 'Target date', 'Notes']]
-    for (const s of data.stages) for (const t of s.trades) {
-      rows.push([s.name, t.name, t.materials ? 'Y' : 'N', t.labour ? 'Y' : 'N', t.procured_from || '', t.status || '', t.target_date || '', t.notes || ''])
+  // Branded .xlsx matching CCG_Procurement_Tracker_Template.xlsx, built in the
+  // browser with ExcelJS (full fill/font/border support, unlike SheetJS free).
+  async function exportExcel() {
+    try {
+      if (!window.ExcelJS) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js')
+      const ExcelJS = window.ExcelJS
+      const wb = new ExcelJS.Workbook()
+      const ws = wb.addWorksheet('Procurement', { views: [{ showGridLines: false }] })
+
+      const GREEN = 'FF448A40', GREEN_DK = 'FF2F5E2C', STAGE = 'FFE8F0E7', ZEBRA = 'FFF6F8F5'
+      const buildingLabel = merton ? (MERTON_BUILDINGS.find(b => b.key === activeBuilding)?.label || '') : ''
+
+      // Title block
+      ws.getCell('A1').value = 'Procurement tracker'
+      ws.getCell('A1').font = { name: 'Arial', size: 16, bold: true, color: { argb: GREEN_DK } }
+      ws.getCell('A2').value = 'Project:'
+      ws.getCell('A2').font = { name: 'Arial', size: 11, bold: true }
+      ws.getCell('B2').value = (project?.project_name || '') + (buildingLabel ? ` — ${buildingLabel}` : '')
+      ws.getCell('A3').value = 'Tick (Y) materials & labour as each trade is procured.'
+      ws.getCell('A3').font = { name: 'Arial', size: 9, italic: true, color: { argb: 'FF777777' } }
+
+      const headers = ['', 'Trade / element', 'Materials', 'Labour', 'Procured from', 'Status', 'Target date', 'Notes']
+      const widths = [4, 34, 11, 10, 22, 16, 14, 40]
+      widths.forEach((w, i) => { ws.getColumn(i + 1).width = w })
+
+      const HEADER_ROW = 5
+      const hr = ws.getRow(HEADER_ROW)
+      headers.forEach((h, i) => {
+        const c = hr.getCell(i + 1)
+        c.value = h
+        c.font = { name: 'Arial', size: 10, bold: true, color: { argb: 'FFFFFFFF' } }
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GREEN } }
+        c.alignment = { horizontal: [2, 3, 5].includes(i) ? 'center' : 'left', vertical: 'middle' }
+      })
+
+      let r = HEADER_ROW + 1
+      for (const s of data.stages) {
+        const sr = ws.getRow(r)
+        sr.getCell(2).value = s.name
+        sr.getCell(2).font = { name: 'Arial', size: 11, bold: true, color: { argb: GREEN_DK } }
+        for (let ci = 1; ci <= headers.length; ci++) {
+          sr.getCell(ci).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: STAGE } }
+        }
+        r++
+        s.trades.forEach((t, ti) => {
+          const row = ws.getRow(r)
+          row.getCell(2).value = t.name
+          row.getCell(3).value = t.materials ? 'Y' : 'N'
+          row.getCell(4).value = t.labour ? 'Y' : 'N'
+          row.getCell(5).value = t.procured_from || ''
+          row.getCell(6).value = t.status || ''
+          row.getCell(7).value = t.target_date || ''
+          row.getCell(8).value = t.notes || ''
+          for (let ci = 1; ci <= headers.length; ci++) {
+            const c = row.getCell(ci)
+            c.font = { name: 'Arial', size: 10 }
+            if ([3, 4, 6].includes(ci - 1)) c.alignment = { horizontal: 'center' }
+            if (ti % 2 === 1) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ZEBRA } }
+          }
+          r++
+        })
+      }
+      ws.views = [{ state: 'frozen', ySplit: HEADER_ROW, showGridLines: false }]
+
+      const buf = await wb.xlsx.writeBuffer()
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${(project?.project_name || 'project')}_procurement${merton ? '_' + activeBuilding : ''}.xlsx`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError('Excel export failed: ' + e.message)
     }
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${(project?.project_name || 'project')}_procurement${merton ? '_' + activeBuilding : ''}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   async function exportPDF() {
@@ -283,10 +345,11 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
           {saveState === 'saving' && <span style={{ fontSize: 11, color: 'var(--text3)' }}>Saving…</span>}
           {saveState === 'saved' && <span style={{ fontSize: 11, color: 'var(--green)' }}>Saved</span>}
           {appointed.length > 0 && <button className="btn btn-sm" onClick={autoFeed} title="Fill 'Procured from' from the appointed team & subcontractors">⤵ Auto-fill from team</button>}
-          <button className="btn btn-sm" onClick={exportCSV}>Export Excel</button>
+          <button className="btn btn-sm" onClick={exportExcel}>Export Excel</button>
           <button className="btn btn-sm" onClick={exportPDF}>Export PDF</button>
           <button className="btn btn-sm" onClick={addStage}>+ Stage</button>
           <button className="btn btn-sm" onClick={resetToTemplate}>Reset</button>
+          <button className="btn btn-sm btn-primary" onClick={() => { clearTimeout(saveTimer.current); save() }}>Save</button>
         </div>
       </div>
 
@@ -391,8 +454,30 @@ const iconBtn = {
 function matchAppointed(tradeName, appointed) {
   if (!tradeName || !appointed?.length) return null
   const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
-  const stop = new Set(['and', 'the', 'of', 'to', 'for', 'works', 'work', 'fix', 'first', 'second', 'below', 'above', 'ground', 'external', 'internal'])
-  const tnWords = new Set(norm(tradeName).split(/\s+/).filter(w => w.length > 2 && !stop.has(w)))
+  const stop = new Set(['and', 'the', 'of', 'to', 'for', 'works', 'work', 'fix', 'first', 'second'])
+  // Synonym groups — any word in a group counts as a match for the others.
+  // Helps design-team roles and trades match across wording variants.
+  const SYN = [
+    ['mechanical', 'electrical', 'me', 'mep', 'services', 'mande'],
+    ['structural', 'structure', 'frame', 'steelwork', 'steel'],
+    ['architect', 'architectural', 'architecture'],
+    ['civil', 'civils', 'groundworks', 'groundwork'],
+    ['quantity', 'surveyor', 'qs', 'survey'],
+    ['drainage', 'drains', 'plumbing'],
+    ['scaffold', 'scaffolding'],
+    ['demolition', 'demolish'],
+    ['roofing', 'roof'],
+    ['carpentry', 'joinery', 'carpenter'],
+    ['plastering', 'drylining', 'plaster'],
+    ['landscaping', 'landscape', 'paving'],
+    ['cladding', 'render', 'facade'],
+  ]
+  const expand = words => {
+    const out = new Set(words)
+    for (const w of words) for (const g of SYN) if (g.includes(w)) g.forEach(x => out.add(x))
+    return out
+  }
+  const tnWords = expand([...new Set(norm(tradeName).split(/\s+/).filter(w => w.length > 2 && !stop.has(w)))])
   if (tnWords.size === 0) return null
   let best = null, bestScore = 0
   for (const a of appointed) {
