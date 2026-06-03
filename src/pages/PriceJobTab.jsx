@@ -171,26 +171,35 @@ export default function PriceJobTab() {
           <span style={{ fontSize: 12, color: 'var(--text3)' }}>ages each price to the build date</span>
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--text2)' }}>Build date</span>
-            <input type="month" value={buildDate} onChange={e => setBuildDate(e.target.value)} style={{ width: 140 }} />
+            <input type="month" value={buildDate} onChange={e => setBuildDate(e.target.value)} style={{ width: 180 }} />
           </span>
         </div>
         {ratesLoading ? (
           <div style={{ fontSize: 12, color: 'var(--text3)' }}>Loading rates…</div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
-            {CATEGORIES.map(cat => (
-              <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: 'var(--text2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {cat === 'DEFAULT' ? 'Default' : titleCase(cat)}
-                </span>
-                <input type="number" step="0.1" min="0" max="50"
-                  value={overrides[cat] ?? ''}
-                  placeholder={String(rates[cat] ?? rates.DEFAULT ?? 0)}
-                  onChange={e => setOverrides(prev => ({ ...prev, [cat]: e.target.value }))}
-                  style={{ width: 60, textAlign: 'right', fontSize: 12 }} />
-                <span style={{ fontSize: 11, color: 'var(--text3)' }}>%</span>
-              </div>
-            ))}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+            {CATEGORIES.map(cat => {
+              const isOverridden = overrides[cat] != null && overrides[cat] !== ''
+              return (
+                <div key={cat} style={{
+                  background: isOverridden ? 'rgba(230,162,60,0.10)' : 'var(--surface)',
+                  border: `0.5px solid ${isOverridden ? 'rgba(230,162,60,0.45)' : 'var(--border)'}`,
+                  borderRadius: 8, padding: '7px 10px',
+                }}>
+                  <div style={{ fontSize: 11, color: isOverridden ? 'var(--amber)' : 'var(--text2)', marginBottom: 5 }}>
+                    {cat === 'DEFAULT' ? 'Default' : titleCase(cat)}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" step="0.1" min="0" max="50"
+                      value={overrides[cat] ?? ''}
+                      placeholder={String(rates[cat] ?? rates.DEFAULT ?? 0)}
+                      onChange={e => setOverrides(prev => ({ ...prev, [cat]: e.target.value }))}
+                      style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 13, padding: '6px 8px' }} />
+                    <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>%</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
         <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
