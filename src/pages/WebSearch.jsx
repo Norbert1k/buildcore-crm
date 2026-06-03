@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import PriceListTab from './PriceListTab'
+import PriceJobTab from './PriceJobTab'
+import PricedJobsHistory from './PricedJobsHistory'
 
 // ── Web Search ───────────────────────────────────────────────────────────────
 // Two research tools backed by the `web-search` edge function:
@@ -36,7 +38,8 @@ const money = (n) => n == null ? null
   : '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export default function WebSearch() {
-  const [tab, setTab] = useState('products')
+  const [tab, setTab] = useState('pricejob')
+  const [subTab, setSubTab] = useState('products')
 
   // Products tab state
   const [pQuery, setPQuery] = useState('')
@@ -118,14 +121,14 @@ export default function WebSearch() {
 
   return (
     <div style={{ padding: '20px 24px', maxWidth: 920, margin: '0 auto' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 2 }}>Web Search</h1>
+      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 2 }}>Price Jobs</h1>
       <p style={{ color: 'var(--text2)', fontSize: 13, marginBottom: 16 }}>
-        Research products and suppliers from across the web.
+        Price tenders from your quotes, price lists and past jobs — with escalation applied.
       </p>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, borderBottom: '0.5px solid var(--border)', marginBottom: 16 }}>
-        {[['products', 'Products'], ['suppliers', 'Suppliers'], ['pricelist', 'Price List']].map(([k, lbl]) => (
+      <div style={{ display: 'flex', gap: 4, borderBottom: '0.5px solid var(--border)', marginBottom: 16, flexWrap: 'wrap' }}>
+        {[['pricejob', 'Price a job'], ['pricelist', 'Price library'], ['research', 'Research'], ['history', 'History']].map(([k, lbl]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{
               padding: '8px 14px', fontSize: 14, cursor: 'pointer',
@@ -138,8 +141,59 @@ export default function WebSearch() {
         ))}
       </div>
 
+      {/* ── PRICE A JOB ────────────────────────────────────────────────────── */}
+      {tab === 'pricejob' && <PriceJobTab />}
+
+      {/* ── HISTORY ────────────────────────────────────────────────────────── */}
+      {tab === 'history' && <PricedJobsHistory />}
+
+      {/* ── RESEARCH (Products + Suppliers) ────────────────────────────────── */}
+      {tab === 'research' && (
+        <div>
+          <div style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
+            {[['products', 'Products'], ['suppliers', 'Suppliers']].map(([k, lbl]) => (
+              <div key={k} onClick={() => setSubTab(k)}
+                style={{
+                  padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderRadius: 6,
+                  fontWeight: subTab === k ? 600 : 400,
+                  color: subTab === k ? 'var(--text)' : 'var(--text3)',
+                  background: subTab === k ? 'var(--surface2)' : 'transparent',
+                }}>
+                {lbl}
+              </div>
+            ))}
+          </div>
+          <ResearchTools
+            subTab={subTab}
+            pQuery={pQuery} setPQuery={setPQuery} searchProducts={searchProducts}
+            pLoading={pLoading} pResults={pResults} pError={pError} pNotes={pNotes}
+            incVat={incVat} setIncVat={setIncVat} priceForView={priceForView} money={money}
+            card={card} cardBest={cardBest} priceBox={priceBox} caveat={caveat}
+            sQuery={sQuery} setSQuery={setSQuery} sPostcode={sPostcode} setSPostcode={setSPostcode}
+            searchSuppliers={searchSuppliers} sLoading={sLoading} sResults={sResults}
+            sError={sError} sNotes={sNotes}
+          />
+        </div>
+      )}
+
+      {/* ── PRICE LIBRARY ──────────────────────────────────────────────────── */}
+      {tab === 'pricelist' && <PriceListTab />}
+    </div>
+  )
+}
+
+// ── Research tools (the original Products + Suppliers web search) ────────────
+// Kept intact, just moved into its own component under the Research tab.
+function ResearchTools(props) {
+  const {
+    subTab, pQuery, setPQuery, searchProducts, pLoading, pResults, pError, pNotes,
+    incVat, setIncVat, priceForView, money, card, cardBest, priceBox, caveat,
+    sQuery, setSQuery, sPostcode, setSPostcode, searchSuppliers, sLoading, sResults, sError, sNotes,
+  } = props
+  return (
+    <>
       {/* ── PRODUCTS ───────────────────────────────────────────────────────── */}
-      {tab === 'products' && (
+      {subTab === 'products' && (
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <input value={pQuery} onChange={e => setPQuery(e.target.value)}
@@ -249,7 +303,7 @@ export default function WebSearch() {
       )}
 
       {/* ── SUPPLIERS ──────────────────────────────────────────────────────── */}
-      {tab === 'suppliers' && (
+      {subTab === 'suppliers' && (
         <div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
             <input value={sQuery} onChange={e => setSQuery(e.target.value)}
@@ -313,8 +367,6 @@ export default function WebSearch() {
         </div>
       )}
 
-      {/* ── PRICE LIST ─────────────────────────────────────────────────────── */}
-      {tab === 'pricelist' && <PriceListTab />}
-    </div>
+    </>
   )
 }
