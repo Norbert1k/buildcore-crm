@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import PriceListTab from './PriceListTab'
 import PriceJobTab from './PriceJobTab'
 import PricedJobsHistory from './PricedJobsHistory'
+import RateLibraryTab from './RateLibraryTab'
 
 // ── Web Search ───────────────────────────────────────────────────────────────
 // Two research tools backed by the `web-search` edge function:
@@ -128,7 +129,7 @@ export default function WebSearch() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, borderBottom: '0.5px solid var(--border)', marginBottom: 16, flexWrap: 'wrap' }}>
-        {[['pricejob', 'Price a job'], ['pricelist', 'Price library'], ['research', 'Research'], ['history', 'History']].map(([k, lbl]) => (
+        {[['pricejob', 'Price a job'], ['ratelib', 'Rate library'], ['pricelist', 'Price list'], ['research', 'Research'], ['history', 'History']].map(([k, lbl]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{
               padding: '8px 14px', fontSize: 14, cursor: 'pointer',
@@ -178,6 +179,7 @@ export default function WebSearch() {
 
       {/* ── PRICE LIBRARY ──────────────────────────────────────────────────── */}
       {tab === 'pricelist' && <PriceListTab />}
+      {tab === 'ratelib' && <RateLibraryTab />}
     </div>
   )
 }
