@@ -620,6 +620,8 @@ export default function Settings() {
           page just decides whether to render it. */}
       {profile?.role === 'admin' && <XeroIntegrationSection />}
 
+      {profile?.role === 'admin' && <EscalationRatesSection profile={profile} />}
+
       {/* Change Password Modal */}
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
 
@@ -1540,5 +1542,189 @@ function XeroIntegrationSection() {
         </div>
       )}
     </CollapsibleSection>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EscalationRatesSection — admin-only Settings block for the Price Jobs
+// escalation rates. One annual % per CSA-section category (+ DEFAULT).
+//
+// Wiring (in Settings.jsx):
+//   • import { useState, useEffect } already present
+//   • render below XeroIntegrationSection, admin-only:
+//       {profile?.role === 'admin' && <EscalationRatesSection profile={profile} />}
+//
+// The "Suggest" button calls the web-search edge function with mode:'escalation'
+// and a category name; the function returns a suggested annual % plus a short
+// rationale sourced from current market commentary. The admin reviews and
+// accepts — the AI never writes the rate directly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EscalationRatesSection({ profile }) {
+  const [rates, setRates] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [savedNote, setSavedNote] = useState('')
+  // Per-category AI suggestion state: { [category]: { loading, pct, rationale, error } }
+  const [suggest, setSuggest] = useState({})
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true); setError('')
+    const { data, error: e } = await supabase
+      .from('escalation_rates')
+      .select('category, annual_pct, updated_at, notes')
+      .order('category')
+    if (e) { setError('Could not load rates: ' + e.message); setLoading(false); return }
+    setRates(data || [])
+    setLoading(false)
+  }
+
+  function setLocalPct(category, value) {
+    setRates(prev => prev.map(r => r.category === category ? { ...r, annual_pct: value } : r))
+  }
+
+  async function saveAll() {
+    setSaving(true); setError(''); setSavedNote('')
+    // Upsert every row. annual_pct clamped to a sane 0–50% range so a typo
+    // can't 10x a tender price.
+    const payload = rates.map(r => ({
+      category: r.category,
+      annual_pct: Math.max(0, Math.min(parseFloat(r.annual_pct) || 0, 50)),
+      updated_by: profile?.id || null,
+      updated_at: new Date().toISOString(),
+    }))
+    const { error: e } = await supabase
+      .from('escalation_rates')
+      .upsert(payload, { onConflict: 'category' })
+    if (e) { setError('Save failed: ' + e.message); setSaving(false); return }
+    setSavedNote('Rates saved.')
+    setSaving(false)
+    load()
+    setTimeout(() => setSavedNote(''), 3000)
+  }
+
+  async function suggestRate(category) {
+    setSuggest(prev => ({ ...prev, [category]: { loading: true } }))
+    try {
+      const { data, error: e } = await supabase.functions.invoke('suggest-escalation-rate', {
+        body: { category: category },
+      })
+      if (e) throw e
+      if (!data?.ok) throw new Error(data?.error || 'Could not get a suggestion.')
+      setSuggest(prev => ({
+        ...prev,
+        [category]: { loading: false, pct: data.annual_pct, rationale: data.rationale || '' },
+      }))
+    } catch (err) {
+      setSuggest(prev => ({ ...prev, [category]: { loading: false, error: err.message || 'Failed.' } }))
+    }
+  }
+
+  function acceptSuggestion(category) {
+    const s = suggest[category]
+    if (s?.pct != null) {
+      setLocalPct(category, String(s.pct))
+      setSuggest(prev => ({ ...prev, [category]: undefined }))
+    }
+  }
+
+  const summary = loading ? 'Loading…' : `${rates.length} categories`
+
+  return (
+    <CollapsibleSection
+      title="Price escalation rates"
+      summary={summary}
+      storageKey="escalation"
+      icon={<IconTrend />}
+    >
+      <div style={{ padding: '4px 2px' }}>
+        <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 14 }}>
+          Annual % applied to each priced line, compounded from the price's date to the
+          job's build date. Categories map to CSA sections. Steel and timber both sit under
+          Main works, so they share that rate — coarse but simple. Set a sensible default;
+          override per job at pricing time.
+        </p>
+
+        {error && <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 10 }}>{error}</div>}
+
+        {loading ? (
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: 10 }}>Loading rates…</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {rates.map(r => {
+              const s = suggest[r.category]
+              return (
+                <div key={r.category} style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 500, minWidth: 150 }}>
+                      {r.category === 'DEFAULT' ? 'Default (uncategorised)' : titleCase(r.category)}
+                    </span>
+                    <input
+                      type="number" step="0.1" min="0" max="50"
+                      value={r.annual_pct}
+                      onChange={e => setLocalPct(r.category, e.target.value)}
+                      style={{ width: 80, textAlign: 'right' }}
+                    />
+                    <span style={{ fontSize: 12, color: 'var(--text3)' }}>% / year</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ marginLeft: 'auto' }}
+                      disabled={s?.loading}
+                      onClick={() => suggestRate(r.category)}
+                    >
+                      {s?.loading ? 'Asking…' : '✨ Suggest'}
+                    </button>
+                  </div>
+
+                  {s && !s.loading && (s.pct != null || s.error) && (
+                    <div style={{ marginTop: 8, fontSize: 12, padding: '8px 10px', background: 'var(--surface2)', borderRadius: 6 }}>
+                      {s.error ? (
+                        <span style={{ color: 'var(--red)' }}>{s.error}</span>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                            <span style={{ fontWeight: 500, color: 'var(--blue)' }}>Suggested: {s.pct}% / year</span>
+                            <button type="button" className="btn btn-sm" onClick={() => acceptSuggestion(r.category)}>Use this</button>
+                            <button type="button" className="btn btn-sm" onClick={() => setSuggest(prev => ({ ...prev, [r.category]: undefined }))}>Dismiss</button>
+                          </div>
+                          {s.rationale && <div style={{ color: 'var(--text2)', lineHeight: 1.5 }}>{s.rationale}</div>}
+                          <div style={{ color: 'var(--text3)', marginTop: 4, fontStyle: 'italic' }}>
+                            AI estimate from current market commentary — review before using on a real tender.
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14 }}>
+          <button className="btn btn-primary" onClick={saveAll} disabled={saving || loading}>
+            {saving ? 'Saving…' : 'Save rates'}
+          </button>
+          {savedNote && <span style={{ fontSize: 12, color: 'var(--green)' }}>{savedNote}</span>}
+        </div>
+      </div>
+    </CollapsibleSection>
+  )
+}
+
+function titleCase(s) {
+  return String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function IconTrend() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
   )
 }
