@@ -28,6 +28,9 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
   const [showInvite, setShowInvite] = useState(false)
   const [showBranding, setShowBranding] = useState(false)
   const [confirmRevoke, setConfirmRevoke] = useState(null)
+  // Per-project access modal: { id, email, full_name } of the client_user
+  // being edited, or null when closed.
+  const [showAccess, setShowAccess] = useState(null)
 
   const isAdmin = profile?.role === 'admin'
 
@@ -115,7 +118,10 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
                   <div style={{ fontSize: 10, color: 'var(--text3)' }}>{cu.email} · {cu.role}{cu.last_login_at ? ` · last login ${new Date(cu.last_login_at).toLocaleDateString('en-GB')}` : ' · never logged in'}</div>
                 </div>
                 {isAdmin && (
-                  <button className="btn btn-sm" style={{ fontSize: 11, color: 'var(--red)' }} onClick={() => setConfirmRevoke(cu)}>Revoke</button>
+                  <>
+                    <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setShowAccess(cu)}>Access</button>
+                    <button className="btn btn-sm" style={{ fontSize: 11, color: 'var(--red)' }} onClick={() => setConfirmRevoke(cu)}>Revoke</button>
+                  </>
                 )}
               </div>
             ))}
@@ -158,6 +164,14 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
           message={`Revoke portal access for ${confirmRevoke.full_name || confirmRevoke.email}?`}
           onCancel={() => setConfirmRevoke(null)}
           onConfirm={() => revokeUser(confirmRevoke)}
+        />
+      )}
+
+      {showAccess && (
+        <AccessModal
+          clientUser={showAccess}
+          client={client}
+          onClose={() => setShowAccess(null)}
         />
       )}
     </div>
@@ -385,6 +399,158 @@ function BrandingModal({ client, onClose, onSaved }) {
             {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ─── Per-project access modal ────────────────────────────────
+// Lets an admin restrict a client_user to a subset of their client's
+// projects. Rule (from migration 027): empty list = full access
+// (default), any rows = restricted to those rows. The save flow is a
+// delete-then-insert because the constraint key is (client_user_id,
+// project_id) and we want simple "current selection wins" semantics.
+function AccessModal({ clientUser, client, onClose }) {
+  const [projects, setProjects] = useState([])
+  const [granted, setGranted] = useState(new Set())
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      const [projsRes, accessRes] = await Promise.all([
+        supabase
+          .from('projects')
+          .select('id, project_name, project_ref, status')
+          .eq('client_id', client.id)
+          .not('status', 'in', '(cancelled)')
+          .order('project_ref', { ascending: false, nullsFirst: false }),
+        supabase
+          .from('client_user_project_access')
+          .select('project_id')
+          .eq('client_user_id', clientUser.id),
+      ])
+      setProjects(projsRes.data || [])
+      setGranted(new Set((accessRes.data || []).map(r => r.project_id)))
+      setLoading(false)
+    }
+    load()
+  }, [clientUser.id, client.id])
+
+  function toggle(projectId) {
+    setGranted(prev => {
+      const next = new Set(prev)
+      if (next.has(projectId)) next.delete(projectId); else next.add(projectId)
+      return next
+    })
+  }
+
+  function selectAll() { setGranted(new Set()) }  // "all access" = no rows
+
+  async function save() {
+    setSaving(true)
+    // Delete existing rows then insert the chosen ones. Two queries
+    // rather than one upsert because upsert can't easily "remove
+    // unchecked items" — and the row count is small (<50 typically).
+    const { error: delErr } = await supabase
+      .from('client_user_project_access')
+      .delete()
+      .eq('client_user_id', clientUser.id)
+    if (delErr) { setSaving(false); alert('Delete failed: ' + delErr.message); return }
+
+    if (granted.size > 0) {
+      const rows = Array.from(granted).map(project_id => ({
+        client_user_id: clientUser.id,
+        project_id,
+      }))
+      const { error: insErr } = await supabase.from('client_user_project_access').insert(rows)
+      if (insErr) { setSaving(false); alert('Save failed: ' + insErr.message); return }
+    }
+
+    setSaving(false)
+    onClose()
+  }
+
+  const isUnrestricted = granted.size === 0
+
+  return (
+    <Modal onClose={onClose}>
+      <div style={{ width: 440, padding: 18 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Project access</div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+          {clientUser.full_name || clientUser.email}
+        </div>
+
+        {loading ? (
+          <div style={{ fontSize: 12, color: 'var(--text3)', padding: 12 }}>Loading projects...</div>
+        ) : (
+          <>
+            <div style={{
+              padding: 10,
+              background: isUnrestricted ? 'var(--green-bg, rgba(92,184,92,0.1))' : 'var(--surface2)',
+              border: `0.5px solid ${isUnrestricted ? 'var(--green-border, rgba(92,184,92,0.3))' : 'var(--border)'}`,
+              borderRadius: 6,
+              fontSize: 11,
+              marginBottom: 12,
+              color: isUnrestricted ? 'var(--green)' : 'var(--text2)',
+            }}>
+              {isUnrestricted
+                ? <>✓ <strong>No restriction</strong> — this user sees all {client.name} projects.</>
+                : <><strong>Restricted</strong> to {granted.size} of {projects.length} projects. <span style={{ color: 'var(--blue, #5b9bd5)', cursor: 'pointer' }} onClick={selectAll}>Remove restriction</span></>
+              }
+            </div>
+
+            <div style={{
+              maxHeight: 320,
+              overflowY: 'auto',
+              border: '0.5px solid var(--border)',
+              borderRadius: 6,
+            }}>
+              {projects.length === 0 ? (
+                <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+                  No projects to show for this client yet.
+                </div>
+              ) : projects.map((p, i) => {
+                const isOn = granted.has(p.id)
+                return (
+                  <div key={p.id}
+                    onClick={() => toggle(p.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '10px 12px',
+                      borderTop: i === 0 ? 'none' : '0.5px solid var(--border)',
+                      cursor: 'pointer',
+                      background: isOn ? 'rgba(91,155,213,0.05)' : 'transparent',
+                    }}>
+                    <input type="checkbox" checked={isOn} readOnly
+                      style={{ flexShrink: 0, accentColor: 'var(--blue, #5b9bd5)' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500 }}>{p.project_name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                        {p.project_ref || '—'} · {p.status}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div style={{ marginTop: 16, fontSize: 10, color: 'var(--text3)', lineHeight: 1.5 }}>
+              Empty list = full access (default). Tick boxes to restrict this user to specific
+              projects only. Restrictions apply at the database level — hidden projects can't
+              be accessed even by direct URL.
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+              <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   )
