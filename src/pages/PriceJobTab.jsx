@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { escalateLine, fmtMoney, fmtYears } from '../lib/escalation'
+import { priceLine, confidenceColor } from '../lib/rateEngine'
 
 // ── Price a Job ──────────────────────────────────────────────────────────────
 // The estimating workspace. Two drop zones:
@@ -32,6 +33,7 @@ export default function PriceJobTab() {
   const [rates, setRates] = useState({})        // { CATEGORY: pct } defaults from DB
   const [overrides, setOverrides] = useState({}) // { CATEGORY: pct } per-job overrides
   const [ratesLoading, setRatesLoading] = useState(true)
+  const [library, setLibrary] = useState([])    // harvested rate_library rows
 
   const [tenderFiles, setTenderFiles] = useState([]) // [{ name, storage_path, size }]
   const [priceFiles, setPriceFiles] = useState([])
@@ -40,7 +42,7 @@ export default function PriceJobTab() {
   const [savedNote, setSavedNote] = useState('')
   const [error, setError] = useState('')
 
-  useEffect(() => { loadRates() }, [])
+  useEffect(() => { loadRates(); loadLibrary() }, [])
 
   async function loadRates() {
     setRatesLoading(true)
@@ -52,6 +54,13 @@ export default function PriceJobTab() {
     for (const r of (data || [])) map[r.category] = Number(r.annual_pct)
     setRates(map)
     setRatesLoading(false)
+  }
+
+  async function loadLibrary() {
+    const { data } = await supabase
+      .from('rate_library')
+      .select('description, description_norm, unit, unit_norm, rate, material_rate, labour_rate, section, project_name, csa_date')
+    setLibrary(data || [])
   }
 
   // Effective rate for a category = override if set, else saved default.
@@ -87,9 +96,31 @@ export default function PriceJobTab() {
 
   function addManualLine() {
     setLines(prev => [...prev, {
-      description: '', category: 'MAIN WORKS', base: '',
+      description: '', category: 'MAIN WORKS', base: '', qty: '', unit: 'm2',
       price_date: new Date().toISOString().slice(0, 10), source: 'manual',
     }])
+  }
+
+  // Suggest a rate for a line from the harvested library. Sets the per-unit
+  // rate × qty into base, and records the suggestion meta for display.
+  function suggestRate(idx) {
+    const ln = lines[idx]
+    const res = priceLine({ description: ln.description, unit: ln.unit }, library)
+    if (!res) {
+      setLines(prev => prev.map((l, i) => i === idx ? { ...l, suggestion: { none: true } } : l))
+      return
+    }
+    const qty = Number(ln.qty) || 1
+    setLines(prev => prev.map((l, i) => i === idx ? {
+      ...l,
+      base: res.rate != null ? String(Math.round(res.rate * qty * 100) / 100) : l.base,
+      source: 'library',
+      suggestion: {
+        rate: res.rate, material_rate: res.material_rate, labour_rate: res.labour_rate,
+        confidence: res.confidence, matchCount: res.matchCount, bestSim: res.bestSim,
+        sources: res.sources,
+      },
+    } : l))
   }
 
   function updateLine(idx, field, value) {
@@ -110,8 +141,11 @@ export default function PriceJobTab() {
       escalation_overrides: overrides,
       lines: pricedLines.map(l => ({
         description: l.description, category: l.category, base: Number(l.base) || 0,
+        qty: Number(l.qty) || null, unit: l.unit || null,
         price_date: l.price_date, escalated: Number(l.escalated) || 0,
         applied_pct: l.appliedPct, source: l.source,
+        material_rate: l.suggestion?.material_rate ?? null,
+        labour_rate: l.suggestion?.labour_rate ?? null,
       })),
       tender_files: tenderFiles,
       total_base: Math.round(totalBase * 100) / 100,
@@ -219,28 +253,59 @@ export default function PriceJobTab() {
           </div>
         ) : (
           <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 0.9fr 1fr 0.9fr 0.9fr 28px', gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 10, color: 'var(--text3)' }}>
-              <span>DESCRIPTION</span><span>CATEGORY</span><span>PRICE DATE</span><span style={{ textAlign: 'right' }}>BASE £</span><span style={{ textAlign: 'right' }}>AGE</span><span style={{ textAlign: 'right' }}>ESCALATED £</span><span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 10, color: 'var(--text3)' }}>
+              <span>DESCRIPTION</span><span>CATEGORY</span><span style={{ textAlign: 'right' }}>QTY</span><span>UNIT</span><span>PRICE DATE</span><span style={{ textAlign: 'right' }}>BASE £</span><span style={{ textAlign: 'right' }}>AGE</span><span style={{ textAlign: 'right' }}>ESCALATED £</span><span></span><span></span>
             </div>
             {pricedLines.map((l, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 0.9fr 1fr 0.9fr 0.9fr 28px', gap: 6, padding: '6px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center' }}>
-                <input value={l.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="item" style={{ fontSize: 12 }} />
-                <select value={l.category} onChange={e => updateLine(i, 'category', e.target.value)} style={{ fontSize: 12 }}>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c === 'DEFAULT' ? 'Default' : titleCase(c)}</option>)}
-                </select>
-                <input type="date" value={l.price_date} onChange={e => updateLine(i, 'price_date', e.target.value)} style={{ fontSize: 11 }} />
-                <input type="number" value={l.base} onChange={e => updateLine(i, 'base', e.target.value)} placeholder="0" style={{ fontSize: 12, textAlign: 'right' }} />
-                <span style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right' }}>{fmtYears(l.years)}</span>
-                <span style={{ fontSize: 12, fontWeight: 500, textAlign: 'right' }}>{fmtMoney(l.escalated)}</span>
-                <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+              <div key={i}>
+                <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '6px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center' }}>
+                  <input value={l.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="item" style={{ fontSize: 12 }} />
+                  <select value={l.category} onChange={e => updateLine(i, 'category', e.target.value)} style={{ fontSize: 12 }}>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c === 'DEFAULT' ? 'Default' : titleCase(c)}</option>)}
+                  </select>
+                  <input type="number" value={l.qty || ''} onChange={e => updateLine(i, 'qty', e.target.value)} placeholder="1" style={{ fontSize: 12, textAlign: 'right' }} />
+                  <select value={l.unit || 'm2'} onChange={e => updateLine(i, 'unit', e.target.value)} style={{ fontSize: 12 }}>
+                    {['m2', 'nr', 'lm', 'item'].map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                  <input type="date" value={l.price_date} onChange={e => updateLine(i, 'price_date', e.target.value)} style={{ fontSize: 11 }} />
+                  <input type="number" value={l.base} onChange={e => updateLine(i, 'base', e.target.value)} placeholder="0" style={{ fontSize: 12, textAlign: 'right' }} />
+                  <span style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right' }}>{fmtYears(l.years)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, textAlign: 'right' }}>{fmtMoney(l.escalated)}</span>
+                  <button onClick={() => suggestRate(i)} title="Suggest a rate from past jobs" style={{ background: 'none', border: 'none', color: '#185FA5', cursor: 'pointer', fontSize: 13 }}>✨</button>
+                  <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                </div>
+                {l.suggestion && (
+                  <div style={{ padding: '4px 10px 8px 10px', fontSize: 11 }}>
+                    {l.suggestion.none ? (
+                      <span style={{ color: 'var(--text3)' }}>No close match in past jobs — enter the rate manually.</span>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ color: confidenceColor(l.suggestion.confidence), fontWeight: 600 }}>
+                          {l.suggestion.confidence} confidence
+                        </span>
+                        <span style={{ color: 'var(--text2)' }}>
+                          {fmtMoney(l.suggestion.rate)}/{l.unit} · {l.suggestion.matchCount} past {l.suggestion.matchCount === 1 ? 'job' : 'jobs'} · best {l.suggestion.bestSim}%
+                        </span>
+                        {l.suggestion.hasSplit !== false && (l.suggestion.material_rate != null || l.suggestion.labour_rate != null) && (
+                          <span style={{ color: 'var(--text3)' }}>
+                            (mat {l.suggestion.material_rate != null ? fmtMoney(l.suggestion.material_rate) : '—'} / lab {l.suggestion.labour_rate != null ? fmtMoney(l.suggestion.labour_rate) : '—'})
+                          </span>
+                        )}
+                        {(l.suggestion.material_rate == null && l.suggestion.labour_rate == null) && (
+                          <span style={{ color: 'var(--amber)' }}>no split recorded yet</span>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 0.9fr 1fr 0.9fr 0.9fr 28px', gap: 6, padding: '8px 10px', borderTop: '0.5px solid var(--border2, var(--border))', background: 'var(--surface2)', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>TOTAL</span><span></span><span></span>
+            <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '8px 10px', borderTop: '0.5px solid var(--border2, var(--border))', background: 'var(--surface2)', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 600 }}>TOTAL</span><span></span><span></span><span></span><span></span>
               <span style={{ fontSize: 12, fontWeight: 600, textAlign: 'right' }}>{fmtMoney(totalBase)}</span>
               <span></span>
               <span style={{ fontSize: 12, fontWeight: 600, textAlign: 'right', color: '#185FA5' }}>{fmtMoney(totalEsc)}</span>
-              <span></span>
+              <span></span><span></span>
             </div>
           </div>
         )}
@@ -291,4 +356,5 @@ function DropZone({ title, subtitle, accent, files, onFiles, onRemove }) {
 }
 
 const lbl = { display: 'block', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }
+const LGRID = '1.8fr 1.1fr 0.6fr 0.6fr 0.9fr 0.9fr 0.7fr 0.9fr 24px 24px'
 function titleCase(s) { return String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) }
