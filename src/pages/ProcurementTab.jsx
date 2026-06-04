@@ -173,19 +173,6 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
     setStages(buildTemplate().stages)
   }
 
-  // Auto-feed: fill empty "Procured from" by matching the trade name to an
-  // appointed company. Never overwrites an existing value.
-  function autoFeed() {
-    setStages(stages => stages.map(s => ({
-      ...s,
-      trades: s.trades.map(t => {
-        if (t.procured_from && t.procured_from.trim()) return t
-        const match = matchAppointed(t.name, appointed)
-        return match ? { ...t, procured_from: match } : t
-      }),
-    })))
-  }
-
   // ── Exports ──
   // Branded .xlsx matching CCG_Procurement_Tracker_Template.xlsx, built in the
   // browser with ExcelJS (full fill/font/border support, unlike SheetJS free).
@@ -344,7 +331,6 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {saveState === 'saving' && <span style={{ fontSize: 11, color: 'var(--text3)' }}>Saving…</span>}
           {saveState === 'saved' && <span style={{ fontSize: 11, color: 'var(--green)' }}>Saved</span>}
-          {appointed.length > 0 && <button className="btn btn-sm" onClick={autoFeed} title="Fill 'Procured from' from the appointed team & subcontractors">⤵ Auto-fill from team</button>}
           <button className="btn btn-sm" onClick={exportExcel}>Export Excel</button>
           <button className="btn btn-sm" onClick={exportPDF}>Export PDF</button>
           <button className="btn btn-sm" onClick={addStage}>+ Stage</button>
@@ -445,52 +431,6 @@ const GRID = '1.6fr 36px 36px 1.2fr 1fr 1fr 1.4fr 56px'
 const iconBtn = {
   background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)',
   fontSize: 12, padding: '2px 4px', lineHeight: 1,
-}
-
-// Match a trade name to an appointed company by overlapping words against the
-// company's trade/role. `appointed` = [{ company, trade }]. Returns the best
-// company name or null. Conservative: needs a real word overlap, ignores
-// short/common words.
-function matchAppointed(tradeName, appointed) {
-  if (!tradeName || !appointed?.length) return null
-  // De-pluralise only longer words so acronyms (SFS, MEP, QS) survive intact.
-  const stem = w => w.length > 4 ? w.replace(/(ies)$/, 'y').replace(/(es|s)$/, '') : w
-  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ')
-  // Generic words appear across many roles — they shouldn't alone decide a
-  // match (otherwise "engineer" makes a structural firm win every engineer row).
-  const GENERIC = new Set(['engineer', 'consultant', 'design', 'designer', 'specialist', 'contractor', 'service', 'solution', 'consultancy', 'office', 'site', 'plan', 'environmental', 'creative', 'idea', 'management'])
-  const stop = new Set(['and', 'the', 'of', 'to', 'for', 'works', 'work', 'fix', 'first', 'second', 'ltd', 'limited'])
-  // Synonym groups of SPECIFIC discipline words. Covers the real CCG trade
-  // names (e.g. SFS = structural, principle/principal designer = CDM).
-  const SYN = [
-    ['mechanical', 'electrical', 'mep'],
-    ['structural', 'sfs', 'steelwork', 'steel', 'frame'],
-    ['architect', 'architectural', 'architecture'],
-    ['civil', 'groundwork'],
-    ['quantity', 'surveyor'],
-    ['drainage', 'plumbing', 'plumber'],
-    ['scaffold'], ['demolition'], ['roofing', 'roof'],
-    ['carpentry', 'joinery', 'carpenter'], ['plastering', 'drylining', 'plaster'],
-    ['landscaping', 'landscape', 'paving'], ['cladding', 'render', 'facade'],
-    ['principal', 'principle', 'cdm'], ['fire'], ['planning', 'planner'],
-    ['topographical', 'topographic', 'survey'], ['asbestos'], ['acoustic'],
-  ]
-  const expand = words => {
-    const out = new Set()
-    for (let w of words) { w = stem(w); out.add(w); for (const g of SYN) if (g.includes(w)) g.forEach(x => out.add(x)) }
-    return out
-  }
-  const tnWords = expand(norm(tradeName).split(/\s+/).filter(w => w.length > 1 && !stop.has(w)))
-  if (tnWords.size === 0) return null
-  let best = null, bestScore = 0
-  for (const a of appointed) {
-    const roleWords = norm(a.trade).split(/\s+/).filter(w => w.length > 1 && !stop.has(w)).map(stem)
-    let score = 0
-    for (const w of roleWords) { if (!tnWords.has(w)) continue; score += GENERIC.has(w) ? 0.2 : 1 }
-    if (score > bestScore) { bestScore = score; best = a.company }
-  }
-  // Need at least one SPECIFIC word match (score >= 1), not just generic overlap.
-  return bestScore >= 1 ? best : null
 }
 
 function loadScript(src) {
