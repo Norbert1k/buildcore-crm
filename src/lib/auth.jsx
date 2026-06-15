@@ -117,6 +117,11 @@ export function AuthProvider({ children }) {
       view_company_other:    ['project_manager', 'accountant', 'director_viewer', 'document_controller'],
       view_company_templates:['project_manager', 'accountant', 'director_viewer', 'document_controller'],
       manage_settings:       ['project_manager', 'accountant'],
+      // Company Information panel: all staff can view the general block; only
+      // admins can edit (empty list → admin short-circuit only). Sensitive
+      // sub-blocks (banking, director personal details) reuse view_company_bank.
+      manage_company_info:   [],
+      view_company_info:     ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
       view_tracker:          ['project_manager', 'accountant', 'director_viewer', 'viewer'],
       blacklist_manage:      [], // admin-only, handled by `role === 'admin'` short-circuit above
       create_tasks:          ['project_manager', 'operations_manager'],
