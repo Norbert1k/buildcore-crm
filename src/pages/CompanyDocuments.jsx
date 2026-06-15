@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
 import { Spinner } from '../components/ui'
 import UploadProgress from '../components/UploadProgress'
+import CompanyInformation from '../components/CompanyInformation'
 
 const CATEGORIES = [
   { key: 'logo',           icon: '🏢', label: 'Logo & Branding',   color: '#448a40', bg: '#e8f5e7' },
@@ -256,7 +257,7 @@ function FileCard({ doc, onPreview, onDelete, canDelete, selected, onSelect }) {
                 </>
             }
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(doc.file_size)}{doc.created_at ? ` · Uploaded ${new Date(doc.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {url && <button onClick={e => { e.stopPropagation(); onPreview(doc) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: '0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
             {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, doc.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: '0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
@@ -329,7 +330,7 @@ function FileListRow({ doc, onPreview, onDelete, canDelete, selected, onSelect }
                   </button>
                 )}
             </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(doc.file_size)}{doc.created_at ? ` · Uploaded ${new Date(doc.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(doc.file_size)}{doc.file_size ? ' · ' : ''}{formatDate(doc.created_at)}</div>
           </div>}
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -1024,6 +1025,7 @@ export default function CompanyDocuments() {
         <h2 style={{ fontSize: 18, fontWeight: 600 }}>Company Documents</h2>
         <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>Upload and manage company-wide documents — accessible to all staff</p>
       </div>
+      <CompanyInformation />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visibleCategories.map(cat => <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} treeVersion={treeVersion} refreshTree={refreshTree} />)}
       </div>
