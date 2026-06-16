@@ -740,7 +740,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
                 </>
             }
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}</div>
           <div style={{ display: 'flex', gap: 4 }}>
             {url && <button onClick={e => { e.stopPropagation(); onPreview(file, url) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
             {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
@@ -877,7 +877,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
                     </>
                   )}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}</div>
               </div>
             )
           }
@@ -2176,7 +2176,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                       style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
                       📄 Export PDF
                     </button>
-                    {canManage && (
+                    {canManage && subfolders.length === 0 && (
                       <button
                         disabled={publishingReportId === r.id}
                         onClick={async (e) => {
@@ -2199,6 +2199,13 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                         style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #378ADD', borderRadius: 4, background: publishingReportId === r.id ? 'var(--surface2)' : '#378ADD', cursor: publishingReportId === r.id ? 'wait' : 'pointer', color: publishingReportId === r.id ? 'var(--text2)' : 'white', opacity: publishingReportId && publishingReportId !== r.id ? 0.5 : 1 }}>
                         {publishingReportId === r.id ? 'Publishing…' : '📤 Publish to client'}
                       </button>
+                    )}
+                    {canManage && subfolders.length > 0 && (
+                      <span
+                        title="This project has separate buildings. Open a building's Progress Report section below and publish from there, so the report appears under that building in the client portal."
+                        style={{ fontSize: 10, color: 'var(--text3)', fontStyle: 'italic', padding: '3px 0' }}>
+                        Publish inside a building ↓
+                      </span>
                     )}
                     {canManage && (
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
