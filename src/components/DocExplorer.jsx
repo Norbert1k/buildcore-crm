@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 
@@ -76,6 +76,83 @@ async function triggerDownload(signedUrl, fileName) {
   } catch (e) { console.warn('download failed', e) }
 }
 
+// ── PDF.js loader (CDN, once) — used to render real first-page thumbnails ─────
+let _pdfjsPromise = null
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib)
+  if (_pdfjsPromise) return _pdfjsPromise
+  _pdfjsPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+    s.onload = () => {
+      try {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        resolve(window.pdfjsLib)
+      } catch (e) { reject(e) }
+    }
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return _pdfjsPromise
+}
+
+// Renders the first page of a PDF (or shows an image) as a thumbnail, lazily —
+// only starts work once the card scrolls into view. Falls back to a type icon
+// for non-previewable files or on error.
+function FilePreview({ file, signedUrlFor, height = 130 }) {
+  const e = extMeta(file.file_name)
+  const ref = useRef(null)
+  const [img, setImg] = useState(null)
+  const [state, setState] = useState('idle') // idle | loading | done | fail
+
+  useEffect(() => {
+    if (!e.prev) return
+    const el = ref.current
+    if (!el) return
+    let cancelled = false
+    const io = new IntersectionObserver(async (entries) => {
+      if (!entries[0].isIntersecting || state !== 'idle') return
+      io.disconnect()
+      setState('loading')
+      try {
+        const signedUrl = await signedUrlFor(file)
+        if (!signedUrl) throw new Error('no url')
+        if (e.t === 'IMG') { if (!cancelled) { setImg(signedUrl); setState('done') } return }
+        const pdfjs = await loadPdfJs()
+        const doc = await pdfjs.getDocument(signedUrl).promise
+        const page = await doc.getPage(1)
+        const vp0 = page.getViewport({ scale: 1 })
+        const scale = (height * 2) / vp0.height   // 2x for crispness
+        const vp = page.getViewport({ scale })
+        const canvas = document.createElement('canvas')
+        canvas.width = vp.width; canvas.height = vp.height
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise
+        if (!cancelled) { setImg(canvas.toDataURL('image/png')); setState('done') }
+      } catch (err) { if (!cancelled) setState('fail') }
+    }, { rootMargin: '120px' })
+    io.observe(el)
+    return () => { cancelled = true; io.disconnect() }
+  }, [file.id])
+
+  const iconFallback = (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+      <span style={{ fontSize: 34, color: e.c }}>▤</span>
+      <span style={{ fontSize: 10, fontWeight: 600, color: e.c }}>{e.t}</span>
+    </div>
+  )
+
+  return (
+    <div ref={ref} style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '0.5px solid var(--border)', background: img ? '#f3f3f1' : e.c + '14', overflow: 'hidden' }}>
+      {img
+        ? <img src={img} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+        : state === 'loading'
+          ? <span style={{ fontSize: 11, color: 'var(--text3)' }}>…</span>
+          : iconFallback}
+    </div>
+  )
+}
+
 export default function DocExplorer({ projectId, projectName }) {
   const { role } = useAuth()
   const [files, setFiles] = useState([])           // all project_doc_files rows
@@ -87,6 +164,8 @@ export default function DocExplorer({ projectId, projectName }) {
   const [picked, setPicked] = useState(() => new Set())
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef(null)
 
   useEffect(() => { loadAll() }, [projectId])
 
@@ -218,9 +297,51 @@ export default function DocExplorer({ projectId, projectName }) {
     const { data } = await supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }
-  async function downloadFile(file) {
+  async function signedUrlFor(file) {
     const { data } = await supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
-    if (data?.signedUrl) await triggerDownload(data.signedUrl, file.file_name)
+    return data?.signedUrl || null
+  }
+  async function downloadFile(file) {
+    const url = await signedUrlFor(file)
+    if (url) await triggerDownload(url, file.file_name)
+  }
+
+  // ── Rename (write) — same call Classic uses: update file_name on the row ────
+  async function renameFile(file, newName) {
+    const name = (newName || '').trim()
+    if (!name || name === file.file_name) return
+    const { error } = await supabase.from('project_doc_files').update({ file_name: name }).eq('id', file.id)
+    if (error) { alert('Rename failed: ' + error.message); return }
+    setFiles(prev => prev.map(f => f.id === file.id ? { ...f, file_name: name } : f))
+  }
+
+  // ── Drag-drop upload (write) — mirrors Classic's path + insert exactly ──────
+  // Confirms before saving. Uploads into the currently-selected folder node.
+  async function uploadToSelected(fileList) {
+    if (!selectedNode) { alert('Pick a folder on the left first.'); return }
+    if (selectedNode.special === 'photos') { alert('Project Photos are managed in the Classic view.'); return }
+    const arr = Array.from(fileList).filter(Boolean)
+    if (!arr.length) return
+    const { folder_key, subfolder_key } = selectedNode.fileKey
+    const names = arr.map(f => f.name).join(', ')
+    if (!window.confirm(`Upload ${arr.length} file${arr.length === 1 ? '' : 's'} to "${selectedNode.label}"?\n\n${names}`)) return
+
+    setBusy(true)
+    const added = []
+    for (const file of arr) {
+      const ts = Date.now()
+      const path = subfolder_key
+        ? `projects/${projectId}/${folder_key}/${subfolder_key}/${ts}-${file.name}`
+        : `projects/${projectId}/${folder_key}/${ts}-${file.name}`
+      const { error } = await supabase.storage.from('project-docs').upload(path, file)
+      if (error) { console.error('upload failed', error.message); continue }
+      const row = { project_id: projectId, folder_key, subfolder_key: subfolder_key || null, file_name: file.name, file_size: file.size, storage_path: path }
+      const { data: ins, error: dbErr } = await supabase.from('project_doc_files').insert(row).select().single()
+      if (dbErr) { console.error('db insert failed', dbErr.message); continue }
+      if (ins) added.push(ins)
+    }
+    setBusy(false)
+    if (added.length) setFiles(prev => [...prev, ...added])
   }
   async function downloadPicked() {
     if (!selectedNode) return
@@ -290,21 +411,35 @@ export default function DocExplorer({ projectId, projectName }) {
         </div>
 
         {/* File pane */}
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative' }}
+          onDragOver={e => { if (selectedNode && selectedNode.special !== 'photos' && !isSearch) { e.preventDefault(); setDragOver(true) } }}
+          onDragLeave={e => { if (e.currentTarget === e.target) setDragOver(false) }}
+          onDrop={e => {
+            e.preventDefault(); setDragOver(false)
+            if (e.dataTransfer?.files?.length) uploadToSelected(e.dataTransfer.files)
+          }}>
           {/* Toolbar */}
           {picked.size > 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderBottom: '0.5px solid var(--border)', background: 'var(--surface2)', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--blue, #185FA5)', flex: 1 }}>{picked.size} selected</span>
               <button onClick={downloadPicked} disabled={busy} style={tbtn}>{busy ? 'Downloading…' : '↓ Download'}</button>
               <button onClick={() => setPicked(new Set())} style={tbtn}>Clear</button>
-              <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>(move &amp; delete coming in next stage)</span>
+              <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>(move &amp; delete coming next)</span>
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, padding: '8px 10px', borderBottom: '0.5px solid var(--border)', flexWrap: 'wrap' }}>
+              {!isSearch && selectedNode && selectedNode.special !== 'photos' && (
+                <>
+                  <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files?.length) uploadToSelected(e.target.files); e.target.value = '' }} />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={busy} style={{ ...tbtn, borderColor: '#448a40', color: '#448a40' }}>
+                    {busy ? 'Uploading…' : '↑ Upload'}
+                  </button>
+                  <span style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
+                </>
+              )}
               {!isSearch && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>view-only preview · upload/edit in classic view</span>
-                  <span style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                   <button onClick={() => setViewMode('list')} style={vmb(viewMode === 'list')} aria-label="List view">≣</button>
                   <button onClick={() => setViewMode('grid')} style={vmb(viewMode === 'grid')} aria-label="Grid view">▦</button>
                 </div>
@@ -316,14 +451,14 @@ export default function DocExplorer({ projectId, projectName }) {
           {viewMode === 'grid' && !isSearch ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 10, padding: 12 }}>
               {shownFiles.map(f => (
-                <GridCard key={f.id} file={f} picked={picked.has(f.id)} onPick={() => togglePick(f.id)} onOpen={() => openFile(f)} onDownload={() => downloadFile(f)} />
+                <GridCard key={f.id} file={f} picked={picked.has(f.id)} onPick={() => togglePick(f.id)} onOpen={() => openFile(f)} onDownload={() => downloadFile(f)} onRename={renameFile} signedUrlFor={signedUrlFor} />
               ))}
               {shownFiles.length === 0 && <Empty isSearch={isSearch} node={selectedNode} />}
             </div>
           ) : (
             <div>
               {shownFiles.map(f => (
-                <ListRow key={f.id} file={f} picked={picked.has(f.id)} onPick={() => togglePick(f.id)} onOpen={() => openFile(f)} onDownload={() => downloadFile(f)} showPath={isSearch} />
+                <ListRow key={f.id} file={f} picked={picked.has(f.id)} onPick={() => togglePick(f.id)} onOpen={() => openFile(f)} onDownload={() => downloadFile(f)} onRename={renameFile} showPath={isSearch} />
               ))}
               {shownFiles.length === 0 && <Empty isSearch={isSearch} node={selectedNode} />}
             </div>
@@ -333,8 +468,16 @@ export default function DocExplorer({ projectId, projectName }) {
             {isSearch ? `${shownFiles.length} result${shownFiles.length === 1 ? '' : 's'}`
               : selectedNode ? `${shownFiles.length} file${shownFiles.length === 1 ? '' : 's'}`
               : 'Select a folder on the left'}
+            {selectedNode && selectedNode.special !== 'photos' && !isSearch && <span> · drag files here to upload</span>}
             {selectedNode?.special === 'photos' && <span> · Project Photos open in the classic view</span>}
           </div>
+
+          {/* Drop overlay */}
+          {dragOver && (
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(68,138,64,0.12)', border: '2px dashed #448a40', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, pointerEvents: 'none' }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#448a40' }}>Drop to upload to "{selectedNode?.label}"</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -361,8 +504,11 @@ function TreeNode({ node, depth, expanded, selectedKey, onToggle, onSelect, coun
   )
 }
 
-function ListRow({ file, picked, onPick, onOpen, onDownload, showPath }) {
+function ListRow({ file, picked, onPick, onOpen, onDownload, onRename, showPath }) {
   const e = extMeta(file.file_name)
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(file.file_name)
+  function commit() { setEditing(false); if (val.trim() && val !== file.file_name) onRename(file, val) }
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 12px', borderTop: '0.5px solid var(--border)', fontSize: 12.5, background: picked ? 'var(--surface2)' : 'transparent' }}
       onMouseEnter={ev => { const a = ev.currentTarget.querySelector('.facts'); if (a) a.style.opacity = 1 }}
@@ -370,36 +516,49 @@ function ListRow({ file, picked, onPick, onOpen, onDownload, showPath }) {
       <input type="checkbox" checked={picked} onChange={onPick} style={{ width: 14, height: 14, flexShrink: 0, appearance: 'auto' }} />
       <span style={{ width: 26, height: 26, borderRadius: 4, background: e.c, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 7, fontWeight: 700 }}>{e.t}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.file_name}</div>
+        {editing ? (
+          <input autoFocus value={val} onChange={ev => setVal(ev.target.value)} onBlur={commit}
+            onKeyDown={ev => { if (ev.key === 'Enter') commit(); if (ev.key === 'Escape') { setVal(file.file_name); setEditing(false) } }}
+            style={{ width: '100%', fontSize: 12.5, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+        ) : (
+          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.file_name}</div>
+        )}
         {showPath && file._path && <div style={{ fontSize: 10, color: 'var(--text3)' }}>{file._path}</div>}
       </div>
       <span style={{ fontSize: 10, color: 'var(--text3)', flexShrink: 0 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + fmtDate(file.created_at) : ''}</span>
       <div className="facts" style={{ display: 'flex', gap: 3, opacity: 0, transition: 'opacity .12s', flexShrink: 0 }}>
         <button onClick={onOpen} style={fabtn}>View</button>
-        <button onClick={onDownload} style={fabtn}>↓</button>
+        <button onClick={onDownload} style={fabtn} title="Download">↓</button>
+        {onRename && <button onClick={() => { setVal(file.file_name); setEditing(true) }} style={fabtn} title="Rename">✎</button>}
       </div>
     </div>
   )
 }
 
-function GridCard({ file, picked, onPick, onOpen, onDownload }) {
-  const e = extMeta(file.file_name)
+function GridCard({ file, picked, onPick, onOpen, onDownload, onRename, signedUrlFor }) {
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState(file.file_name)
+  function commit() { setEditing(false); if (val.trim() && val !== file.file_name) onRename(file, val) }
   return (
     <div style={{ position: 'relative', border: '0.5px solid ' + (picked ? 'var(--blue, #185FA5)' : 'var(--border)'), borderRadius: 10, overflow: 'hidden', background: 'var(--surface)', cursor: 'pointer' }}
       onMouseEnter={ev => { const a = ev.currentTarget.querySelector('.gacts'); if (a) a.style.opacity = 1 }}
       onMouseLeave={ev => { const a = ev.currentTarget.querySelector('.gacts'); if (a) a.style.opacity = 0 }}>
-      <div style={{ height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '0.5px solid var(--border)', background: e.c + '14' }} onClick={onOpen}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 34, color: e.c }}>▤</span>
-          <span style={{ fontSize: 10, fontWeight: 600, color: e.c }}>{e.t}</span>
-        </div>
+      <div onClick={onOpen}>
+        <FilePreview file={file} signedUrlFor={signedUrlFor} height={130} />
       </div>
       <input type="checkbox" checked={picked} onChange={onPick} style={{ position: 'absolute', top: 7, left: 7, width: 16, height: 16, zIndex: 2, appearance: 'auto' }} />
       <div className="gacts" style={{ position: 'absolute', top: 7, right: 7, display: 'flex', gap: 3, opacity: 0, transition: 'opacity .12s', zIndex: 2 }}>
-        <button onClick={onDownload} style={{ ...fabtn, background: 'var(--surface)' }}>↓</button>
+        <button onClick={onDownload} style={{ ...fabtn, background: 'var(--surface)' }} title="Download">↓</button>
+        {onRename && <button onClick={() => { setVal(file.file_name); setEditing(true) }} style={{ ...fabtn, background: 'var(--surface)' }} title="Rename">✎</button>}
       </div>
       <div style={{ padding: '7px 9px' }}>
-        <div style={{ fontSize: 11.5, lineHeight: 1.3, wordBreak: 'break-word' }}>{file.file_name}</div>
+        {editing ? (
+          <input autoFocus value={val} onChange={ev => setVal(ev.target.value)} onBlur={commit}
+            onKeyDown={ev => { if (ev.key === 'Enter') commit(); if (ev.key === 'Escape') { setVal(file.file_name); setEditing(false) } }}
+            style={{ width: '100%', fontSize: 11.5, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+        ) : (
+          <div style={{ fontSize: 11.5, lineHeight: 1.3, wordBreak: 'break-word' }}>{file.file_name}</div>
+        )}
         <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + fmtDate(file.created_at) : ''}</div>
       </div>
     </div>
