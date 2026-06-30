@@ -8,6 +8,7 @@ import ProjectPhotos from './ProjectPhotos'
 import FileLightbox from './FileLightbox'
 import { parseEml } from '../lib/emlParser'
 import CffGeneratorModal from './CffGeneratorModal'
+import DocExplorer from './DocExplorer'
 
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
@@ -2459,6 +2460,11 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
   const [treeVersion, setTreeVersion] = useState(0)
   const refreshTree = () => setTreeVersion(v => v + 1)
 
+  // Document browser view: 'classic' (the proven nested browser) or 'explorer'
+  // (the new two-panel file explorer — read/navigate/download only for now).
+  // Defaults to classic so nothing changes until the user opts in.
+  const [docView, setDocView] = useState('classic')
+
   const canManage = can('manage_projects')
   const canAddFolders = can('manage_projects')
 
@@ -2576,13 +2582,29 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
   return (
     <div>
       <ZipProgressOverlay progress={zipProgress} />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-        <button onClick={zipAll} disabled={zippingAll}
-          style={{ fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-          {zippingAll ? 'Zipping...' : 'Zip all documents'}
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'inline-flex', border: '0.5px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          <button onClick={() => setDocView('classic')}
+            style={{ fontSize: 12, padding: '6px 12px', border: 'none', cursor: 'pointer', background: docView === 'classic' ? 'var(--accent)' : 'transparent', color: docView === 'classic' ? '#fff' : 'var(--text2)' }}>
+            Classic
+          </button>
+          <button onClick={() => setDocView('explorer')}
+            style={{ fontSize: 12, padding: '6px 12px', border: 'none', borderLeft: '0.5px solid var(--border)', cursor: 'pointer', background: docView === 'explorer' ? 'var(--accent)' : 'transparent', color: docView === 'explorer' ? '#fff' : 'var(--text2)' }}>
+            Explorer <span style={{ fontSize: 9, opacity: 0.8 }}>(beta)</span>
+          </button>
+        </div>
+        {docView === 'classic' && (
+          <button onClick={zipAll} disabled={zippingAll}
+            style={{ fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
+            {zippingAll ? 'Zipping...' : 'Zip all documents'}
+          </button>
+        )}
       </div>
+
+      {docView === 'explorer' ? (
+        <DocExplorer projectId={projectId} projectName={projectName} />
+      ) : (
       <div>
         {allFolders.map(folder => (
           <PrimeFolderSection key={folder.key} projectId={projectId} projectName={projectName} folder={folder}
@@ -2601,7 +2623,8 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
             }} />
         ))}
       </div>
-      {canAddFolders && <AddTopFolderButton onAdd={addTopFolder} />}
+      )}
+      {docView === 'classic' && canAddFolders && <AddTopFolderButton onAdd={addTopFolder} />}
     </div>
   )
 }
