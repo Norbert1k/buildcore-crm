@@ -170,6 +170,12 @@ export default function ProjectDetail() {
     return saved === 'photos' ? 'documents' : saved
   })
   const [driveFolderId, setDriveFolderId] = useState(null)
+  // Collapse the top "Project overview" block (info + financial + description +
+  // EA) so the tabs sit higher. Remembered per browser.
+  const [overviewCollapsed, setOverviewCollapsed] = useState(() => localStorage.getItem('projectOverviewCollapsed') === '1')
+  function toggleOverview() {
+    setOverviewCollapsed(v => { const n = !v; localStorage.setItem('projectOverviewCollapsed', n ? '1' : '0'); return n })
+  }
   const [driveFolderName, setDriveFolderName] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
   const [programmes, setProgrammes] = useState([])
@@ -806,6 +812,17 @@ export default function ProjectDetail() {
         <IconChevron size={13} dir="left" /> Back
       </button>
 
+      {/* Collapsible "Project overview" — folds the info/financial/description/EA
+          cards so the document tabs sit higher. State remembered per browser. */}
+      <div onClick={toggleOverview}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: overviewCollapsed ? 16 : 12, userSelect: 'none' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Project overview</span>
+        <span style={{ fontSize: 12, color: 'var(--text3)' }}>{overviewCollapsed ? '▸ show' : '▾ hide'}</span>
+        <div style={{ flex: 1, height: '0.5px', background: 'var(--border)' }} />
+      </div>
+
+      {!overviewCollapsed && (
+      <div>
       {/* Header row — project info card + financial summary card side by side.
           Stacks vertically on narrower screens via flex-wrap. */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -1067,6 +1084,8 @@ export default function ProjectDetail() {
           </div>
         )}
       </div>
+      </div>
+      )}
 
       <ProjectFileSearch projectId={id} />
 
