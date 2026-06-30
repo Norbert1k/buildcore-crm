@@ -510,9 +510,7 @@ function ListRow({ file, picked, onPick, onOpen, onDownload, onRename, showPath 
   const [val, setVal] = useState(file.file_name)
   function commit() { setEditing(false); if (val.trim() && val !== file.file_name) onRename(file, val) }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 12px', borderTop: '0.5px solid var(--border)', fontSize: 12.5, background: picked ? 'var(--surface2)' : 'transparent' }}
-      onMouseEnter={ev => { const a = ev.currentTarget.querySelector('.facts'); if (a) a.style.opacity = 1 }}
-      onMouseLeave={ev => { const a = ev.currentTarget.querySelector('.facts'); if (a) a.style.opacity = 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 12px', borderTop: '0.5px solid var(--border)', fontSize: 12.5, background: picked ? 'var(--surface2)' : 'transparent' }}>
       <input type="checkbox" checked={picked} onChange={onPick} style={{ width: 14, height: 14, flexShrink: 0, appearance: 'auto' }} />
       <span style={{ width: 26, height: 26, borderRadius: 4, background: e.c, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 7, fontWeight: 700 }}>{e.t}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -526,7 +524,7 @@ function ListRow({ file, picked, onPick, onOpen, onDownload, onRename, showPath 
         {showPath && file._path && <div style={{ fontSize: 10, color: 'var(--text3)' }}>{file._path}</div>}
       </div>
       <span style={{ fontSize: 10, color: 'var(--text3)', flexShrink: 0 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + fmtDate(file.created_at) : ''}</span>
-      <div className="facts" style={{ display: 'flex', gap: 3, opacity: 0, transition: 'opacity .12s', flexShrink: 0 }}>
+      <div className="facts" style={{ display: 'flex', gap: 3, opacity: 1, flexShrink: 0 }}>
         <button onClick={onOpen} style={fabtn}>View</button>
         <button onClick={onDownload} style={fabtn} title="Download">↓</button>
         {onRename && <button onClick={() => { setVal(file.file_name); setEditing(true) }} style={fabtn} title="Rename">✎</button>}
@@ -540,14 +538,12 @@ function GridCard({ file, picked, onPick, onOpen, onDownload, onRename, signedUr
   const [val, setVal] = useState(file.file_name)
   function commit() { setEditing(false); if (val.trim() && val !== file.file_name) onRename(file, val) }
   return (
-    <div style={{ position: 'relative', border: '0.5px solid ' + (picked ? 'var(--blue, #185FA5)' : 'var(--border)'), borderRadius: 10, overflow: 'hidden', background: 'var(--surface)', cursor: 'pointer' }}
-      onMouseEnter={ev => { const a = ev.currentTarget.querySelector('.gacts'); if (a) a.style.opacity = 1 }}
-      onMouseLeave={ev => { const a = ev.currentTarget.querySelector('.gacts'); if (a) a.style.opacity = 0 }}>
+    <div style={{ position: 'relative', border: '0.5px solid ' + (picked ? 'var(--blue, #185FA5)' : 'var(--border)'), borderRadius: 10, overflow: 'hidden', background: 'var(--surface)', cursor: 'pointer' }}>
       <div onClick={onOpen}>
         <FilePreview file={file} signedUrlFor={signedUrlFor} height={130} />
       </div>
       <input type="checkbox" checked={picked} onChange={onPick} style={{ position: 'absolute', top: 7, left: 7, width: 16, height: 16, zIndex: 2, appearance: 'auto' }} />
-      <div className="gacts" style={{ position: 'absolute', top: 7, right: 7, display: 'flex', gap: 3, opacity: 0, transition: 'opacity .12s', zIndex: 2 }}>
+      <div className="gacts" style={{ position: 'absolute', top: 7, right: 7, display: 'flex', gap: 3, opacity: 1, zIndex: 2 }}>
         <button onClick={onDownload} style={{ ...fabtn, background: 'var(--surface)' }} title="Download">↓</button>
         {onRename && <button onClick={() => { setVal(file.file_name); setEditing(true) }} style={{ ...fabtn, background: 'var(--surface)' }} title="Rename">✎</button>}
       </div>
