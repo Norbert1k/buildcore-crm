@@ -199,6 +199,14 @@ export default function DocExplorer({ projectId, projectName }) {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   function selectNode(id) {
+    // Pure selection — does NOT change expansion. The tree row's own click
+    // handles expand/collapse; mixing the two here caused a same-tick race
+    // that immediately re-closed a folder you just opened.
+    setSelectedKey(id); setPicked(new Set()); setSearch('')
+  }
+  // Used by the breadcrumb: jump to a node AND make sure it (and its ancestors,
+  // already open by definition of being in the trail) are expanded.
+  function selectAndExpand(id) {
     setSelectedKey(id); setPicked(new Set()); setSearch('')
     setExpanded(prev => { const n = new Set(prev); n.add(id); return n })
   }
@@ -266,7 +274,7 @@ export default function DocExplorer({ projectId, projectName }) {
         {trail && trail.map(n => (
           <span key={n.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <span style={{ color: 'var(--text3)' }}>/</span>
-            <span onClick={() => selectNode(n.id)} style={{ cursor: 'pointer', color: n.id === selectedKey ? 'var(--text)' : 'var(--text3)', fontWeight: n.id === selectedKey ? 600 : 400 }}>{n.label}</span>
+            <span onClick={() => selectAndExpand(n.id)} style={{ cursor: 'pointer', color: n.id === selectedKey ? 'var(--text)' : 'var(--text3)', fontWeight: n.id === selectedKey ? 600 : 400 }}>{n.label}</span>
           </span>
         ))}
       </div>
