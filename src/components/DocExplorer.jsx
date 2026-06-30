@@ -401,9 +401,9 @@ export default function DocExplorer({ projectId, projectName }) {
       </div>
 
       {/* Two-panel body */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.8fr) minmax(0,1.55fr)', border: '0.5px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--surface)', minHeight: 400 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.8fr) minmax(0,1.55fr)', border: '0.5px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--surface)', minHeight: 640 }}>
         {/* Tree pane */}
-        <div style={{ borderRight: '0.5px solid var(--border)', padding: '6px 0', overflow: 'auto', maxHeight: 560 }}>
+        <div style={{ borderRight: '0.5px solid var(--border)', padding: '6px 0', overflow: 'auto', maxHeight: '78vh' }}>
           {tree.map(node => (
             <TreeNode key={node.id} node={node} depth={0} expanded={expanded} selectedKey={selectedKey}
               onToggle={toggleExpand} onSelect={selectNode} countFiles={countFiles} />
