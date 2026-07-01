@@ -519,7 +519,7 @@ function ListRow({ file, picked, onPick, onOpen, onDownload, onRename, showPath 
             onKeyDown={ev => { if (ev.key === 'Enter') commit(); if (ev.key === 'Escape') { setVal(file.file_name); setEditing(false) } }}
             style={{ width: '100%', fontSize: 12.5, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
         ) : (
-          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.file_name}</div>
+          <div onClick={onOpen} title="Open" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}>{file.file_name}</div>
         )}
         {showPath && file._path && <div style={{ fontSize: 10, color: 'var(--text3)' }}>{file._path}</div>}
       </div>
