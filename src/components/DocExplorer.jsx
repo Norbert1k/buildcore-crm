@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import FileLightbox from './FileLightbox'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DocExplorer — two-panel "Windows-style" file explorer for project documents.
@@ -166,6 +167,7 @@ export default function DocExplorer({ projectId, projectName }) {
   const [busy, setBusy] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef(null)
+  const [lightboxIndex, setLightboxIndex] = useState(null)  // index into shownFiles, or null
 
   useEffect(() => { loadAll() }, [projectId])
 
@@ -293,9 +295,11 @@ export default function DocExplorer({ projectId, projectName }) {
     setPicked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
 
-  async function openFile(file) {
-    const { data } = await supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
-    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  function openFile(file) {
+    // Open the in-app lightbox popup (same viewer the classic view uses),
+    // positioned at this file so you can flick through the folder with arrows.
+    const idx = shownFiles.findIndex(f => f.id === file.id)
+    setLightboxIndex(idx >= 0 ? idx : 0)
   }
   async function signedUrlFor(file) {
     const { data } = await supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
@@ -480,6 +484,17 @@ export default function DocExplorer({ projectId, projectName }) {
           )}
         </div>
       </div>
+
+      {lightboxIndex !== null && shownFiles[lightboxIndex] && (
+        <FileLightbox
+          files={shownFiles}
+          currentIndex={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          getSignedUrl={signedUrlFor}
+          onClose={() => setLightboxIndex(null)}
+          onDownload={downloadFile}
+        />
+      )}
     </div>
   )
 }
