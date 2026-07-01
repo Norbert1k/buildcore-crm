@@ -817,7 +817,13 @@ export default function ProjectDetail() {
       <div onClick={toggleOverview}
         style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: overviewCollapsed ? 16 : 12, userSelect: 'none' }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Project overview</span>
-        <span style={{ fontSize: 12, color: 'var(--text3)' }}>{overviewCollapsed ? '▸ show' : '▾ hide'}</span>
+        {overviewCollapsed && (
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.project_name}</span>
+            {project.project_ref && <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>#{project.project_ref}</span>}
+          </span>
+        )}
+        <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>{overviewCollapsed ? '▸ show' : '▾ hide'}</span>
         <div style={{ flex: 1, height: '0.5px', background: 'var(--border)' }} />
       </div>
 
