@@ -65,6 +65,16 @@ function fmtDate(d) {
 const byLabel = (a, b) => (a.label || '').localeCompare(b.label || '', undefined, { numeric: true, sensitivity: 'base' })
 const byName = (a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' })
 
+// Folders created anywhere under one of these keys must be created
+// client_visible=true so they reach the client portal (matches Classic's
+// rule). Top-level portal folders + the portal-mapped 00-project-information
+// subfolders.
+const PORTAL_ROOT_KEYS = new Set([
+  '01-project-order', '02-payment-application', '03-payment-notice',
+  '04-variations', '05-progress-report', '06-project-programme',
+  'csa', 'cff', 'reports', 'meetings', 'photos',
+])
+
 async function triggerDownload(signedUrl, fileName) {
   try {
     const res = await fetch(signedUrl)
@@ -275,6 +285,7 @@ export default function DocExplorer({ projectId, projectName }) {
   }
 
   const selectedNode = selectedKey ? findNode(selectedKey, tree) : null
+  const isSelectedCustomFolder = selectedNode && !selectedNode.top && !selectedNode.special && customFolders.some(c => c.folder_key === selectedNode.id)
 
   function toggleExpand(id) {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -353,6 +364,84 @@ export default function DocExplorer({ projectId, projectName }) {
     const list = nodeFiles(selectedNode).filter(f => picked.has(f.id))
     for (const f of list) await downloadFile(f)
     setBusy(false)
+  }
+
+  // ── Folder operations (write project_doc_folders) ──────────────────────────
+  // Does the selected node sit under a portal-mapped area? If so, new folders
+  // are created client_visible=true (so they reach the client portal) — same
+  // rule Classic uses. We walk the node's path and check every ancestor key.
+  function isUnderPortalRoot(node) {
+    const t = pathTo(node.id, tree) || []
+    return t.some(n => PORTAL_ROOT_KEYS.has(n.id) || PORTAL_ROOT_KEYS.has(n.fileKey?.subfolder_key))
+  }
+
+  async function addFolder() {
+    if (!selectedNode) { alert('Pick a folder on the left to add inside it.'); return }
+    if (selectedNode.special === 'photos') { alert('Project Photos are managed in the Classic view.'); return }
+    const name = window.prompt('New sub-folder name:')
+    if (!name || !name.trim()) return
+    // New folders nest under the selected node's own key. For a top-level
+    // template folder the parent is its folder_key; for a subfolder/custom
+    // folder it's that folder's key (which the tree stores as node.id for
+    // custom folders, or the template subfolder key).
+    const parentKey = selectedNode.fileKey.subfolder_key || selectedNode.fileKey.folder_key
+    const key = parentKey + '-sub-' + Date.now()
+    const row = { project_id: projectId, parent_key: parentKey, folder_key: key, label: name.trim() }
+    if (isUnderPortalRoot(selectedNode)) row.client_visible = true
+    setBusy(true)
+    const { data, error } = await supabase.from('project_doc_folders').insert(row).select().single()
+    setBusy(false)
+    if (error) { alert('Could not add folder: ' + error.message); return }
+    if (data) { setCustomFolders(prev => [...prev, data]); setExpanded(prev => new Set(prev).add(selectedNode.id)) }
+  }
+
+  async function renameFolder(node) {
+    if (!node || node.top || node.special) return  // don't rename template top folders / photos
+    // Only custom folders (in project_doc_folders) can be renamed. Template
+    // subfolders aren't rows, so skip them.
+    const isCustom = customFolders.some(c => c.folder_key === node.id)
+    if (!isCustom) { alert('This is a built-in folder and can’t be renamed.'); return }
+    const name = window.prompt('Rename folder:', node.label)
+    if (!name || !name.trim() || name.trim() === node.label) return
+    setBusy(true)
+    const { error } = await supabase.from('project_doc_folders').update({ label: name.trim() }).eq('folder_key', node.id).eq('project_id', projectId)
+    setBusy(false)
+    if (error) { alert('Rename failed: ' + error.message); return }
+    setCustomFolders(prev => prev.map(c => c.folder_key === node.id ? { ...c, label: name.trim() } : c))
+  }
+
+  async function deleteFolder(node) {
+    if (!node || node.top || node.special) return
+    const isCustom = customFolders.some(c => c.folder_key === node.id)
+    if (!isCustom) { alert('This is a built-in folder and can’t be deleted.'); return }
+    // Recursively collect this folder + every descendant custom folder.
+    const toDelete = new Set([node.id])
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const c of customFolders) {
+        if (toDelete.has(c.parent_key) && !toDelete.has(c.folder_key)) { toDelete.add(c.folder_key); grew = true }
+      }
+    }
+    const folderKeys = [...toDelete]
+    // Files living in any of these folders (matched by subfolder_key).
+    const doomedFiles = files.filter(f => folderKeys.includes(f.subfolder_key))
+    const msg = `Delete "${node.label}"` +
+      (folderKeys.length > 1 ? ` and its ${folderKeys.length - 1} sub-folder${folderKeys.length - 1 === 1 ? '' : 's'}` : '') +
+      (doomedFiles.length ? `, including ${doomedFiles.length} file${doomedFiles.length === 1 ? '' : 's'}` : '') +
+      `?\n\nThis cannot be undone.`
+    if (!window.confirm(msg)) return
+    setBusy(true)
+    // Delete files first (rows; storage blobs are left — same as Classic).
+    if (doomedFiles.length) {
+      await supabase.from('project_doc_files').delete().in('id', doomedFiles.map(f => f.id))
+    }
+    const { error } = await supabase.from('project_doc_folders').delete().in('folder_key', folderKeys).eq('project_id', projectId)
+    setBusy(false)
+    if (error) { alert('Delete failed: ' + error.message); return }
+    setFiles(prev => prev.filter(f => !doomedFiles.some(d => d.id === f.id)))
+    setCustomFolders(prev => prev.filter(c => !folderKeys.includes(c.folder_key)))
+    if (folderKeys.includes(selectedKey)) setSelectedKey(null)
   }
 
   // Global search across all files in the project
@@ -439,6 +528,13 @@ export default function DocExplorer({ projectId, projectName }) {
                   <button onClick={() => fileInputRef.current?.click()} disabled={busy} style={{ ...tbtn, borderColor: '#448a40', color: '#448a40' }}>
                     {busy ? 'Uploading…' : '↑ Upload'}
                   </button>
+                  <button onClick={addFolder} disabled={busy} style={tbtn} title="Create a sub-folder here">+ Folder</button>
+                  {isSelectedCustomFolder && (
+                    <>
+                      <button onClick={() => renameFolder(selectedNode)} disabled={busy} style={tbtn} title="Rename this folder">✎ Rename</button>
+                      <button onClick={() => deleteFolder(selectedNode)} disabled={busy} style={{ ...tbtn, borderColor: 'var(--red)', color: 'var(--red)' }} title="Delete this folder">🗑 Delete</button>
+                    </>
+                  )}
                   <span style={{ width: 1, height: 20, background: 'var(--border)', margin: '0 2px' }} />
                 </>
               )}
