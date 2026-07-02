@@ -814,18 +814,31 @@ export default function ProjectDetail() {
 
       {/* Collapsible "Project overview" — folds the info/financial/description/EA
           cards so the document tabs sit higher. State remembered per browser. */}
-      <div onClick={toggleOverview}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: overviewCollapsed ? 16 : 12, userSelect: 'none' }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Project overview</span>
-        {overviewCollapsed && (
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{project.project_name}</span>
-            {project.project_ref && <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>#{project.project_ref}</span>}
-          </span>
-        )}
-        <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>{overviewCollapsed ? '▸ show' : '▾ hide'}</span>
-        <div style={{ flex: 1, height: '0.5px', background: 'var(--border)' }} />
-      </div>
+      {overviewCollapsed ? (
+        <div onClick={toggleOverview}
+          style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', userSelect: 'none', padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, marginBottom: 16 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>{project.project_name}</span>
+              {project.project_ref && <span style={{ fontSize: 13, color: 'var(--text3)' }}>#{project.project_ref}</span>}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Project overview — tap to expand</div>
+          </div>
+          <div style={{ flex: 1 }} />
+          {PROJECT_STATUSES[project.status] && <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>}
+          <button className="btn btn-sm" onClick={e => { e.stopPropagation(); toggleOverview() }} style={{ flexShrink: 0 }}>Show</button>
+        </div>
+      ) : (
+        <div onClick={toggleOverview}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12, userSelect: 'none' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Project overview</span>
+          <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>▾ hide</span>
+          <div style={{ flex: 1, height: '0.5px', background: 'var(--border)' }} />
+        </div>
+      )}
 
       {!overviewCollapsed && (
       <div>
