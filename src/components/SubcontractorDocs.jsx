@@ -221,29 +221,72 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   const [fileCount, setFileCount] = useState(0)
   // Generate PO — only used by the 'purchase-order' folder.
   const [showPOModal, setShowPOModal] = useState(false)
-  // The latest saved PO for this subcontractor (draft or issued). Loaded when
-  // the Generate PO button is clicked so the modal reopens PRE-FILLED with
-  // everything previously saved, instead of a blank form. Fixes the
-  // "Generate PO wipes all my data" problem — the data was always saved in
-  // purchase_orders; the modal just never loaded it back.
+  // PO picker: clicking Generate PO lists ALL saved POs for this
+  // subcontractor (draft + issued) so the user chooses which one to amend or
+  // delete — or starts a brand-new PO. If none exist, the blank form opens
+  // directly. (Also enables raising a SECOND separate PO for the same sub.)
   const [existingPOForModal, setExistingPOForModal] = useState(null)
   const [loadingPO, setLoadingPO] = useState(false)
+  const [poList, setPoList] = useState([])
+  const [showPOPicker, setShowPOPicker] = useState(false)
   const { profile } = useAuth()
 
   async function openPOModal() {
     setLoadingPO(true)
-    // Latest non-superseded PO for this project_sub link. Drafts update in
-    // place; issued POs open for a new revision (the modal's revision model
-    // handles both — we just need to hand it the row).
-    const { data } = await supabase
+    try {
+      const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('id, order_number, revision, status, order_date, contract_value, created_at')
+        .eq('project_sub_id', projectSubId)
+        .in('status', ['draft', 'issued'])
+        .order('created_at', { ascending: false })
+      if (error) {
+        // Surface the exact failure on screen (devtools may be unavailable).
+        alert('Could not load purchase orders: ' + error.message)
+        return
+      }
+      const list = data || []
+      if (list.length === 0) {
+        // Nothing saved yet — straight into a fresh form.
+        setExistingPOForModal(null)
+        setShowPOModal(true)
+      } else {
+        setPoList(list)
+        setShowPOPicker(true)
+      }
+    } catch (err) {
+      alert('Generate PO failed: ' + (err?.message || String(err)))
+    } finally {
+      setLoadingPO(false)
+    }
+  }
+
+  async function amendPO(po) {
+    // Fetch the full row (picker list is slim) then open the form with it.
+    const { data } = await supabase.from('purchase_orders').select('*').eq('id', po.id).single()
+    setExistingPOForModal(data || null)
+    setShowPOPicker(false)
+    setShowPOModal(true)
+  }
+
+  async function deletePOFromPicker(po) {
+    const msg = `Delete the saved record for ${po.order_number}${po.revision ? ' Rev ' + po.revision : ''}?\n\n` +
+      `• Its saved form data is permanently removed (all revisions of this order number).\n` +
+      `• PDF documents already in the Purchase Order folder are separate files and will NOT be deleted.\n\n` +
+      `This cannot be undone.`
+    if (!window.confirm(msg)) return
+    const { error } = await supabase
       .from('purchase_orders')
-      .select('*')
+      .delete()
       .eq('project_sub_id', projectSubId)
-      .in('status', ['draft', 'issued'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-    setExistingPOForModal(data && data.length ? data[0] : null)
-    setLoadingPO(false)
+      .eq('order_number', po.order_number)
+    if (error) { alert('Could not delete: ' + error.message); return }
+    setPoList(prev => prev.filter(p => p.order_number !== po.order_number))
+  }
+
+  function newPOFromPicker() {
+    setExistingPOForModal(null)
+    setShowPOPicker(false)
     setShowPOModal(true)
   }
 
@@ -313,7 +356,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           </> : <>
             <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip all</button>
             {folder.key === 'purchase-order' && canManage && (
-              <button onClick={openPOModal} disabled={loadingPO} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={e => { e.stopPropagation(); openPOModal() }} disabled={loadingPO} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                 {loadingPO ? 'Loading…' : 'Generate PO'}
               </button>
@@ -335,6 +378,38 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
             </label>
           ) : <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage} onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDropFolder} onUpload={uploadToFolder} />}
+        </div>
+      )}
+      {showPOPicker && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, width: 'min(560px, 100%)', maxHeight: '80vh', overflow: 'auto', border: '0.5px solid var(--border)', padding: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Purchase Orders — {poList.length} on record</span>
+              <button onClick={() => setShowPOPicker(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>✕</button>
+            </div>
+            <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+              {poList.map(po => (
+                <div key={po.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderTop: '0.5px solid var(--border)', fontSize: 12.5 }}>
+                  <span style={{ fontWeight: 600, flexShrink: 0 }}>{po.order_number}{po.revision ? ` Rev ${po.revision}` : ''}</span>
+                  <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: po.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: po.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{po.status}</span>
+                  <span style={{ color: 'var(--text3)', flex: 1 }}>{po.order_date ? new Date(po.order_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span>
+                  {po.contract_value != null && <span style={{ flexShrink: 0 }}>£{Number(po.contract_value).toLocaleString()}</span>}
+                  <button onClick={() => amendPO(po)} style={{ fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text)', flexShrink: 0 }}>
+                    {po.status === 'issued' ? 'Revise' : 'Edit'}
+                  </button>
+                  <button onClick={() => deletePOFromPicker(po)} style={{ fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--red, #E24B4A)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red, #E24B4A)', flexShrink: 0 }}>
+                    Delete
+                  </button>
+                </div>
+              ))}
+              {poList.length === 0 && <div style={{ padding: 18, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>No saved purchase orders left.</div>}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={newPOFromPicker} style={{ fontSize: 12.5, padding: '7px 14px', border: 'none', borderRadius: 6, background: '#448a40', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+                + New PO
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {showPOModal && (
