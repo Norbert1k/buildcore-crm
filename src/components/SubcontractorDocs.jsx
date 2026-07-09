@@ -221,7 +221,31 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   const [fileCount, setFileCount] = useState(0)
   // Generate PO — only used by the 'purchase-order' folder.
   const [showPOModal, setShowPOModal] = useState(false)
+  // The latest saved PO for this subcontractor (draft or issued). Loaded when
+  // the Generate PO button is clicked so the modal reopens PRE-FILLED with
+  // everything previously saved, instead of a blank form. Fixes the
+  // "Generate PO wipes all my data" problem — the data was always saved in
+  // purchase_orders; the modal just never loaded it back.
+  const [existingPOForModal, setExistingPOForModal] = useState(null)
+  const [loadingPO, setLoadingPO] = useState(false)
   const { profile } = useAuth()
+
+  async function openPOModal() {
+    setLoadingPO(true)
+    // Latest non-superseded PO for this project_sub link. Drafts update in
+    // place; issued POs open for a new revision (the modal's revision model
+    // handles both — we just need to hand it the row).
+    const { data } = await supabase
+      .from('purchase_orders')
+      .select('*')
+      .eq('project_sub_id', projectSubId)
+      .in('status', ['draft', 'issued'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+    setExistingPOForModal(data && data.length ? data[0] : null)
+    setLoadingPO(false)
+    setShowPOModal(true)
+  }
 
   useEffect(() => { loadCustomSubfolders(); loadFileCount() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
@@ -289,9 +313,9 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           </> : <>
             <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip all</button>
             {folder.key === 'purchase-order' && canManage && (
-              <button onClick={() => setShowPOModal(true)} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={openPOModal} disabled={loadingPO} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                Generate PO
+                {loadingPO ? 'Loading…' : 'Generate PO'}
               </button>
             )}
             {canManage && <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>}
@@ -317,7 +341,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
         <GeneratePOModal
           projectId={projectId}
           projectSubId={projectSubId}
-          existingPO={null}
+          existingPO={existingPOForModal}
           onClose={() => setShowPOModal(false)}
           onSaved={() => { loadRootFiles(); loadFileCount() }}
         />
