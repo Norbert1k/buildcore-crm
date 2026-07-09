@@ -1,520 +1,885 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { formatDate } from '../lib/utils'
-import UploadProgress from './UploadProgress'
-import GeneratePOModal from './GeneratePOModal'
 
-const SUB_DOC_FOLDERS = [
-  { key: 'purchase-order',       label: '01. Purchase Order',             color: '#185FA5', bg: '#E6F1FB' },
-  { key: 'payment-applications', label: '02. Payment Applications',      color: '#854F0B', bg: '#FAEEDA' },
-  { key: 'variations',           label: '03. Variations',                color: '#993C1D', bg: '#FAECE7' },
-  { key: 'correspondence',       label: '04. Correspondence',            color: '#534AB7', bg: '#EEEDFE' },
-  { key: 'rams',                 label: '05. RAMS & Method Statements',  color: '#0F6E56', bg: '#E1F5EE' },
-  { key: 'other',                label: '06. Other',                     color: '#888780', bg: '#F1EFE8' },
+// ── Generate PO modal ────────────────────────────────────────────────────────
+// Stage 1 of the Generate PO feature. Collects everything needed for a
+// Sub-Contractor Purchase Order, auto-filling from the project, the
+// subcontractor, the project_subcontractors link and the accepted quote.
+// Saves a row to `purchase_orders`. The .docx generation is Stage 2.
+//
+// Revision model:
+//   • New PO            → draft, revision ''.
+//   • Editing a draft   → same row, still revision ''.
+//   • Editing an issued → creates a new row: next revision letter, revision_of
+//     points at the original, original becomes 'superseded'.
+
+// The 24-row General & Specific Attendance table — defaults from the CCG
+// template (true = CCG provides, false = Sub-Contractor provides).
+const ATTENDANCE_DEFAULTS = [
+  { item: 'Mechanical Plant', ccg: false },
+  { item: 'Power Tools and Cables', ccg: false },
+  { item: 'General Scaffolding', ccg: true },
+  { item: 'Special Scaffolding', ccg: true },
+  { item: 'Unloading', ccg: false },
+  { item: 'Distribution of Materials', ccg: false },
+  { item: 'Hoist / Telehandler / Crane (first 7 weeks)', ccg: true },
+  { item: 'Storage', ccg: false },
+  { item: 'Water Supply', ccg: true },
+  { item: 'Power (110v during construction)', ccg: true },
+  { item: 'Temporary Lighting', ccg: true },
+  { item: 'Task Lighting', ccg: false },
+  { item: 'Clear Rubbish to Designated Point', ccg: false },
+  { item: 'Provision of Skips', ccg: true },
+  { item: 'Protection of Work', ccg: false },
+  { item: 'Screws, Bolts, Fixings etc.', ccg: false },
+  { item: 'Holes and Chases', ccg: false },
+  { item: 'Making Good', ccg: false },
+  { item: 'Welfare Facilities', ccg: true },
+  { item: 'Security', ccg: true },
+  { item: 'Personal Protective Equipment', ccg: false },
+  { item: 'Setting Out', ccg: true },
+  { item: 'Levels and Datums', ccg: true },
+  { item: 'Risk Assessments and Method Statements', ccg: false },
 ]
 
-function fmtSize(b) { if (!b) return ''; if (b < 1024) return b + 'B'; if (b < 1048576) return (b / 1024).toFixed(0) + 'KB'; return (b / 1048576).toFixed(1) + 'MB' }
-function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE' }
-function naturalSort(arr) { return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' })) }
-async function triggerDownload(signedUrl, fileName) {
-  try { const res = await fetch(signedUrl); const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(a.href), 2000) }
-  catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click() }
+const NEXT_REVISION = (rev) => {
+  // '' -> 'A' -> 'B' -> … (rev is the CURRENT highest revision)
+  if (!rev) return 'A'
+  return String.fromCharCode(rev.charCodeAt(0) + 1)
 }
-function fileTypeInfo(fileName) {
-  const n = fileName || ''
-  return { isImage: /\.(jpg|jpeg|png|gif|webp)$/i.test(n), isPdf: /\.pdf$/i.test(n), isWord: /\.docx?$/i.test(n), isExcel: /\.xlsx?$/i.test(n), isPpt: /\.pptx?$/i.test(n) }
-}
-function FileTypeBadge({ fileName, size = 34 }) {
-  const { isWord, isExcel, isPpt } = fileTypeInfo(fileName)
-  const color = isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : null
-  const letter = isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
-  if (!color) return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-  return <div style={{ width: size, height: size, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 14, fontWeight: 700, color }}>{letter}</span></div>
-}
-async function readDropEntries(e) {
-  const items = e.dataTransfer?.items
-  if (!items) return { files: Array.from(e.dataTransfer?.files || []).map(f => ({ file: f, path: '' })), folders: [] }
-  const entries = []
-  for (let i = 0; i < items.length; i++) { const entry = items[i].webkitGetAsEntry?.(); if (entry) entries.push(entry) }
-  if (!entries.length) return { files: Array.from(e.dataTransfer?.files || []).map(f => ({ file: f, path: '' })), folders: [] }
-  const result = { files: [], folders: new Set() }
-  async function walk(entry, path) {
-    if (entry.isFile) { const file = await new Promise(r => entry.file(r)); result.files.push({ file, path }); if (path) result.folders.add(path) }
-    else if (entry.isDirectory) { const dirPath = path ? path + '/' + entry.name : entry.name; result.folders.add(dirPath); const reader = entry.createReader(); const children = await new Promise(r => reader.readEntries(r)); for (const child of children) await walk(child, dirPath) }
+
+// Build the 6 monthly valuation dates from a commencement date.
+// Rule (CCG template clause 10.1): valuation date = end of each month;
+// application deadline = 14 days before that valuation date.
+function buildValuationDates(commencementDate) {
+  if (!commencementDate) return []
+  const start = new Date(commencementDate)
+  if (Number.isNaN(start.getTime())) return []
+  const rows = []
+  // First valuation = end of the commencement month; then monthly.
+  let y = start.getFullYear()
+  let m = start.getMonth()  // 0-indexed
+  for (let i = 0; i < 6; i++) {
+    const valDate = new Date(y, m + 1, 0)            // last day of month (m)
+    const appDeadline = new Date(valDate)
+    appDeadline.setDate(appDeadline.getDate() - 14)  // 14 days prior
+    rows.push({
+      val_date: valDate.toISOString().slice(0, 10),
+      app_deadline: appDeadline.toISOString().slice(0, 10),
+    })
+    m += 1
+    if (m > 11) { m = 0; y += 1 }
   }
-  for (const entry of entries) await walk(entry, '')
-  return { files: result.files, folders: [...result.folders] }
+  return rows
 }
 
-const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
-const PENCIL = <svg width="11" height="11" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/><rect x="10" y="7" width="4" height="4" fill="#FDD835"/><polygon points="10,18 14,18 12,23" fill="#fff"/><rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/></svg>
-const BIN = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-
-function ConfirmDlg({ message, onOk, onCancel }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
-      <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border)', padding: 24, maxWidth: 340, width: '90%' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message}</div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} style={Btn}>Cancel</button>
-          <button onClick={onOk} style={BtnR}>Delete</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-function CountBadge({ count }) { if (!count) return null; return <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 8, fontWeight: 500, background: 'var(--accent)', color: '#fff', minWidth: 18, textAlign: 'center', display: 'inline-block' }}>{count}</span> }
-function ViewToggle({ viewMode, setView }) {
-  const modes = [
-    { mode: 'grid', icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg> },
-    { mode: 'compact', icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="5" height="5" rx="1"/><rect x="6" y="0" width="5" height="5" rx="1"/><rect x="12" y="0" width="4" height="5" rx="1"/><rect x="0" y="6" width="5" height="5" rx="1"/><rect x="6" y="6" width="5" height="5" rx="1"/><rect x="12" y="6" width="4" height="5" rx="1"/></svg> },
-    { mode: 'list', icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="1" width="16" height="2.5" rx="1"/><rect x="0" y="5.5" width="16" height="2.5" rx="1"/><rect x="0" y="10" width="16" height="2.5" rx="1"/></svg> },
-  ]
-  return <div style={{ display: 'flex', gap: 2 }}>{modes.map(({ mode, icon }) => <button key={mode} onClick={() => setView(mode)} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid ' + (viewMode === mode ? 'var(--accent)' : 'var(--border)'), borderRadius: 4, background: viewMode === mode ? 'var(--accent)' : 'transparent', cursor: 'pointer', color: viewMode === mode ? '#fff' : 'var(--text3)', padding: 0, flexShrink: 0 }}>{icon}</button>)}</div>
-}
-function BulkBar({ selected, onZip, onClear }) {
-  if (selected.size === 0) return null
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', marginBottom: 8, background: 'var(--accent-light, var(--surface2))', borderRadius: 6, fontSize: 11, border: '0.5px solid var(--accent)' }}>
-    <span style={{ fontWeight: 600, color: 'var(--accent)' }}>{selected.size} selected</span>
-    <button onClick={onZip} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 3 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip selected</button>
-    <button onClick={onClear} style={Btn}>Clear</button>
-  </div>
+const fmtDate = (d) => {
+  if (!d) return '—'
+  const dt = new Date(d)
+  return Number.isNaN(dt.getTime()) ? '—'
+    : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-// ── FileCard — EXACT same design as ProjectDocumentation ─────
-function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
-  const [url, setUrl] = useState(null)
-  const [confirmDel, setConfirmDel] = useState(false)
-  const [renaming, setRenaming] = useState(false)
-  const [renameVal, setRenameVal] = useState('')
-  const { isImage, isPdf } = fileTypeInfo(file.file_name)
-
-  useEffect(() => {
-    supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600)
-      .then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) })
-  }, [file.storage_path])
-
-  async function renameFile() {
-    if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }
-    await supabase.from('project_sub_files').update({ file_name: renameVal.trim() }).eq('id', file.id)
-    file.file_name = renameVal.trim(); setRenaming(false)
-  }
-
-  return (
-    <>
-      <div draggable={!renaming} onDragStart={e => { e.dataTransfer.setData('text/plain', file.id); e.dataTransfer.effectAllowed = 'move' }}
-        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', position: 'relative', transition: 'border .1s' }}>
-        {/* Checkbox */}
-        <div onClick={e => { e.stopPropagation(); onSelect(file.id) }}
-          style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-        </div>
-        {/* Thumbnail preview */}
-        <div style={{ height: 120, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onPreview(file, url)}>
-          {isImage && url ? <img src={url} alt={file.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : isPdf && url ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
-            : <FileTypeBadge fileName={file.file_name} size={34} />}
-          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(file.file_name)}</div>
-        </div>
-        {/* Info + buttons */}
-        <div style={{ padding: '6px 8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-            {renaming
-              ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
-                  onClick={e => e.stopPropagation()}
-                  style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
-              : <>
-                  <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
-                  {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename"
-                    style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  </button>}
-                </>}
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {url && <button onClick={e => { e.stopPropagation(); onPreview(file, url) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-            {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
-          </div>
-        </div>
-      </div>
-      {confirmDel && <ConfirmDlg message={'Delete "' + file.file_name + '"?'} onOk={() => { setConfirmDel(false); onDelete(file) }} onCancel={() => setConfirmDel(false)} />}
-    </>
-  )
-}
-
-// ── FileListRow — same as ProjectDocumentation ───────────────
-function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect }) {
-  const [url, setUrl] = useState(null)
-  const [confirmDel, setConfirmDel] = useState(false)
-  const [renaming, setRenaming] = useState(false)
-  const [renameVal, setRenameVal] = useState('')
-  const { isPdf, isWord, isExcel, isPpt, isImage } = fileTypeInfo(file.file_name)
-  const iconColor = isPdf ? '#E24B4A' : isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : isImage ? '#448a40' : '#888'
-  const iconLetter = isPdf ? 'PDF' : isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
-
-  useEffect(() => { supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600).then(({ data }) => { if (data?.signedUrl) setUrl(data.signedUrl) }) }, [file.storage_path])
-  async function renameFile() { if (!renameVal.trim() || renameVal.trim() === file.file_name) { setRenaming(false); return }; await supabase.from('project_sub_files').update({ file_name: renameVal.trim() }).eq('id', file.id); file.file_name = renameVal.trim(); setRenaming(false) }
-
-  return (
-    <>
-      <div draggable={!renaming} onDragStart={e => { e.dataTransfer.setData('text/plain', file.id); e.dataTransfer.effectAllowed = 'move' }}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', transition: 'border .1s', marginBottom: 4 }}>
-        <div onClick={e => { e.stopPropagation(); onSelect(file.id) }} style={{ width: 16, height: 16, borderRadius: 3, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.3)'), background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-          {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
-        </div>
-        <div style={{ width: 32, height: 32, borderRadius: 5, background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {iconLetter ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {renaming ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }} onClick={e => e.stopPropagation()} style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
-            : <div onClick={() => onPreview?.(file, url)} style={{ cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
-                  {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename" style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>}
-                </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
-              </div>}
-        </div>
-        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-          {url && <button onClick={e => { e.stopPropagation(); onPreview?.(file, url) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-          {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
-        </div>
-      </div>
-      {confirmDel && <ConfirmDlg message={'Delete "' + file.file_name + '"?'} onOk={() => { setConfirmDel(false); onDelete(file) }} onCancel={() => setConfirmDel(false)} />}
-    </>
-  )
-}
-
-function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, onSelect, onDrop, onUpload }) {
-  if (!files.length) return null
-  if (viewMode === 'list') return <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{files.map(f => <FileListRow key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete} selected={selected.has(f.id)} onSelect={onSelect} />)}</div>
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8 }}>
-      {files.map(f => <FileCard key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete} selected={selected.has(f.id)} onSelect={onSelect} />)}
-      {canManage && <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: viewMode === 'compact' ? 80 : 120, cursor: 'pointer', fontSize: 11, color: 'var(--text3)' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        + Add files
-        <input type="file" multiple style={{ display: 'none' }} onChange={e => onUpload(Array.from(e.target.files))} />
-      </label>}
-    </div>
-  )
-}
-
-// ── PrimeFolder ──────────────────────────────────────────────
-function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, setView, onPreview, onReload }) {
-  const [open, setOpen] = useState(false)
-  const [subfolders, setSubfolders] = useState([])
-  const [showAddFolder, setShowAddFolder] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
-  const [savingFolder, setSavingFolder] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
-  const [files, setFiles] = useState([])
-  const [selected, setSelected] = useState(new Set())
-  const [fileCount, setFileCount] = useState(0)
-  // Generate PO — only used by the 'purchase-order' folder.
-  const [showPOModal, setShowPOModal] = useState(false)
-  // PO picker: clicking Generate PO lists ALL saved POs for this
-  // subcontractor (draft + issued) so the user chooses which one to amend or
-  // delete — or starts a brand-new PO. If none exist, the blank form opens
-  // directly. (Also enables raising a SECOND separate PO for the same sub.)
-  const [existingPOForModal, setExistingPOForModal] = useState(null)
-  const [loadingPO, setLoadingPO] = useState(false)
-  const [poList, setPoList] = useState([])
-  const [showPOPicker, setShowPOPicker] = useState(false)
+export default function GeneratePOModal({ projectId, projectSubId, existingPO, onClose, onSaved }) {
   const { profile } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  async function openPOModal() {
-    setLoadingPO(true)
-    const { data } = await supabase
-      .from('purchase_orders')
-      .select('id, order_number, revision, status, order_date, contract_value, created_at')
-      .eq('project_sub_id', projectSubId)
-      .in('status', ['draft', 'issued'])
-      .order('created_at', { ascending: false })
-    setLoadingPO(false)
-    const list = data || []
-    if (list.length === 0) {
-      // Nothing saved yet — straight into a fresh form.
-      setExistingPOForModal(null)
-      setShowPOModal(true)
-    } else {
-      setPoList(list)
-      setShowPOPicker(true)
+  // Auto-filled context (read-only in the form)
+  const [ctx, setCtx] = useState({
+    subName: '', subAddress: '', subContact: '', subContactTel: '', subTrade: '',
+    siteName: '', siteAddress: '',
+    pmName: '', pmEmail: '',
+    directorName: '',
+    contractValue: '', quoteReference: '', quoteDate: '',
+  })
+
+  // Project Manager — list of selectable PMs (role = project_manager).
+  // The PO auto-fills the project's PM but the PM is overridable per-PO.
+  const [pmOptions, setPmOptions] = useState([])
+  const [selectedPmId, setSelectedPmId] = useState('')
+
+  // Programme — files available in the project's "06. Project Programme"
+  // folder; the PM picks one to reference in the PO.
+  const [programmeFiles, setProgrammeFiles] = useState([])
+  const [selectedProgrammeId, setSelectedProgrammeId] = useState('')
+
+  // Quotes on record for this company on this project — pick one to use.
+  const [quoteOptions, setQuoteOptions] = useState([])
+  const [pickedQuoteId, setPickedQuoteId] = useState('')
+  function pickQuote(q) {
+    setPickedQuoteId(q.id)
+    setForm(f => ({
+      ...f,
+      quote_reference: q.quote_reference || f.quote_reference,
+      quote_date: q.received_date || f.quote_date,
+    }))
+  }
+
+  // Order number — generated once on open for a new PO so it can be shown
+  // locked. Existing POs use their stored number.
+  const [orderNumber, setOrderNumber] = useState('')
+
+  // Editable form state
+  const [form, setForm] = useState({
+    order_date: new Date().toISOString().slice(0, 10),
+    commencement_date: '',
+    site_manager_name: '',
+    site_manager_tel: '',
+    pm_tel: '',                     // typed — profiles has no phone column
+    director_name: '',              // typed — auto-fills from project's assigned director
+    quote_reference: '',            // typed — auto-fills from the accepted quote if one exists
+    quote_date: '',                 // typed — auto-fills from the accepted quote if one exists
+    scope_of_works: '',
+    brief_description: '',
+    design_responsibility: '',
+    practical_completion_items: '',
+    quality_control_requirements: '',
+    statutory_compliance_requirements: '',
+    contact2_name: '',
+    contact2_tel: '',
+  })
+  const [attendance, setAttendance] = useState(ATTENDANCE_DEFAULTS)
+
+  const valuationDates = buildValuationDates(form.commencement_date)
+
+  useEffect(() => { loadContext() }, [])
+
+  async function loadContext() {
+    setLoading(true)
+    try {
+      // The project_subcontractors link carries contract value + the FK ids.
+      const { data: link } = await supabase
+        .from('project_subcontractors')
+        .select('*, projects(*), subcontractors(*)')
+        .eq('id', projectSubId)
+        .single()
+
+      const project = link?.projects || {}
+      const sub = link?.subcontractors || {}
+
+      // Project Manager — the assigned PM (projects.project_manager_id).
+      let pmName = '', pmEmail = ''
+      if (project.project_manager_id) {
+        const { data: pm } = await supabase
+          .from('profiles')
+          .select('full_name, email')
+          .eq('id', project.project_manager_id)
+          .single()
+        pmName = pm?.full_name || ''
+        pmEmail = pm?.email || ''
+      }
+      // Project Director — the person the project is "Assigned To"
+      // (projects.project_director_id). Defensive: the column may not yet
+      // exist in live (migration 013 still pending) — if it's undefined we
+      // simply leave the field blank for the user to type.
+      let directorName = ''
+      if (project.project_director_id) {
+        const { data: dir } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', project.project_director_id)
+          .single()
+        directorName = dir?.full_name || ''
+      }
+
+      // ALL quotes for this subcontractor on this project — shown as a picker
+      // so the PM can tick which quote (which job) this PO is against. The
+      // accepted one (if any) still auto-fills the reference/date initially.
+      let quoteReference = '', quoteDate = ''
+      const { data: quotes } = await supabase
+        .from('task_quotes')
+        .select('id, quote_reference, received_date, status, amount, tasks!inner(id, title, project_id)')
+        .eq('subcontractor_id', link?.subcontractor_id)
+        .eq('tasks.project_id', projectId)
+        .order('received_date', { ascending: false })
+      setQuoteOptions(quotes || [])
+      const accepted = (quotes || []).find(q => q.status === 'accepted')
+      if (accepted) {
+        quoteReference = accepted.quote_reference || ''
+        quoteDate = accepted.received_date || ''
+      }
+
+      const subAddress = [sub.address, sub.city, sub.postcode].filter(Boolean).join(', ')
+      const siteAddress = [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')
+
+      setCtx({
+        subName: sub.company_name || '',
+        subAddress,
+        subContact: sub.contact_name || '',
+        subContactTel: sub.phone || '',
+        subTrade: link?.trade_on_project || sub.trade || '',
+        siteName: project.project_name || '',
+        siteAddress,
+        pmName, pmEmail,
+        directorName,
+        contractValue: link?.contract_value != null ? String(link.contract_value) : '',
+        quoteReference, quoteDate,
+      })
+
+      // Project Manager options — all profiles with the project_manager role.
+      const { data: pms } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('role', 'project_manager')
+        .order('full_name')
+      setPmOptions(pms || [])
+
+      // Programme files — from the project's "06. Project Programme" folder.
+      const { data: progFiles } = await supabase
+        .from('project_doc_files')
+        .select('id, file_name, storage_path, created_at')
+        .eq('project_id', projectId)
+        .eq('folder_key', '06-project-programme')
+        .order('created_at', { ascending: false })
+      setProgrammeFiles(progFiles || [])
+
+      // Order number. Existing PO → its stored number. New PO → generate now
+      // so it can be shown locked in the form.
+      if (existingPO) {
+        setOrderNumber(existingPO.order_number || '')
+      } else {
+        setOrderNumber(await nextOrderNumber())
+      }
+
+      // Editing an existing PO — seed the form from it.
+      if (existingPO) {
+        setForm(f => ({
+          ...f,
+          order_date: existingPO.order_date || f.order_date,
+          commencement_date: existingPO.commencement_date || '',
+          site_manager_name: existingPO.site_manager_name || '',
+          site_manager_tel: existingPO.site_manager_tel || '',
+          pm_tel: existingPO.pm_tel || '',
+          // Director name — prefer the value saved on this PO, else fall back
+          // to the project's currently assigned director (handles older POs
+          // saved before this field existed).
+          director_name: existingPO.director_name || directorName || '',
+          // Quote reference/date — prefer what's saved on this PO, else the
+          // accepted quote's values (both editable in the form).
+          quote_reference: existingPO.quote_reference || quoteReference || '',
+          quote_date: existingPO.quote_date || quoteDate || '',
+          scope_of_works: existingPO.scope_of_works || '',
+          brief_description: existingPO.brief_description || '',
+          design_responsibility: existingPO.design_responsibility || '',
+          practical_completion_items: existingPO.practical_completion_items || '',
+          quality_control_requirements: existingPO.quality_control_requirements || '',
+          statutory_compliance_requirements: existingPO.statutory_compliance_requirements || '',
+          contact2_name: existingPO.contact2_name || '',
+          contact2_tel: existingPO.contact2_tel || '',
+        }))
+        if (Array.isArray(existingPO.attendance) && existingPO.attendance.length) {
+          setAttendance(existingPO.attendance)
+        }
+        setSelectedPmId(existingPO.pm_id || project.project_manager_id || '')
+        setSelectedProgrammeId(existingPO.programme_file_id || '')
+      } else {
+        // New PO — default the PM and Director to the project's assigned ones
+        // (both overridable: PM via dropdown, Director by typing). Quote
+        // reference/date auto-fill from the accepted quote but stay editable.
+        setSelectedPmId(project.project_manager_id || '')
+        setForm(f => ({ ...f, director_name: directorName || '', quote_reference: quoteReference || '', quote_date: quoteDate || '' }))
+      }
+    } catch (err) {
+      setError('Could not load project / subcontractor details: ' + err.message)
     }
+    setLoading(false)
   }
 
-  async function amendPO(po) {
-    // Fetch the full row (picker list is slim) then open the form with it.
-    const { data } = await supabase.from('purchase_orders').select('*').eq('id', po.id).single()
-    setExistingPOForModal(data || null)
-    setShowPOPicker(false)
-    setShowPOModal(true)
+  function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
+
+  function toggleAttendance(i) {
+    setAttendance(prev => prev.map((row, idx) => idx === i ? { ...row, ccg: !row.ccg } : row))
   }
 
-  async function deletePOFromPicker(po) {
-    const msg = `Delete the saved record for ${po.order_number}${po.revision ? ' Rev ' + po.revision : ''}?\n\n` +
-      `• Its saved form data is permanently removed (all revisions of this order number).\n` +
-      `• PDF documents already in the Purchase Order folder are separate files and will NOT be deleted.\n\n` +
+  // AI fill — generates trade-specific draft text for one of the three
+  // clause sections via the generate-po-clause edge function. Result is a
+  // DRAFT that drops into the textarea for the PM to review and edit.
+  const [aiBusy, setAiBusy] = useState('')   // which section is generating
+  const [aiError, setAiError] = useState('')
+
+  // Maps the form field key → the edge-function section identifier.
+  const AI_SECTION = {
+    practical_completion_items: 'practical_completion',
+    quality_control_requirements: 'quality_control',
+    statutory_compliance_requirements: 'statutory_compliance',
+  }
+
+  async function aiFill(fieldKey) {
+    setAiError('')
+    const section = AI_SECTION[fieldKey]
+    if (!section) return
+    if (!ctx.subTrade) {
+      setAiError('This subcontractor has no trade set, so AI fill cannot tailor the text. Set a trade on the subcontractor first.')
+      return
+    }
+    setAiBusy(fieldKey)
+    try {
+      const { data, error: e } = await supabase.functions.invoke('generate-po-clause', {
+        body: { section, trade: ctx.subTrade, sub_name: ctx.subName },
+      })
+      if (e) throw e
+      if (!data?.ok || !data?.text) {
+        throw new Error(data?.error || 'The AI did not return any text. Try again.')
+      }
+      set(fieldKey, data.text)
+    } catch (err) {
+      setAiError('AI fill failed: ' + (err.message || 'unknown error'))
+    }
+    setAiBusy('')
+  }
+
+  // ── Quote drop-box ──────────────────────────────────────────────────────────
+  // Drop the subcontractor's quote PDF here. It is (1) SAVED into the sub's
+  // Purchase Order folder as a real document, then (2) read by the
+  // parse-quote-pdf edge function (Claude reads the PDF) and the extracted
+  // quote reference, date, scope and description are dropped into the form as
+  // EDITABLE drafts. Nothing is auto-saved — you review everything first.
+  const [quoteParsing, setQuoteParsing] = useState(false)
+  const [quoteParseMsg, setQuoteParseMsg] = useState('')
+  const [quoteDragOver, setQuoteDragOver] = useState(false)
+
+  async function handleQuoteFile(file) {
+    if (!file) return
+    if (!/\.pdf$/i.test(file.name)) { setQuoteParseMsg('Please drop a PDF quote.'); return }
+    setQuoteParsing(true)
+    setQuoteParseMsg('Uploading quote…')
+    try {
+      // 1) Save the quote into the sub's Purchase Order folder (kept as a record).
+      const path = `projects/${projectId}/subs/${projectSubId}/purchase-order/${Date.now()}-${file.name}`
+      const { error: upErr } = await supabase.storage.from('project-docs').upload(path, file)
+      if (upErr) throw new Error('Upload failed: ' + upErr.message)
+      await supabase.from('project_sub_files').insert({
+        project_id: projectId, project_sub_id: projectSubId, folder_key: 'purchase-order',
+        file_name: file.name, file_size: file.size, storage_path: path, uploaded_by: profile?.id,
+      })
+
+      // 2) Ask the edge function to read it.
+      setQuoteParseMsg('Reading the quote with AI…')
+      const { data, error: fnErr } = await supabase.functions.invoke('parse-quote-pdf', {
+        body: { storage_path: path },
+      })
+      if (fnErr) throw fnErr
+      if (!data?.ok) throw new Error(data?.error || 'The quote could not be read.')
+
+      const q = data.quote || {}
+      // Fill the fields — empty fields fill silently; occupied ones only after
+      // one confirm (so a re-drop can refresh everything deliberately).
+      const updates = {}
+      if (q.quote_reference) updates.quote_reference = q.quote_reference
+      if (q.quote_date) updates.quote_date = q.quote_date
+      if (q.scope_of_works) updates.scope_of_works = q.scope_of_works
+      if (q.brief_description) updates.brief_description = q.brief_description
+
+      const occupied = Object.keys(updates).filter(k => (form[k] || '').trim())
+      let apply = updates
+      if (occupied.length) {
+        const ok = window.confirm(`The quote provides new text for field(s) you already filled: ${occupied.join(', ')}.\n\nOverwrite them with the quote's content? (Cancel keeps your text — empty fields still fill.)`)
+        if (!ok) {
+          apply = Object.fromEntries(Object.entries(updates).filter(([k]) => !(form[k] || '').trim()))
+        }
+      }
+      setForm(f => ({ ...f, ...apply }))
+
+      const bits = []
+      if (q.quote_reference) bits.push(`ref ${q.quote_reference}`)
+      if (q.quote_date) bits.push(`dated ${q.quote_date}`)
+      if (q.total_value_ex_vat != null) bits.push(`total £${Number(q.total_value_ex_vat).toLocaleString()} ex VAT`)
+      setQuoteParseMsg(`✓ Quote read${bits.length ? ' — ' + bits.join(', ') : ''}. Fields filled below are drafts — review before saving.` +
+        (q.total_value_ex_vat != null && ctx.contractValue && Number(q.total_value_ex_vat) !== Number(ctx.contractValue)
+          ? ` Note: quote total differs from the contract value on this subcontractor (£${Number(ctx.contractValue).toLocaleString()}).` : ''))
+    } catch (err) {
+      setQuoteParseMsg('Quote reading failed: ' + (err.message || 'unknown error') + ' — the PDF was still saved to the Purchase Order folder if the upload succeeded.')
+    }
+    setQuoteParsing(false)
+  }
+
+  // Generate the order number: CCG-PO-<year>-<4-digit sequence>.
+  // Uses a count of existing distinct order numbers as the sequence basis;
+  // the DB sequence (purchase_order_seq) is the authoritative collision guard
+  // but a simple count keeps Stage 1 self-contained without an RPC.
+  async function nextOrderNumber() {
+    const year = new Date().getFullYear()
+    const { count } = await supabase
+      .from('purchase_orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('revision', '')   // count originals only, not revisions
+    const seq = String((count || 0) + 1).padStart(4, '0')
+    return `CCG-PO-${year}-${seq}`
+  }
+
+  async function save(issue) {
+    setError('')
+    // Minimal validation — scope and commencement date are the essentials.
+    if (!form.scope_of_works.trim()) {
+      setError('Scope of works is required.')
+      return
+    }
+    if (issue && !form.commencement_date) {
+      setError('Commencement date is required to issue the order (it generates the valuation dates).')
+      return
+    }
+    setSaving(true)
+    try {
+      const basePayload = {
+        project_id: projectId,
+        project_sub_id: projectSubId,
+        order_date: form.order_date || null,
+        commencement_date: form.commencement_date || null,
+        site_manager_name: form.site_manager_name.trim() || null,
+        site_manager_tel: form.site_manager_tel.trim() || null,
+        contract_value: ctx.contractValue ? Number(ctx.contractValue) : null,
+        quote_reference: form.quote_reference.trim() || null,
+        quote_date: form.quote_date || null,
+        scope_of_works: form.scope_of_works.trim() || null,
+        brief_description: form.brief_description.trim() || null,
+        design_responsibility: form.design_responsibility.trim() || null,
+        practical_completion_items: form.practical_completion_items.trim() || null,
+        quality_control_requirements: form.quality_control_requirements.trim() || null,
+        statutory_compliance_requirements: form.statutory_compliance_requirements.trim() || null,
+        contact2_name: form.contact2_name.trim() || null,
+        contact2_tel: form.contact2_tel.trim() || null,
+        // Project Manager — overridable per-PO; snapshot id + name/email.
+        pm_id: selectedPmId || null,
+        pm_name: (pmOptions.find(p => p.id === selectedPmId)?.full_name) || ctx.pmName || null,
+        pm_email: (pmOptions.find(p => p.id === selectedPmId)?.email) || ctx.pmEmail || null,
+        pm_tel: form.pm_tel.trim() || null,
+        director_name: form.director_name.trim() || null,
+        // Programme — the chosen file from the project's 06. Project Programme
+        // folder. Stores the id + name so the PO references a real document.
+        programme_file_id: selectedProgrammeId || null,
+        programme_file_name: (programmeFiles.find(f => f.id === selectedProgrammeId)?.file_name) || null,
+        attendance,
+        valuation_dates: valuationDates,
+        status: issue ? 'issued' : 'draft',
+      }
+
+      let savedRow = null
+
+      if (existingPO && existingPO.status === 'draft') {
+        // Editing a draft — update the same row in place.
+        const { data, error: e } = await supabase
+          .from('purchase_orders')
+          .update(basePayload)
+          .eq('id', existingPO.id)
+          .select()
+        if (e) throw e
+        if (!data || data.length === 0) {
+          // RLS or a missing row meant nothing was actually written. Do NOT
+          // close — keep the user's data on screen and tell them.
+          throw new Error('the update did not affect any row. You may not have permission to edit this purchase order.')
+        }
+        savedRow = data[0]
+      } else if (existingPO && existingPO.status === 'issued') {
+        // Editing an issued PO — create the next revision, supersede the old.
+        const newRow = {
+          ...basePayload,
+          subcontractor_id: existingPO.subcontractor_id,
+          created_by: profile?.id || null,
+          order_number: existingPO.order_number,            // same number
+          revision: NEXT_REVISION(existingPO.revision),     // next letter
+          revision_of: existingPO.id,
+        }
+        const { data, error: e } = await supabase
+          .from('purchase_orders')
+          .insert(newRow)
+          .select()
+        if (e) throw e
+        if (!data || data.length === 0) {
+          throw new Error('the revision was not created (no row returned). You may not have permission to create purchase orders.')
+        }
+        savedRow = data[0]
+        // Mark the prior revision superseded.
+        await supabase.from('purchase_orders')
+          .update({ status: 'superseded' })
+          .eq('id', existingPO.id)
+      } else {
+        // Brand-new PO.
+        const { data: link, error: linkErr } = await supabase
+          .from('project_subcontractors')
+          .select('subcontractor_id')
+          .eq('id', projectSubId)
+          .single()
+        if (linkErr) throw linkErr
+        if (!link?.subcontractor_id) {
+          throw new Error('could not resolve the sub-contractor for this PO. Please reopen the modal and try again.')
+        }
+        const newRow = {
+          ...basePayload,
+          subcontractor_id: link.subcontractor_id,
+          created_by: profile?.id || null,
+          order_number: orderNumber || await nextOrderNumber(),
+          revision: '',
+        }
+        const { data, error: e } = await supabase
+          .from('purchase_orders')
+          .insert(newRow)
+          .select()
+        if (e) throw e
+        if (!data || data.length === 0) {
+          throw new Error('the purchase order was not saved (no row returned). You may not have permission to create purchase orders.')
+        }
+        savedRow = data[0]
+      }
+
+      // Generate the PDF document from the saved PO and drop it into the
+      // Purchase Order folder. We do this after the row is confirmed saved.
+      // Generate the 1:1 PDF ONLY when issuing (finalising) the order. Draft
+      // saves never produce a PDF — a draft stays editable and re-openable as
+      // many times as needed; the document is only created when the user
+      // chooses to Issue the PO. (A failure here should NOT lose the PO: it's
+      // already saved, so we surface a soft warning and keep the record.)
+      if (issue && savedRow?.id) {
+        try {
+          const { error: genErr } = await supabase.functions.invoke('generate-po-document', {
+            body: { purchase_order_id: savedRow.id },
+          })
+          if (genErr) {
+            setError('Order issued and saved, but the PDF could not be generated: ' + genErr.message + ' — you can re-issue to try again.')
+            setSaving(false)
+            return
+          }
+        } catch (genEx) {
+          setError('Order issued and saved, but the PDF could not be generated: ' + genEx.message)
+          setSaving(false)
+          return
+        }
+      }
+      onSaved?.(savedRow)
+
+      // Only reached if a row was genuinely written and returned. Closing
+      // here — and ONLY here — guarantees the modal never disappears while
+      // losing the user's data.
+      onClose?.()
+    } catch (err) {
+      setError('Could not save the purchase order: ' + err.message)
+    }
+    setSaving(false)
+  }
+
+  // ── Delete the saved PO record ──────────────────────────────────────────────
+  // Removes the "invisible" purchase_orders record (this order number and ALL
+  // its revisions for this subcontractor) so the next Generate PO starts
+  // completely fresh with a new number. PDFs already generated into the
+  // Purchase Order folder are separate files — deliberately NOT touched here;
+  // delete those from the folder itself if you want them gone too.
+  async function deletePORecord() {
+    if (!existingPO) return
+    const msg = `Delete the saved record for ${existingPO.order_number}` +
+      (existingPO.revision ? ` (all revisions)` : '') + `?\n\n` +
+      `• The form data saved for this order will be permanently removed.\n` +
+      `• The next Generate PO for this subcontractor starts blank with a NEW order number.\n` +
+      `• Any PDF documents already in the Purchase Order folder are separate files and will NOT be deleted.\n\n` +
       `This cannot be undone.`
     if (!window.confirm(msg)) return
-    const { error } = await supabase
-      .from('purchase_orders')
-      .delete()
-      .eq('project_sub_id', projectSubId)
-      .eq('order_number', po.order_number)
-    if (error) { alert('Could not delete: ' + error.message); return }
-    setPoList(prev => prev.filter(p => p.order_number !== po.order_number))
-  }
-
-  function newPOFromPicker() {
-    setExistingPOForModal(null)
-    setShowPOPicker(false)
-    setShowPOModal(true)
-  }
-
-  useEffect(() => { loadCustomSubfolders(); loadFileCount() }, [])
-  useEffect(() => { if (open) loadRootFiles() }, [open])
-
-  async function loadFileCount() { const { count } = await supabase.from('project_sub_files').select('id', { count: 'exact', head: true }).eq('project_sub_id', projectSubId).eq('folder_key', folder.key); setFileCount(count || 0) }
-  async function loadCustomSubfolders() { const { data } = await supabase.from('project_sub_folders').select('*').eq('project_sub_id', projectSubId).eq('parent_key', folder.key).order('created_at'); setSubfolders((data || []).map(d => ({ key: d.folder_key, label: d.label, custom: true }))) }
-  async function loadRootFiles() { const { data } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', folder.key).order('created_at', { ascending: false }); setFiles(naturalSort(data || [])); setFileCount((data || []).length) }
-  async function addCustomSubfolder() { if (!newFolderName.trim()) return; setSavingFolder(true); const key = folder.key + '-custom-' + Date.now(); await supabase.from('project_sub_folders').insert({ project_id: projectId, project_sub_id: projectSubId, parent_key: folder.key, folder_key: key, label: newFolderName.trim() }); setSubfolders(prev => [...prev, { key, label: newFolderName.trim(), custom: true }]); setNewFolderName(''); setShowAddFolder(false); setSavingFolder(false) }
-
-  async function uploadToFolder(fileList) {
-    if (!fileList.length) return; const fileArr = Array.from(fileList); setUploading(true)
-    setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
-    for (let i = 0; i < fileArr.length; i++) {
-      const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i }))
-      const path = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`
-      const { error } = await supabase.storage.from('project-docs').upload(path, file)
-      if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: folder.key, file_name: file.name, file_size: file.size, storage_path: path, uploaded_by: profile?.id })
+    setSaving(true)
+    setError('')
+    try {
+      const { error: delErr } = await supabase
+        .from('purchase_orders')
+        .delete()
+        .eq('project_sub_id', projectSubId)
+        .eq('order_number', existingPO.order_number)
+      if (delErr) throw delErr
+      onSaved?.(null)
+      onClose?.()
+    } catch (err) {
+      setError('Could not delete the PO record: ' + err.message)
     }
-    setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] })
-    loadRootFiles()
+    setSaving(false)
   }
-  async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
-  async function zipFolder() {
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.head.appendChild(s); await new Promise(r => s.onload = r)
-    const zip = new window.JSZip(); const { data: allFiles } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', folder.key)
-    if (!allFiles?.length) { alert('No files.'); return }
-    for (const f of allFiles) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300); if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
-    const blob = await zip.generateAsync({ type: 'blob' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '.zip'; document.body.appendChild(a); a.click(); document.body.removeChild(a)
-  }
-  async function bulkZip() {
-    const chosen = files.filter(f => selected.has(f.id)); if (!chosen.length) return
-    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.head.appendChild(s); await new Promise(r => s.onload = r)
-    const zip = new window.JSZip()
-    for (const f of chosen) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 120); if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
-    const blob = await zip.generateAsync({ type: 'blob' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '-selected.zip'; document.body.appendChild(a); a.click(); document.body.removeChild(a)
-  }
-  async function onDropFolder(e) {
-    e.preventDefault(); e.stopPropagation(); if (!canManage) return
-    const drop = await readDropEntries(e)
-    if (drop.folders.length > 0) {
-      const keyMap = {}; for (const fp of drop.folders.sort()) { const parts = fp.split('/'); const label = parts[parts.length - 1]; const parentPath = parts.slice(0, -1).join('/'); const parentKey = parentPath ? keyMap[parentPath] : folder.key; const key = (parentKey || folder.key) + '-custom-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6); keyMap[fp] = key; await supabase.from('project_sub_folders').insert({ project_id: projectId, project_sub_id: projectSubId, parent_key: parentKey || folder.key, folder_key: key, label }) }
-      for (const { file, path } of drop.files) { const sfKey = path ? keyMap[path] : null; const sp = `projects/${projectId}/subs/${projectSubId}/${folder.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(sp, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sfKey || folder.key, file_name: file.name, file_size: file.size, storage_path: sp }) }
-      loadCustomSubfolders(); loadRootFiles()
-    } else { const f = drop.files.map(x => x.file); if (f.length) uploadToFolder(f) }
-  }
-  function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
+  // ── Styling helpers ────────────────────────────────────────────────────────
+  const overlay = {
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
+  }
+  const panel = {
+    background: 'var(--surface)', borderRadius: 12, width: 'min(820px, 100%)',
+    maxHeight: '90vh', overflow: 'auto', border: '0.5px solid var(--border)',
+  }
+  const sectionTitle = {
+    fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+    color: 'var(--text3)', margin: '20px 0 8px',
+  }
+  const roBox = {
+    background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 6,
+    padding: '8px 11px', fontSize: 13, color: 'var(--text2)',
+  }
+  const label = { fontSize: 11, color: 'var(--text3)', marginBottom: 4, display: 'block' }
+
+  const issuedRevision = existingPO && existingPO.status === 'issued'
+  const heading = !existingPO ? 'Generate Purchase Order'
+    : existingPO.status === 'issued'
+      ? `Revise PO — ${existingPO.order_number} (creating Rev ${NEXT_REVISION(existingPO.revision)})`
+      : `Edit PO — ${existingPO.order_number}${existingPO.revision ? ' Rev ' + existingPO.revision : ''}`
+
+  // Backdrop does NOT close the modal — closing only via ✕ or Cancel.
+  // This avoids losing all typed data on an accidental outside click
+  // (or a click-and-drag selection that releases over the overlay).
   return (
-    <div style={{ marginBottom: 12 }}>
-      <UploadProgress uploadState={uploadProgress} />
-      <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: '0.5px solid var(--border)', borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: folder.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth="1.6"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    <div style={overlay}>
+      <div style={panel}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px', borderBottom: '0.5px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{heading}</div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--text3)' }}>✕</button>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{subfolders.length > 0 ? `${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}{fileCount > 0 ? `${subfolders.length > 0 ? ' · ' : ''}${fileCount} file${fileCount !== 1 ? 's' : ''}` : ''}{subfolders.length === 0 && fileCount === 0 ? 'Empty' : ''}</div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-          {showAddFolder ? <>
-            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
-            <button onClick={addCustomSubfolder} disabled={savingFolder} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
-            <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
-          </> : <>
-            <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip all</button>
-            {folder.key === 'purchase-order' && canManage && (
-              <button onClick={openPOModal} disabled={loadingPO} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                {loadingPO ? 'Loading…' : 'Generate PO'}
-              </button>
+
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)' }}>Loading project details…</div>
+        ) : (
+          <div style={{ padding: '4px 20px 20px' }}>
+
+            {issuedRevision && (
+              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#FAEEDA', color: '#854F0B', fontSize: 12 }}>
+                This order has already been issued. Saving changes will create <strong>Rev {NEXT_REVISION(existingPO.revision)}</strong> — the current version is kept on record.
+              </div>
             )}
-            {canManage && <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>}
-            {canManage && <label style={BtnG}>{uploading ? '...' : '+ Upload'}<input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} /></label>}
-            {open && <ViewToggle viewMode={viewMode} setView={setView} />}
-          </>}
-        </div>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', marginLeft: 4, flexShrink: 0 }}><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      {open && (
-        <div onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ marginLeft: 16, paddingLeft: 12, borderLeft: `1.5px solid ${folder.color}30`, paddingTop: 8, paddingBottom: 8 }}>
-          <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
-          {subfolders.map(sf => <SubFolder key={sf.key} sf={sf} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadCustomSubfolders(); loadRootFiles() }} />)}
-          {files.length === 0 && subfolders.length === 0 ? (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 80, border: '0.5px dashed var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
-              <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
-            </label>
-          ) : <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage} onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDropFolder} onUpload={uploadToFolder} />}
-        </div>
-      )}
-      {showPOPicker && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 12, width: 'min(560px, 100%)', maxHeight: '80vh', overflow: 'auto', border: '0.5px solid var(--border)', padding: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>Purchase Orders — {poList.length} on record</span>
-              <button onClick={() => setShowPOPicker(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>✕</button>
-            </div>
-            <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
-              {poList.map(po => (
-                <div key={po.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderTop: '0.5px solid var(--border)', fontSize: 12.5 }}>
-                  <span style={{ fontWeight: 600, flexShrink: 0 }}>{po.order_number}{po.revision ? ` Rev ${po.revision}` : ''}</span>
-                  <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: po.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: po.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{po.status}</span>
-                  <span style={{ color: 'var(--text3)', flex: 1 }}>{po.order_date ? new Date(po.order_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span>
-                  {po.contract_value != null && <span style={{ flexShrink: 0 }}>£{Number(po.contract_value).toLocaleString()}</span>}
-                  <button onClick={() => amendPO(po)} style={{ fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text)', flexShrink: 0 }}>
-                    {po.status === 'issued' ? 'Revise' : 'Edit'}
-                  </button>
-                  <button onClick={() => deletePOFromPicker(po)} style={{ fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--red, #E24B4A)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red, #E24B4A)', flexShrink: 0 }}>
-                    Delete
-                  </button>
+
+            {/* Auto-filled context */}
+            <div style={sectionTitle}>Auto-filled — from project &amp; subcontractor</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <span style={label}>Order Number — auto-generated, locked</span>
+                <div style={{ ...roBox, fontWeight: 600, color: 'var(--text)', letterSpacing: '0.02em' }}>
+                  {orderNumber || '—'}{existingPO?.revision ? ' Rev ' + existingPO.revision : ''}
                 </div>
-              ))}
-              {poList.length === 0 && <div style={{ padding: 18, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>No saved purchase orders left.</div>}
+              </div>
+              <div>
+                <span style={label}>Project Director (Assigned To) — auto-filled, can edit</span>
+                <input value={form.director_name} onChange={e => set('director_name', e.target.value)} placeholder="Type director name" style={{ width: '100%' }} />
+              </div>
+              <div><span style={label}>Sub-Contractor</span><div style={roBox}>{ctx.subName || '—'}</div></div>
+              <div><span style={label}>Sub-Contractor Address</span><div style={roBox}>{ctx.subAddress || '—'}</div></div>
+              <div><span style={label}>Site / Project</span><div style={roBox}>{ctx.siteName || '—'}</div></div>
+              <div><span style={label}>Site / Delivery Address</span><div style={roBox}>{ctx.siteAddress || '—'}</div></div>
+              <div><span style={label}>Contract Value (excl. VAT)</span><div style={roBox}>{ctx.contractValue ? '£' + Number(ctx.contractValue).toLocaleString('en-GB') : '—'}</div></div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div
+                  onDragOver={e => { e.preventDefault(); setQuoteDragOver(true) }}
+                  onDragLeave={() => setQuoteDragOver(false)}
+                  onDrop={e => { e.preventDefault(); setQuoteDragOver(false); if (e.dataTransfer?.files?.[0]) handleQuoteFile(e.dataTransfer.files[0]) }}
+                  style={{ border: '1.5px dashed ' + (quoteDragOver ? '#448a40' : 'var(--border)'), borderRadius: 8, padding: '12px 14px', textAlign: 'center', background: quoteDragOver ? 'rgba(68,138,64,0.08)' : 'transparent', fontSize: 12, color: 'var(--text2)' }}>
+                  {quoteParsing ? (
+                    <span>{quoteParseMsg || 'Reading quote…'}</span>
+                  ) : (
+                    <label style={{ cursor: 'pointer' }}>
+                      📄 Drop the subcontractor's quote PDF here (or click) — AI reads it and fills the quote reference, date and scope for you to review
+                      <input type="file" accept="application/pdf" style={{ display: 'none' }}
+                        onChange={e => { if (e.target.files?.[0]) handleQuoteFile(e.target.files[0]); e.target.value = '' }} />
+                    </label>
+                  )}
+                </div>
+                {!quoteParsing && quoteParseMsg && (
+                  <div style={{ fontSize: 11, color: quoteParseMsg.startsWith('✓') ? '#448a40' : 'var(--red, #E24B4A)', marginTop: 5 }}>{quoteParseMsg}</div>
+                )}
+              </div>
+              {quoteOptions.length > 0 && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={label}>Quotes on record for {ctx.subName || 'this company'} — tick the one this PO is against</span>
+                  <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginTop: 4 }}>
+                    {quoteOptions.map(q => (
+                      <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderTop: '0.5px solid var(--border)', fontSize: 12, cursor: 'pointer', background: pickedQuoteId === q.id ? 'var(--surface2)' : 'transparent' }}>
+                        <input type="radio" name="quotePick" checked={pickedQuoteId === q.id} onChange={() => pickQuote(q)} style={{ width: 14, height: 14, appearance: 'auto', flexShrink: 0 }} />
+                        <span style={{ fontWeight: 600, flexShrink: 0 }}>{q.quote_reference || '(no ref)'}</span>
+                        <span style={{ color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{q.tasks?.title || '—'}</span>
+                        {q.amount != null && <span style={{ flexShrink: 0 }}>£{Number(q.amount).toLocaleString()}</span>}
+                        <span style={{ color: 'var(--text3)', flexShrink: 0 }}>{q.received_date ? fmtDate(q.received_date) : ''}</span>
+                        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: q.status === 'accepted' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: q.status === 'accepted' ? '#448a40' : 'var(--text3)' }}>{q.status}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <span style={label}>Quote Reference — auto-filled, can edit</span>
+                <input value={form.quote_reference} onChange={e => set('quote_reference', e.target.value)} placeholder="e.g. Q-2026-0143" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Quote Date — auto-filled, can edit</span>
+                <input type="date" value={form.quote_date} onChange={e => set('quote_date', e.target.value)} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Project Manager — auto-filled, can override</span>
+                <select value={selectedPmId} onChange={e => setSelectedPmId(e.target.value)} style={{ width: '100%' }}>
+                  <option value="">— Select Project Manager —</option>
+                  {pmOptions.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                </select>
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-              <button onClick={newPOFromPicker} style={{ fontSize: 12.5, padding: '7px 14px', border: 'none', borderRadius: 6, background: '#448a40', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
-                + New PO
+
+            {/* Dates */}
+            <div style={sectionTitle}>Order details</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <span style={label}>Order Date</span>
+                <input type="date" value={form.order_date} onChange={e => set('order_date', e.target.value)} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Commencement Date — generates the valuation dates</span>
+                <input type="date" value={form.commencement_date} onChange={e => set('commencement_date', e.target.value)} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Site Manager — Name</span>
+                <input value={form.site_manager_name} onChange={e => set('site_manager_name', e.target.value)} placeholder="Site Manager name" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Site Manager — Tel</span>
+                <input value={form.site_manager_tel} onChange={e => set('site_manager_tel', e.target.value)} placeholder="Site Manager tel" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>PM Phone — for the PO (not stored on profile)</span>
+                <input value={form.pm_tel} onChange={e => set('pm_tel', e.target.value)} placeholder="Project Manager phone" style={{ width: '100%' }} />
+              </div>
+            </div>
+
+            {/* Generated valuation dates */}
+            <div style={sectionTitle}>Valuation dates — auto-generated from commencement date</div>
+            {valuationDates.length === 0 ? (
+              <div style={{ ...roBox, color: 'var(--text3)' }}>Enter a commencement date above to generate the 6 monthly valuation dates.</div>
+            ) : (
+              <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ color: 'var(--text3)', textAlign: 'left' }}>
+                    <th style={{ padding: '4px 8px' }}>CCG Valuation Date</th>
+                    <th style={{ padding: '4px 8px' }}>Application Deadline</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {valuationDates.map((v, i) => (
+                    <tr key={i} style={{ borderTop: '0.5px solid var(--border)' }}>
+                      <td style={{ padding: '5px 8px' }}>{fmtDate(v.val_date)}</td>
+                      <td style={{ padding: '5px 8px' }}>{fmtDate(v.app_deadline)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+
+            {/* PM free-text */}
+            <div style={sectionTitle}>Works description — to complete</div>
+            {[
+              ['scope_of_works', 'Scope of Works *', 4],
+              ['brief_description', 'Brief Description of Works', 3],
+              ['design_responsibility', 'Design Responsibility (if applicable)', 3],
+              ['practical_completion_items', 'Practical Completion Items', 3],
+              ['quality_control_requirements', 'Quality Control Requirements', 2],
+              ['statutory_compliance_requirements', 'Statutory Compliance Requirements', 2],
+            ].map(([key, lbl, rows]) => {
+              const aiEligible = !!AI_SECTION[key]
+              return (
+                <div key={key} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={label}>{lbl}</span>
+                    {aiEligible && (
+                      <button type="button" onClick={() => aiFill(key)} disabled={!!aiBusy}
+                        title={`Generate a trade-specific draft for ${ctx.subTrade || 'this trade'}`}
+                        style={{
+                          fontSize: 11, padding: '2px 9px', borderRadius: 5, cursor: aiBusy ? 'default' : 'pointer',
+                          border: '0.5px solid #448a40', background: aiBusy === key ? '#E1F5EE' : 'transparent',
+                          color: '#448a40', fontWeight: 600, marginBottom: 4,
+                        }}>
+                        {aiBusy === key ? 'Generating…' : '✨ AI fill'}
+                      </button>
+                    )}
+                  </div>
+                  <textarea value={form[key]} onChange={e => set(key, e.target.value)} rows={rows}
+                    style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 13 }} />
+                  {aiEligible && (
+                    <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>
+                      AI fill produces a draft based on the trade — review and edit before issuing.
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+            {aiError && (
+              <div style={{ marginTop: 4, padding: '8px 11px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{aiError}</div>
+            )}
+
+            {/* 2nd director */}
+            <div style={sectionTitle}>Sub-Contractor — 2nd Director (optional)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <span style={label}>Name</span>
+                <input value={form.contact2_name} onChange={e => set('contact2_name', e.target.value)} style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Tel</span>
+                <input value={form.contact2_tel} onChange={e => set('contact2_tel', e.target.value)} style={{ width: '100%' }} />
+              </div>
+            </div>
+
+            {/* Programme — pick a file from the project's 06. Project Programme folder */}
+            <div style={sectionTitle}>Programme — select from project documents</div>
+            {programmeFiles.length === 0 ? (
+              <div style={{ ...roBox, color: 'var(--text3)' }}>
+                No files found in the project’s “06. Project Programme” folder. Upload the programme there first, then it will appear here to attach to the PO.
+              </div>
+            ) : (
+              <select value={selectedProgrammeId} onChange={e => setSelectedProgrammeId(e.target.value)} style={{ width: '100%' }}>
+                <option value="">— No programme attached —</option>
+                {programmeFiles.map(f => (
+                  <option key={f.id} value={f.id}>
+                    {f.file_name}{f.created_at ? '  ·  ' + fmtDate(f.created_at) : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Attendance table */}
+            <div style={sectionTitle}>General &amp; Specific Attendance — tap to toggle CCG / Sub-Con</div>
+            <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ color: 'var(--text3)', textAlign: 'left' }}>
+                  <th style={{ padding: '4px 8px' }}>Item</th>
+                  <th style={{ padding: '4px 8px', width: 80, textAlign: 'center' }}>CCG</th>
+                  <th style={{ padding: '4px 8px', width: 80, textAlign: 'center' }}>Sub-Con</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendance.map((row, i) => (
+                  <tr key={i} style={{ borderTop: '0.5px solid var(--border)', cursor: 'pointer' }} onClick={() => toggleAttendance(i)}>
+                    <td style={{ padding: '5px 8px' }}>{row.item}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'center', color: '#448a40', fontWeight: 700 }}>{row.ccg ? '✓' : ''}</td>
+                    <td style={{ padding: '5px 8px', textAlign: 'center', color: '#854F0B', fontWeight: 700 }}>{!row.ccg ? '✓' : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {error && (
+              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '0.5px solid var(--border)' }}>
+              {existingPO && (
+                <button onClick={deletePORecord} disabled={saving}
+                  title="Remove the saved PO record so the next Generate PO starts fresh. PDFs already in the folder are separate files and are not touched."
+                  style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--red, #E24B4A)', background: 'transparent', color: 'var(--red, #E24B4A)', cursor: 'pointer', fontSize: 13, marginRight: 'auto' }}>
+                  🗑 Delete saved PO record
+                </button>
+              )}
+              <button onClick={onClose} disabled={saving}
+                style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>
+                Cancel
+              </button>
+              <button onClick={() => save(false)} disabled={saving}
+                style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--border)', background: 'var(--surface2)', cursor: 'pointer', fontSize: 13 }}>
+                {saving ? 'Saving…' : 'Save draft'}
+              </button>
+              <button onClick={() => save(true)} disabled={saving}
+                style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#448a40', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                {saving ? 'Saving…' : (issuedRevision ? `Issue Rev ${NEXT_REVISION(existingPO.revision)}` : 'Issue PO')}
               </button>
             </div>
           </div>
-        </div>
-      )}
-      {showPOModal && (
-        <GeneratePOModal
-          projectId={projectId}
-          projectSubId={projectSubId}
-          existingPO={existingPOForModal}
-          onClose={() => setShowPOModal(false)}
-          onSaved={() => { loadRootFiles(); loadFileCount() }}
-        />
-      )}
-    </div>
-  )
-}
-
-// ── SubFolder (recursive child folders) ──────────────────────
-function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, onPreview, onReload }) {
-  const [open, setOpen] = useState(false)
-  const [files, setFiles] = useState([])
-  const [children, setChildren] = useState([])
-  const [selected, setSelected] = useState(new Set())
-  const [renaming, setRenaming] = useState(false)
-  const [renameVal, setRenameVal] = useState(sf.label)
-  const [label, setLabel] = useState(sf.label)
-  const [showAddSub, setShowAddSub] = useState(false)
-  const [newSubName, setNewSubName] = useState('')
-  const [confirmDel, setConfirmDel] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState({ active: false, files: [], current: 0, total: 0, errors: [] })
-  const [fileCount, setFileCount] = useState(0)
-  const { profile } = useAuth()
-
-  useEffect(() => { loadCount() }, [])
-  useEffect(() => { if (open) { loadFiles(); loadChildren() } }, [open])
-
-  async function loadCount() { const { count } = await supabase.from('project_sub_files').select('id', { count: 'exact', head: true }).eq('project_sub_id', projectSubId).eq('folder_key', sf.key); setFileCount(count || 0) }
-  async function loadFiles() { const { data } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', sf.key).order('created_at', { ascending: false }); setFiles(naturalSort(data || [])); setFileCount((data || []).length) }
-  async function loadChildren() { const { data } = await supabase.from('project_sub_folders').select('*').eq('project_sub_id', projectSubId).eq('parent_key', sf.key).order('created_at'); setChildren(data || []) }
-  async function uploadFiles(fileList) {
-    if (!fileList.length) return; const fileArr = Array.from(fileList); setUploading(true); setUploadProgress({ active: true, files: fileArr.map(f => f.name), current: 0, total: fileArr.length, errors: [] })
-    for (let i = 0; i < fileArr.length; i++) { const file = fileArr[i]; setUploadProgress(prev => ({ ...prev, current: i })); const path = `projects/${projectId}/subs/${projectSubId}/${sf.key}/${Date.now()}-${file.name}`; const { error } = await supabase.storage.from('project-docs').upload(path, file); if (!error) await supabase.from('project_sub_files').insert({ project_id: projectId, project_sub_id: projectSubId, folder_key: sf.key, file_name: file.name, file_size: file.size, storage_path: path, uploaded_by: profile?.id }) }
-    setUploading(false); setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors: [] }); loadFiles()
-  }
-  async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
-  function onDrop(e) { e.preventDefault(); e.stopPropagation(); if (!canManage) return; const f = Array.from(e.dataTransfer?.files || []); if (f.length) uploadFiles(f) }
-  async function rename() { if (!renameVal.trim()) return; await supabase.from('project_sub_folders').update({ label: renameVal.trim() }).eq('folder_key', sf.key).eq('project_sub_id', projectSubId); setLabel(renameVal.trim()); setRenaming(false) }
-  async function deleteFolder() { await supabase.from('project_sub_folders').delete().eq('folder_key', sf.key).eq('project_sub_id', projectSubId); onReload() }
-  async function addChild() { if (!newSubName.trim()) return; const key = sf.key + '-sub-' + Date.now(); await supabase.from('project_sub_folders').insert({ project_sub_id: projectSubId, project_id: projectId, parent_key: sf.key, folder_key: key, label: newSubName.trim() }); setNewSubName(''); setShowAddSub(false); loadChildren() }
-  function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
-
-  return (
-    <div style={{ marginBottom: 2 }}>
-      <UploadProgress uploadState={uploadProgress} />
-      <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }} onMouseLeave={e => { if (!open) e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent' }}>
-        <div style={{ width: 24, height: 24, borderRadius: 5, background: '#F1EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ fontSize: 13 }}>📁</span></div>
-        {renaming ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setRenaming(false) }} onClick={e => e.stopPropagation()} style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
-          : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{label}</span>}
-        {!open && <CountBadge count={fileCount} />}
-        {canManage && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
-          {!renaming && <>
-            <button onClick={() => { setRenameVal(label); setRenaming(true) }} style={Btn} title="Rename">{PENCIL}</button>
-            {confirmDel ? <><button onClick={deleteFolder} style={BtnR}>Confirm</button><button onClick={() => setConfirmDel(false)} style={Btn}>✕</button></> : <button onClick={() => setConfirmDel(true)} style={BtnR} title="Delete">{BIN}</button>}
-            {showAddSub ? <>
-              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addChild(); if (e.key === 'Escape') setShowAddSub(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
-              <button onClick={addChild} style={BtnG}>Add</button><button onClick={() => setShowAddSub(false)} style={Btn}>✕</button>
-            </> : <button onClick={() => setShowAddSub(true)} style={Btn}>+ Sub</button>}
-          </>}
-          <label style={BtnG}>{uploading ? '...' : '+ Upload'}<input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} /></label>
-        </div>}
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}><polyline points="6 9 12 15 18 9"/></svg>
+        )}
       </div>
-      {open && (
-        <div onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ marginLeft: 14, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
-          {children.map(ch => <SubFolder key={ch.folder_key} sf={{ key: ch.folder_key, label: ch.label, custom: true }} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadFiles(); loadChildren() }} />)}
-          {files.length === 0 && children.length === 0 ? (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
-              <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
-            </label>
-          ) : <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage} onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDrop} onUpload={uploadFiles} />}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Main ─────────────────────────────────────────────────────
-export default function SubcontractorDocs({ projectId, projectSubId, subFiles, onReload, canManage }) {
-  const [viewMode, setViewMode] = useState(() => { try { return localStorage.getItem('subDocView') || 'grid' } catch { return 'grid' } })
-  const [previewFile, setPreviewFile] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  function setView(mode) { setViewMode(mode); try { localStorage.setItem('subDocView', mode) } catch {} }
-  function openPreview(file, url) { setPreviewFile(file); setPreviewUrl(url || null); if (!url) supabase.storage.from('project-docs').createSignedUrl(file.storage_path, 3600).then(({ data }) => { if (data?.signedUrl) setPreviewUrl(data.signedUrl) }) }
-
-  return (
-    <div style={{ padding: '10px 16px 14px' }}>
-      {SUB_DOC_FOLDERS.map(folder => <PrimeFolder key={folder.key} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} setView={setView} onPreview={openPreview} onReload={onReload} />)}
-      {previewFile && previewUrl && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setPreviewFile(null); setPreviewUrl(null) }}>
-          <div style={{ width: '100%', maxWidth: 900, maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '10px 14px', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ flex: 1, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewFile.file_name}</div>
-              <button onClick={() => triggerDownload(previewUrl, previewFile.file_name)} style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)', fontFamily: 'inherit' }}>Download</button>
-              <button onClick={() => { setPreviewFile(null); setPreviewUrl(null) }} style={{ fontSize: 14, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text2)', fontFamily: 'inherit', padding: '2px 6px' }}>✕</button>
-            </div>
-            <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
-              {previewFile.file_name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? <img src={previewUrl} alt={previewFile.file_name} style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }} />
-                : previewFile.file_name.match(/\.pdf$/i) ? <iframe src={previewUrl} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewFile.file_name} />
-                : <div style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 13 }}><div style={{ fontSize: 40, marginBottom: 10 }}>📄</div>Preview not available — click Download to view</div>}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
