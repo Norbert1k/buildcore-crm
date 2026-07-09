@@ -81,7 +81,7 @@ const fmtDate = (d) => {
     : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default function GeneratePOModal({ projectId, projectSubId, existingPO, onClose, onSaved }) {
+export default function GeneratePOModal({ projectId, projectSubId, existingPO, editInPlace = false, onClose, onSaved }) {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -458,7 +458,9 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
 
       let savedRow = null
 
-      if (existingPO && existingPO.status === 'draft') {
+      if (existingPO && (existingPO.status === 'draft' || editInPlace)) {
+        // Draft edits AND explicit "edit current version" both update the same
+        // row in place — no new revision is created.
         // Editing a draft — update the same row in place.
         const { data, error: e } = await supabase
           .from('purchase_orders')
@@ -610,8 +612,10 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
   }
   const label = { fontSize: 11, color: 'var(--text3)', marginBottom: 4, display: 'block' }
 
-  const issuedRevision = existingPO && existingPO.status === 'issued'
+  const issuedRevision = existingPO && existingPO.status === 'issued' && !editInPlace
   const heading = !existingPO ? 'Generate Purchase Order'
+    : (editInPlace && existingPO.status === 'issued')
+      ? `Edit PO — ${existingPO.order_number}${existingPO.revision ? ' Rev ' + existingPO.revision : ''} (updating current version)`
     : existingPO.status === 'issued'
       ? `Revise PO — ${existingPO.order_number} (creating Rev ${NEXT_REVISION(existingPO.revision)})`
       : `Edit PO — ${existingPO.order_number}${existingPO.revision ? ' Rev ' + existingPO.revision : ''}`
@@ -636,6 +640,11 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
             {issuedRevision && (
               <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#FAEEDA', color: '#854F0B', fontSize: 12 }}>
                 This order has already been issued. Saving changes will create <strong>Rev {NEXT_REVISION(existingPO.revision)}</strong> — the current version is kept on record.
+              </div>
+            )}
+            {editInPlace && existingPO?.status === 'issued' && (
+              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#E1F5EE', color: '#0F6E56', fontSize: 12 }}>
+                Editing the <strong>current version in place</strong> — no new revision will be created. Issuing again regenerates the PDF for this same version.
               </div>
             )}
 
