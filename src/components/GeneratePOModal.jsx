@@ -118,6 +118,8 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
     site_manager_tel: '',
     pm_tel: '',                     // typed — profiles has no phone column
     director_name: '',              // typed — auto-fills from project's assigned director
+    quote_reference: '',            // typed — auto-fills from the accepted quote if one exists
+    quote_date: '',                 // typed — auto-fills from the accepted quote if one exists
     scope_of_works: '',
     brief_description: '',
     design_responsibility: '',
@@ -241,6 +243,10 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           // to the project's currently assigned director (handles older POs
           // saved before this field existed).
           director_name: existingPO.director_name || directorName || '',
+          // Quote reference/date — prefer what's saved on this PO, else the
+          // accepted quote's values (both editable in the form).
+          quote_reference: existingPO.quote_reference || quoteReference || '',
+          quote_date: existingPO.quote_date || quoteDate || '',
           scope_of_works: existingPO.scope_of_works || '',
           brief_description: existingPO.brief_description || '',
           design_responsibility: existingPO.design_responsibility || '',
@@ -257,9 +263,10 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         setSelectedProgrammeId(existingPO.programme_file_id || '')
       } else {
         // New PO — default the PM and Director to the project's assigned ones
-        // (both overridable: PM via dropdown, Director by typing).
+        // (both overridable: PM via dropdown, Director by typing). Quote
+        // reference/date auto-fill from the accepted quote but stay editable.
         setSelectedPmId(project.project_manager_id || '')
-        setForm(f => ({ ...f, director_name: directorName || '' }))
+        setForm(f => ({ ...f, director_name: directorName || '', quote_reference: quoteReference || '', quote_date: quoteDate || '' }))
       }
     } catch (err) {
       setError('Could not load project / subcontractor details: ' + err.message)
@@ -310,6 +317,71 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
     setAiBusy('')
   }
 
+  // ── Quote drop-box ──────────────────────────────────────────────────────────
+  // Drop the subcontractor's quote PDF here. It is (1) SAVED into the sub's
+  // Purchase Order folder as a real document, then (2) read by the
+  // parse-quote-pdf edge function (Claude reads the PDF) and the extracted
+  // quote reference, date, scope and description are dropped into the form as
+  // EDITABLE drafts. Nothing is auto-saved — you review everything first.
+  const [quoteParsing, setQuoteParsing] = useState(false)
+  const [quoteParseMsg, setQuoteParseMsg] = useState('')
+  const [quoteDragOver, setQuoteDragOver] = useState(false)
+
+  async function handleQuoteFile(file) {
+    if (!file) return
+    if (!/\.pdf$/i.test(file.name)) { setQuoteParseMsg('Please drop a PDF quote.'); return }
+    setQuoteParsing(true)
+    setQuoteParseMsg('Uploading quote…')
+    try {
+      // 1) Save the quote into the sub's Purchase Order folder (kept as a record).
+      const path = `projects/${projectId}/subs/${projectSubId}/purchase-order/${Date.now()}-${file.name}`
+      const { error: upErr } = await supabase.storage.from('project-docs').upload(path, file)
+      if (upErr) throw new Error('Upload failed: ' + upErr.message)
+      await supabase.from('project_sub_files').insert({
+        project_id: projectId, project_sub_id: projectSubId, folder_key: 'purchase-order',
+        file_name: file.name, file_size: file.size, storage_path: path, uploaded_by: profile?.id,
+      })
+
+      // 2) Ask the edge function to read it.
+      setQuoteParseMsg('Reading the quote with AI…')
+      const { data, error: fnErr } = await supabase.functions.invoke('parse-quote-pdf', {
+        body: { storage_path: path },
+      })
+      if (fnErr) throw fnErr
+      if (!data?.ok) throw new Error(data?.error || 'The quote could not be read.')
+
+      const q = data.quote || {}
+      // Fill the fields — empty fields fill silently; occupied ones only after
+      // one confirm (so a re-drop can refresh everything deliberately).
+      const updates = {}
+      if (q.quote_reference) updates.quote_reference = q.quote_reference
+      if (q.quote_date) updates.quote_date = q.quote_date
+      if (q.scope_of_works) updates.scope_of_works = q.scope_of_works
+      if (q.brief_description) updates.brief_description = q.brief_description
+
+      const occupied = Object.keys(updates).filter(k => (form[k] || '').trim())
+      let apply = updates
+      if (occupied.length) {
+        const ok = window.confirm(`The quote provides new text for field(s) you already filled: ${occupied.join(', ')}.\n\nOverwrite them with the quote's content? (Cancel keeps your text — empty fields still fill.)`)
+        if (!ok) {
+          apply = Object.fromEntries(Object.entries(updates).filter(([k]) => !(form[k] || '').trim()))
+        }
+      }
+      setForm(f => ({ ...f, ...apply }))
+
+      const bits = []
+      if (q.quote_reference) bits.push(`ref ${q.quote_reference}`)
+      if (q.quote_date) bits.push(`dated ${q.quote_date}`)
+      if (q.total_value_ex_vat != null) bits.push(`total £${Number(q.total_value_ex_vat).toLocaleString()} ex VAT`)
+      setQuoteParseMsg(`✓ Quote read${bits.length ? ' — ' + bits.join(', ') : ''}. Fields filled below are drafts — review before saving.` +
+        (q.total_value_ex_vat != null && ctx.contractValue && Number(q.total_value_ex_vat) !== Number(ctx.contractValue)
+          ? ` Note: quote total differs from the contract value on this subcontractor (£${Number(ctx.contractValue).toLocaleString()}).` : ''))
+    } catch (err) {
+      setQuoteParseMsg('Quote reading failed: ' + (err.message || 'unknown error') + ' — the PDF was still saved to the Purchase Order folder if the upload succeeded.')
+    }
+    setQuoteParsing(false)
+  }
+
   // Generate the order number: CCG-PO-<year>-<4-digit sequence>.
   // Uses a count of existing distinct order numbers as the sequence basis;
   // the DB sequence (purchase_order_seq) is the authoritative collision guard
@@ -345,8 +417,8 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         site_manager_name: form.site_manager_name.trim() || null,
         site_manager_tel: form.site_manager_tel.trim() || null,
         contract_value: ctx.contractValue ? Number(ctx.contractValue) : null,
-        quote_reference: ctx.quoteReference || null,
-        quote_date: ctx.quoteDate || null,
+        quote_reference: form.quote_reference.trim() || null,
+        quote_date: form.quote_date || null,
         scope_of_works: form.scope_of_works.trim() || null,
         brief_description: form.brief_description.trim() || null,
         design_responsibility: form.design_responsibility.trim() || null,
@@ -539,7 +611,34 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
               <div><span style={label}>Site / Project</span><div style={roBox}>{ctx.siteName || '—'}</div></div>
               <div><span style={label}>Site / Delivery Address</span><div style={roBox}>{ctx.siteAddress || '—'}</div></div>
               <div><span style={label}>Contract Value (excl. VAT)</span><div style={roBox}>{ctx.contractValue ? '£' + Number(ctx.contractValue).toLocaleString('en-GB') : '—'}</div></div>
-              <div><span style={label}>Quote Reference / Date</span><div style={roBox}>{ctx.quoteReference || '—'}{ctx.quoteDate ? ' · ' + fmtDate(ctx.quoteDate) : ''}</div></div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div
+                  onDragOver={e => { e.preventDefault(); setQuoteDragOver(true) }}
+                  onDragLeave={() => setQuoteDragOver(false)}
+                  onDrop={e => { e.preventDefault(); setQuoteDragOver(false); if (e.dataTransfer?.files?.[0]) handleQuoteFile(e.dataTransfer.files[0]) }}
+                  style={{ border: '1.5px dashed ' + (quoteDragOver ? '#448a40' : 'var(--border)'), borderRadius: 8, padding: '12px 14px', textAlign: 'center', background: quoteDragOver ? 'rgba(68,138,64,0.08)' : 'transparent', fontSize: 12, color: 'var(--text2)' }}>
+                  {quoteParsing ? (
+                    <span>{quoteParseMsg || 'Reading quote…'}</span>
+                  ) : (
+                    <label style={{ cursor: 'pointer' }}>
+                      📄 Drop the subcontractor's quote PDF here (or click) — AI reads it and fills the quote reference, date and scope for you to review
+                      <input type="file" accept="application/pdf" style={{ display: 'none' }}
+                        onChange={e => { if (e.target.files?.[0]) handleQuoteFile(e.target.files[0]); e.target.value = '' }} />
+                    </label>
+                  )}
+                </div>
+                {!quoteParsing && quoteParseMsg && (
+                  <div style={{ fontSize: 11, color: quoteParseMsg.startsWith('✓') ? '#448a40' : 'var(--red, #E24B4A)', marginTop: 5 }}>{quoteParseMsg}</div>
+                )}
+              </div>
+              <div>
+                <span style={label}>Quote Reference — auto-filled, can edit</span>
+                <input value={form.quote_reference} onChange={e => set('quote_reference', e.target.value)} placeholder="e.g. Q-2026-0143" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Quote Date — auto-filled, can edit</span>
+                <input type="date" value={form.quote_date} onChange={e => set('quote_date', e.target.value)} style={{ width: '100%' }} />
+              </div>
               <div>
                 <span style={label}>Project Manager — auto-filled, can override</span>
                 <select value={selectedPmId} onChange={e => setSelectedPmId(e.target.value)} style={{ width: '100%' }}>
