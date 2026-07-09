@@ -297,15 +297,32 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       `• Only this version's saved data is removed${others.length ? ` — ${others.length} other version${others.length === 1 ? '' : 's'} of this order remain` : ' (it is the only version, so the whole order record goes)'}.\n` +
       `• PDF documents in the folder are separate files and are NOT deleted.\n\nThis cannot be undone.`
     if (!window.confirm(msg)) return
-    // Re-point children that referenced this version, then delete it.
-    await supabase.from('purchase_orders').update({ revision_of: v.revision_of || null }).eq('revision_of', v.id)
-    const { error } = await supabase.from('purchase_orders').delete().eq('id', v.id)
+    // Re-point children that referenced this version, then delete it. Both
+    // steps verify a row actually changed — RLS can silently block writes
+    // (0 rows affected, no error), which would otherwise look like a dead
+    // button.
+    const { error: upErr } = await supabase.from('purchase_orders')
+      .update({ revision_of: v.revision_of || null }).eq('revision_of', v.id)
+    if (upErr) { alert('Could not unlink revisions: ' + upErr.message); return }
+    const { data: deleted, error } = await supabase.from('purchase_orders')
+      .delete().eq('id', v.id).select('id')
     if (error) { alert('Could not delete: ' + error.message); return }
+    if (!deleted || deleted.length === 0) {
+      alert('The delete was blocked — no row was removed. This is usually a database permission (RLS) rule on purchase_orders. Tell me and I will provide the policy fix.')
+      return
+    }
     // If we removed the current version and older ones remain, promote the
     // newest remaining back to issued.
     if (v.status !== 'superseded' && others.length) {
       const newest = others[others.length - 1]
       await supabase.from('purchase_orders').update({ status: 'issued' }).eq('id', newest.id)
+    }
+    // If exactly ONE version now remains in this chain, it becomes the clean
+    // original: revision cleared (no more "Rev A"), link cleared, and issued.
+    if (others.length === 1) {
+      await supabase.from('purchase_orders')
+        .update({ revision: '', revision_of: null, status: 'issued' })
+        .eq('id', others[0].id)
     }
     // Refresh the picker list from the DB (statuses may have changed).
     const { data } = await supabase
@@ -416,7 +433,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       )}
       {showPOPicker && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 12, width: 'min(620px, 100%)', maxHeight: '80vh', overflow: 'auto', border: '0.5px solid var(--border)', padding: 18 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, width: 'min(700px, 100%)', maxHeight: '80vh', overflow: 'auto', border: '0.5px solid var(--border)', padding: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>Purchase Orders</span>
               <button onClick={() => setShowPOPicker(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>✕</button>
@@ -454,22 +471,24 @@ function POGroupRow({ group, onAmend, onDeleteVersion }) {
   const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   return (
     <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', fontSize: 12.5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', fontSize: 12.5, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 600, flexShrink: 0 }}>{cur.order_number}{cur.revision ? ` Rev ${cur.revision}` : ''}</span>
         <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: cur.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: cur.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{cur.status}</span>
-        <span style={{ color: 'var(--text3)', flex: 1 }}>{fmtD(cur.order_date)}</span>
-        {cur.contract_value != null && <span style={{ flexShrink: 0 }}>£{Number(cur.contract_value).toLocaleString()}</span>}
-        {cur.status === 'issued' ? (
-          <>
-            <button onClick={() => onAmend(cur, true)} title="Update this version directly — no new Rev is created" style={pkBtn}>Edit current</button>
-            <button onClick={() => onAmend(cur, false)} title="Create the next revision; this version is kept on record" style={pkBtn}>Revise</button>
-          </>
-        ) : (
-          <button onClick={() => onAmend(cur, false)} style={pkBtn}>Edit</button>
-        )}
-        <button onClick={() => setShowVersions(v => !v)} title="Show all versions of this order" style={{ ...pkBtn, minWidth: 84 }}>
-          {group.versions.length} version{group.versions.length === 1 ? '' : 's'} {showVersions ? '▴' : '▾'}
-        </button>
+        <span style={{ color: 'var(--text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtD(cur.order_date)}</span>
+        {cur.contract_value != null && <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>£{Number(cur.contract_value).toLocaleString()}</span>}
+        <span style={{ display: 'inline-flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          {cur.status === 'issued' ? (
+            <>
+              <button onClick={() => onAmend(cur, true)} title="Update this version directly — no new Rev is created" style={pkBtn}>Edit current</button>
+              <button onClick={() => onAmend(cur, false)} title="Create the next revision; this version is kept on record" style={pkBtn}>Revise</button>
+            </>
+          ) : (
+            <button onClick={() => onAmend(cur, false)} style={pkBtn}>Edit</button>
+          )}
+          <button onClick={() => setShowVersions(v => !v)} title="Show all versions of this order" style={pkBtn}>
+            {group.versions.length}v {showVersions ? '▴' : '▾'}
+          </button>
+        </span>
       </div>
       {showVersions && (
         <div style={{ borderTop: '0.5px solid var(--border)', background: 'var(--surface2)' }}>
