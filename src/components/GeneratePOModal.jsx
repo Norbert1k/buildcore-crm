@@ -130,6 +130,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
     site_manager_tel: '',
     pm_tel: '',                     // typed — profiles has no phone column
     director_name: '',              // typed — auto-fills from project's assigned director
+    contract_value: '',             // typed — auto-fills from the assignment's order value
     quote_reference: '',            // typed — auto-fills from the accepted quote if one exists
     quote_date: '',                 // typed — auto-fills from the accepted quote if one exists
     scope_of_works: '',
@@ -259,6 +260,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
           director_name: existingPO.director_name || directorName || '',
           // Quote reference/date — prefer what's saved on this PO, else the
           // accepted quote's values (both editable in the form).
+          contract_value: existingPO.contract_value != null ? String(existingPO.contract_value) : (link?.contract_value != null ? String(link.contract_value) : ''),
           quote_reference: existingPO.quote_reference || quoteReference || '',
           quote_date: existingPO.quote_date || quoteDate || '',
           scope_of_works: existingPO.scope_of_works || '',
@@ -280,7 +282,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
         // (both overridable: PM via dropdown, Director by typing). Quote
         // reference/date auto-fill from the accepted quote but stay editable.
         setSelectedPmId(project.project_manager_id || '')
-        setForm(f => ({ ...f, director_name: directorName || '', quote_reference: quoteReference || '', quote_date: quoteDate || '' }))
+        setForm(f => ({ ...f, director_name: directorName || '', contract_value: link?.contract_value != null ? String(link.contract_value) : '', quote_reference: quoteReference || '', quote_date: quoteDate || '' }))
       }
     } catch (err) {
       setError('Could not load project / subcontractor details: ' + err.message)
@@ -372,6 +374,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
       if (q.quote_date) updates.quote_date = q.quote_date
       if (q.scope_of_works) updates.scope_of_works = q.scope_of_works
       if (q.brief_description) updates.brief_description = q.brief_description
+      if (q.total_value_ex_vat != null) updates.contract_value = String(q.total_value_ex_vat)
 
       const occupied = Object.keys(updates).filter(k => (form[k] || '').trim())
       let apply = updates
@@ -389,7 +392,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
       if (q.total_value_ex_vat != null) bits.push(`total £${Number(q.total_value_ex_vat).toLocaleString()} ex VAT`)
       setQuoteParseMsg(`✓ Quote read${bits.length ? ' — ' + bits.join(', ') : ''}. Fields filled below are drafts — review before saving.` +
         (q.total_value_ex_vat != null && ctx.contractValue && Number(q.total_value_ex_vat) !== Number(ctx.contractValue)
-          ? ` Note: quote total differs from the contract value on this subcontractor (£${Number(ctx.contractValue).toLocaleString()}).` : ''))
+          ? ` Note: quote total differs from the order value on this subcontractor assignment (£${Number(ctx.contractValue).toLocaleString()}).` : ''))
     } catch (err) {
       setQuoteParseMsg('Quote reading failed: ' + (err.message || 'unknown error') + ' — the PDF was still saved to the Purchase Order folder if the upload succeeded.')
     }
@@ -430,7 +433,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
         commencement_date: form.commencement_date || null,
         site_manager_name: form.site_manager_name.trim() || null,
         site_manager_tel: form.site_manager_tel.trim() || null,
-        contract_value: ctx.contractValue ? Number(ctx.contractValue) : null,
+        contract_value: form.contract_value !== '' && !isNaN(Number(form.contract_value)) ? Number(form.contract_value) : null,
         quote_reference: form.quote_reference.trim() || null,
         quote_date: form.quote_date || null,
         scope_of_works: form.scope_of_works.trim() || null,
@@ -665,7 +668,10 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
               <div><span style={label}>Sub-Contractor Address</span><div style={roBox}>{ctx.subAddress || '—'}</div></div>
               <div><span style={label}>Site / Project</span><div style={roBox}>{ctx.siteName || '—'}</div></div>
               <div><span style={label}>Site / Delivery Address</span><div style={roBox}>{ctx.siteAddress || '—'}</div></div>
-              <div><span style={label}>Contract Value (excl. VAT)</span><div style={roBox}>{ctx.contractValue ? '£' + Number(ctx.contractValue).toLocaleString('en-GB') : '—'}</div></div>
+              <div>
+                <span style={label}>Contract / Order Value £ (excl. VAT) — auto-filled, can edit</span>
+                <input type="number" step="0.01" value={form.contract_value} onChange={e => set('contract_value', e.target.value)} placeholder="e.g. 30000" style={{ width: '100%' }} />
+              </div>
               <div style={{ gridColumn: '1 / -1' }}>
                 <div
                   onDragOver={e => { e.preventDefault(); setQuoteDragOver(true) }}
