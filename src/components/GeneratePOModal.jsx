@@ -360,7 +360,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
 
       // 2) Ask the edge function to read it.
       setQuoteParseMsg('Reading the quote with AI…')
-      const { data, error: fnErr } = await supabase.functions.invoke('parse-quote-pdf', {
+      const { data, error: fnErr } = await supabase.functions.invoke('parse-quote-po', {
         body: { storage_path: path },
       })
       if (fnErr) throw fnErr
