@@ -105,6 +105,11 @@ export async function extractFromPa(arrayBuffer) {
     // followed them — yielding £117,000 as the project total instead of
     // £1,345,000.
     let contractSumF = null, contractSumH = null, contractSumI = null
+    // Retention — captured from the LESS RETENTION / RETENTION row that the
+    // parser previously skipped outright. Amount from the first numeric money
+    // column on that row (F, then H); % parsed from the label text when
+    // written like "LESS RETENTION (5%)". Null when the PA has no such row.
+    let retentionAmount = null, retentionPct = null
     let subtotalsF = 0, subtotalsH = 0, subtotalsI = 0
     let subtotalCount = 0
     let fallbackTotalSum = 0, fallbackCumulativeSum = 0, fallbackPrevCertSum = 0
@@ -141,6 +146,16 @@ export async function extractFromPa(arrayBuffer) {
       if (isSection) {
         currentSection = aStr.toUpperCase()
         if (TOTAL_ROW_LABELS.has(currentSection)) {
+          // Retention rows: capture their value while skipping the row —
+          // additive to the existing behaviour (the row is still skipped for
+          // group/subtotal purposes exactly as before).
+          if (currentSection === 'LESS RETENTION' || currentSection === 'RETENTION') {
+            const amt = [f, h].find(x => typeof x === 'number' && x !== 0)
+            if (typeof amt === 'number') retentionAmount = Math.abs(amt)
+            const pctSrc = aStr + ' ' + (typeof b === 'string' ? b : '')
+            const pctM = pctSrc.match(/(\d+(?:\.\d+)?)\s*%/)
+            if (pctM) retentionPct = parseFloat(pctM[1])
+          }
           currentGroup = null
           continue
         }
@@ -252,6 +267,20 @@ export async function extractFromPa(arrayBuffer) {
         total: totalSum,
         cumulative: cumulativeSum,
         prev_certified: prevCertSum,
+        // ── Additive retention breakdown (null when the PA has no retention
+        // row). `cumulative` above is the GROSS cumulative claim (resolved
+        // before the retention deduction); these let callers show the
+        // PA-style Gross − retention → Net split without changing any
+        // existing field.
+        retention_amount: retentionAmount,
+        retention_pct: retentionPct != null
+          ? retentionPct
+          : (retentionAmount != null && cumulativeSum > 0
+              ? Math.round((retentionAmount / cumulativeSum) * 10000) / 100
+              : null),
+        net_cumulative: retentionAmount != null
+          ? cumulativeSum - retentionAmount
+          : null,
       },
     }
   } catch (err) {
