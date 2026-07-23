@@ -61,9 +61,6 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   const [dragTaskId, setDragTaskId] = useState(null)
 
   const timelineScrollRef = useRef(null)
-  // Auto-fit: track the timeline container's width so the whole programme
-  // always fits without horizontal scrolling. pxPerDay derives from this.
-  const [containerW, setContainerW] = useState(1000)
 
   useEffect(() => { load() }, [projectId, buildingOrdinal])
 
@@ -628,7 +625,6 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   function stretchGroupEnd(groupId, newEndStr) {
     const newEnd = parseDate(newEndStr)
     if (!newEnd) return
-    // Collect the subtree under the group.
     const ids = new Set([groupId])
     let grew = true
     while (grew) {
@@ -637,11 +633,9 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         if (t.parent_id && ids.has(t.parent_id) && !ids.has(t.id)) { ids.add(t.id); grew = true }
       }
     }
-    // Leaves = subtree tasks with no children of their own.
     const hasChild = new Set(tasks.filter(t => t.parent_id && ids.has(t.parent_id)).map(t => t.parent_id))
     const leaves = tasks.filter(t => ids.has(t.id) && t.id !== groupId && !hasChild.has(t.id))
     if (!leaves.length) return
-    // Current latest finish among the leaves.
     let maxEnd = null
     for (const t of leaves) {
       const e = parseDate(t.end_date)
@@ -652,7 +646,6 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
     setTasks(prev => prev.map(t => {
       if (!ids.has(t.id) || hasChild.has(t.id) || t.id === groupId) return t
       if (t.end_date !== maxEndStr) return t
-      // Finisher: move its end to the new date, clamped to its own start.
       const start = parseDate(t.start_date)
       const clamped = (start && newEnd < start) ? start : newEnd
       return { ...t, end_date: fmtDate(clamped) }
@@ -782,27 +775,13 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
   // ─── Timeline geometry ────────────────────────────────────
   const flat = useMemo(() => flattenTasks(rollupGroups(tasks)), [tasks])
-
-  // Measure the timeline container (and re-measure on resize) for auto-fit.
-  useEffect(() => {
-    const el = timelineScrollRef.current
-    if (!el) return
-    const measure = () => setContainerW(el.clientWidth || 1000)
-    measure()
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
   const bounds = useMemo(() => {
     const b = getDateBounds(flat)
     // Pad timeline 7 days each side
     return { min: addDays(b.min, -7), max: addDays(b.max, 14) }
   }, [flat])
   const totalDays = Math.max(30, diffDays(bounds.min, bounds.max) + 1)
-  // Auto-fit: the full programme always spans the visible width — no
-  // horizontal scrolling. Day/Week/Month now control ONLY the axis-label
-  // granularity (buildAxisMarkers below), not the scale.
-  const pxPerDay = Math.max(0.4, (containerW - 1) / totalDays)
+  const pxPerDay = ZOOM_LEVELS[zoom].pxPerDay
   const timelineW = totalDays * pxPerDay
 
   // Date X position (pixels) from start
@@ -819,7 +798,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   }
 
   // Build axis ticks based on zoom
-  const axisMarkers = useMemo(() => buildAxisMarkers(bounds.min, bounds.max, zoom, pxPerDay), [bounds, zoom, pxPerDay])
+  const axisMarkers = useMemo(() => buildAxisMarkers(bounds.min, bounds.max, zoom), [bounds, zoom])
 
   // Today line
   const todayX = useMemo(() => {
@@ -972,7 +951,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         </div>
 
         {/* RIGHT: timeline */}
-        <div ref={timelineScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative', background: 'var(--surface)' }}>
+        <div ref={timelineScrollRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative', background: 'var(--surface)' }}>
           <div style={{ position: 'relative', width: timelineW, minHeight: '100%' }}>
             {/* Date axis (sticky) */}
             <div style={{ position: 'sticky', top: 0, height: HEADER_H, background: 'var(--surface2)', borderBottom: '1px solid var(--border)', zIndex: 2 }}>
@@ -982,7 +961,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
             {/* Vertical day grid lines + weekend shading + today line */}
             <svg style={{ position: 'absolute', top: HEADER_H, left: 0, width: timelineW, height: flat.length * ROW_HEIGHT, pointerEvents: 'none' }}>
               {/* Weekend shading (only at day zoom) */}
-              {zoom === 'day' && pxPerDay >= 8 && (() => {
+              {zoom === 'day' && (() => {
                 const cells = []
                 for (let i = 0; i < totalDays; i++) {
                   const d = addDays(bounds.min, i)
@@ -1132,7 +1111,7 @@ function AxisRender({ markers, pxPerDay, bounds, zoom }) {
   )
 }
 
-function buildAxisMarkers(min, max, zoom, pxPerDay) {
+function buildAxisMarkers(min, max, zoom) {
   // major: month boundaries (for all zooms) — drawn with month name + year
   // minor: day numbers (day zoom), week start dates (week zoom), or month abbrev (month zoom)
   const totalDays = diffDays(min, max) + 1
@@ -1144,7 +1123,7 @@ function buildAxisMarkers(min, max, zoom, pxPerDay) {
     const d = addDays(min, i)
     const dow = d.getUTCDay()
     const dayOfMonth = d.getUTCDate()
-    const x = i * pxPerDay
+    const x = i * ZOOM_LEVELS[zoom].pxPerDay
 
     // Major: first of month
     if (dayOfMonth === 1) {
