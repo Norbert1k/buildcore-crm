@@ -1159,7 +1159,7 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
   const dur = durationFromDates(parseDate(task.start_date), parseDate(task.end_date))
 
   return (
-    <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+    <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden' }}>
       <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Task Details</div>
         <button className="btn btn-sm" onClick={onClose}>✕</button>
@@ -1168,9 +1168,10 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
         <Field label="Name">
           <input value={task.name} onChange={e => onChange({ name: e.target.value })} autoFocus />
         </Field>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }}>
           <Field label="Start">
             <input type="date" value={task.start_date}
+              style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               onChange={e => {
                 const newStart = e.target.value
                 const newEnd = endFromStartAndDuration(newStart, dur)
@@ -1179,6 +1180,7 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
           </Field>
           <Field label="End">
             <input type="date" value={task.end_date}
+              style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               onChange={e => isGroup ? onGroupEnd(e.target.value) : onChange({ end_date: e.target.value })} />
             {isGroup && (
               <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>
