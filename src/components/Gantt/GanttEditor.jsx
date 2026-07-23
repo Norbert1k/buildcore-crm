@@ -1197,8 +1197,13 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
             }} />
         </Field>
         <Field label="Progress (%)">
+          {/* The CRM's global input CSS sets appearance:none, which strips a
+              range slider of its track and thumb — leaving nothing to drag.
+              Same fix as the radio buttons elsewhere: restore the native
+              control appearance for this input only. */}
           <input type="range" min="0" max="100" value={task.progress || 0}
-            onChange={e => onChange({ progress: parseInt(e.target.value, 10) })} />
+            onChange={e => onChange({ progress: parseInt(e.target.value, 10) })}
+            style={{ appearance: 'auto', WebkitAppearance: 'auto', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', accentColor: '#448a40' }} />
           <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', marginTop: 4 }}>{task.progress || 0}%</div>
         </Field>
         <Field label="Color">
