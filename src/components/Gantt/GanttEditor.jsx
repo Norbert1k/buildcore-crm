@@ -807,7 +807,12 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
     return diffDays(bounds.min, today) * pxPerDay
   }, [bounds, pxPerDay])
 
-  const selectedTask = tasks.find(t => t.id === selectedTaskId) || null
+  // The details panel must show the same dates the chart draws. Group rows
+  // derive their span from their children (rollupGroups), so read the rolled
+  // version — otherwise a group's End/Duration display its stale stored
+  // values and appear frozen after a Stretch.
+  const rolledTasks = useMemo(() => rollupGroups(tasks), [tasks])
+  const selectedTask = rolledTasks.find(t => t.id === selectedTaskId) || null
 
   if (loading) return (
     <Overlay onClose={handleClose}>
@@ -1022,8 +1027,8 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                       userSelect: 'none',
                     }}>
                     {/* Progress overlay */}
-                    {t.progress > 0 && !isGroup && (
-                      <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${t.progress}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 4 }} />
+                    {t.progress > 0 && (
+                      <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${t.progress}%`, background: isGroup ? 'rgba(68,138,64,0.55)' : 'rgba(0,0,0,0.25)', borderRadius: 4 }} />
                     )}
                     <span style={{ position: 'relative', textShadow: '0 1px 0 rgba(0,0,0,0.3)' }}>
                       {pos.w > 60 ? t.name : ''}
