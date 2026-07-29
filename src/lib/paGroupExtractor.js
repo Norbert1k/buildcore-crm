@@ -209,7 +209,11 @@ export async function extractPaGroups(file) {
       continue
     }
 
-    if (currentSection === 'VARIATIONS') continue
+    // Variations flow through the normal row machinery below: VO item rows
+    // (ref + description + value) bump the shared 'VARIATIONS::__all__'
+    // group so each PA's variations cumulative anchors the CFF's Variations
+    // row — mirroring csaExtractor's aggregation. Subtotal/label rows are
+    // handled by the existing skip branches.
 
     const aEmpty = !a
     const bEmpty = !b
