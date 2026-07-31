@@ -246,10 +246,21 @@ async function publishProgressReportToFolder({ reportId, projectId, projectName,
   // Upload new PDF. Storage path follows the same convention as uploadFiles().
   // Subfolder segment is `${subfolderKey}` for sub-buildings, or omitted for
   // root-level (single-building) projects.
+  //
+  // The STORAGE key must be ASCII-safe: multi-building filenames contain an
+  // em dash ("Merton — 01. CCG PB …") which Supabase storage rejects with
+  // "Invalid key". Sanitise the storage segment only — the pretty fileName
+  // is kept for the file_name column, so the CRM and client portal still
+  // display the original name.
+  const safeName = fileName
+    .replace(/[—–]/g, '-')      // em/en dashes → hyphen
+    .normalize('NFKD').replace(/[̀-ͯ]/g, '')  // strip accents
+    .replace(/[^ -~]/g, '')          // drop any other non-ASCII
+    .replace(/\s{2,}/g, ' ').trim()
   const ts = Date.now()
   const path = subfolderKey
-    ? `projects/${projectId}/${folderKey}/${subfolderKey}/${ts}-${fileName}`
-    : `projects/${projectId}/${folderKey}/${ts}-${fileName}`
+    ? `projects/${projectId}/${folderKey}/${subfolderKey}/${ts}-${safeName}`
+    : `projects/${projectId}/${folderKey}/${ts}-${safeName}`
   const { error: upErr } = await supabase.storage.from('project-docs').upload(path, blob, {
     contentType: 'application/pdf',
     upsert: false,
