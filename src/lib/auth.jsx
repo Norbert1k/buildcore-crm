@@ -114,8 +114,11 @@ export function AuthProvider({ children }) {
       view_payments:         ['project_manager', 'accountant', 'director_viewer'],
       view_company_vat:      ['project_manager', 'accountant', 'director_viewer'],
       view_company_bank:     ['project_manager', 'accountant', 'director_viewer'],
-      view_company_other:    ['project_manager', 'accountant', 'director_viewer', 'document_controller'],
-      view_company_templates:['project_manager', 'accountant', 'director_viewer', 'document_controller'],
+      // Site managers: view + download of general company documents
+      // (Templates, Other). VAT & Bank stay restricted, and manage_documents
+      // (upload/rename/delete) deliberately still excludes them.
+      view_company_other:    ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'site_manager'],
+      view_company_templates:['project_manager', 'accountant', 'director_viewer', 'document_controller', 'site_manager'],
       manage_settings:       ['project_manager', 'accountant'],
       // Company Information panel: all staff can view the general block; only
       // admins can edit (empty list → admin short-circuit only). Sensitive
