@@ -10,6 +10,20 @@ import { parseEml } from '../lib/emlParser'
 import CffGeneratorModal from './CffGeneratorModal'
 import DocExplorer from './DocExplorer'
 
+// Storage keys must be ASCII-safe: em/en dashes, degree symbols and other
+// characters common in CAD/drawing filenames make Supabase reject the upload
+// with "Invalid key". Display names (file_name column) keep the original;
+// only the storage segment is sanitised. Same rule as the publish flow.
+function sanitizeStorageName(name) {
+  return String(name)
+    .replace(/[\u2014\u2013]/g, '-')
+    .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/[#?%{}\\^~\[\]`>|<]/g, '-')
+    .replace(/\s{2,}/g, ' ').trim() || 'file'
+}
+
+
 // ── Fixed template folders ────────────────────────────────────────────────────
 const TEMPLATE_FOLDERS = [
   {
@@ -1139,7 +1153,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
     for (let i = 0; i < fileArr.length; i++) {
       const file = fileArr[i]
       setUploadProgress(prev => ({ ...prev, current: i }))
-      const path = `projects/${projectId}/${folder.key}/${subfolder.key}/${Date.now()}-${file.name}`
+      const path = `projects/${projectId}/${folder.key}/${subfolder.key}/${Date.now()}-${sanitizeStorageName(file.name)}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
       if (error) { console.error('Upload failed:', error.message); errors.push(file.name); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
@@ -1276,7 +1290,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         const { file, path } = dropFiles[i]
         setUploadProgress(prev => ({ ...prev, current: i }))
         const sfKey = path ? keyMap[path] : subfolder.key
-        const storagePath = `projects/${projectId}/${folder.key}/${sfKey}/${Date.now()}-${file.name}`
+        const storagePath = `projects/${projectId}/${folder.key}/${sfKey}/${Date.now()}-${sanitizeStorageName(file.name)}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
         if (error) { folderErrors.push(file.name); continue }
         await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
@@ -1746,7 +1760,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     for (let i = 0; i < fileArr.length; i++) {
       const file = fileArr[i]
       setUploadProgress(prev => ({ ...prev, current: i }))
-      const path = `projects/${projectId}/${folder.key}/${Date.now()}-${file.name}`
+      const path = `projects/${projectId}/${folder.key}/${Date.now()}-${sanitizeStorageName(file.name)}`
       const { error } = await supabase.storage.from('project-docs').upload(path, file)
       if (error) { console.error('Upload failed:', error.message); errors.push(file.name); continue }
       const { error: dbErr } = await supabase.from('project_doc_files').insert({
@@ -1888,7 +1902,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         const { file, path } = dropFiles[i]
         setUploadProgress(prev => ({ ...prev, current: i }))
         const sfKey = path ? keyMap[path] : null
-        const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
+        const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${sanitizeStorageName(file.name)}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
         if (error) { folderErrors.push(file.name); continue }
         await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
@@ -1979,7 +1993,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         const { file, path } = dropFiles[i]
         setUploadProgress(prev => ({ ...prev, current: i }))
         const sfKey = path ? keyMap[path] : null
-        const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${file.name}`
+        const storagePath = `projects/${projectId}/${folder.key}/${sfKey || 'root'}/${Date.now()}-${sanitizeStorageName(file.name)}`
         const { error } = await supabase.storage.from('project-docs').upload(storagePath, file)
         if (error) { folderErrors.push(file.name); continue }
         await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: folder.key, subfolder_key: sfKey, file_name: file.name, file_size: file.size, storage_path: storagePath })
