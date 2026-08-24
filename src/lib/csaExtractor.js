@@ -117,6 +117,17 @@ function parseRows(rows, headerRowIdx) {
   let currentGroup = null
   let contractSum = null
   let variationsSum = 0    // tracked separately so callers can explain
+  // Duplicate group names within a section (Tonbridge has two trades both
+  // called "EXTERNAL WORKS") must stay distinct rows: repeats get an ordinal
+  // — "EXTERNAL WORKS (2)". Deterministic top-down, so the PA-side extractor
+  // (same rule) produces identical group keys.
+  const seenGroupNames = new Map()
+  const groupNameFor = (section, name) => {
+    const k = `${section}::${name}`
+    const n = (seenGroupNames.get(k) || 0) + 1
+    seenGroupNames.set(k, n)
+    return n === 1 ? name : `${name} (${n})`
+  }
                             // any gap between contract sum and CFF body total
 
   for (let r = headerRowIdx + 1; r < rows.length; r++) {
@@ -152,7 +163,12 @@ function parseRows(rows, headerRowIdx) {
     const bUpper = (typeof b === 'string') ? b.trim().toUpperCase() : ''
     let detectedSection = null
     if (KNOWN_SECTIONS.has(aUpper) && fEmpty) detectedSection = aUpper
-    else if (KNOWN_SECTIONS.has(bUpper) && fEmpty) detectedSection = bUpper
+    // Col-B section names only count when col A is EMPTY. A numeric ref in
+    // col A means it's a GROUP header, even when the group shares a canonical
+    // section name — Tonbridge names trade group 6 "EXTERNAL WORKS", and
+    // promoting it to a section swallowed every group after it into one
+    // £4.7m lump.
+    else if (KNOWN_SECTIONS.has(bUpper) && fEmpty && (a == null || a === '')) detectedSection = bUpper
 
     if (detectedSection) {
       currentSection = detectedSection
@@ -199,17 +215,20 @@ function parseRows(rows, headerRowIdx) {
     if (fEmpty && currentSection) {
       // Pattern 1: descriptive label in col A, col B empty
       if (typeof a === 'string' && a.trim() && bEmpty) {
-        currentGroup = a.trim()
+        currentGroup = groupNameFor(currentSection, a.trim())
         continue
       }
       // Pattern 2: numeric ref in col A, label in col B (Arcady's "1 / PLOT 1")
-      if (typeof a === 'number' && typeof b === 'string' && b.trim()) {
-        currentGroup = b.trim()
+      // Group refs are whole numbers (1, 2, 21). A DECIMAL ref (12.2) with an
+      // empty/zero value is a zero-priced ITEM row — treating it as a group
+      // header would misfile every item after it under a junk group.
+      if (typeof a === 'number' && Number.isInteger(a) && typeof b === 'string' && b.trim()) {
+        currentGroup = groupNameFor(currentSection, b.trim())
         continue
       }
       // Pattern 3: col A empty, label in col B (legacy fallback)
       if (aEmpty && typeof b === 'string' && b.trim()) {
-        currentGroup = b.trim()
+        currentGroup = groupNameFor(currentSection, b.trim())
         continue
       }
     }
