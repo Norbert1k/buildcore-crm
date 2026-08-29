@@ -16,18 +16,21 @@ import { useAuth } from '../lib/auth'
 const MAP_STYLES = {
   dark: {
     label: 'Dark',
-    url:   'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attr:  '© OpenStreetMap contributors © CARTO',
+    // Esri Dark Gray Canvas — keyless (CARTO now watermarks unkeyed tiles)
+    url:   'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attr:  '© OpenStreetMap contributors Tiles © Esri',
   },
   light: {
     label: 'Light',
-    url:   'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attr:  '© OpenStreetMap contributors © CARTO',
+    // Esri Light Gray Canvas — keyless
+    url:   'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+    attr:  '© OpenStreetMap contributors Tiles © Esri',
   },
   colour: {
     label: 'Colour',
-    url:   'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attr:  '© OpenStreetMap contributors © CARTO',
+    // Esri World Street Map — keyless colour style
+    url:   'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attr:  '© OpenStreetMap contributors Tiles © Esri',
   },
   osm: {
     label: 'OSM',
