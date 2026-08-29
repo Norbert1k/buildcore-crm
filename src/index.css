@@ -237,45 +237,6 @@ tbody tr:hover td { background: var(--surface2); }
   --purple-bg:   rgba(155,135,224,0.12);
 }
 
-/* ── BLUEPRINT — the Fit-Out division's signature theme ──────────────────
-   Dark, squared edges, hairline borders, electric-teal accents; numerals
-   render tabular for a technical-drawing feel. Chosen for Stage 6. */
-[data-theme="blueprint"] {
-  --bg:          #0D1519;
-  --surface:     #101B21;
-  --surface2:    #15242C;
-  --border:      #1C2E36;
-  --border2:     #29424D;
-  --text:        #DCE9EE;
-  --text2:       #8FA6B0;
-  --text3:       #5E7681;
-  --accent:      #22B8D4;
-  --accent-dark: #1795AD;
-  --accent-light:rgba(34,184,212,0.14);
-  --green:       #4DC98A;
-  --green-bg:    rgba(77,201,138,0.12);
-  --green-border:rgba(77,201,138,0.28);
-  --red:         #E06C6C;
-  --red-bg:      rgba(224,108,108,0.12);
-  --red-border:  rgba(224,108,108,0.25);
-  --amber:       #E6A23C;
-  --amber-bg:    rgba(230,162,60,0.12);
-  --amber-border:rgba(230,162,60,0.25);
-  --blue:        #22B8D4;
-  --blue-bg:     rgba(34,184,212,0.12);
-  --blue-border: rgba(34,184,212,0.25);
-  --purple:      #9B87E0;
-  --purple-bg:   rgba(155,135,224,0.12);
-  --radius:      3px;
-}
-[data-theme="blueprint"] body { background: var(--bg); color: var(--text); font-variant-numeric: tabular-nums; }
-[data-theme="blueprint"] .sidebar { background: #101B21; border-color: #1C2E36; }
-[data-theme="blueprint"] .nav-item.active { border-left: 3px solid #22B8D4; background: #15242C; color: #7FDCEE; border-radius: 0; }
-[data-theme="blueprint"] .card, [data-theme="blueprint"] .stat-card { border-radius: 3px; }
-[data-theme="blueprint"] .pill-teal { background: rgba(14,116,144,.22); color: #4FC3E0; }
-[data-theme="blueprint"] .pill-indigo { background: rgba(67,56,202,.25); color: #A5B4FC; }
-[data-theme="blueprint"] .pill-slate { background: rgba(100,125,150,.25); color: #B8C7D6; }
-
 [data-theme="dark"] body { background: var(--bg); color: var(--text); }
 [data-theme="dark"] .sidebar { background: #13151f; border-color: rgba(255,255,255,0.07); }
 [data-theme="dark"] .nav-item:hover,

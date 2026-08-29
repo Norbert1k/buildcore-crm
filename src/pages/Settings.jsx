@@ -155,9 +155,6 @@ const THEME_OPTIONS = [
   { value: 'sand',   label: 'Sand',   preview: { bg: '#F4EEDD', sidebar: '#FBF7EB', border: '#E2D5B5', text: '#412402', accent: '#854F0B', accentBg: '#FAEEDA' } },
   { value: 'slate',  label: 'Slate',  preview: { bg: '#1A1E2A', sidebar: '#20253A', border: 'rgba(133,183,235,0.10)', text: '#E6F1FB', accent: '#85B7EB', accentBg: 'rgba(55,138,221,0.18)' } },
   { value: 'pearl',  label: 'Pearl White', preview: { bg: '#FFFFFF', sidebar: '#FFFFFF', border: '#E2E0D8', text: '#1C1B18', accent: '#5B9BD5', accentBg: '#EFF6FB' } },
-  // The Fit-Out division's signature look (Stage 6) — available to both
-  // divisions, and Fit-Out's default when no theme has been chosen.
-  { value: 'blueprint', label: 'Blueprint', preview: { bg: '#0D1519', sidebar: '#101B21', border: '#1C2E36', text: '#DCE9EE', accent: '#22B8D4', accentBg: 'rgba(34,184,212,0.14)' } },
 ]
 
 export default function Settings() {
@@ -190,8 +187,7 @@ export default function Settings() {
   useEffect(() => {
     if (can('manage_users')) { loadUsers(); loadProjects() }
     else setLoading(false)
-    // Reload on division switch — the staff list is division-scoped.
-  }, [division])
+  }, [])
 
   async function loadUsers() {
     setLoading(true)
@@ -205,7 +201,7 @@ export default function Settings() {
       supabase.from('profiles').select('*').order('full_name'),
       supabase.from('user_project_access').select('*'),
       supabase.from('client_users').select('id, email, full_name, role, client_id, created_at'),
-      supabase.from('clients').select('id, name, division'),
+      supabase.from('clients').select('id, name'),
       supabase.from('projects').select('id, project_name, project_ref, client_id'),
     ])
 
@@ -261,14 +257,9 @@ export default function Settings() {
     // don't create duplicates. id is a sentinel "portal:<id>" so React keys
     // remain unique and the renderer can detect via _portalOnly.
     const profileEmails = new Set(profiles.map(p => (p.email || '').toLowerCase()).filter(Boolean))
-    // External (portal) users are divisional through their CLIENT: a portal
-    // account belongs to a client, and the client belongs to a division —
-    // so the fit-out view lists only fit-out clients' portal users.
-    const clientDivision = new Map((clientsRes.data || []).map(c => [c.id, c.division || 'construction']))
     const portalOnly = clientUsers.filter(cu => {
       const k = (cu.email || '').toLowerCase()
-      if (!k || profileEmails.has(k)) return false
-      return (clientDivision.get(cu.client_id) || 'construction') === division
+      return k && !profileEmails.has(k)
     })
     const portalOnlyRows = portalOnly.map(cu => ({
       id: `portal:${cu.id}`,
@@ -287,16 +278,12 @@ export default function Settings() {
       _portalClientId: cu.client_id,
     }))
 
-    // Staff list follows the ACTIVE division: a user shows here when their
-    // divisions include it (dual-division admins appear in both). Portal
-    // client rows are external accounts and stay division-agnostic for now.
-    const inDivision = (p) => ((p.divisions && p.divisions.length) ? p.divisions : ['construction']).includes(division)
-    setUsers(sortBy([...profileRows.filter(inDivision), ...portalOnlyRows], 'full_name'))
+    setUsers(sortBy([...profileRows, ...portalOnlyRows], 'full_name'))
     setLoading(false)
   }
 
   async function loadProjects() {
-    const { data } = await supabase.from('projects').select('id, project_name, project_ref').eq('division', division).order('project_name')
+    const { data } = await supabase.from('projects').select('id, project_name, project_ref').order('project_name')
     setProjects(sortBy(data || [], 'project_name'))
   }
 
@@ -329,19 +316,17 @@ export default function Settings() {
 
     if (error) { setAddError(error.message); setSaving(false); return }
     if (data?.user) {
-      const newDivisions = addForm.division === 'both' ? ['construction', 'fitout'] : [addForm.division || division]
-      await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, divisions: newDivisions, must_change_password: true })
+      await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, must_change_password: true })
     }
     setSaving(false)
     setAddSuccess(`Account created for ${addForm.full_name}. They can log in at crm.cltd.co.uk`)
-    setAddForm({ email: '', full_name: '', password: '', role: 'viewer', division })
+    setAddForm({ email: '', full_name: '', password: '', role: 'viewer' })
     loadUsers()
   }
 
   async function updateUser() {
     setSaving(true)
-    const updDivisions = editForm.division === 'both' ? ['construction', 'fitout'] : [editForm.division || 'construction']
-    await supabase.from('profiles').update({ full_name: editForm.full_name, role: editForm.role, divisions: updDivisions }).eq('id', showEditUser.id)
+    await supabase.from('profiles').update({ full_name: editForm.full_name, role: editForm.role }).eq('id', showEditUser.id)
 
     // Update project access for site managers
     await supabase.from('user_project_access').delete().eq('user_id', showEditUser.id)
@@ -554,7 +539,7 @@ export default function Settings() {
                           projectMap={projectMap}
                           onNavigateProject={(id) => navigate(`/projects/${id}`)}
                           onNavigateClient={(id) => navigate(`/clients/${id}`)}
-                          onEdit={() => { const d = (u.divisions && u.divisions.length) ? u.divisions : ['construction']; setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [], division: d.length > 1 ? 'both' : d[0] }); setShowEditUser(u) }}
+                          onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
                           onDelete={() => setShowDeleteUser({ user: u, mode: 'profile' })}
                         />
                       ))}
@@ -594,7 +579,7 @@ export default function Settings() {
                             projectMap={projectMap}
                             onNavigateProject={(id) => navigate(`/projects/${id}`)}
                             onNavigateClient={(id) => navigate(`/clients/${id}`)}
-                            onEdit={() => { const d = (u.divisions && u.divisions.length) ? u.divisions : ['construction']; setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [], division: d.length > 1 ? 'both' : d[0] }); setShowEditUser(u) }}
+                            onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
                             onDelete={() => setShowDeleteUser({
                               user: u,
                               // Portal-only users (synthetic rows from
@@ -641,8 +626,7 @@ export default function Settings() {
           separation) — the connection itself must also be revoked on the
           Xero side (see Stage 4 notes). */}
 
-      {/* Escalation Rates removed with Price Jobs (Stage 4) — the section
-          existed solely to feed the Price Jobs pricing engine. */}
+      {profile?.role === 'admin' && <EscalationRatesSection profile={profile} />}
 
       {/* Change Password Modal */}
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
@@ -678,13 +662,6 @@ export default function Settings() {
               <Field label="Full Name *"><input value={addForm.full_name} onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Jane Smith" autoFocus /></Field>
               <Field label="Email Address *"><input type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@cltd.co.uk" /></Field>
               <Field label="Temporary Password *"><PasswordInput value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 characters" /></Field>
-              <Field label="Division">
-                <select value={addForm.division || division} onChange={e => setAddForm(f => ({ ...f, division: e.target.value }))}>
-                  <option value="construction">Construction</option>
-                  <option value="fitout">Fit-Out</option>
-                  <option value="both">Both divisions</option>
-                </select>
-              </Field>
               <Field label="Role">
                 <select value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))}>
                   {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -716,13 +693,6 @@ export default function Settings() {
             <Field label="Role">
               <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value, projectIds: e.target.value !== 'site_manager' ? [] : f.projectIds }))}>
                 {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
-            </Field>
-            <Field label="Division">
-              <select value={editForm.division || 'construction'} onChange={e => setEditForm(f => ({ ...f, division: e.target.value }))}>
-                <option value="construction">Construction</option>
-                <option value="fitout">Fit-Out</option>
-                <option value="both">Both divisions</option>
               </select>
             </Field>
           </div>

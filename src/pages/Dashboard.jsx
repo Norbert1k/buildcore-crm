@@ -9,15 +9,15 @@ export default function Dashboard() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
-  const { profile, can, division } = useAuth()
+  const { profile, can } = useAuth()
 
-  useEffect(() => { loadDashboard() }, [division])
+  useEffect(() => { loadDashboard() }, [])
 
   async function loadDashboard() {
     const [subsRes, docsRes, projectsRes, suppliersRes] = await Promise.all([
       supabase.from('subcontractors').select('id, status, company_name, category, documents_with_status(id, expiry_date, status)'),
       supabase.from('documents_with_status').select('id, document_name, document_type, expiry_date, status, subcontractor_id, subcontractors(company_name, trade)').in('status', ['expired', 'expiring_soon']).order('expiry_date'),
-      supabase.from('projects').select('id, status').eq('division', division),
+      supabase.from('projects').select('id, status'),
       supabase.from('suppliers').select('id, status'),
     ])
     for (const [name, res] of [['subs', subsRes], ['docs', docsRes], ['projects', projectsRes], ['suppliers', suppliersRes]]) {

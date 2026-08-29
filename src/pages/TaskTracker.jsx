@@ -18,7 +18,7 @@ const STATUS_LABELS = {
 
 export default function TaskTracker() {
   const navigate = useNavigate()
-  const { can, profile, division } = useAuth()
+  const { can, profile } = useAuth()
   const [projects, setProjects] = useState([])
   const [tasks, setTasks] = useState([])
   const [assignees, setAssignees] = useState({})
@@ -62,7 +62,7 @@ export default function TaskTracker() {
   const setFilterAssignee = (v) => updateFilter('assignee', v, 'all')
   const setViewMode       = (v) => updateFilter('view',     v, 'open')
 
-  useEffect(() => { load() }, [division])
+  useEffect(() => { load() }, [])
 
   // Load reminders for the current user; poll every 60s so the due banner
   // appears without a manual refresh. Unmount cleans up the interval.
@@ -89,8 +89,8 @@ export default function TaskTracker() {
     setLoading(true)
     try {
       const [projRes, taskRes, asgRes, usrRes] = await Promise.all([
-        supabase.from('projects').select('id, project_name, project_ref, status').eq('division', division).in('status', ['tender', 'active']).order('project_ref'),
-        supabase.from('tasks').select('*').eq('division', division),
+        supabase.from('projects').select('id, project_name, project_ref, status').in('status', ['tender', 'active']).order('project_ref'),
+        supabase.from('tasks').select('*'),
         supabase.from('task_assignees').select('task_id, user_id, profiles(id, full_name)'),
         supabase.from('profiles').select('id, full_name, role').order('full_name'),
       ])

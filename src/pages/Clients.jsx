@@ -91,7 +91,6 @@ export default function Clients() {
     const { data: projectData } = await supabase
       .from('projects')
       .select('id, client_id, status, value')
-      .eq('division', division)
       .not('client_id', 'is', null)
 
     const enriched = (clientData || []).map(c => {

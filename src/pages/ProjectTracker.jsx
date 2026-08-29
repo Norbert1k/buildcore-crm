@@ -196,7 +196,7 @@ export default function ProjectTracker() {
   const tileLayerRef = useRef(null)
   const markersRef = useRef([])
   const navigate = useNavigate()
-  const { can, profile, setMapStyle, division } = useAuth()
+  const { can, profile, setMapStyle } = useAuth()
 
   // Map style state. The persisted override comes from profiles.map_style
   // (or localStorage as a fallback for first-time use). null/empty means
@@ -239,14 +239,13 @@ export default function ProjectTracker() {
     if (!can('view_tracker')) navigate('/')
   }, [])
 
-  useEffect(() => { loadProjects() }, [division])
+  useEffect(() => { loadProjects() }, [])
 
   async function loadProjects() {
     setLoading(true)
     const { data, error } = await supabase
       .from('projects')
       .select('id, project_name, project_ref, client_name, status, value, site_address, city, postcode, start_date, end_date, director:profiles!projects_project_director_id_fkey(full_name), project_subcontractors(id)')
-      .eq('division', division)
       .order('created_at', { ascending: false })
     if (error) console.error('[ProjectTracker] load error:', error)
 

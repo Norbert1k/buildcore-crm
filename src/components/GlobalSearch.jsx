@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../lib/auth'
 
 export default function GlobalSearch() {
-  const { division } = useAuth()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [open, setOpen] = useState(false)
@@ -34,7 +32,7 @@ export default function GlobalSearch() {
     const term = `%${q}%`
     const [subsRes, projRes, suppRes] = await Promise.all([
       supabase.from('subcontractors').select('id, company_name, trade, status').ilike('company_name', term).limit(5),
-      supabase.from('projects').select('id, project_name, project_ref, status').eq('division', division).or(`project_name.ilike.${term},project_ref.ilike.${term}`).limit(5),
+      supabase.from('projects').select('id, project_name, project_ref, status').or(`project_name.ilike.${term},project_ref.ilike.${term}`).limit(5),
       supabase.from('suppliers').select('id, company_name, category').ilike('company_name', term).limit(4),
     ])
     setResults({
