@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
+import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
 // ──────────────────────────────────────────────────────────────────────────
 // ProjectPhotos
@@ -29,7 +30,7 @@ function triggerBrowserDownload(blob, filename) {
   a.href = url
   a.download = filename
   document.body.appendChild(a)
-  a.click()
+  a.click(); zipProgressHide()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
@@ -227,7 +228,7 @@ export default function ProjectPhotos({ projectId }) {
     try {
       // Dynamic import keeps the zip library out of the main bundle.
       const JSZip = (await import('https://esm.sh/jszip@3.10.1')).default
-      const zip = new JSZip()
+      zipProgressShow(); const zip = new JSZip()
       let done = 0
       for (const photo of picked) {
         const { data, error } = await supabase.storage
@@ -253,7 +254,7 @@ export default function ProjectPhotos({ projectId }) {
         zip.file(fname, blob)
         done++; setBulkProgress(done)
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
+      const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
       const today = new Date().toISOString().slice(0, 10)
       triggerBrowserDownload(blob, `${folderName}-${today}.zip`)
     } catch (err) {

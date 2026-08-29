@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { formatDate } from '../lib/utils'
 import UploadProgress from './UploadProgress'
 import GeneratePOModal from './GeneratePOModal'
+import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
 const SUB_DOC_FOLDERS = [
   { key: 'purchase-order',       label: '01. Purchase Order',             color: '#185FA5', bg: '#E6F1FB' },
@@ -18,8 +19,8 @@ function fmtSize(b) { if (!b) return ''; if (b < 1024) return b + 'B'; if (b < 1
 function fileExt(name) { return name?.split('.').pop()?.toUpperCase().slice(0, 4) || 'FILE' }
 function naturalSort(arr) { return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' })) }
 async function triggerDownload(signedUrl, fileName) {
-  try { const res = await fetch(signedUrl); const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(a.href), 2000) }
-  catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click() }
+  try { const res = await fetch(signedUrl); const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; document.body.appendChild(a); a.click(); zipProgressHide(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(a.href), 2000) }
+  catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click(); zipProgressHide() }
 }
 function fileTypeInfo(fileName) {
   const n = fileName || ''
@@ -364,17 +365,17 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   async function deleteFile(f) { await supabase.storage.from('project-docs').remove([f.storage_path]); await supabase.from('project_sub_files').delete().eq('id', f.id); setFiles(prev => prev.filter(x => x.id !== f.id)) }
   async function zipFolder() {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.head.appendChild(s); await new Promise(r => s.onload = r)
-    const zip = new window.JSZip(); const { data: allFiles } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', folder.key)
+    zipProgressShow(); const zip = new window.JSZip(); const { data: allFiles } = await supabase.from('project_sub_files').select('*').eq('project_sub_id', projectSubId).eq('folder_key', folder.key)
     if (!allFiles?.length) { alert('No files.'); return }
-    for (const f of allFiles) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300); if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
-    const blob = await zip.generateAsync({ type: 'blob' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '.zip'; document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    for (const f of allFiles) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 300); if (data?.signedUrl) { zipProgressUpdate({ fileName: f.file_name }); const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
+    const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' })); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '.zip'; document.body.appendChild(a); a.click(); zipProgressHide(); document.body.removeChild(a)
   }
   async function bulkZip() {
     const chosen = files.filter(f => selected.has(f.id)); if (!chosen.length) return
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; document.head.appendChild(s); await new Promise(r => s.onload = r)
-    const zip = new window.JSZip()
-    for (const f of chosen) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 120); if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
-    const blob = await zip.generateAsync({ type: 'blob' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '-selected.zip'; document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    zipProgressShow(); const zip = new window.JSZip()
+    for (const f of chosen) { const { data } = await supabase.storage.from('project-docs').createSignedUrl(f.storage_path, 120); if (data?.signedUrl) { zipProgressUpdate({ fileName: f.file_name }); const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) } }
+    const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' })); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = folder.label + '-selected.zip'; document.body.appendChild(a); a.click(); zipProgressHide(); document.body.removeChild(a)
   }
   async function onDropFolder(e) {
     e.preventDefault(); e.stopPropagation(); if (!canManage) return

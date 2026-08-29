@@ -5,6 +5,7 @@ import { formatDate } from '../lib/utils'
 import { Spinner } from '../components/ui'
 import UploadProgress from '../components/UploadProgress'
 import CompanyInformation from '../components/CompanyInformation'
+import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
 const CATEGORIES = [
   { key: 'logo',           icon: '🏢', label: 'Logo & Branding',   color: '#448a40', bg: '#e8f5e7' },
@@ -113,10 +114,10 @@ async function triggerDownload(signedUrl, fileName) {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = fileName
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    document.body.appendChild(a); a.click(); zipProgressHide(); document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
   } catch {
-    const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click()
+    const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click(); zipProgressHide()
   }
 }
 
@@ -538,13 +539,13 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     const chosen = files.filter(f => selected.has(f.id))
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
-      const zip = new window.JSZip()
+      zipProgressShow(); const zip = new window.JSZip()
       for (const f of chosen) {
         const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 120)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
+        if (data?.signedUrl) { zipProgressUpdate({ fileName: f.file_name }); const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = subLabel + '.zip'; a.click()
+      const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = subLabel + '.zip'; a.click(); zipProgressHide()
     }
     document.head.appendChild(s)
   }
@@ -774,13 +775,13 @@ function CategoryFolder({ cat, canManage, onPreview, treeVersion, refreshTree })
     if (!allFiles?.length) { alert('No files in this folder.'); setZipping(false); return }
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
-      const zip = new window.JSZip()
+      zipProgressShow(); const zip = new window.JSZip()
       for (const f of allFiles) {
         const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.subfolder_key ? f.subfolder_key + '/' + f.file_name : f.file_name, await res.blob()) }
+        if (data?.signedUrl) { zipProgressUpdate({ fileName: f.file_name }); const res = await fetch(data.signedUrl); zip.file(f.subfolder_key ? f.subfolder_key + '/' + f.file_name : f.file_name, await res.blob()) }
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '.zip'; a.click()
+      const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '.zip'; a.click(); zipProgressHide()
       setZipping(false)
     }
     document.head.appendChild(s)
@@ -789,13 +790,13 @@ function CategoryFolder({ cat, canManage, onPreview, treeVersion, refreshTree })
     const chosen = files.filter(f => selected.has(f.id))
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
-      const zip = new window.JSZip()
+      zipProgressShow(); const zip = new window.JSZip()
       for (const f of chosen) {
         const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 120)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
+        if (data?.signedUrl) { zipProgressUpdate({ fileName: f.file_name }); const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '-selected.zip'; a.click()
+      const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '-selected.zip'; a.click(); zipProgressHide()
     }
     document.head.appendChild(s)
   }
@@ -809,18 +810,18 @@ function CategoryFolder({ cat, canManage, onPreview, treeVersion, refreshTree })
   async function zipSelected() {
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
-      const zip = new window.JSZip()
+      zipProgressShow(); const zip = new window.JSZip()
       for (const sfKey of selectedSubs) {
         const sf = subfolders.find(s => s.folder_key === sfKey)
         const folderName = sf ? sf.label : sfKey
         const { data: sfFiles } = await supabase.from('company_documents').select('*').eq('subfolder_key', sfKey)
         for (const f of (sfFiles || [])) {
           const { data } = await supabase.storage.from('company-docs').createSignedUrl(f.storage_path, 300)
-          if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
+          if (data?.signedUrl) { zipProgressUpdate({ fileName: f.file_name }); const res = await fetch(data.signedUrl); zip.file(folderName + '/' + f.file_name, await res.blob()) }
         }
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '-selected.zip'; a.click()
+      const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cat.label + '-selected.zip'; a.click(); zipProgressHide()
       setSelectedSubs(new Set())
     }
     document.head.appendChild(s)

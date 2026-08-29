@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { drawCover, drawLetterhead, drawFooter, addInternalLink, loadLogo, BRAND, bc, fmtDateLong } from '../lib/pdfTemplate'
 import UploadProgress from './UploadProgress'
+import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
 // ── Full H&S folder template ─────────────────────────────────
 const HS_STRUCTURE = [
@@ -371,9 +372,9 @@ async function triggerDownload(signedUrl, fileName) {
   try {
     const res = await fetch(signedUrl); const blob = await res.blob()
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName
-    document.body.appendChild(a); a.click(); document.body.removeChild(a)
+    document.body.appendChild(a); a.click(); zipProgressHide(); document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-  } catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click() }
+  } catch { const a = document.createElement('a'); a.href = signedUrl; a.download = fileName; a.click(); zipProgressHide() }
 }
 
 async function readDropEntries(e) {
@@ -979,7 +980,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     const script = document.createElement('script')
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     script.onload = async () => {
-      const zip = new window.JSZip()
+      zipProgressShow(); const zip = new window.JSZip()
       const rootFolder = zip.folder(node.label)
       for (const f of allFiles) {
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
@@ -990,8 +991,8 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
           target.file(f.file_name, await resp.blob())
         }
       }
-      const content = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = `${node.label}.zip`; a.click()
+      const content = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
+      const a = document.createElement('a'); a.href = URL.createObjectURL(content); a.download = `${node.label}.zip`; a.click(); zipProgressHide()
     }
     document.head.appendChild(script)
   }
@@ -1001,13 +1002,13 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     if (!chosen.length) return
     const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
     s.onload = async () => {
-      const zip = new window.JSZip()
+      zipProgressShow(); const zip = new window.JSZip()
       for (const f of chosen) {
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 120)
-        if (data?.signedUrl) { const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
+        if (data?.signedUrl) { zipProgressUpdate({ fileName: f.file_name }); const res = await fetch(data.signedUrl); zip.file(f.file_name, await res.blob()) }
       }
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = node.label + '-selected.zip'; a.click()
+      const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = node.label + '-selected.zip'; a.click(); zipProgressHide()
     }
     document.head.appendChild(s)
   }
@@ -1449,7 +1450,7 @@ export default function HSHandover({ projectId, projectName }) {
     const bytes = await merged.save()
     const blob = new Blob([bytes], { type: 'application/pdf' })
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob); a.download = filename; a.click()
+    a.href = URL.createObjectURL(blob); a.download = filename; a.click(); zipProgressHide()
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
   }
 
@@ -1486,7 +1487,7 @@ export default function HSHandover({ projectId, projectName }) {
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
       document.head.appendChild(script)
       await new Promise(r => script.onload = r)
-      const zip = new window.JSZip()
+      zipProgressShow(); const zip = new window.JSZip()
 
       // Build folder paths from HS_STRUCTURE in memory (no DB dependency)
       const keyToPath = buildPaths(HS_STRUCTURE, '', {})
@@ -1522,11 +1523,11 @@ export default function HSHandover({ projectId, projectName }) {
         }
       }
 
-      const blob = await zip.generateAsync({ type: 'blob' })
+      const blob = await zip.generateAsync({ type: 'blob' }, m => zipProgressUpdate({ percent: m.percent, label: 'Compressing zip' }))
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = (projectName || 'project') + '-hs-handover.zip'
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
+      document.body.appendChild(a); a.click(); zipProgressHide(); document.body.removeChild(a)
       setTimeout(() => URL.revokeObjectURL(a.href), 2000)
     } catch (e) { alert('Zip failed: ' + e.message) }
     setZippingAll(false)
