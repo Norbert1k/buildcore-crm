@@ -12,7 +12,9 @@ function themeFor(profileData, div) {
   // 'light' — a profile with no saved theme must never stomp the look the
   // user was already running (that regression forced light on every refresh).
   const remembered = localStorage.getItem('theme') || 'light'
-  if (div === 'fitout') return profileData?.theme_fitout || profileData?.theme || remembered
+  // Fit-out defaults to its signature Blueprint theme (Stage 6) until the
+  // user explicitly picks something else for that division.
+  if (div === 'fitout') return profileData?.theme_fitout || 'blueprint'
   return profileData?.theme || remembered
 }
 

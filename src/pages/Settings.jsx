@@ -155,6 +155,9 @@ const THEME_OPTIONS = [
   { value: 'sand',   label: 'Sand',   preview: { bg: '#F4EEDD', sidebar: '#FBF7EB', border: '#E2D5B5', text: '#412402', accent: '#854F0B', accentBg: '#FAEEDA' } },
   { value: 'slate',  label: 'Slate',  preview: { bg: '#1A1E2A', sidebar: '#20253A', border: 'rgba(133,183,235,0.10)', text: '#E6F1FB', accent: '#85B7EB', accentBg: 'rgba(55,138,221,0.18)' } },
   { value: 'pearl',  label: 'Pearl White', preview: { bg: '#FFFFFF', sidebar: '#FFFFFF', border: '#E2E0D8', text: '#1C1B18', accent: '#5B9BD5', accentBg: '#EFF6FB' } },
+  // The Fit-Out division's signature look (Stage 6) — available to both
+  // divisions, and Fit-Out's default when no theme has been chosen.
+  { value: 'blueprint', label: 'Blueprint', preview: { bg: '#0D1519', sidebar: '#101B21', border: '#1C2E36', text: '#DCE9EE', accent: '#22B8D4', accentBg: 'rgba(34,184,212,0.14)' } },
 ]
 
 export default function Settings() {
