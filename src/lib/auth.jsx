@@ -3,6 +3,15 @@ import { supabase } from './supabase'
 
 const AuthContext = createContext(null)
 
+// Each division remembers its own theme: profiles.theme = Construction's,
+// profiles.theme_fitout = Fit-Out's (falls back to the construction theme,
+// then light). Picking a theme in Settings saves to the ACTIVE division's
+// slot; switching division applies that division's saved look.
+function themeFor(profileData, div) {
+  if (div === 'fitout') return profileData?.theme_fitout || profileData?.theme || 'light'
+  return profileData?.theme || 'light'
+}
+
 function applyTheme(theme) {
   const t = theme || 'light'
   document.documentElement.setAttribute('data-theme', t)
@@ -61,8 +70,8 @@ export function AuthProvider({ children }) {
       setDivisionState(resolved)
       document.documentElement.setAttribute('data-division', resolved)
       localStorage.setItem(`ccg_division_${userId}`, resolved)
+      applyTheme(themeFor(data, resolved))
     }
-    if (data?.theme) applyTheme(data.theme)
     if (data?.role === 'site_manager') {
       const { data: access } = await supabase.from('user_project_access').select('project_id').eq('user_id', userId)
       setProjectAccess((access || []).map(a => a.project_id))
@@ -72,8 +81,10 @@ export function AuthProvider({ children }) {
 
   async function setTheme(theme) {
     applyTheme(theme)
-    setProfile(p => ({ ...p, theme }))
-    if (user) await supabase.from('profiles').update({ theme }).eq('id', user.id)
+    // Save to the ACTIVE division's theme slot.
+    const col = division === 'fitout' ? 'theme_fitout' : 'theme'
+    setProfile(p => ({ ...p, [col]: theme }))
+    if (user) await supabase.from('profiles').update({ [col]: theme }).eq('id', user.id)
   }
 
   async function signIn(email, password) {
@@ -97,8 +108,10 @@ export function AuthProvider({ children }) {
     if (!divisions.includes(d)) return
     setDivisionState(d)
     // Fit-out mode re-themes the app chrome (see [data-division="fitout"] in
-    // index.css) so switching divisions is visually unmistakable.
+    // index.css) so switching divisions is visually unmistakable — and each
+    // division applies its own saved theme.
     document.documentElement.setAttribute('data-division', d)
+    applyTheme(themeFor(profile, d))
     if (user) localStorage.setItem(`ccg_division_${user.id}`, d)
   }
 

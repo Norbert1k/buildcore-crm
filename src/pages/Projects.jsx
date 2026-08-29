@@ -25,6 +25,25 @@ export default function Projects() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('proj_live_open') === 'true')
   const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('proj_tender_open') === 'true')
+  const navigate = useNavigate()
+  const { can, role, division } = useAuth()
+  const isAdmin = role === 'admin'
+
+  function toggleLive() { setLiveOpen(v => { localStorage.setItem('proj_live_open', !v); return !v }) }
+  function toggleTender() { setTenderOpen(v => { localStorage.setItem('proj_tender_open', !v); return !v }) }
+
+  useEffect(() => { load() }, [division])
+
+  // Active projects only — derived from the loaded list. We compute it
+  // synchronously here (cheap filter) so we can drive the dashboard load
+  // from a stable reference.
+  const activeProjects = useMemo(
+    () => projects.filter(p => p.status === 'active'),
+    [projects]
+  )
+
+  // Load dashboard financials whenever the set of active projects changes.
+  //
 
   async function load() {
     setLoading(true)
@@ -222,7 +241,6 @@ export default function Projects() {
           </div>
         </>
       )}
-
 
       {showModal && <ProjectModal project={editing} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}
 

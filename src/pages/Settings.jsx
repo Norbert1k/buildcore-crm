@@ -158,9 +158,14 @@ const THEME_OPTIONS = [
 ]
 
 export default function Settings() {
-  const { profile, can, signOut, setTheme } = useAuth()
+  const { profile, can, signOut, setTheme, division } = useAuth()
   const navigate = useNavigate()
   const [activeTheme, setActiveTheme] = useState(() => document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'light')
+  // Each division has its own theme — resync the highlighted swatch when the
+  // division switcher applies the other division's saved theme.
+  useEffect(() => {
+    setActiveTheme(document.documentElement.getAttribute('data-theme') || 'light')
+  }, [division])
   const [users, setUsers] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -387,7 +392,11 @@ export default function Settings() {
           {/* Card 2 — Appearance (theme swatches). Heading lives inside the
               card now since it's no longer nested under Profile. */}
           <div className="card card-pad">
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Appearance</div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Appearance</div>
+            <div style={{ fontSize: 12, color: division === 'fitout' ? '#0E7490' : '#448a40', fontWeight: 600, marginBottom: 10 }}>
+              Theme for the {division === 'fitout' ? 'Fit-Out' : 'Construction'} division
+              <span style={{ color: 'var(--text3)', fontWeight: 400 }}> — each division keeps its own</span>
+            </div>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
