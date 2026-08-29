@@ -37,15 +37,16 @@ export default function ProjectCalendar() {
   const [hoveredId, setHoveredId] = useState(null)
   const ganttRef = useRef(null)
   const navigate = useNavigate()
-  const { can } = useAuth()
+  const { can, division } = useAuth()
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [division])
 
   async function load() {
     setLoading(true)
     const { data } = await supabase
       .from('projects')
       .select('id, project_name, project_ref, start_date, end_date, status, value, client_name')
+      .eq('division', division)
       .not('start_date', 'is', null)
       .not('end_date', 'is', null)
       .order('start_date', { ascending: true })

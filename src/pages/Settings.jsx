@@ -288,7 +288,7 @@ export default function Settings() {
   }
 
   async function loadProjects() {
-    const { data } = await supabase.from('projects').select('id, project_name, project_ref').order('project_name')
+    const { data } = await supabase.from('projects').select('id, project_name, project_ref').eq('division', division).order('project_name')
     setProjects(sortBy(data || [], 'project_name'))
   }
 

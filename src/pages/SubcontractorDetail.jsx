@@ -14,7 +14,7 @@ export default function SubcontractorDetail() {
   const navigate = useNavigate()
   const location = useLocation()
   const backPath = location.state?.from || '/subcontractors'
-  const { can, profile } = useAuth()
+  const { can, profile, division } = useAuth()
   const [sub, setSub] = useState(null)
   const [docs, setDocs] = useState([])
   const [projects, setProjects] = useState([])
@@ -41,7 +41,7 @@ export default function SubcontractorDetail() {
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load() }, [id, division])
 
   async function load() {
     setLoading(true)
@@ -49,7 +49,7 @@ export default function SubcontractorDetail() {
       supabase.from('subcontractors').select('*').eq('id', id).single(),
       supabase.from('documents_with_status').select('*').eq('subcontractor_id', id).order('document_type'),
       supabase.from('project_subcontractors').select('id, project_id, start_date, end_date, contract_value, variation_amount, variation_notes, status, trade_on_project, projects(id, project_name, project_ref, status, start_date, end_date, client_name)').eq('subcontractor_id', id),
-      supabase.from('projects').select('id, project_name, project_ref, status').eq('status', 'active').order('project_name'),
+      supabase.from('projects').select('id, project_name, project_ref, status').eq('status', 'active').eq('division', division).order('project_name'),
       supabase.from('subcontractor_notes').select('*, profiles(full_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
       supabase.from('subcontractor_contacts').select('*').eq('subcontractor_id', id).order('is_primary', { ascending: false }),
       supabase.from('performance_ratings').select('*, profiles(full_name), projects(project_name)').eq('subcontractor_id', id).order('created_at', { ascending: false }),
