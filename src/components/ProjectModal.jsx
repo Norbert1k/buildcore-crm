@@ -5,7 +5,7 @@ import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
 
 export default function ProjectModal({ project, onClose, onSaved }) {
-  const { profile } = useAuth()
+  const { profile, division } = useAuth()
   const editing = !!project
   const [managers, setManagers] = useState([])
   const [clients, setClients] = useState([])
@@ -99,6 +99,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       result = await supabase.from('projects').update(payload).eq('id', project.id)
     } else {
       payload.created_by = profile?.id
+      payload.division = division   // new projects belong to the active division
       result = await supabase.from('projects').insert(payload).select('id').single()
     }
     setSaving(false)

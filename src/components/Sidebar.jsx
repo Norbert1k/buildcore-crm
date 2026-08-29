@@ -25,7 +25,7 @@ function isDarkTheme() {
 }
 
 export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClose }) {
-  const { profile } = useAuth()
+  const { profile, division, divisions, setDivision } = useAuth()
   const [isDark, setIsDark] = useState(isDarkTheme())
   const location = useLocation()
   const [expandedKeys, setExpandedKeys] = useState(() => {
@@ -111,6 +111,29 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
               <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
             </div>
           </div>
+        </div>
+
+        {/* Division badge / switcher. Single-division users see a static
+            badge; dual-division users (admins) can switch without re-login. */}
+        <div style={{ padding: '8px 14px 0' }}>
+          {divisions.length > 1 ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              {divisions.map(d => (
+                <button key={d} onClick={() => setDivision(d)}
+                  style={{ flex: 1, padding: '5px 6px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+                    border: division === d ? `1.5px solid ${d === 'fitout' ? '#0E7490' : '#448a40'}` : '1px solid var(--border)',
+                    background: division === d ? (d === 'fitout' ? 'rgba(14,116,144,0.10)' : 'rgba(68,138,64,0.10)') : 'transparent',
+                    color: division === d ? (d === 'fitout' ? '#0E7490' : '#448a40') : 'var(--text3)' }}>
+                  {d === 'fitout' ? 'Fit-Out' : 'Construction'}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase',
+              color: division === 'fitout' ? '#0E7490' : '#448a40' }}>
+              {division === 'fitout' ? 'Fit-Out Division' : 'Construction Division'}
+            </div>
+          )}
         </div>
 
         <nav style={{ flex: 1, padding: '8px 0' }}>

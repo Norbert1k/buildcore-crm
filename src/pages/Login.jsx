@@ -19,6 +19,15 @@ export default function Login() {
   const [confirmPass, setConfirmPass] = useState('')
   const [passError, setPassError] = useState('')
   const [passLoading, setPassLoading] = useState(false)
+  // Pre-login division choice (Construction / Fit-Out). Persisted; validated
+  // after sign-in by the auth provider against the divisions the account
+  // actually holds — a single-division user lands in their division
+  // regardless of the card picked here.
+  const [chosenDivision, setChosenDivision] = useState(() => localStorage.getItem('ccg_division_choice') || 'construction')
+  function pickDivision(d) {
+    setChosenDivision(d)
+    localStorage.setItem('ccg_division_choice', d)
+  }
 
   // If redirected here with mfaFactorId from ProtectedLayout, go straight to 2FA
   useEffect(() => {
@@ -119,7 +128,25 @@ export default function Login() {
           {step === 'login' && (
             <>
               <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, color: 'var(--text, #1c1b18)' }}>Sign in</h2>
-              <p style={{ color: 'var(--text2, #808080)', fontSize: 13, marginBottom: 20 }}>Access the City Construction CRM</p>
+              <p style={{ color: 'var(--text2, #808080)', fontSize: 13, marginBottom: 14 }}>Access the City Construction CRM</p>
+
+              {/* Division chooser — Construction / Fit-Out */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+                <button type="button" onClick={() => pickDivision('construction')}
+                  style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                    border: chosenDivision === 'construction' ? '2px solid #448a40' : '1px solid var(--border, #e2e0d8)',
+                    background: chosenDivision === 'construction' ? 'rgba(68,138,64,0.08)' : 'transparent',
+                    color: chosenDivision === 'construction' ? '#448a40' : 'var(--text2, #808080)' }}>
+                  Construction
+                </button>
+                <button type="button" onClick={() => pickDivision('fitout')}
+                  style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                    border: chosenDivision === 'fitout' ? '2px solid #0E7490' : '1px solid var(--border, #e2e0d8)',
+                    background: chosenDivision === 'fitout' ? 'rgba(14,116,144,0.08)' : 'transparent',
+                    color: chosenDivision === 'fitout' ? '#0E7490' : 'var(--text2, #808080)' }}>
+                  Fit-Out
+                </button>
+              </div>
               <form onSubmit={handleLogin}>
                 <div style={{ marginBottom: 14 }}>
                   <label>Email address</label>

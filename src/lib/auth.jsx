@@ -16,6 +16,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   // MFA state — ProtectedLayout checks this to gate access
   const [mfaVerified, setMfaVerified] = useState(false)
+  // ── Division context (Construction / Fit-Out) ──────────────────────────
+  // The active division scopes every divisioned list and create-form.
+  // Resolved on profile load: the user's saved choice (per-user key) if they
+  // still hold that division, else the pre-login chooser pick, else their
+  // first division. Single-division users (e.g. fit-out-only) can never land
+  // outside their division regardless of what was chosen pre-login.
+  const [division, setDivisionState] = useState('construction')
 
   useEffect(() => {
     const saved = localStorage.getItem('theme') || 'light'
@@ -46,6 +53,14 @@ export function AuthProvider({ children }) {
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     setProfile(data)
+    {
+      const held = (data?.divisions && data.divisions.length) ? data.divisions : ['construction']
+      const saved = localStorage.getItem(`ccg_division_${userId}`)
+      const choice = localStorage.getItem('ccg_division_choice')
+      const resolved = held.includes(saved) ? saved : (held.includes(choice) ? choice : held[0])
+      setDivisionState(resolved)
+      localStorage.setItem(`ccg_division_${userId}`, resolved)
+    }
     if (data?.theme) applyTheme(data.theme)
     if (data?.role === 'site_manager') {
       const { data: access } = await supabase.from('user_project_access').select('project_id').eq('user_id', userId)
@@ -72,6 +87,15 @@ export function AuthProvider({ children }) {
 
   function markMfaVerified() {
     setMfaVerified(true)
+  }
+
+  // Divisions this user may enter; admins hold both via profiles.divisions.
+  const divisions = (profile?.divisions && profile.divisions.length) ? profile.divisions : ['construction']
+
+  function setDivision(d) {
+    if (!divisions.includes(d)) return
+    setDivisionState(d)
+    if (user) localStorage.setItem(`ccg_division_${user.id}`, d)
   }
 
   const role = profile?.role
@@ -144,7 +168,7 @@ export function AuthProvider({ children }) {
   const canViewActivity = () => ['admin', 'project_manager', 'operations_manager'].includes(role)
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, canViewActivity, projectAccess, role, setTheme, mfaVerified, markMfaVerified }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, canViewActivity, projectAccess, role, setTheme, mfaVerified, markMfaVerified, division, divisions, setDivision }}>
       {children}
     </AuthContext.Provider>
   )

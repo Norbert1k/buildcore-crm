@@ -33,14 +33,14 @@ export default function Projects() {
   // real CFF/PA-aggregated shape as background fetches complete.
   const [dashFin, setDashFin] = useState(null)
   const navigate = useNavigate()
-  const { can, role } = useAuth()
+  const { can, role, division } = useAuth()
   const isAdmin = role === 'admin'
 
   function toggleLive() { setLiveOpen(v => { localStorage.setItem('proj_live_open', !v); return !v }) }
   function toggleTender() { setTenderOpen(v => { localStorage.setItem('proj_tender_open', !v); return !v }) }
   function toggleFinancials() { setFinancialsOpen(v => { localStorage.setItem('proj_financials_open', !v); return !v }) }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [division])
 
   // Active projects only — derived from the loaded list. We compute it
   // synchronously here (cheap filter) so we can drive the dashboard load
@@ -95,6 +95,7 @@ export default function Projects() {
     const { data, error } = await supabase
       .from('projects')
       .select('*, profiles!projects_project_manager_id_fkey(full_name), director:profiles!projects_project_director_id_fkey(full_name), project_subcontractors(id)')
+      .eq('division', division)
       .order('project_ref', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
     if (error) console.error('[Projects] load error:', error)

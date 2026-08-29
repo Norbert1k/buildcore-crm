@@ -69,7 +69,7 @@ function clientColor(id) {
 }
 
 export default function Clients() {
-  const { can, profile } = useAuth()
+  const { can, profile, division } = useAuth()
   const navigate = useNavigate()
   const [clients, setClients] = useState([])
   const [loading, setLoading] = useState(true)
@@ -78,13 +78,14 @@ export default function Clients() {
 
   const isAdmin = profile?.role === 'admin'
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [division])
 
   async function load() {
     setLoading(true)
     const { data: clientData } = await supabase
       .from('clients')
       .select('*')
+      .eq('division', division)
       .order('name')
 
     const { data: projectData } = await supabase
@@ -215,7 +216,7 @@ function AddClientModal({ onClose, onSaved }) {
     if (!form.name.trim()) { setError('Client name is required'); return }
     setSaving(true)
     const cleanName = form.name.trim()
-    const { error: err } = await supabase.from('clients').insert({ ...form, name: cleanName, slug: slugify(cleanName) })
+    const { error: err } = await supabase.from('clients').insert({ ...form, name: cleanName, slug: slugify(cleanName), division })
     setSaving(false)
     if (err) { setError(err.message); return }
     onSaved()
