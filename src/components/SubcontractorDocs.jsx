@@ -221,7 +221,125 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
   const [fileCount, setFileCount] = useState(0)
   // Generate PO — only used by the 'purchase-order' folder.
   const [showPOModal, setShowPOModal] = useState(false)
+  // PO picker: clicking Generate PO lists ALL saved POs for this
+  // subcontractor (draft + issued) so the user chooses which one to amend or
+  // delete — or starts a brand-new PO. If none exist, the blank form opens
+  // directly. (Also enables raising a SECOND separate PO for the same sub.)
+  const [existingPOForModal, setExistingPOForModal] = useState(null)
+  const [loadingPO, setLoadingPO] = useState(false)
+  const [poList, setPoList] = useState([])
+  const [showPOPicker, setShowPOPicker] = useState(false)
+  const [editInPlaceMode, setEditInPlaceMode] = useState(false)
   const { profile } = useAuth()
+
+  async function openPOModal() {
+    setLoadingPO(true)
+    try {
+      // Load EVERY version — draft, issued AND superseded originals — so the
+      // picker can show each order's full revision chain.
+      const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('id, order_number, revision, status, order_date, contract_value, created_at')
+        .eq('project_sub_id', projectSubId)
+        .in('status', ['draft', 'issued', 'superseded'])
+        .order('created_at', { ascending: false })
+      if (error) {
+        alert('Could not load purchase orders: ' + error.message)
+        return
+      }
+      const list = data || []
+      if (list.length === 0) {
+        setExistingPOForModal(null)
+        setEditInPlaceMode(false)
+        setShowPOModal(true)
+      } else {
+        setPoList(list)
+        setShowPOPicker(true)
+      }
+    } catch (err) {
+      alert('Generate PO failed: ' + (err?.message || String(err)))
+    } finally {
+      setLoadingPO(false)
+    }
+  }
+
+  // Group the flat list into order chains: one entry per order_number with
+  // its versions sorted oldest→newest (original '' first, then Rev A, B…).
+  function poGroups() {
+    const byOrder = {}
+    for (const po of poList) {
+      (byOrder[po.order_number] = byOrder[po.order_number] || []).push(po)
+    }
+    return Object.entries(byOrder).map(([orderNumber, versions]) => {
+      const sorted = versions.slice().sort((a, b) => (a.revision || '').localeCompare(b.revision || ''))
+      const current = sorted.filter(v => v.status !== 'superseded').pop() || sorted[sorted.length - 1]
+      return { orderNumber, versions: sorted, current }
+    }).sort((a, b) => (b.current?.created_at || '').localeCompare(a.current?.created_at || ''))
+  }
+
+  async function amendPO(po, inPlace = false) {
+    const { data } = await supabase.from('purchase_orders').select('*').eq('id', po.id).single()
+    setExistingPOForModal(data || null)
+    setEditInPlaceMode(inPlace)
+    setShowPOPicker(false)
+    setShowPOModal(true)
+  }
+
+  // Delete ONE version from a chain (e.g. remove the superseded original so
+  // Rev A stands as the clean version). Re-points any revision_of links first
+  // so the chain never breaks, and if the CURRENT version is deleted while an
+  // older one remains, the newest remaining version is promoted back to
+  // 'issued' so the order always has a current version.
+  async function deleteVersion(v, group) {
+    const label = `${v.order_number}${v.revision ? ' Rev ' + v.revision : ' (original)'}`
+    const others = group.versions.filter(x => x.id !== v.id)
+    const msg = `Delete ${label}?\n\n` +
+      `• Only this version's saved data is removed${others.length ? ` — ${others.length} other version${others.length === 1 ? '' : 's'} of this order remain` : ' (it is the only version, so the whole order record goes)'}.\n` +
+      `• PDF documents in the folder are separate files and are NOT deleted.\n\nThis cannot be undone.`
+    if (!window.confirm(msg)) return
+    // Re-point children that referenced this version, then delete it. Both
+    // steps verify a row actually changed — RLS can silently block writes
+    // (0 rows affected, no error), which would otherwise look like a dead
+    // button.
+    const { error: upErr } = await supabase.from('purchase_orders')
+      .update({ revision_of: v.revision_of || null }).eq('revision_of', v.id)
+    if (upErr) { alert('Could not unlink revisions: ' + upErr.message); return }
+    const { data: deleted, error } = await supabase.from('purchase_orders')
+      .delete().eq('id', v.id).select('id')
+    if (error) { alert('Could not delete: ' + error.message); return }
+    if (!deleted || deleted.length === 0) {
+      alert('The delete was blocked — no row was removed. This is usually a database permission (RLS) rule on purchase_orders. Tell me and I will provide the policy fix.')
+      return
+    }
+    // If we removed the current version and older ones remain, promote the
+    // newest remaining back to issued.
+    if (v.status !== 'superseded' && others.length) {
+      const newest = others[others.length - 1]
+      await supabase.from('purchase_orders').update({ status: 'issued' }).eq('id', newest.id)
+    }
+    // If exactly ONE version now remains in this chain, it becomes the clean
+    // original: revision cleared (no more "Rev A"), link cleared, and issued.
+    if (others.length === 1) {
+      await supabase.from('purchase_orders')
+        .update({ revision: '', revision_of: null, status: 'issued' })
+        .eq('id', others[0].id)
+    }
+    // Refresh the picker list from the DB (statuses may have changed).
+    const { data } = await supabase
+      .from('purchase_orders')
+      .select('id, order_number, revision, status, order_date, contract_value, created_at')
+      .eq('project_sub_id', projectSubId)
+      .in('status', ['draft', 'issued', 'superseded'])
+      .order('created_at', { ascending: false })
+    setPoList(data || [])
+  }
+
+  function newPOFromPicker() {
+    setExistingPOForModal(null)
+    setEditInPlaceMode(false)
+    setShowPOPicker(false)
+    setShowPOModal(true)
+  }
 
   useEffect(() => { loadCustomSubfolders(); loadFileCount() }, [])
   useEffect(() => { if (open) loadRootFiles() }, [open])
@@ -289,9 +407,9 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           </> : <>
             <button onClick={() => zipFolder()} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip all</button>
             {folder.key === 'purchase-order' && canManage && (
-              <button onClick={() => setShowPOModal(true)} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <button onClick={e => { e.stopPropagation(); openPOModal() }} disabled={loadingPO} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                Generate PO
+                {loadingPO ? 'Loading…' : 'Generate PO'}
               </button>
             )}
             {canManage && <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>}
@@ -313,11 +431,31 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           ) : <FilesGrid files={files} viewMode={viewMode} onPreview={onPreview} canManage={canManage} onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDropFolder} onUpload={uploadToFolder} />}
         </div>
       )}
+      {showPOPicker && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 12, width: 'min(700px, 100%)', maxHeight: '80vh', overflow: 'auto', border: '0.5px solid var(--border)', padding: 18 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 600 }}>Purchase Orders</span>
+              <button onClick={() => setShowPOPicker(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>✕</button>
+            </div>
+            {poGroups().map(group => (
+              <POGroupRow key={group.orderNumber} group={group} onAmend={amendPO} onDeleteVersion={deleteVersion} />
+            ))}
+            {poGroups().length === 0 && <div style={{ padding: 18, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>No saved purchase orders left.</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={newPOFromPicker} style={{ fontSize: 12.5, padding: '7px 14px', border: 'none', borderRadius: 6, background: '#448a40', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+                + New PO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showPOModal && (
         <GeneratePOModal
           projectId={projectId}
           projectSubId={projectSubId}
-          existingPO={null}
+          existingPO={existingPOForModal}
+          editInPlace={editInPlaceMode}
           onClose={() => setShowPOModal(false)}
           onSaved={() => { loadRootFiles(); loadFileCount() }}
         />
@@ -325,6 +463,54 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
     </div>
   )
 }
+
+// ── PO picker: one order chain (current version + revision history) ─────────
+function POGroupRow({ group, onAmend, onDeleteVersion }) {
+  const [showVersions, setShowVersions] = useState(false)
+  const cur = group.current
+  const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  return (
+    <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', fontSize: 12.5, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 600, flexShrink: 0 }}>{cur.order_number}{cur.revision ? ` Rev ${cur.revision}` : ''}</span>
+        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: cur.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: cur.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{cur.status}</span>
+        <span style={{ color: 'var(--text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtD(cur.order_date)}</span>
+        {cur.contract_value != null && <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>£{Number(cur.contract_value).toLocaleString()}</span>}
+        <span style={{ display: 'inline-flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          {cur.status === 'issued' ? (
+            <>
+              <button onClick={() => onAmend(cur, true)} title="Update this version directly — no new Rev is created" style={pkBtn}>Edit current</button>
+              <button onClick={() => onAmend(cur, false)} title="Create the next revision; this version is kept on record" style={pkBtn}>Revise</button>
+            </>
+          ) : (
+            <button onClick={() => onAmend(cur, false)} style={pkBtn}>Edit</button>
+          )}
+          <button onClick={() => setShowVersions(v => !v)} title="Show all versions of this order" style={pkBtn}>
+            {group.versions.length}v {showVersions ? '▴' : '▾'}
+          </button>
+        </span>
+      </div>
+      {showVersions && (
+        <div style={{ borderTop: '0.5px solid var(--border)', background: 'var(--surface2)' }}>
+          {group.versions.map(v => (
+            <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px 7px 24px', borderTop: '0.5px solid var(--border)', fontSize: 12 }}>
+              <span style={{ flexShrink: 0 }}>{v.revision ? `Rev ${v.revision}` : 'Original'}</span>
+              <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: v.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface)', color: v.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{v.status}</span>
+              <span style={{ color: 'var(--text3)', flex: 1 }}>{fmtD(v.created_at)}</span>
+              <button onClick={() => onDeleteVersion(v, group)} style={{ fontSize: 10.5, padding: '2px 9px', border: '0.5px solid var(--red, #E24B4A)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red, #E24B4A)', flexShrink: 0 }}>
+                Delete
+              </button>
+            </div>
+          ))}
+          <div style={{ padding: '6px 12px 8px 24px', fontSize: 10.5, color: 'var(--text3)' }}>
+            Deleting the superseded original leaves the latest Rev as the clean, only version. PDFs in the folder are separate — remove old PDFs there.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+const pkBtn = { fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text)', flexShrink: 0 }
 
 // ── SubFolder (recursive child folders) ──────────────────────
 function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, onPreview, onReload }) {

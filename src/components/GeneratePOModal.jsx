@@ -81,7 +81,7 @@ const fmtDate = (d) => {
     : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default function GeneratePOModal({ projectId, projectSubId, existingPO, onClose, onSaved }) {
+export default function GeneratePOModal({ projectId, projectSubId, existingPO, editInPlace = false, onClose, onSaved }) {
   const { profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -106,6 +106,18 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
   const [programmeFiles, setProgrammeFiles] = useState([])
   const [selectedProgrammeId, setSelectedProgrammeId] = useState('')
 
+  // Quotes on record for this company on this project — pick one to use.
+  const [quoteOptions, setQuoteOptions] = useState([])
+  const [pickedQuoteId, setPickedQuoteId] = useState('')
+  function pickQuote(q) {
+    setPickedQuoteId(q.id)
+    setForm(f => ({
+      ...f,
+      quote_reference: q.quote_reference || f.quote_reference,
+      quote_date: q.received_date || f.quote_date,
+    }))
+  }
+
   // Order number — generated once on open for a new PO so it can be shown
   // locked. Existing POs use their stored number.
   const [orderNumber, setOrderNumber] = useState('')
@@ -118,6 +130,9 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
     site_manager_tel: '',
     pm_tel: '',                     // typed — profiles has no phone column
     director_name: '',              // typed — auto-fills from project's assigned director
+    contract_value: '',             // typed — auto-fills from the assignment's order value
+    quote_reference: '',            // typed — auto-fills from the accepted quote if one exists
+    quote_date: '',                 // typed — auto-fills from the accepted quote if one exists
     scope_of_works: '',
     brief_description: '',
     design_responsibility: '',
@@ -171,19 +186,21 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         directorName = dir?.full_name || ''
       }
 
-      // Accepted quote for this subcontractor on this project, if any —
-      // gives the quote reference + date for the contract-documents clause.
+      // ALL quotes for this subcontractor on this project — shown as a picker
+      // so the PM can tick which quote (which job) this PO is against. The
+      // accepted one (if any) still auto-fills the reference/date initially.
       let quoteReference = '', quoteDate = ''
       const { data: quotes } = await supabase
         .from('task_quotes')
-        .select('quote_reference, received_date, status, subcontractor_id, tasks!inner(project_id)')
+        .select('id, quote_reference, received_date, status, amount, tasks!inner(id, title, project_id)')
         .eq('subcontractor_id', link?.subcontractor_id)
-        .eq('status', 'accepted')
         .eq('tasks.project_id', projectId)
-        .limit(1)
-      if (quotes && quotes.length) {
-        quoteReference = quotes[0].quote_reference || ''
-        quoteDate = quotes[0].received_date || ''
+        .order('received_date', { ascending: false })
+      setQuoteOptions(quotes || [])
+      const accepted = (quotes || []).find(q => q.status === 'accepted')
+      if (accepted) {
+        quoteReference = accepted.quote_reference || ''
+        quoteDate = accepted.received_date || ''
       }
 
       const subAddress = [sub.address, sub.city, sub.postcode].filter(Boolean).join(', ')
@@ -241,6 +258,11 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
           // to the project's currently assigned director (handles older POs
           // saved before this field existed).
           director_name: existingPO.director_name || directorName || '',
+          // Quote reference/date — prefer what's saved on this PO, else the
+          // accepted quote's values (both editable in the form).
+          contract_value: existingPO.contract_value != null ? String(existingPO.contract_value) : (link?.contract_value != null ? String(link.contract_value) : ''),
+          quote_reference: existingPO.quote_reference || quoteReference || '',
+          quote_date: existingPO.quote_date || quoteDate || '',
           scope_of_works: existingPO.scope_of_works || '',
           brief_description: existingPO.brief_description || '',
           design_responsibility: existingPO.design_responsibility || '',
@@ -257,9 +279,10 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         setSelectedProgrammeId(existingPO.programme_file_id || '')
       } else {
         // New PO — default the PM and Director to the project's assigned ones
-        // (both overridable: PM via dropdown, Director by typing).
+        // (both overridable: PM via dropdown, Director by typing). Quote
+        // reference/date auto-fill from the accepted quote but stay editable.
         setSelectedPmId(project.project_manager_id || '')
-        setForm(f => ({ ...f, director_name: directorName || '' }))
+        setForm(f => ({ ...f, director_name: directorName || '', contract_value: link?.contract_value != null ? String(link.contract_value) : '', quote_reference: quoteReference || '', quote_date: quoteDate || '' }))
       }
     } catch (err) {
       setError('Could not load project / subcontractor details: ' + err.message)
@@ -310,6 +333,72 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
     setAiBusy('')
   }
 
+  // ── Quote drop-box ──────────────────────────────────────────────────────────
+  // Drop the subcontractor's quote PDF here. It is (1) SAVED into the sub's
+  // Purchase Order folder as a real document, then (2) read by the
+  // parse-quote-pdf edge function (Claude reads the PDF) and the extracted
+  // quote reference, date, scope and description are dropped into the form as
+  // EDITABLE drafts. Nothing is auto-saved — you review everything first.
+  const [quoteParsing, setQuoteParsing] = useState(false)
+  const [quoteParseMsg, setQuoteParseMsg] = useState('')
+  const [quoteDragOver, setQuoteDragOver] = useState(false)
+
+  async function handleQuoteFile(file) {
+    if (!file) return
+    if (!/\.pdf$/i.test(file.name)) { setQuoteParseMsg('Please drop a PDF quote.'); return }
+    setQuoteParsing(true)
+    setQuoteParseMsg('Uploading quote…')
+    try {
+      // 1) Save the quote into the sub's Purchase Order folder (kept as a record).
+      const path = `projects/${projectId}/subs/${projectSubId}/purchase-order/${Date.now()}-${file.name}`
+      const { error: upErr } = await supabase.storage.from('project-docs').upload(path, file)
+      if (upErr) throw new Error('Upload failed: ' + upErr.message)
+      await supabase.from('project_sub_files').insert({
+        project_id: projectId, project_sub_id: projectSubId, folder_key: 'purchase-order',
+        file_name: file.name, file_size: file.size, storage_path: path, uploaded_by: profile?.id,
+      })
+
+      // 2) Ask the edge function to read it.
+      setQuoteParseMsg('Reading the quote with AI…')
+      const { data, error: fnErr } = await supabase.functions.invoke('parse-quote-po', {
+        body: { storage_path: path },
+      })
+      if (fnErr) throw fnErr
+      if (!data?.ok) throw new Error(data?.error || 'The quote could not be read.')
+
+      const q = data.quote || {}
+      // Fill the fields — empty fields fill silently; occupied ones only after
+      // one confirm (so a re-drop can refresh everything deliberately).
+      const updates = {}
+      if (q.quote_reference) updates.quote_reference = q.quote_reference
+      if (q.quote_date) updates.quote_date = q.quote_date
+      if (q.scope_of_works) updates.scope_of_works = q.scope_of_works
+      if (q.brief_description) updates.brief_description = q.brief_description
+      if (q.total_value_ex_vat != null) updates.contract_value = String(q.total_value_ex_vat)
+
+      const occupied = Object.keys(updates).filter(k => (form[k] || '').trim())
+      let apply = updates
+      if (occupied.length) {
+        const ok = window.confirm(`The quote provides new text for field(s) you already filled: ${occupied.join(', ')}.\n\nOverwrite them with the quote's content? (Cancel keeps your text — empty fields still fill.)`)
+        if (!ok) {
+          apply = Object.fromEntries(Object.entries(updates).filter(([k]) => !(form[k] || '').trim()))
+        }
+      }
+      setForm(f => ({ ...f, ...apply }))
+
+      const bits = []
+      if (q.quote_reference) bits.push(`ref ${q.quote_reference}`)
+      if (q.quote_date) bits.push(`dated ${q.quote_date}`)
+      if (q.total_value_ex_vat != null) bits.push(`total £${Number(q.total_value_ex_vat).toLocaleString()} ex VAT`)
+      setQuoteParseMsg(`✓ Quote read${bits.length ? ' — ' + bits.join(', ') : ''}. Fields filled below are drafts — review before saving.` +
+        (q.total_value_ex_vat != null && ctx.contractValue && Number(q.total_value_ex_vat) !== Number(ctx.contractValue)
+          ? ` Note: quote total differs from the order value on this subcontractor assignment (£${Number(ctx.contractValue).toLocaleString()}).` : ''))
+    } catch (err) {
+      setQuoteParseMsg('Quote reading failed: ' + (err.message || 'unknown error') + ' — the PDF was still saved to the Purchase Order folder if the upload succeeded.')
+    }
+    setQuoteParsing(false)
+  }
+
   // Generate the order number: CCG-PO-<year>-<4-digit sequence>.
   // Uses a count of existing distinct order numbers as the sequence basis;
   // the DB sequence (purchase_order_seq) is the authoritative collision guard
@@ -344,9 +433,9 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
         commencement_date: form.commencement_date || null,
         site_manager_name: form.site_manager_name.trim() || null,
         site_manager_tel: form.site_manager_tel.trim() || null,
-        contract_value: ctx.contractValue ? Number(ctx.contractValue) : null,
-        quote_reference: ctx.quoteReference || null,
-        quote_date: ctx.quoteDate || null,
+        contract_value: form.contract_value !== '' && !isNaN(Number(form.contract_value)) ? Number(form.contract_value) : null,
+        quote_reference: form.quote_reference.trim() || null,
+        quote_date: form.quote_date || null,
         scope_of_works: form.scope_of_works.trim() || null,
         brief_description: form.brief_description.trim() || null,
         design_responsibility: form.design_responsibility.trim() || null,
@@ -372,7 +461,9 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
 
       let savedRow = null
 
-      if (existingPO && existingPO.status === 'draft') {
+      if (existingPO && (existingPO.status === 'draft' || editInPlace)) {
+        // Draft edits AND explicit "edit current version" both update the same
+        // row in place — no new revision is created.
         // Editing a draft — update the same row in place.
         const { data, error: e } = await supabase
           .from('purchase_orders')
@@ -473,6 +564,38 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
     setSaving(false)
   }
 
+  // ── Delete the saved PO record ──────────────────────────────────────────────
+  // Removes the "invisible" purchase_orders record (this order number and ALL
+  // its revisions for this subcontractor) so the next Generate PO starts
+  // completely fresh with a new number. PDFs already generated into the
+  // Purchase Order folder are separate files — deliberately NOT touched here;
+  // delete those from the folder itself if you want them gone too.
+  async function deletePORecord() {
+    if (!existingPO) return
+    const msg = `Delete the saved record for ${existingPO.order_number}` +
+      (existingPO.revision ? ` (all revisions)` : '') + `?\n\n` +
+      `• The form data saved for this order will be permanently removed.\n` +
+      `• The next Generate PO for this subcontractor starts blank with a NEW order number.\n` +
+      `• Any PDF documents already in the Purchase Order folder are separate files and will NOT be deleted.\n\n` +
+      `This cannot be undone.`
+    if (!window.confirm(msg)) return
+    setSaving(true)
+    setError('')
+    try {
+      const { error: delErr } = await supabase
+        .from('purchase_orders')
+        .delete()
+        .eq('project_sub_id', projectSubId)
+        .eq('order_number', existingPO.order_number)
+      if (delErr) throw delErr
+      onSaved?.(null)
+      onClose?.()
+    } catch (err) {
+      setError('Could not delete the PO record: ' + err.message)
+    }
+    setSaving(false)
+  }
+
   // ── Styling helpers ────────────────────────────────────────────────────────
   const overlay = {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)',
@@ -492,8 +615,10 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
   }
   const label = { fontSize: 11, color: 'var(--text3)', marginBottom: 4, display: 'block' }
 
-  const issuedRevision = existingPO && existingPO.status === 'issued'
+  const issuedRevision = existingPO && existingPO.status === 'issued' && !editInPlace
   const heading = !existingPO ? 'Generate Purchase Order'
+    : (editInPlace && existingPO.status === 'issued')
+      ? `Edit PO — ${existingPO.order_number}${existingPO.revision ? ' Rev ' + existingPO.revision : ''} (updating current version)`
     : existingPO.status === 'issued'
       ? `Revise PO — ${existingPO.order_number} (creating Rev ${NEXT_REVISION(existingPO.revision)})`
       : `Edit PO — ${existingPO.order_number}${existingPO.revision ? ' Rev ' + existingPO.revision : ''}`
@@ -520,6 +645,11 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
                 This order has already been issued. Saving changes will create <strong>Rev {NEXT_REVISION(existingPO.revision)}</strong> — the current version is kept on record.
               </div>
             )}
+            {editInPlace && existingPO?.status === 'issued' && (
+              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#E1F5EE', color: '#0F6E56', fontSize: 12 }}>
+                Editing the <strong>current version in place</strong> — no new revision will be created. Issuing again regenerates the PDF for this same version.
+              </div>
+            )}
 
             {/* Auto-filled context */}
             <div style={sectionTitle}>Auto-filled — from project &amp; subcontractor</div>
@@ -538,8 +668,55 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
               <div><span style={label}>Sub-Contractor Address</span><div style={roBox}>{ctx.subAddress || '—'}</div></div>
               <div><span style={label}>Site / Project</span><div style={roBox}>{ctx.siteName || '—'}</div></div>
               <div><span style={label}>Site / Delivery Address</span><div style={roBox}>{ctx.siteAddress || '—'}</div></div>
-              <div><span style={label}>Contract Value (excl. VAT)</span><div style={roBox}>{ctx.contractValue ? '£' + Number(ctx.contractValue).toLocaleString('en-GB') : '—'}</div></div>
-              <div><span style={label}>Quote Reference / Date</span><div style={roBox}>{ctx.quoteReference || '—'}{ctx.quoteDate ? ' · ' + fmtDate(ctx.quoteDate) : ''}</div></div>
+              <div>
+                <span style={label}>Contract / Order Value £ (excl. VAT) — auto-filled, can edit</span>
+                <input type="number" step="0.01" value={form.contract_value} onChange={e => set('contract_value', e.target.value)} placeholder="e.g. 30000" style={{ width: '100%' }} />
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div
+                  onDragOver={e => { e.preventDefault(); setQuoteDragOver(true) }}
+                  onDragLeave={() => setQuoteDragOver(false)}
+                  onDrop={e => { e.preventDefault(); setQuoteDragOver(false); if (e.dataTransfer?.files?.[0]) handleQuoteFile(e.dataTransfer.files[0]) }}
+                  style={{ border: '1.5px dashed ' + (quoteDragOver ? '#448a40' : 'var(--border)'), borderRadius: 8, padding: '12px 14px', textAlign: 'center', background: quoteDragOver ? 'rgba(68,138,64,0.08)' : 'transparent', fontSize: 12, color: 'var(--text2)' }}>
+                  {quoteParsing ? (
+                    <span>{quoteParseMsg || 'Reading quote…'}</span>
+                  ) : (
+                    <label style={{ cursor: 'pointer' }}>
+                      📄 Drop the subcontractor's quote PDF here (or click) — AI reads it and fills the quote reference, date and scope for you to review
+                      <input type="file" accept="application/pdf" style={{ display: 'none' }}
+                        onChange={e => { if (e.target.files?.[0]) handleQuoteFile(e.target.files[0]); e.target.value = '' }} />
+                    </label>
+                  )}
+                </div>
+                {!quoteParsing && quoteParseMsg && (
+                  <div style={{ fontSize: 11, color: quoteParseMsg.startsWith('✓') ? '#448a40' : 'var(--red, #E24B4A)', marginTop: 5 }}>{quoteParseMsg}</div>
+                )}
+              </div>
+              {quoteOptions.length > 0 && (
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <span style={label}>Quotes on record for {ctx.subName || 'this company'} — tick the one this PO is against</span>
+                  <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginTop: 4 }}>
+                    {quoteOptions.map(q => (
+                      <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderTop: '0.5px solid var(--border)', fontSize: 12, cursor: 'pointer', background: pickedQuoteId === q.id ? 'var(--surface2)' : 'transparent' }}>
+                        <input type="radio" name="quotePick" checked={pickedQuoteId === q.id} onChange={() => pickQuote(q)} style={{ width: 14, height: 14, appearance: 'auto', flexShrink: 0 }} />
+                        <span style={{ fontWeight: 600, flexShrink: 0 }}>{q.quote_reference || '(no ref)'}</span>
+                        <span style={{ color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{q.tasks?.title || '—'}</span>
+                        {q.amount != null && <span style={{ flexShrink: 0 }}>£{Number(q.amount).toLocaleString()}</span>}
+                        <span style={{ color: 'var(--text3)', flexShrink: 0 }}>{q.received_date ? fmtDate(q.received_date) : ''}</span>
+                        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: q.status === 'accepted' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: q.status === 'accepted' ? '#448a40' : 'var(--text3)' }}>{q.status}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div>
+                <span style={label}>Quote Reference — auto-filled, can edit</span>
+                <input value={form.quote_reference} onChange={e => set('quote_reference', e.target.value)} placeholder="e.g. Q-2026-0143" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <span style={label}>Quote Date — auto-filled, can edit</span>
+                <input type="date" value={form.quote_date} onChange={e => set('quote_date', e.target.value)} style={{ width: '100%' }} />
+              </div>
               <div>
                 <span style={label}>Project Manager — auto-filled, can override</span>
                 <select value={selectedPmId} onChange={e => setSelectedPmId(e.target.value)} style={{ width: '100%' }}>
@@ -695,6 +872,13 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, o
 
             {/* Actions */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20, paddingTop: 16, borderTop: '0.5px solid var(--border)' }}>
+              {existingPO && (
+                <button onClick={deletePORecord} disabled={saving}
+                  title="Remove the saved PO record so the next Generate PO starts fresh. PDFs already in the folder are separate files and are not touched."
+                  style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--red, #E24B4A)', background: 'transparent', color: 'var(--red, #E24B4A)', cursor: 'pointer', fontSize: 13, marginRight: 'auto' }}>
+                  🗑 Delete saved PO record
+                </button>
+              )}
               <button onClick={onClose} disabled={saving}
                 style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>
                 Cancel

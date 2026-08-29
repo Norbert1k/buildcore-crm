@@ -162,7 +162,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         //   • project_employer_agents → employer_agents.company_name (multi)
         //   • project_team_members where role in (Project Manager, Site Manager) (multi)
         // All run in parallel with the existing prev-report and PA-buffer fetches.
-        const [prevRes, projRes, paBuf, eaRes, teamRes] = await Promise.all([
+        const [prevRes, projRes, paBuf, eaRes, teamRes, retRes] = await Promise.all([
           prevQuery.maybeSingle(),
           supabase.from('projects')
             .select('project_name, project_ref, client_name, start_date, end_date')
@@ -176,9 +176,16 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
             .eq('project_id', projectId)
             .in('role', ['Project Manager', 'Site Manager'])
             .order('position_order').order('created_at'),
+          supabase.from('projects').select('retention_pct').eq('id', projectId).maybeSingle(),
         ])
         const prev = prevRes.data
         const proj = projRes.data
+        // Project retention % — fetched in its own query so the editor keeps
+        // working even before the retention_pct migration has been run (a
+        // missing column errors THIS query only, and we fall back to 5%).
+        const projectRetention = (!retRes.error && retRes.data && retRes.data.retention_pct != null)
+          ? Number(retRes.data.retention_pct) : 5
+        setDefaultRetention(projectRetention)
         const number = await nextReportNumber(projectId)
 
         // Comma-join helpers — multi-value fields show all assigned people /
@@ -235,12 +242,27 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
             // Single valuation row: latest application's cumulative claim
             if (extract.totals && extract.totals.cumulative > 0) {
               const today = new Date().toISOString().slice(0, 10)
-              paValuationRow = {
-                no: String((prev?.valuations?.length || 0) + 1),
-                date_submitted: today,
-                amount_claimed: String(Math.round(extract.totals.cumulative)),
-                amount_agreed: '',
-              }
+              // When the PA's own retention row was captured, feed the full
+              // Gross − retention → Net split from the PA itself. Otherwise
+              // behave EXACTLY as before (cumulative → claimed, gross blank).
+              const t = extract.totals
+              paValuationRow = (t.net_cumulative != null)
+                ? {
+                    no: String((prev?.valuations?.length || 0) + 1),
+                    date_submitted: today,
+                    gross_claimed: String(Math.round(t.cumulative)),
+                    retention_pct: t.retention_pct != null ? String(t.retention_pct) : String(projectRetention),
+                    amount_claimed: String(Math.round(t.net_cumulative)),
+                    amount_agreed: '',
+                  }
+                : {
+                    no: String((prev?.valuations?.length || 0) + 1),
+                    date_submitted: today,
+                    gross_claimed: '',
+                    retention_pct: String(projectRetention),
+                    amount_claimed: String(Math.round(t.cumulative)),
+                    amount_agreed: '',
+                  }
             }
           }
         }
@@ -406,6 +428,9 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
   // Helper editors for arrays
   const addRowToArr = (key, blank) => patch(key, [...(report[key] || []), blank])
   const updateRowInArr = (key, idx, patchObj) => patch(key, report[key].map((r, i) => i === idx ? { ...r, ...patchObj } : r))
+  // Default retention % for new valuation rows — from the project's
+  // retention_pct when set, else 5. Loaded alongside the other project data.
+  const [defaultRetention, setDefaultRetention] = useState(5)
   const removeRowFromArr = (key, idx) => patch(key, report[key].filter((_, i) => i !== idx))
 
   if (loading) return (
@@ -468,7 +493,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         {activeTab === 'info' && <InfoTab report={report} patch={patch} />}
         {activeTab === 'programme' && <ProgrammeTab report={report} patch={patch} />}
         {activeTab === 'statement' && <StatementTab report={report} patch={patch} />}
-        {activeTab === 'commercial' && <CommercialTab report={report} addRow={addRowToArr} updateRow={updateRowInArr} removeRow={removeRowFromArr} />}
+        {activeTab === 'commercial' && <CommercialTab report={report} addRow={addRowToArr} updateRow={updateRowInArr} removeRow={removeRowFromArr} defaultRetention={defaultRetention} />}
         {activeTab === 'risks' && <RisksTab report={report} patch={patch} addRow={addRowToArr} updateRow={updateRowInArr} removeRow={removeRowFromArr} />}
         {activeTab === 'photos' && (
           <PhotosTab photos={photos} uploading={uploading} onUpload={uploadPhotos}
@@ -631,24 +656,47 @@ function StatementTab({ report, patch }) {
   )
 }
 
-function CommercialTab({ report, addRow, updateRow, removeRow }) {
+function CommercialTab({ report, addRow, updateRow, removeRow, defaultRetention = 5 }) {
   const valuations = report.valuations || []
+  // Gross − retention → net. Returns '' when gross isn't a number so manual
+  // typing in the net field is never fought.
+  const netOf = (gross, retPct) => {
+    const g = parseFloat(gross)
+    if (isNaN(g)) return null
+    const r = parseFloat(retPct)
+    const net = g * (1 - (isNaN(r) ? 0 : r) / 100)
+    return String(Math.round(net))
+  }
   const variations = report.variations || []
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <Section title="3.1 Valuations">
-        <Table headers={['No', 'Date Submitted', 'Amount Claimed (Net) £', 'Amount Agreed (Net) £', '']}>
+        <Table headers={['No', 'Date Submitted', 'Gross £', 'Ret %', 'Amount Claimed (Net) £', 'Amount Agreed (Net) £', '']}>
           {valuations.map((v, i) => (
             <tr key={i}>
               <td><input value={v.no || ''} onChange={e => updateRow('valuations', i, { no: e.target.value })} style={S.cell} /></td>
               <td><input type="date" value={v.date_submitted || ''} onChange={e => updateRow('valuations', i, { date_submitted: e.target.value })} style={S.cell} /></td>
+              <td><input value={v.gross_claimed || ''} placeholder="Gross"
+                onChange={e => {
+                  const gross = e.target.value
+                  const net = netOf(gross, v.retention_pct ?? defaultRetention)
+                  // Auto-fill Claimed (net) from Gross − retention; still
+                  // editable — typing in the net field directly always wins.
+                  updateRow('valuations', i, net != null ? { gross_claimed: gross, amount_claimed: net } : { gross_claimed: gross })
+                }} style={S.cell} /></td>
+              <td><input value={v.retention_pct ?? String(defaultRetention)} placeholder="%"
+                onChange={e => {
+                  const ret = e.target.value
+                  const net = netOf(v.gross_claimed, ret)
+                  updateRow('valuations', i, net != null ? { retention_pct: ret, amount_claimed: net } : { retention_pct: ret })
+                }} style={{ ...S.cell, maxWidth: 60 }} /></td>
               <td><input value={v.amount_claimed || ''} onChange={e => updateRow('valuations', i, { amount_claimed: e.target.value })} style={S.cell} /></td>
               <td><input value={v.amount_agreed || ''} onChange={e => updateRow('valuations', i, { amount_agreed: e.target.value })} style={S.cell} /></td>
               <td><button onClick={() => removeRow('valuations', i)} style={S.removeBtn}>✕</button></td>
             </tr>
           ))}
         </Table>
-        <button className="btn btn-sm" onClick={() => addRow('valuations', { no: String(valuations.length + 1), date_submitted: '', amount_claimed: '', amount_agreed: '' })}>
+        <button className="btn btn-sm" onClick={() => addRow('valuations', { no: String(valuations.length + 1), date_submitted: '', gross_claimed: '', retention_pct: String(defaultRetention), amount_claimed: '', amount_agreed: '' })}>
           <IconPlus size={11} /> Add valuation
         </button>
       </Section>
@@ -1062,10 +1110,12 @@ export async function generateProgressReportPdf(report, photos, projectName, opt
       doc.text('3.1 Valuations', 15, y); y += 3
       doc.autoTable({
         startY: y,
-        head: [['Valuation No.', 'Date Submitted', 'Amount Claimed (Net)', 'Amount Agreed (Net)']],
+        head: [['Valuation No.', 'Date Submitted', 'Gross', 'Ret %', 'Amount Claimed (Net)', 'Amount Agreed (Net)']],
         body: (report.valuations?.length ? report.valuations : [{}, {}, {}, {}]).map(v => [
           v.no || '',
           v.date_submitted ? fmtDateUK(v.date_submitted) : '',
+          v.gross_claimed ? '£' + v.gross_claimed : '£',
+          v.retention_pct != null && v.retention_pct !== '' ? v.retention_pct + '%' : '',
           v.amount_claimed ? '£' + v.amount_claimed : '£',
           v.amount_agreed ? '£' + v.amount_agreed : '£',
         ]),

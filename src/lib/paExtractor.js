@@ -105,6 +105,11 @@ export async function extractFromPa(arrayBuffer) {
     // followed them — yielding £117,000 as the project total instead of
     // £1,345,000.
     let contractSumF = null, contractSumH = null, contractSumI = null
+    // Retention — captured from the "Less Retention …" row (any casing).
+    // % parsed from the label; amount = first numeric money cell on the row.
+    // The amount may be application-scoped ("on This Application"), so
+    // net-of-retention maths prefers the % where present.
+    let retentionAmount = null, retentionPct = null
     let subtotalsF = 0, subtotalsH = 0, subtotalsI = 0
     let subtotalCount = 0
     let fallbackTotalSum = 0, fallbackCumulativeSum = 0, fallbackPrevCertSum = 0
@@ -133,6 +138,21 @@ export async function extractFromPa(arrayBuffer) {
         continue
       }
 
+      // ── Retention row — any casing ("LESS RETENTION", "Less Retention 3%
+      // (on This Application)"). Capture its % / amount, then skip the row —
+      // the mixed-case form previously leaked into the group-header branch
+      // and created a junk group.
+      const aRet = (typeof a === 'string') ? a.trim() : ''
+      if (/^Less\s+Retention/i.test(aRet) || /^Retention\b/i.test(aRet)) {
+        const pctM = aRet.match(/(\d+(?:\.\d+)?)\s*%/)
+        if (pctM) retentionPct = parseFloat(pctM[1])
+        for (let c = 5; c < row.length; c++) {
+          if (typeof row[c] === 'number' && row[c] !== 0) { retentionAmount = Math.abs(row[c]); break }
+        }
+        currentGroup = null
+        continue
+      }
+
       // ── Section header: col A is UPPERCASE multi-character string ──
       const aStr = (typeof a === 'string') ? a.trim() : ''
       const isSection = aStr && aStr.length > 4 && aStr === aStr.toUpperCase() &&
@@ -151,11 +171,17 @@ export async function extractFromPa(arrayBuffer) {
         continue
       }
 
-      // ── Variation row (col A like 'VO1', 'VO2') under VARIATIONS ──
-      if (currentSection === 'VARIATIONS' && /^VO\d+$/i.test(aStr)) {
+      // ── Variation row under VARIATIONS ──
+      // Real PAs label VO refs inconsistently: 'VO1' / 'V01' / plain numbers
+      // (1, 2, 3 — as in Arcady PA03). Accept a numeric col A, or a ref-like
+      // string, provided the row has a description. (Previously only
+      // /^VO\d+$/ matched, so numeric refs made every VO invisible —
+      // Financial Summary and the portal then showed Variations £0.)
+      const isVoRef = (typeof a === 'number' && isFinite(a)) || /^V?O?\s*-?\d+$/i.test(aStr)
+      if (currentSection === 'VARIATIONS' && isVoRef && typeof b === 'string' && b.trim()) {
         variations.push({
-          instruction_no: aStr.toUpperCase(),
-          instruction_details: typeof b === 'string' ? b.trim() : '',
+          instruction_no: (typeof a === 'number') ? String(a) : aStr.toUpperCase(),
+          instruction_details: b.trim(),
           cost_impact: (typeof f === 'number') ? String(f) : '',
         })
         continue
@@ -252,6 +278,15 @@ export async function extractFromPa(arrayBuffer) {
         total: totalSum,
         cumulative: cumulativeSum,
         prev_certified: prevCertSum,
+        // ── Additive retention breakdown (null when the PA shows none).
+        // `cumulative` is the GROSS cumulative claim. net_cumulative prefers
+        // the retention % (the £ on the retention row is often per-
+        // application, not cumulative, so subtracting it would be wrong).
+        retention_amount: retentionAmount,
+        retention_pct: retentionPct,
+        net_cumulative: retentionPct != null
+          ? Math.round(cumulativeSum * (1 - retentionPct / 100) * 100) / 100
+          : (retentionAmount != null ? cumulativeSum - retentionAmount : null),
       },
     }
   } catch (err) {

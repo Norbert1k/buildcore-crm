@@ -155,6 +155,15 @@ export async function extractPaGroups(file) {
   // Walk rows applying the same group-detection rules as csaExtractor
   let currentSection = null
   let currentGroup = null
+  // Duplicate group names get ordinals ("EXTERNAL WORKS (2)") — identical
+  // deterministic rule to csaExtractor so CSA and PA group keys align.
+  const seenGroupNames = new Map()
+  const groupNameFor = (section, name) => {
+    const k = `${section}::${name}`
+    const n = (seenGroupNames.get(k) || 0) + 1
+    seenGroupNames.set(k, n)
+    return n === 1 ? name : `${name} (${n})`
+  }
   let contractSumF = null
   let contractCumulativeH = null
   const groupAcc = {}    // key → { section, group, cumulative, item_count, description }
@@ -201,7 +210,10 @@ export async function extractPaGroups(file) {
     const bUpper = (typeof b === 'string') ? b.trim().toUpperCase() : ''
     let detectedSection = null
     if (KNOWN_SECTIONS.has(aUpper) && fEmpty) detectedSection = aUpper
-    else if (KNOWN_SECTIONS.has(bUpper) && fEmpty) detectedSection = bUpper
+    // Col-B section names only count when col A is EMPTY — a numeric col A
+    // means a GROUP header even when the group shares a section name
+    // (Tonbridge trade "6 EXTERNAL WORKS"). Mirrors csaExtractor.
+    else if (KNOWN_SECTIONS.has(bUpper) && fEmpty && (a == null || a === '')) detectedSection = bUpper
 
     if (detectedSection) {
       currentSection = detectedSection
@@ -209,7 +221,11 @@ export async function extractPaGroups(file) {
       continue
     }
 
-    if (currentSection === 'VARIATIONS') continue
+    // Variations flow through the normal row machinery below: VO item rows
+    // (ref + description + value) bump the shared 'VARIATIONS::__all__'
+    // group so each PA's variations cumulative anchors the CFF's Variations
+    // row — mirroring csaExtractor's aggregation. Subtotal/label rows are
+    // handled by the existing skip branches.
 
     const aEmpty = !a
     const bEmpty = !b
@@ -219,9 +235,11 @@ export async function extractPaGroups(file) {
 
     // Group header
     if (fEmpty && currentSection) {
-      if (typeof a === 'string' && a.trim() && bEmpty) { currentGroup = a.trim(); continue }
-      if (typeof a === 'number' && typeof b === 'string' && b.trim()) { currentGroup = b.trim(); continue }
-      if (aEmpty && typeof b === 'string' && b.trim()) { currentGroup = b.trim(); continue }
+      if (typeof a === 'string' && a.trim() && bEmpty) { currentGroup = groupNameFor(currentSection, a.trim()); continue }
+      // Integer refs only — a decimal ref (12.2) with zero value is a
+      // zero-priced ITEM, not a group header. Mirrors csaExtractor.
+      if (typeof a === 'number' && Number.isInteger(a) && typeof b === 'string' && b.trim()) { currentGroup = groupNameFor(currentSection, b.trim()); continue }
+      if (aEmpty && typeof b === 'string' && b.trim()) { currentGroup = groupNameFor(currentSection, b.trim()); continue }
     }
 
     // Data row — record cumulative (may be 0 if work not yet started)

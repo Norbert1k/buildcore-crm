@@ -617,6 +617,41 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
     setSelectedTaskId(t.id)
   }
 
+  // Extend a group's (or the project row's) end date by pushing the tasks
+  // that currently finish LAST in that group out to the new end date.
+  // ("Stretch": mid-programme tasks are untouched; only the finishers move.)
+  // Works in both directions; a task's end never moves before its start.
+  // Group bars redraw automatically via the live rollup.
+  function stretchGroupEnd(groupId, newEndStr) {
+    const newEnd = parseDate(newEndStr)
+    if (!newEnd) return
+    const ids = new Set([groupId])
+    let grew = true
+    while (grew) {
+      grew = false
+      for (const t of tasks) {
+        if (t.parent_id && ids.has(t.parent_id) && !ids.has(t.id)) { ids.add(t.id); grew = true }
+      }
+    }
+    const hasChild = new Set(tasks.filter(t => t.parent_id && ids.has(t.parent_id)).map(t => t.parent_id))
+    const leaves = tasks.filter(t => ids.has(t.id) && t.id !== groupId && !hasChild.has(t.id))
+    if (!leaves.length) return
+    let maxEnd = null
+    for (const t of leaves) {
+      const e = parseDate(t.end_date)
+      if (e && (!maxEnd || e > maxEnd)) maxEnd = e
+    }
+    if (!maxEnd) return
+    const maxEndStr = fmtDate(maxEnd)
+    setTasks(prev => prev.map(t => {
+      if (!ids.has(t.id) || hasChild.has(t.id) || t.id === groupId) return t
+      if (t.end_date !== maxEndStr) return t
+      const start = parseDate(t.start_date)
+      const clamped = (start && newEnd < start) ? start : newEnd
+      return { ...t, end_date: fmtDate(clamped) }
+    }))
+  }
+
   function updateTask(id, patch) {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...patch } : t))
   }
@@ -772,7 +807,12 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
     return diffDays(bounds.min, today) * pxPerDay
   }, [bounds, pxPerDay])
 
-  const selectedTask = tasks.find(t => t.id === selectedTaskId) || null
+  // The details panel must show the same dates the chart draws. Group rows
+  // derive their span from their children (rollupGroups), so read the rolled
+  // version — otherwise a group's End/Duration display its stale stored
+  // values and appear frozen after a Stretch.
+  const rolledTasks = useMemo(() => rollupGroups(tasks), [tasks])
+  const selectedTask = rolledTasks.find(t => t.id === selectedTaskId) || null
 
   if (loading) return (
     <Overlay onClose={handleClose}>
@@ -916,7 +956,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         </div>
 
         {/* RIGHT: timeline */}
-        <div ref={timelineScrollRef} style={{ flex: 1, overflow: 'auto', position: 'relative', background: 'var(--surface)' }}>
+        <div ref={timelineScrollRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', position: 'relative', background: 'var(--surface)' }}>
           <div style={{ position: 'relative', width: timelineW, minHeight: '100%' }}>
             {/* Date axis (sticky) */}
             <div style={{ position: 'sticky', top: 0, height: HEADER_H, background: 'var(--surface2)', borderBottom: '1px solid var(--border)', zIndex: 2 }}>
@@ -987,8 +1027,8 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                       userSelect: 'none',
                     }}>
                     {/* Progress overlay */}
-                    {t.progress > 0 && !isGroup && (
-                      <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${t.progress}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 4 }} />
+                    {t.progress > 0 && (
+                      <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${t.progress}%`, background: isGroup ? 'rgba(68,138,64,0.55)' : 'rgba(0,0,0,0.25)', borderRadius: 4 }} />
                     )}
                     <span style={{ position: 'relative', textShadow: '0 1px 0 rgba(0,0,0,0.3)' }}>
                       {pos.w > 60 ? t.name : ''}
@@ -1013,6 +1053,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
             task={selectedTask}
             allTasks={tasks}
             onChange={patch => updateTask(selectedTask.id, patch)}
+            onGroupEnd={newEnd => stretchGroupEnd(selectedTask.id, newEnd)}
             onDelete={() => setConfirmDeleteTask(selectedTask.id)}
             onIndent={() => indentTask(selectedTask.id)}
             onOutdent={() => outdentTask(selectedTask.id)}
@@ -1115,11 +1156,15 @@ function buildAxisMarkers(min, max, zoom) {
   return { majorLabels, minor, major }
 }
 
-function TaskEditPanel({ task, allTasks, onChange, onDelete, onIndent, onOutdent, onMoveUp, onMoveDown, onClose }) {
+function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onIndent, onOutdent, onMoveUp, onMoveDown, onClose }) {
+  // Group rows (rows with children) derive their bar from their children, so
+  // editing their End/Duration goes through the Stretch behaviour instead of
+  // a plain field write (which would visibly do nothing).
+  const isGroup = allTasks.some(x => x.parent_id === task.id)
   const dur = durationFromDates(parseDate(task.start_date), parseDate(task.end_date))
 
   return (
-    <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+    <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden' }}>
       <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Task Details</div>
         <button className="btn btn-sm" onClick={onClose}>✕</button>
@@ -1128,9 +1173,10 @@ function TaskEditPanel({ task, allTasks, onChange, onDelete, onIndent, onOutdent
         <Field label="Name">
           <input value={task.name} onChange={e => onChange({ name: e.target.value })} autoFocus />
         </Field>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }}>
           <Field label="Start">
             <input type="date" value={task.start_date}
+              style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               onChange={e => {
                 const newStart = e.target.value
                 const newEnd = endFromStartAndDuration(newStart, dur)
@@ -1138,7 +1184,14 @@ function TaskEditPanel({ task, allTasks, onChange, onDelete, onIndent, onOutdent
               }} />
           </Field>
           <Field label="End">
-            <input type="date" value={task.end_date} onChange={e => onChange({ end_date: e.target.value })} />
+            <input type="date" value={task.end_date}
+              style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
+              onChange={e => isGroup ? onGroupEnd(e.target.value) : onChange({ end_date: e.target.value })} />
+            {isGroup && (
+              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>
+                Extends the task(s) finishing last in this group
+              </div>
+            )}
           </Field>
         </div>
         <Field label={`Duration (${dur} days)`}>
@@ -1146,12 +1199,18 @@ function TaskEditPanel({ task, allTasks, onChange, onDelete, onIndent, onOutdent
             onChange={e => {
               const n = Math.max(1, parseInt(e.target.value, 10) || 1)
               const newEnd = endFromStartAndDuration(task.start_date, n)
-              onChange({ end_date: fmtDate(newEnd) })
+              if (isGroup) onGroupEnd(fmtDate(newEnd))
+              else onChange({ end_date: fmtDate(newEnd) })
             }} />
         </Field>
         <Field label="Progress (%)">
+          {/* The CRM's global input CSS sets appearance:none, which strips a
+              range slider of its track and thumb — leaving nothing to drag.
+              Same fix as the radio buttons elsewhere: restore the native
+              control appearance for this input only. */}
           <input type="range" min="0" max="100" value={task.progress || 0}
-            onChange={e => onChange({ progress: parseInt(e.target.value, 10) })} />
+            onChange={e => onChange({ progress: parseInt(e.target.value, 10) })}
+            style={{ appearance: 'auto', WebkitAppearance: 'auto', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', accentColor: '#448a40' }} />
           <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', marginTop: 4 }}>{task.progress || 0}%</div>
         </Field>
         <Field label="Color">

@@ -21,7 +21,9 @@
 //   • MAIN WORKS      — group by Plot N (each plot = one CFF row, sub-items summed)
 //   • EXTERNAL WORKS  — collapse to a single CFF row (all items summed)
 //   • PROVISIONAL SUMS— collapse to a single CFF row, labelled "(N items — see CSA)"
-//   • VARIATIONS      — excluded (CFF body is original contract only)
+//   • VARIATIONS      — when populated, collapsed to a single CFF row so
+//                       instructed VOs distribute in the cashflow (empty
+//                       section = no row, original behaviour)
 //
 // CSA is structurally identical to a PA xlsx (same column layout) — main
 // peculiarity: section headers can appear in column A *or* column B (the
@@ -115,6 +117,17 @@ function parseRows(rows, headerRowIdx) {
   let currentGroup = null
   let contractSum = null
   let variationsSum = 0    // tracked separately so callers can explain
+  // Duplicate group names within a section (Tonbridge has two trades both
+  // called "EXTERNAL WORKS") must stay distinct rows: repeats get an ordinal
+  // — "EXTERNAL WORKS (2)". Deterministic top-down, so the PA-side extractor
+  // (same rule) produces identical group keys.
+  const seenGroupNames = new Map()
+  const groupNameFor = (section, name) => {
+    const k = `${section}::${name}`
+    const n = (seenGroupNames.get(k) || 0) + 1
+    seenGroupNames.set(k, n)
+    return n === 1 ? name : `${name} (${n})`
+  }
                             // any gap between contract sum and CFF body total
 
   for (let r = headerRowIdx + 1; r < rows.length; r++) {
@@ -150,7 +163,12 @@ function parseRows(rows, headerRowIdx) {
     const bUpper = (typeof b === 'string') ? b.trim().toUpperCase() : ''
     let detectedSection = null
     if (KNOWN_SECTIONS.has(aUpper) && fEmpty) detectedSection = aUpper
-    else if (KNOWN_SECTIONS.has(bUpper) && fEmpty) detectedSection = bUpper
+    // Col-B section names only count when col A is EMPTY. A numeric ref in
+    // col A means it's a GROUP header, even when the group shares a canonical
+    // section name — Tonbridge names trade group 6 "EXTERNAL WORKS", and
+    // promoting it to a section swallowed every group after it into one
+    // £4.7m lump.
+    else if (KNOWN_SECTIONS.has(bUpper) && fEmpty && (a == null || a === '')) detectedSection = bUpper
 
     if (detectedSection) {
       currentSection = detectedSection
@@ -158,13 +176,24 @@ function parseRows(rows, headerRowIdx) {
       continue
     }
 
-    // ── Skip variations entirely (CFF excludes them) but tally so the
-    //    UI can show a "excluded variations" hint instead of a mismatch error.
-    //    Only count item rows (col A or col B has content) — skip the
-    //    section subtotal row (both empty).
+    // ── Variations: when the CSA's VARIATIONS section is populated, its
+    //    items become CFF body items like any other section (aggregated to a
+    //    single "Variations" row downstream), so instructed VOs distribute in
+    //    the cashflow. variationsSum still tallied so the UI can report it.
+    //    Item rows need a ref (col A — string OR the numeric refs real PAs
+    //    use) or a description; the section subtotal row (both empty) skips.
     if (currentSection === 'VARIATIONS') {
-      const looksLikeItem = (typeof a === 'string' && a.trim()) || (typeof b === 'string' && b.trim())
-      if (typeof f === 'number' && f > 0 && looksLikeItem) variationsSum += f
+      const looksLikeItem = (typeof a === 'string' && a.trim()) || (typeof a === 'number') || (typeof b === 'string' && b.trim())
+      if (typeof f === 'number' && f > 0 && looksLikeItem) {
+        variationsSum += f
+        items.push({
+          ref: typeof a === 'string' ? a.trim() : (a != null ? String(a) : ''),
+          description: typeof b === 'string' ? b.trim() : '',
+          value: f,
+          section: 'VARIATIONS',
+          group: null,
+        })
+      }
       continue
     }
 
@@ -186,17 +215,20 @@ function parseRows(rows, headerRowIdx) {
     if (fEmpty && currentSection) {
       // Pattern 1: descriptive label in col A, col B empty
       if (typeof a === 'string' && a.trim() && bEmpty) {
-        currentGroup = a.trim()
+        currentGroup = groupNameFor(currentSection, a.trim())
         continue
       }
       // Pattern 2: numeric ref in col A, label in col B (Arcady's "1 / PLOT 1")
-      if (typeof a === 'number' && typeof b === 'string' && b.trim()) {
-        currentGroup = b.trim()
+      // Group refs are whole numbers (1, 2, 21). A DECIMAL ref (12.2) with an
+      // empty/zero value is a zero-priced ITEM row — treating it as a group
+      // header would misfile every item after it under a junk group.
+      if (typeof a === 'number' && Number.isInteger(a) && typeof b === 'string' && b.trim()) {
+        currentGroup = groupNameFor(currentSection, b.trim())
         continue
       }
       // Pattern 3: col A empty, label in col B (legacy fallback)
       if (aEmpty && typeof b === 'string' && b.trim()) {
-        currentGroup = b.trim()
+        currentGroup = groupNameFor(currentSection, b.trim())
         continue
       }
     }
@@ -230,6 +262,7 @@ export function groupKeyFor(section, identifier) {
   if (section === 'PRELIMINARIES') return `PRELIMINARIES::${identifier || ''}`
   if (section === 'EXTERNAL WORKS') return 'EXTERNAL WORKS::__all__'
   if (section === 'PROVISIONAL SUMS') return 'PROVISIONAL SUMS::__all__'
+  if (section === 'VARIATIONS') return 'VARIATIONS::__all__'
   return `${section}::${identifier || '(no group)'}`
 }
 
@@ -293,6 +326,22 @@ function aggregateIntoGroups(items) {
     })
   }
 
+  // VARIATIONS — collapse to one row (instructed VOs distribute in the CFF)
+  const variations = items.filter(it => it.section === 'VARIATIONS')
+  if (variations.length > 0) {
+    const total = variations.reduce((s, it) => s + it.value, 0)
+    groups.push({
+      id: `g${nextId++}`,
+      group_key: groupKeyFor('VARIATIONS', null),
+      label: `Variations (${variations.length} no. — instructed to date, see CSA)`,
+      value: total,
+      section: 'VARIATIONS',
+      group: null,
+      item_count: variations.length,
+      source_refs: variations.map(it => it.ref).filter(Boolean),
+    })
+  }
+
   // PROVISIONAL SUMS — collapse to one row, with item count in label
   const provisional = items.filter(it => it.section === 'PROVISIONAL SUMS')
   if (provisional.length > 0) {
@@ -344,7 +393,7 @@ export async function extractCsa(file) {
     project_name: meta.project_name,
     csa_no: meta.csa_no,
     contract_sum: finalContractSum,    // CONTRACT SUM row value (incl. variations)
-    body_total: itemTotal,              // Sum of CFF body items only (excl. variations)
+    body_total: itemTotal,              // Sum of CFF body items (incl. variations when the section is populated)
     variations_sum: variationsSum,     // Sum of VOs in the VARIATIONS section
     items,
     groups,
