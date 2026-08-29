@@ -5,7 +5,6 @@ import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import ProjectModal from '../components/ProjectModal'
-import { loadDashboardFinancials, buildInstantFallback } from '../lib/dashboardFinancials'
 
 function calcDuration(start, end) {
   if (!start || !end) return null
@@ -26,69 +25,6 @@ export default function Projects() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('proj_live_open') === 'true')
   const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('proj_tender_open') === 'true')
-  const [financialsOpen, setFinancialsOpen] = useState(() => localStorage.getItem('proj_financials_open') === 'true')
-  // Dashboard financials — null until first projects load completes. Once
-  // projects are loaded, dashFin starts as the buildInstantFallback shape
-  // (instant, derived from project.value column) then gets replaced by the
-  // real CFF/PA-aggregated shape as background fetches complete.
-  const [dashFin, setDashFin] = useState(null)
-  const navigate = useNavigate()
-  const { can, role, division } = useAuth()
-  const isAdmin = role === 'admin'
-
-  function toggleLive() { setLiveOpen(v => { localStorage.setItem('proj_live_open', !v); return !v }) }
-  function toggleTender() { setTenderOpen(v => { localStorage.setItem('proj_tender_open', !v); return !v }) }
-  function toggleFinancials() { setFinancialsOpen(v => { localStorage.setItem('proj_financials_open', !v); return !v }) }
-
-  useEffect(() => { load() }, [division])
-
-  // Active projects only — derived from the loaded list. We compute it
-  // synchronously here (cheap filter) so we can drive the dashboard load
-  // from a stable reference.
-  const activeProjects = useMemo(
-    () => projects.filter(p => p.status === 'active'),
-    [projects]
-  )
-
-  // Load dashboard financials whenever the set of active projects changes.
-  //
-  // Two-stage load:
-  //   1. Synchronously build a fallback shape from project.value so the
-  //      dashboard renders something instantly (no flicker, no blank cards)
-  //   2. Asynchronously fetch + parse PAs and CFFs for every active
-  //      project, updating dashFin as each completes (incremental progress)
-  //
-  // The cache layer in dashboardFinancials.js means subsequent visits with
-  // unchanged files are near-instant.
-  useEffect(() => {
-    if (loading) return    // wait for projects load to finish
-    if (activeProjects.length === 0) {
-      setDashFin(buildInstantFallback([]))
-      return
-    }
-
-    let cancelled = false
-    setDashFin(buildInstantFallback(activeProjects))
-
-    loadDashboardFinancials(supabase, activeProjects, ({ partial }) => {
-      // Incremental progress callback — update with rolled-up numbers as
-      // each project finishes. Marked as still-loading so the UI can show
-      // a subtle indicator until the final resolve.
-      if (cancelled) return
-      setDashFin({ ...partial, loaded: false, loading_count: activeProjects.length })
-    }).then(final => {
-      if (cancelled) return
-      setDashFin(final)
-    }).catch(err => {
-      console.warn('[Projects] dashboard load failed:', err)
-      if (!cancelled) setDashFin(prev => prev || buildInstantFallback(activeProjects))
-    })
-
-    return () => { cancelled = true }
-    // We intentionally key on the joined IDs string rather than the array
-    // reference so re-renders that don't change membership don't re-fetch.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, activeProjects.map(p => p.id).join('|')])
 
   async function load() {
     setLoading(true)
@@ -287,39 +223,6 @@ export default function Projects() {
         </>
       )}
 
-      {/* ─── Project Financials ───────────────────────────────────────
-          Wraps the existing ProjectsDashboard in the same collapsible
-          section pattern as Live + Tender so all three sit at consistent
-          vertical rhythm. Dashboard data still loads in the background
-          when active projects change (loadDashboardFinancials in the
-          useEffect above), independently of whether this section is open
-          — so opening it is instant if the data is ready, or shows the
-          existing two-stage fallback otherwise. */}
-      <div style={{ marginBottom: 16 }}>
-        <div className="section-header" onClick={toggleFinancials}
-          style={{ marginBottom: financialsOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
-          <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-              style={{ transform: financialsOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
-              <polyline points="9 18 15 12 9 6"/>
-            </svg>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#5b9bd5', display: 'inline-block' }} />
-            Project Financials
-            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>portfolio overview</span>
-            {!financialsOpen && (
-              <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
-            )}
-          </div>
-        </div>
-        {financialsOpen && (
-          <ProjectsDashboard
-            counts={counts}
-            dashFin={dashFin}
-            canViewValue={can('view_project_value')}
-            onProjectClick={(id) => navigate(`/projects/${id}`)}
-          />
-        )}
-      </div>
 
       {showModal && <ProjectModal project={editing} onClose={() => setShowModal(false)} onSaved={() => { setShowModal(false); load() }} />}
 

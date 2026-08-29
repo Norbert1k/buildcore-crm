@@ -32,7 +32,6 @@ const ProjectTracker    = lazy(() => import('./pages/ProjectTracker'))
 const Suppliers         = lazy(() => import('./pages/Suppliers'))
 const Settings          = lazy(() => import('./pages/Settings'))
 const CompanyDocuments  = lazy(() => import('./pages/CompanyDocuments'))
-const WebSearch         = lazy(() => import('./pages/WebSearch'))
 const Clients           = lazy(() => import('./pages/Clients'))
 const ClientDetail      = lazy(() => import('./pages/ClientDetail'))
 const TaskTracker       = lazy(() => import('./pages/TaskTracker'))
@@ -366,7 +365,6 @@ function ProtectedLayout() {
               <Route path="/quotes" element={<Quotes />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/company-documents" element={<CompanyDocuments />} />
-              <Route path="/web-search" element={<WebSearch />} />
               <Route path="/clients" element={<Clients />} />
               <Route path="/clients/:id" element={<ClientDetail />} />
               <Route path="/tasks" element={<TaskTracker />} />
