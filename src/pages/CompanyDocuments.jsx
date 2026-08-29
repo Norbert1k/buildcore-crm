@@ -14,6 +14,11 @@ const CATEGORIES = [
   { key: 'vat',            icon: '💰', label: 'VAT & UTR',          color: '#888780', bg: '#F1EFE8' },
   { key: 'bank',           icon: '🏦', label: 'Bank Details',       color: '#448a40', bg: '#e8f5e7' },
   { key: 'certifications', icon: '📜', label: 'Certifications',     color: '#534AB7', bg: '#EEEDFE' },
+  // Personal tickets (SMSTS, CSCS, first aid…) — one subfolder per person,
+  // "Surname, Firstname"; company accreditations stay in Certifications.
+  // Ungated: all staff can view/download (tickets get produced at
+  // inductions); upload/delete stays manager-only as everywhere.
+  { key: 'staff_certs',    icon: '🎓', label: 'Staff Certificates', color: '#0E7490', bg: '#E0F2F7' },
   { key: 'templates',      icon: '📝', label: 'Templates',          color: '#0F6E56', bg: '#E1F5EE' },
   { key: 'site_folder',    icon: '📁', label: 'Site Folder',        color: '#888780', bg: '#F1EFE8' },
   { key: 'other',           icon: '🗃️', label: 'Other Documents',     color: '#6B5B93', bg: '#EEE8F8' },
