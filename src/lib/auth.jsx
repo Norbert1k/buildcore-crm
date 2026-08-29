@@ -8,8 +8,12 @@ const AuthContext = createContext(null)
 // then light). Picking a theme in Settings saves to the ACTIVE division's
 // slot; switching division applies that division's saved look.
 function themeFor(profileData, div) {
-  if (div === 'fitout') return profileData?.theme_fitout || profileData?.theme || 'light'
-  return profileData?.theme || 'light'
+  // Fallback chain ends at the browser's last-applied theme, NOT hard
+  // 'light' — a profile with no saved theme must never stomp the look the
+  // user was already running (that regression forced light on every refresh).
+  const remembered = localStorage.getItem('theme') || 'light'
+  if (div === 'fitout') return profileData?.theme_fitout || profileData?.theme || remembered
+  return profileData?.theme || remembered
 }
 
 function applyTheme(theme) {
