@@ -11,6 +11,7 @@ import ProjectDocumentation from '../components/ProjectDocumentation'
 import CaseStudyEditor from '../components/CaseStudyEditor'
 import HSHandover from '../components/HSHandover'
 import FitOutHandover from '../components/FitOutHandover'
+import ConstructionHandoverStatus from '../components/ConstructionHandoverStatus'
 import SubcontractorDocs from '../components/SubcontractorDocs'
 import ProjectQuotesTab from '../components/ProjectQuotesTab'
 import ProcurementTab from './ProcurementTab'
@@ -1602,7 +1603,12 @@ export default function ProjectDetail() {
       {activeTab === 'hs' && can('view_hs_handover') && project?.status !== 'tender' && (
         project.division === 'fitout'
           ? <FitOutHandover projectId={id} projectName={project?.project_name} />
-          : <HSHandover projectId={id} projectName={project?.project_name} />
+          : <>
+              {/* Readiness layer rides ABOVE the tree — HSHandover and its
+                  files (hs_files / hs_folders) are untouched by it. */}
+              <ConstructionHandoverStatus projectId={id} />
+              <HSHandover projectId={id} projectName={project?.project_name} />
+            </>
       )}
 
       {showEdit && <ProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load() }} />}
