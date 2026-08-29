@@ -19,7 +19,9 @@ function EmployersAgentTab() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const { can, division } = useAuth()
 
-  useEffect(() => { load() }, [])
+  // Reload when the division switches — the EA firms list is divisional,
+  // so flipping Construction ⇄ Fit-Out must refetch, not show stale rows.
+  useEffect(() => { load() }, [division])
 
   async function load() {
     setLoading(true)
