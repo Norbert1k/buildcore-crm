@@ -66,6 +66,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .pill-blue { background: var(--blue-bg); color: var(--blue); }
 .pill-purple { background: var(--purple-bg); color: var(--purple); }
 .pill-gray { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+/* Distinct role-badge colours (roles previously shared pill-blue) */
+.pill-teal { background: #E0F2F7; color: #0E7490; }
+.pill-indigo { background: #EEEDFE; color: #4338CA; }
+.pill-slate { background: #EDF1F5; color: #40566B; }
+[data-theme="dark"] .pill-teal, [data-theme="midnight"] .pill-teal { background: rgba(14,116,144,.22); color: #4FC3E0; }
+[data-theme="dark"] .pill-indigo, [data-theme="midnight"] .pill-indigo { background: rgba(67,56,202,.25); color: #A5B4FC; }
+[data-theme="dark"] .pill-slate, [data-theme="midnight"] .pill-slate { background: rgba(100,125,150,.25); color: #B8C7D6; }
 
 .app-layout { display: flex; height: 100vh; overflow: hidden; }
 

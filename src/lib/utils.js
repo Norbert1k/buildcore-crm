@@ -68,9 +68,9 @@ export const SUB_STATUSES = {
 export const ROLES = {
   admin:                { label: 'Admin',               cls: 'pill-red',    desc: 'Full access including user management' },
   project_manager:      { label: 'Project Manager',     cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
-  operations_manager:   { label: 'Operations Manager',  cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
-  project_director:     { label: 'Project Director',    cls: 'pill-blue',   desc: 'Manage projects, subcontractors & documents' },
-  director_viewer:      { label: 'Director Viewer',     cls: 'pill-blue',   desc: 'View everything including financials — read-only, no editing' },
+  operations_manager:   { label: 'Operations Manager',  cls: 'pill-teal',   desc: 'Manage projects, subcontractors & documents' },
+  project_director:     { label: 'Project Director',    cls: 'pill-indigo', desc: 'Manage projects, subcontractors & documents' },
+  director_viewer:      { label: 'Director Viewer',     cls: 'pill-slate',  desc: 'View everything including financials — read-only, no editing' },
   accountant:           { label: 'Accountant',          cls: 'pill-purple', desc: 'Manage suppliers, add/edit subcontractor VAT & CIS, view financials' },
   site_manager:         { label: 'Site Manager',        cls: 'pill-amber',  desc: 'Access assigned projects & compliance docs only' },
   document_controller:  { label: 'Document Controller', cls: 'pill-green',  desc: 'Add & edit compliance documents' },
