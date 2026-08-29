@@ -269,7 +269,7 @@ export default function ProjectDetail() {
       supabase.from('project_subcontractors').select('*, subcontractors(id, company_name, trade, status, email, phone, contact_name)').eq('project_id', id),
       supabase.from('subcontractors').select('id, company_name, trade').order('company_name'),
       supabase.from('project_employer_agents').select('*, employer_agents(id, company_name, contact_name, email, phone, payment_submission_email, street_address, city, postcode)').eq('project_id', id),
-      supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').order('company_name'),
+      supabase.from('employer_agents').select('id, company_name, payment_submission_email, city').eq('status', 'active').eq('division', projRes.data?.division || 'construction').order('company_name'),
       supabase.from('project_team_members').select('*').eq('project_id', id).order('position_order').order('created_at'),
     ])
     setProject(projRes.data)
@@ -1015,9 +1015,9 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Employers Agent — construction projects only (fit-out has its own
-          agents model; the whole EA block is suppressed there) */}
-      {project.division !== 'fitout' && (
+      {/* Employers Agent — always visible directly under Project Description.
+          The EA FIRMS list is divisional (fit-out has its own agents), but
+          the feature exists in both divisions. */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: projectEAs.length > 0 ? 8 : 0, padding: '8px 12px', background: '#042C53', borderRadius: 6, borderLeft: '3px solid #5b9bd5' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -1105,7 +1105,6 @@ export default function ProjectDetail() {
           </div>
         )}
       </div>
-      )}
       </div>
       )}
 

@@ -4,7 +4,7 @@ import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
 
 export default function EAModal({ ea, onClose, onSaved }) {
-  const { profile } = useAuth()
+  const { profile, division } = useAuth()
   const editing = !!ea
 
   const [form, setForm] = useState({
@@ -43,6 +43,7 @@ export default function EAModal({ ea, onClose, onSaved }) {
       result = await supabase.from('employer_agents').update(payload).eq('id', ea.id)
     } else {
       payload.created_by = profile?.id
+      payload.division = division   // EA firms are divisional
       result = await supabase.from('employer_agents').insert(payload)
     }
     setSaving(false)

@@ -17,13 +17,13 @@ function EmployersAgentTab() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const { can } = useAuth()
+  const { can, division } = useAuth()
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('employer_agents').select('*').order('company_name')
+    const { data } = await supabase.from('employer_agents').select('*').eq('division', division).order('company_name')
     setEas(sortBy(data || [], 'company_name'))
     setLoading(false)
   }
