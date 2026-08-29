@@ -109,7 +109,7 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
               <div style={{ fontSize: 10, color: division === 'fitout' ? '#0E7490' : 'var(--text3)', fontWeight: division === 'fitout' ? 600 : 400 }}>
-                {division === 'fitout' ? 'Fit-Out Division' : 'CRM System'}
+                {division === 'fitout' ? 'Fit-Out Division' : 'Construction Division'}
               </div>
             </div>
           </div>
