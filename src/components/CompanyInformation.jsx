@@ -74,7 +74,7 @@ export default function CompanyInformation() {
   const staff = d.staff || []
 
   return (
-    <div style={{ border: '0.5px solid var(--border)', borderRadius: 10, marginBottom: 16, overflow: 'hidden', background: 'var(--surface)' }}>
+    <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 16, overflow: 'hidden', background: 'var(--surface)' }}>
       {/* Header */}
       <div onClick={() => !editing && setOpen(o => !o)}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', cursor: editing ? 'default' : 'pointer', background: 'var(--surface2)' }}>
@@ -201,8 +201,8 @@ function LockedNote() {
   return <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>🔒 Restricted — you don't have permission to view this section.</span>
 }
 
-const btn = { fontSize: 11, lineHeight: '22px', padding: '0 10px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }
+const btn = { fontSize: 11, lineHeight: '22px', padding: '0 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }
 const btnGreen = { border: '0.5px solid #448a40', color: '#448a40' }
 const inp = { fontSize: 13, width: '100%' }
-const listCard = { position: 'relative', border: '0.5px solid var(--border)', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }
+const listCard = { position: 'relative', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }
 const removeBtn = { position: 'absolute', top: 6, right: 6, background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 13 }

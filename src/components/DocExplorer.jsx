@@ -474,7 +474,7 @@ export default function DocExplorer({ projectId, projectName }) {
       {/* Header row: title + search */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 14, fontWeight: 600, flex: 1, minWidth: 140 }}>Project documents</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '0.5px solid var(--border)', borderRadius: 6, padding: '5px 9px', background: 'var(--surface)', minWidth: 180 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '5px 9px', background: 'var(--surface)', minWidth: 180 }}>
           <span style={{ color: 'var(--text3)', fontSize: 13 }}>⌕</span>
           <input value={search} onChange={e => { setSearch(e.target.value); setPicked(new Set()) }}
             placeholder="Search this project"
@@ -494,7 +494,7 @@ export default function DocExplorer({ projectId, projectName }) {
       </div>
 
       {/* Two-panel body */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.8fr) minmax(0,1.55fr)', border: '0.5px solid var(--border)', borderRadius: 12, overflow: 'hidden', background: 'var(--surface)', minHeight: 640 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,0.8fr) minmax(0,1.55fr)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)', minHeight: 640 }}>
         {/* Tree pane */}
         <div style={{ borderRight: '0.5px solid var(--border)', padding: '6px 0', overflow: 'auto', maxHeight: '78vh' }}>
           {tree.map(node => (
@@ -574,7 +574,7 @@ export default function DocExplorer({ projectId, projectName }) {
 
           {/* Drop overlay */}
           {dragOver && (
-            <div style={{ position: 'absolute', inset: 0, background: 'rgba(68,138,64,0.12)', border: '2px dashed #448a40', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(68,138,64,0.12)', border: '2px dashed #448a40', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, pointerEvents: 'none' }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: '#448a40' }}>Drop to upload to "{selectedNode?.label}"</span>
             </div>
           )}
@@ -649,7 +649,7 @@ function GridCard({ file, picked, onPick, onOpen, onDownload, onRename, signedUr
   const [val, setVal] = useState(file.file_name)
   function commit() { setEditing(false); if (val.trim() && val !== file.file_name) onRename(file, val) }
   return (
-    <div style={{ position: 'relative', border: '0.5px solid ' + (picked ? 'var(--blue, #185FA5)' : 'var(--border)'), borderRadius: 10, overflow: 'hidden', background: 'var(--surface)', cursor: 'pointer' }}>
+    <div style={{ position: 'relative', border: '0.5px solid ' + (picked ? 'var(--blue, #185FA5)' : 'var(--border)'), borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)', cursor: 'pointer' }}>
       <div onClick={onOpen}>
         <FilePreview file={file} signedUrlFor={signedUrlFor} height={130} />
       </div>
@@ -683,8 +683,8 @@ function Empty({ isSearch, node }) {
   return <div style={{ padding: 30, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>{msg}</div>
 }
 
-const tbtn = { fontSize: 11.5, padding: '4px 9px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }
+const tbtn = { fontSize: 11.5, padding: '4px 9px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }
 const fabtn = { fontSize: 10, lineHeight: '20px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }
 function vmb(on) {
-  return { width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid ' + (on ? 'var(--accent)' : 'var(--border)'), background: on ? 'var(--accent)' : 'transparent', cursor: 'pointer', color: on ? '#fff' : 'var(--text3)', borderRadius: 6, padding: 0 }
+  return { width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', border: '0.5px solid ' + (on ? 'var(--accent)' : 'var(--border)'), background: on ? 'var(--accent)' : 'transparent', cursor: 'pointer', color: on ? '#fff' : 'var(--text3)', borderRadius: 'var(--radius)', padding: 0 }
 }

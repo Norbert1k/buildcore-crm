@@ -123,7 +123,7 @@ export default function Login() {
           <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 90, display: 'block', margin: '0 auto', objectFit: 'contain', filter: 'none' }} />
         </div>
 
-        <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e2e0d8)', borderRadius: 12, padding: 28, borderTop: '3px solid #448a40' }}>
+        <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e2e0d8)', borderRadius: 'var(--radius)', padding: 28, borderTop: '3px solid #448a40' }}>
 
           {step === 'login' && (
             <>
@@ -133,14 +133,14 @@ export default function Login() {
               {/* Division chooser — Construction / Fit-Out */}
               <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
                 <button type="button" onClick={() => pickDivision('construction')}
-                  style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                  style={{ flex: 1, padding: '10px 8px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
                     border: chosenDivision === 'construction' ? '2px solid #448a40' : '1px solid var(--border, #e2e0d8)',
                     background: chosenDivision === 'construction' ? 'rgba(68,138,64,0.08)' : 'transparent',
                     color: chosenDivision === 'construction' ? '#448a40' : 'var(--text2, #808080)' }}>
                   Construction
                 </button>
                 <button type="button" onClick={() => pickDivision('fitout')}
-                  style={{ flex: 1, padding: '10px 8px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+                  style={{ flex: 1, padding: '10px 8px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
                     border: chosenDivision === 'fitout' ? '2px solid #0E7490' : '1px solid var(--border, #e2e0d8)',
                     background: chosenDivision === 'fitout' ? 'rgba(14,116,144,0.08)' : 'transparent',
                     color: chosenDivision === 'fitout' ? '#0E7490' : 'var(--text2, #808080)' }}>
@@ -156,8 +156,8 @@ export default function Login() {
                   <label>Password</label>
                   <PasswordInput value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
                 </div>
-                {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
-                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading}>
+                {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
+                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading}>
                   {loading ? 'Signing in...' : 'Sign in'}
                 </button>
               </form>
@@ -177,8 +177,8 @@ export default function Login() {
                   <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
                     style={{ fontSize: 24, letterSpacing: '0.4em', textAlign: 'center', fontFamily: 'monospace' }} autoFocus maxLength={6} />
                 </div>
-                {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
-                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading || code.length !== 6}>
+                {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
+                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading || code.length !== 6}>
                   {loading ? 'Verifying...' : 'Verify'}
                 </button>
                 <button type="button" onClick={() => { setStep('login'); setCode(''); setError('') }} style={{ width: '100%', marginTop: 8, padding: '8px 0', background: 'none', border: 'none', color: 'var(--text2, #808080)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -212,14 +212,14 @@ export default function Login() {
                       { label: 'Number', ok: /[0-9]/.test(newPass) },
                       { label: 'Matches', ok: newPass === confirmPass && confirmPass.length > 0 },
                     ].map(r => (
-                      <span key={r.label} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: r.ok ? '#e8f5e7' : 'var(--surface2, #f5f4f0)', color: r.ok ? '#448a40' : '#9C9A94', fontWeight: 500 }}>
+                      <span key={r.label} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius)', background: r.ok ? '#e8f5e7' : 'var(--surface2, #f5f4f0)', color: r.ok ? '#448a40' : '#9C9A94', fontWeight: 500 }}>
                         {r.ok ? '✓' : '○'} {r.label}
                       </span>
                     ))}
                   </div>
                 )}
-                {passError && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{passError}</div>}
-                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: passLoading ? .7 : 1 }} disabled={passLoading || newPass.length < 8 || newPass !== confirmPass}>
+                {passError && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{passError}</div>}
+                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: passLoading ? .7 : 1 }} disabled={passLoading || newPass.length < 8 || newPass !== confirmPass}>
                   {passLoading ? 'Saving...' : 'Set New Password & Continue'}
                 </button>
               </form>

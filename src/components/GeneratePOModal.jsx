@@ -602,7 +602,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
   }
   const panel = {
-    background: 'var(--surface)', borderRadius: 12, width: 'min(820px, 100%)',
+    background: 'var(--surface)', borderRadius: 'var(--radius)', width: 'min(820px, 100%)',
     maxHeight: '90vh', overflow: 'auto', border: '0.5px solid var(--border)',
   }
   const sectionTitle = {
@@ -610,7 +610,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
     color: 'var(--text3)', margin: '20px 0 8px',
   }
   const roBox = {
-    background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 6,
+    background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)',
     padding: '8px 11px', fontSize: 13, color: 'var(--text2)',
   }
   const label = { fontSize: 11, color: 'var(--text3)', marginBottom: 4, display: 'block' }
@@ -641,12 +641,12 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
           <div style={{ padding: '4px 20px 20px' }}>
 
             {issuedRevision && (
-              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#FAEEDA', color: '#854F0B', fontSize: 12 }}>
+              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAEEDA', color: '#854F0B', fontSize: 12 }}>
                 This order has already been issued. Saving changes will create <strong>Rev {NEXT_REVISION(existingPO.revision)}</strong> — the current version is kept on record.
               </div>
             )}
             {editInPlace && existingPO?.status === 'issued' && (
-              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#E1F5EE', color: '#0F6E56', fontSize: 12 }}>
+              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 'var(--radius)', background: '#E1F5EE', color: '#0F6E56', fontSize: 12 }}>
                 Editing the <strong>current version in place</strong> — no new revision will be created. Issuing again regenerates the PDF for this same version.
               </div>
             )}
@@ -677,7 +677,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
                   onDragOver={e => { e.preventDefault(); setQuoteDragOver(true) }}
                   onDragLeave={() => setQuoteDragOver(false)}
                   onDrop={e => { e.preventDefault(); setQuoteDragOver(false); if (e.dataTransfer?.files?.[0]) handleQuoteFile(e.dataTransfer.files[0]) }}
-                  style={{ border: '1.5px dashed ' + (quoteDragOver ? '#448a40' : 'var(--border)'), borderRadius: 8, padding: '12px 14px', textAlign: 'center', background: quoteDragOver ? 'rgba(68,138,64,0.08)' : 'transparent', fontSize: 12, color: 'var(--text2)' }}>
+                  style={{ border: '1.5px dashed ' + (quoteDragOver ? '#448a40' : 'var(--border)'), borderRadius: 'var(--radius)', padding: '12px 14px', textAlign: 'center', background: quoteDragOver ? 'rgba(68,138,64,0.08)' : 'transparent', fontSize: 12, color: 'var(--text2)' }}>
                   {quoteParsing ? (
                     <span>{quoteParseMsg || 'Reading quote…'}</span>
                   ) : (
@@ -695,7 +695,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
               {quoteOptions.length > 0 && (
                 <div style={{ gridColumn: '1 / -1' }}>
                   <span style={label}>Quotes on record for {ctx.subName || 'this company'} — tick the one this PO is against</span>
-                  <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginTop: 4 }}>
+                  <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', marginTop: 4 }}>
                     {quoteOptions.map(q => (
                       <label key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderTop: '0.5px solid var(--border)', fontSize: 12, cursor: 'pointer', background: pickedQuoteId === q.id ? 'var(--surface2)' : 'transparent' }}>
                         <input type="radio" name="quotePick" checked={pickedQuoteId === q.id} onChange={() => pickQuote(q)} style={{ width: 14, height: 14, appearance: 'auto', flexShrink: 0 }} />
@@ -703,7 +703,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
                         <span style={{ color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{q.tasks?.title || '—'}</span>
                         {q.amount != null && <span style={{ flexShrink: 0 }}>£{Number(q.amount).toLocaleString()}</span>}
                         <span style={{ color: 'var(--text3)', flexShrink: 0 }}>{q.received_date ? fmtDate(q.received_date) : ''}</span>
-                        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: q.status === 'accepted' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: q.status === 'accepted' ? '#448a40' : 'var(--text3)' }}>{q.status}</span>
+                        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 'var(--radius)', background: q.status === 'accepted' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: q.status === 'accepted' ? '#448a40' : 'var(--text3)' }}>{q.status}</span>
                       </label>
                     ))}
                   </div>
@@ -793,7 +793,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
                       <button type="button" onClick={() => aiFill(key)} disabled={!!aiBusy}
                         title={`Generate a trade-specific draft for ${ctx.subTrade || 'this trade'}`}
                         style={{
-                          fontSize: 11, padding: '2px 9px', borderRadius: 5, cursor: aiBusy ? 'default' : 'pointer',
+                          fontSize: 11, padding: '2px 9px', borderRadius: 'var(--radius)', cursor: aiBusy ? 'default' : 'pointer',
                           border: '0.5px solid #448a40', background: aiBusy === key ? '#E1F5EE' : 'transparent',
                           color: '#448a40', fontWeight: 600, marginBottom: 4,
                         }}>
@@ -812,7 +812,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
               )
             })}
             {aiError && (
-              <div style={{ marginTop: 4, padding: '8px 11px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{aiError}</div>
+              <div style={{ marginTop: 4, padding: '8px 11px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{aiError}</div>
             )}
 
             {/* 2nd director */}
@@ -867,7 +867,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
             </table>
 
             {error && (
-              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>
+              <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>
             )}
 
             {/* Actions */}
@@ -875,20 +875,20 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
               {existingPO && (
                 <button onClick={deletePORecord} disabled={saving}
                   title="Remove the saved PO record so the next Generate PO starts fresh. PDFs already in the folder are separate files and are not touched."
-                  style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--red, #E24B4A)', background: 'transparent', color: 'var(--red, #E24B4A)', cursor: 'pointer', fontSize: 13, marginRight: 'auto' }}>
+                  style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: '0.5px solid var(--red, #E24B4A)', background: 'transparent', color: 'var(--red, #E24B4A)', cursor: 'pointer', fontSize: 13, marginRight: 'auto' }}>
                   🗑 Delete saved PO record
                 </button>
               )}
               <button onClick={onClose} disabled={saving}
-                style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>
+                style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: '0.5px solid var(--border)', background: 'transparent', cursor: 'pointer', fontSize: 13 }}>
                 Cancel
               </button>
               <button onClick={() => save(false)} disabled={saving}
-                style={{ padding: '8px 16px', borderRadius: 6, border: '0.5px solid var(--border)', background: 'var(--surface2)', cursor: 'pointer', fontSize: 13 }}>
+                style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: '0.5px solid var(--border)', background: 'var(--surface2)', cursor: 'pointer', fontSize: 13 }}>
                 {saving ? 'Saving…' : 'Save draft'}
               </button>
               <button onClick={() => save(true)} disabled={saving}
-                style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#448a40', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
+                style={{ padding: '8px 16px', borderRadius: 'var(--radius)', border: 'none', background: '#448a40', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 500 }}>
                 {saving ? 'Saving…' : (issuedRevision ? `Issue Rev ${NEXT_REVISION(existingPO.revision)}` : 'Issue PO')}
               </button>
             </div>

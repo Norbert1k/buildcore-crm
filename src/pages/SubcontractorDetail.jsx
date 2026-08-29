@@ -215,7 +215,7 @@ export default function SubcontractorDetail() {
 
       {/* Blacklist banner — prominent red warning */}
       {sub.blacklisted && (
-        <div style={{ background: '#fee', border: '2px solid #c00', borderRadius: 8, padding: 14, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ background: '#fee', border: '2px solid #c00', borderRadius: 'var(--radius)', padding: 14, marginBottom: 16, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ fontSize: 22, lineHeight: 1 }}>⛔</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#c00', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
@@ -502,7 +502,7 @@ export default function SubcontractorDetail() {
                     <div style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{nt.icon}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: nt.color, background: 'var(--surface2)', padding: '1px 7px', borderRadius: 10 }}>{nt.label}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: nt.color, background: 'var(--surface2)', padding: '1px 7px', borderRadius: 'var(--radius)' }}>{nt.label}</span>
                         <span style={{ fontSize: 11, color: 'var(--text3)' }}>{formatDateTime(n.created_at)}</span>
                         {n.profiles?.full_name && <span style={{ fontSize: 11, color: 'var(--text3)' }}>by {n.profiles.full_name}</span>}
                       </div>
@@ -558,7 +558,7 @@ export default function SubcontractorDetail() {
             {savingBlacklist ? 'Blacklisting...' : '⛔ Confirm Blacklist'}
           </button>
         </>}>
-        <div style={{ padding: '10px 14px', background: '#fee', border: '1px solid #fcc', borderRadius: 6, marginBottom: 14, fontSize: 12, color: '#8a0000' }}>
+        <div style={{ padding: '10px 14px', background: '#fee', border: '1px solid #fcc', borderRadius: 'var(--radius)', marginBottom: 14, fontSize: 12, color: '#8a0000' }}>
           This will prevent <strong>{sub.company_name}</strong> from being assigned to any project. The block is enforced at the database level and cannot be bypassed. Only an administrator can remove the blacklist.
         </div>
         <Field label="Reason (required)">
@@ -588,12 +588,12 @@ export default function SubcontractorDetail() {
           <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 8, zIndex: 1001 }}>
             {previewUrl && (
               <button onClick={e => { e.stopPropagation(); triggerDocDownload() }}
-                style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+                style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
                 ↓ Download
               </button>
             )}
             <button onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }}
-              style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+              style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
               ✕ Close
             </button>
           </div>
@@ -602,10 +602,10 @@ export default function SubcontractorDetail() {
           </div>
           {previewUrl ? (
             docFileTypeInfo(previewDoc.file_name).isImage
-              ? <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }} onClick={e => e.stopPropagation()} />
+              ? <img src={previewUrl} alt={previewDoc.file_name} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 'var(--radius)' }} onClick={e => e.stopPropagation()} />
               : docFileTypeInfo(previewDoc.file_name).isPdf
-              ? <iframe src={previewUrl} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8 }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
-              : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 8, background: '#fff' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
+              ? <iframe src={previewUrl} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 'var(--radius)' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
+              : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 'var(--radius)', background: '#fff' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
           ) : (
             <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Loading…</div>
           )}

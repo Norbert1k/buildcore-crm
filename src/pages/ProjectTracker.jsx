@@ -517,7 +517,7 @@ export default function ProjectTracker() {
         <div style={{
           background: 'var(--surface)',
           border: '1px solid var(--border)',
-          borderRadius: 10,
+          borderRadius: 'var(--radius)',
           padding: '14px 18px',
           marginBottom: 14,
         }}>
@@ -658,7 +658,7 @@ export default function ProjectTracker() {
       {/* ─── Live Projects ────────────────────────────────────── */}
       <div style={{ marginBottom: 16 }}>
         <div className="section-header" onClick={toggleLive}
-          style={{ marginBottom: liveOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
+          style={{ marginBottom: liveOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
           <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
               style={{ transform: liveOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
@@ -710,7 +710,7 @@ export default function ProjectTracker() {
       {/* ─── Tender Projects ──────────────────────────────────── */}
       <div>
         <div className="section-header" onClick={toggleTender}
-          style={{ marginBottom: tenderOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
+          style={{ marginBottom: tenderOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
           <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
               style={{ transform: tenderOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
@@ -782,7 +782,7 @@ function MapStylePicker({ override, effective, onPick }) {
       right: 10,
       background: 'var(--surface)',
       border: '1px solid var(--border)',
-      borderRadius: 8,
+      borderRadius: 'var(--radius)',
       padding: '4px',
       display: 'flex',
       gap: 2,
@@ -818,7 +818,7 @@ function PickerButton({ label, sublabel, active, onClick }) {
         background: active ? 'var(--accent)' : 'transparent',
         color: active ? 'white' : 'var(--text2)',
         border: 'none',
-        borderRadius: 5,
+        borderRadius: 'var(--radius)',
         cursor: 'pointer',
         whiteSpace: 'nowrap',
         display: 'flex',

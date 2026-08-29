@@ -548,7 +548,7 @@ export default function TaskTracker() {
       </div>
 
       {dueReminders.length > 0 && (
-        <div style={{ background: 'var(--surface2)', border: '1px solid var(--blue-border)', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+        <div style={{ background: 'var(--surface2)', border: '1px solid var(--blue-border)', borderRadius: 'var(--radius)', padding: '10px 14px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--blue)' }}>{dueReminders.length} reminder{dueReminders.length === 1 ? '' : 's'}</span>
@@ -586,7 +586,7 @@ export default function TaskTracker() {
               style={{ cursor: 'pointer', padding: 12, borderColor: isFiltered ? 'var(--accent)' : undefined, background: isFiltered ? 'var(--surface2)' : undefined }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                 {p.project_ref && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', letterSpacing: '0.03em' }}>{p.project_ref}</span>}
-                {c.high > 0 && <span style={{ fontSize: 9, fontWeight: 700, background: '#fee', color: '#c00', borderRadius: 10, padding: '2px 6px', marginLeft: 'auto' }}>{c.high} HIGH</span>}
+                {c.high > 0 && <span style={{ fontSize: 9, fontWeight: 700, background: '#fee', color: '#c00', borderRadius: 'var(--radius)', padding: '2px 6px', marginLeft: 'auto' }}>{c.high} HIGH</span>}
               </div>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{p.project_name}</div>
               <div style={{ fontSize: 11, color: 'var(--text3)' }}>
@@ -686,7 +686,7 @@ export default function TaskTracker() {
                 return (
                   <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/tasks/${t.id}`)}>
                     <td onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 10, background: pri.bg, border: '1px solid ' + pri.border }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 'var(--radius)', background: pri.bg, border: '1px solid ' + pri.border }}>
                         <span style={{ width: 8, height: 8, borderRadius: '50%', background: pri.color }} />
                         <span style={{ fontSize: 11, fontWeight: 600, color: pri.color }}>{pri.label}</span>
                       </div>

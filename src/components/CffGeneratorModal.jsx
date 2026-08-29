@@ -904,7 +904,7 @@ export default function CffGeneratorModal({
           background: 'rgba(220, 38, 38, 0.08)',
           border: '1px solid rgba(220, 38, 38, 0.3)',
           color: '#dc2626',
-          borderRadius: 6,
+          borderRadius: 'var(--radius)',
           padding: 10,
           fontSize: 13,
           marginBottom: 14,
@@ -1406,7 +1406,7 @@ function Step1SourceAndProgramme({
                 cursor: 'pointer',
                 padding: '8px 10px',
                 border: '1px solid var(--border)',
-                borderRadius: 6,
+                borderRadius: 'var(--radius)',
                 background: defaultCurve === c ? 'var(--surface2)' : 'transparent',
                 fontSize: 12,
                 display: 'flex',
@@ -1533,7 +1533,7 @@ function Step2CurvesAndPreview({
           padding: 10,
           background: 'rgba(80, 102, 188, 0.08)',
           border: '0.5px solid rgba(80, 102, 188, 0.3)',
-          borderRadius: 6,
+          borderRadius: 'var(--radius)',
           fontSize: 12,
         }}>
           <strong>Months 1{paMonthCount > 1 ? `–${paMonthCount}` : ''}</strong> use cumulative figures from{' '}
@@ -1546,7 +1546,7 @@ function Step2CurvesAndPreview({
           padding: 10,
           background: 'rgba(80, 102, 188, 0.08)',
           border: '0.5px solid rgba(80, 102, 188, 0.3)',
-          borderRadius: 6,
+          borderRadius: 'var(--radius)',
           fontSize: 12,
         }}>
           <strong>Months 1{paMonthCount > 1 ? `–${paMonthCount}` : ''}</strong> use manually-entered amounts:{' '}
@@ -1574,7 +1574,7 @@ function Step2CurvesAndPreview({
         overflow: 'auto',
         maxHeight: '60vh',
         border: '1px solid var(--border)',
-        borderRadius: 6,
+        borderRadius: 'var(--radius)',
       }}>
         <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
           <thead>
@@ -1837,7 +1837,7 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
       marginTop: 10,
       padding: 10,
       border: '0.5px solid var(--border)',
-      borderRadius: 6,
+      borderRadius: 'var(--radius)',
       background: 'var(--surface2)',
     }}>
       {entries.length === 0 ? (

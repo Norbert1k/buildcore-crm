@@ -98,7 +98,7 @@ export default function Projects() {
           {/* ─── Live Projects ────────────────────────────────────── */}
           <div style={{ marginBottom: 16 }}>
             <div className="section-header" onClick={toggleLive}
-              style={{ marginBottom: liveOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
+              style={{ marginBottom: liveOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
               <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
                   style={{ transform: liveOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
@@ -169,7 +169,7 @@ export default function Projects() {
           {/* ─── Tender Projects ──────────────────────────────────── */}
           <div style={{ marginBottom: 16 }}>
             <div className="section-header" onClick={toggleTender}
-              style={{ marginBottom: tenderOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 6 }}>
+              style={{ marginBottom: tenderOpen ? 10 : 0, cursor: 'pointer', userSelect: 'none', padding: '8px 12px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
               <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
                   style={{ transform: tenderOpen ? 'rotate(90deg)' : 'rotate(0)', transition: 'transform 0.15s', flexShrink: 0 }}>
@@ -300,7 +300,7 @@ function ProjectsDashboard({ counts, dashFin, canViewValue, onProjectClick }) {
   return (
     <div style={{
       background: 'var(--surface2)',
-      borderRadius: 10,
+      borderRadius: 'var(--radius)',
       padding: 14,
       marginBottom: 20,
       display: 'flex',
@@ -387,7 +387,7 @@ function PortfolioTab({ projects, canViewValue, onProjectClick }) {
 
       <div style={{ marginTop: 10 }}>
         <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, padding: '0 4px' }}>Per job</div>
-        <div style={{ border: '0.5px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1.6fr 1fr 1fr 1fr 60px',
@@ -608,7 +608,7 @@ function MonthlyPaymentsTab({ projects }) {
         <KpiCard label="PAs Issued" value={String(yrCount)} />
       </div>
 
-      <div style={{ border: '0.5px solid var(--border)', borderRadius: 6, overflow: 'hidden', marginTop: 10 }}>
+      <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', marginTop: 10 }}>
         <div style={{
           display: 'grid',
           gridTemplateColumns: '28px 100px 1fr 100px 90px 100px',
@@ -809,7 +809,7 @@ function KpiCard({ label, value, accent, caption }) {
     <div style={{
       background: 'var(--surface)',
       border: '0.5px solid var(--border)',
-      borderRadius: 8,
+      borderRadius: 'var(--radius)',
       padding: '12px 14px',
     }}>
       <div style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: '0.04em' }}>{label.toUpperCase()}</div>

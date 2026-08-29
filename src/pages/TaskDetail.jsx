@@ -1065,7 +1065,7 @@ export default function TaskDetail() {
           </div>
         )}
         {task.description && (
-          <div style={{ marginTop: 12, padding: 12, background: 'var(--surface2)', borderRadius: 6, fontSize: 13, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+          <div style={{ marginTop: 12, padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
             {task.description}
           </div>
         )}
@@ -1111,7 +1111,7 @@ export default function TaskDetail() {
             </div>
           </div>
         ) : (
-          <div style={{ marginBottom: 12, padding: 10, background: 'var(--surface2)', borderRadius: 6, fontSize: 11, color: 'var(--text3)', textAlign: 'center', fontStyle: 'italic' }}>
+          <div style={{ marginBottom: 12, padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 11, color: 'var(--text3)', textAlign: 'center', fontStyle: 'italic' }}>
             Only assigned team members can post notes. Claim this task to contribute.
           </div>
         )}
@@ -1122,7 +1122,7 @@ export default function TaskDetail() {
             {notes.map(n => {
               const isEditing = editingNoteId === n.id
               return (
-                <div key={n.id} style={{ padding: 10, background: 'var(--surface2)', borderRadius: 6, borderLeft: '3px solid var(--accent)' }}>
+                <div key={n.id} style={{ padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', borderLeft: '3px solid var(--accent)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1413,7 +1413,7 @@ export default function TaskDetail() {
                           : linkedQuote?.currency === 'USD' ? '$' : '£'
                         const qFmt = (n) => qCcy + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                         return (
-                          <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 8, background: 'var(--surface2)', borderRadius: 6 }}>
+                          <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 8, background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
                             <div style={{ width: 28, height: 28, borderRadius: 4, background: isEml ? '#e3f2fd' : 'var(--surface)', color: isEml ? '#1565c0' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                               {isEml ? '✉' : '📄'}
                             </div>
@@ -1575,7 +1575,7 @@ export default function TaskDetail() {
                   })
                 }}
                 style={{
-                  padding: '5px 12px', fontSize: 12, borderRadius: 14, cursor: 'pointer', fontFamily: 'inherit',
+                  padding: '5px 12px', fontSize: 12, borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit',
                   border: '1px solid ' + (sel ? 'var(--accent)' : 'var(--border)'),
                   background: sel ? 'var(--accent)' : 'var(--surface)',
                   color: sel ? 'white' : 'var(--text)'
@@ -1720,7 +1720,7 @@ export default function TaskDetail() {
                   : ccy + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 const aiVat = quoteModal._aiFilled?.vat
                 return (
-                  <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--surface2)' }}>
+                  <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: 12, background: 'var(--surface2)' }}>
                     <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>
                       VAT
                       {aiVat && <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 9, padding: '1px 6px', borderRadius: 99, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>AI</span>}
@@ -1742,7 +1742,7 @@ export default function TaskDetail() {
                         </select>
                       </Field>
                     </div>
-                    <div style={{ background: 'var(--surface)', borderRadius: 6, padding: '8px 12px', marginTop: 4 }}>
+                    <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: '8px 12px', marginTop: 4 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', padding: '3px 0' }}>
                         <span>Net (ex VAT)</span><span>{fmt(vb.net)}</span>
                       </div>
@@ -1846,7 +1846,7 @@ export default function TaskDetail() {
                         padding: '6px 10px',
                         background: sel ? '#E6F1FB' : 'var(--surface2)',
                         color: sel ? '#0C447C' : 'var(--text2)',
-                        borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                        borderRadius: 'var(--radius)', fontSize: 12, cursor: 'pointer',
                         border: sel ? '1px solid #B5D4F4' : '1px solid transparent',
                       }}>
                         <input type="checkbox"
@@ -1902,7 +1902,7 @@ export default function TaskDetail() {
           pointerEvents: 'none',
         }}>
           <div style={{
-            border: '3px dashed white', borderRadius: 12,
+            border: '3px dashed white', borderRadius: 'var(--radius)',
             padding: '40px 60px', textAlign: 'center', color: 'white',
           }}>
             <div style={{ fontSize: 48, marginBottom: 8 }}>📥</div>
@@ -2014,7 +2014,7 @@ function formatActivityAction(a) {
 function EmlViewer({ file, parsed, onClose }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 8, maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 14, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ fontSize: 13, fontWeight: 600 }}>✉ {file.file_name}</div>
           <button className="btn btn-sm" onClick={onClose}>Close</button>

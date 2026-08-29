@@ -102,9 +102,9 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           {client.logo_url ? (
-            <img src={client.logo_url} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
+            <img src={client.logo_url} alt="" style={{ width: 40, height: 40, borderRadius: 'var(--radius)', objectFit: 'cover' }} />
           ) : (
-            <div style={{ width: 40, height: 40, borderRadius: 8, background: client.brand_color || '#448a40', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 'var(--radius)', background: client.brand_color || '#448a40', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: 12 }}>
               {(client.name || 'C').split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')}
             </div>
           )}
@@ -349,7 +349,7 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
             ) : (
               <>
                 {emailWarning && (
-                  <div style={{ fontSize: 12, color: '#854F0B', background: '#FAEEDA', border: '1px solid #FAC775', borderRadius: 6, padding: '8px 12px', marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: '#854F0B', background: '#FAEEDA', border: '1px solid #FAC775', borderRadius: 'var(--radius)', padding: '8px 12px', marginBottom: 12 }}>
                     Access granted, but the email didn&apos;t go out: {emailWarning}
                   </div>
                 )}
@@ -541,7 +541,7 @@ function AccessModal({ clientUser, client, onClose }) {
               padding: 10,
               background: isUnrestricted ? 'var(--green-bg, rgba(92,184,92,0.1))' : 'var(--surface2)',
               border: `0.5px solid ${isUnrestricted ? 'var(--green-border, rgba(92,184,92,0.3))' : 'var(--border)'}`,
-              borderRadius: 6,
+              borderRadius: 'var(--radius)',
               fontSize: 11,
               marginBottom: 12,
               color: isUnrestricted ? 'var(--green)' : 'var(--text2)',
@@ -556,7 +556,7 @@ function AccessModal({ clientUser, client, onClose }) {
               maxHeight: 320,
               overflowY: 'auto',
               border: '0.5px solid var(--border)',
-              borderRadius: 6,
+              borderRadius: 'var(--radius)',
             }}>
               {projects.length === 0 ? (
                 <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
@@ -612,7 +612,7 @@ function AccessModal({ clientUser, client, onClose }) {
 function Modal({ children, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, maxWidth: '90%', maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', maxWidth: '90%', maxHeight: '90vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
         {children}
       </div>
     </div>
@@ -638,7 +638,7 @@ const inputStyle = {
   padding: '8px 10px',
   fontSize: 13,
   border: '0.5px solid var(--border)',
-  borderRadius: 5,
+  borderRadius: 'var(--radius)',
   background: 'var(--surface2)',
   color: 'var(--text)',
   outline: 'none',

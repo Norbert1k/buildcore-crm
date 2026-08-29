@@ -468,7 +468,7 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
         <Section title={`Photos (${doc.photos?.length || 0})`}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
             {(doc.photos || []).map(p => (
-              <div key={p.id} style={{ border: '0.5px solid var(--border)', borderRadius: 6, overflow: 'hidden', background: 'var(--surface)' }}>
+              <div key={p.id} style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)' }}>
                 {photoUrls[p.id]
                   ? <img src={photoUrls[p.id]} alt="" style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }} />
                   : <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text3)' }}>Loading…</div>}
@@ -487,7 +487,7 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              style={{ aspectRatio: '4/3', border: '1.5px dashed var(--border)', borderRadius: 6, background: 'transparent', color: 'var(--text2)', fontSize: 12, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              style={{ aspectRatio: '4/3', border: '1.5px dashed var(--border)', borderRadius: 'var(--radius)', background: 'transparent', color: 'var(--text2)', fontSize: 12, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
               {uploading ? 'Uploading…' : 'Upload photos'}
             </button>
@@ -516,7 +516,7 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
 
       {confirmDelete && (
         <div onClick={() => setConfirmDelete(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, padding: 24, maxWidth: 400, width: '90%' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: 24, maxWidth: 400, width: '90%' }}>
             <div style={{ fontSize: 14, marginBottom: 6, fontWeight: 600 }}>Delete case study?</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18 }}>This permanently removes the case study and all its photos. The underlying project is not affected.</div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -559,7 +559,7 @@ function Overlay({ children, onClose }) {
 
 function Section({ title, children }) {
   return (
-    <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '18px 20px', marginBottom: 16 }}>
+    <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '18px 20px', marginBottom: 16 }}>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</div>
       {children}
     </div>
@@ -580,7 +580,7 @@ const input = {
   padding: '8px 10px',
   fontSize: 13,
   border: '0.5px solid var(--border)',
-  borderRadius: 5,
+  borderRadius: 'var(--radius)',
   background: 'var(--surface2)',
   color: 'var(--text)',
   outline: 'none',
@@ -588,13 +588,13 @@ const input = {
 }
 
 const btnPrimary = {
-  fontSize: 12, padding: '7px 14px', borderRadius: 6, background: '#448a40', color: 'white', border: 'none', cursor: 'pointer',
+  fontSize: 12, padding: '7px 14px', borderRadius: 'var(--radius)', background: '#448a40', color: 'white', border: 'none', cursor: 'pointer',
 }
 const btnSecondary = {
-  fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)',
+  fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)',
 }
 const btnRed = {
-  fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--red-border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--red)',
+  fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',
 }
 const btnGhost = {
   fontSize: 12, padding: '6px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text2)',

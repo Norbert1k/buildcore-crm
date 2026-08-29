@@ -101,7 +101,7 @@ export default function ClientDetail() {
       {/* Header card */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <div style={{ width: 50, height: 50, borderRadius: 12, background: col.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: col.color, flexShrink: 0 }}>
+          <div style={{ width: 50, height: 50, borderRadius: 'var(--radius)', background: col.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: col.color, flexShrink: 0 }}>
             {initials(client.name)}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -231,7 +231,7 @@ function ProjectList({ projects, fmt, navigate, faded }) {
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 13 }}>{fmt(p.value)}</div>
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, fontWeight: 600, background: sc.bg, color: sc.color }}>
+              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: sc.bg, color: sc.color }}>
                 {p.status.charAt(0).toUpperCase() + p.status.slice(1).replace('_', ' ')}
               </span>
             </div>

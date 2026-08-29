@@ -298,7 +298,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
 
   return (
     <div style={{ padding: '4px 0 24px' }}>
-      {error && <div style={{ padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>}
 
       {/* Merton building sub-tabs */}
       {merton && (
@@ -321,7 +321,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 180 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ flex: 1, height: 10, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+            <div style={{ flex: 1, height: 10, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', minWidth: pct > 0 ? 4 : 0, background: pct === 100 ? 'var(--green, #5cb85c)' : '#185FA5', transition: 'width .2s' }} />
             </div>
             <span style={{ fontSize: 13, fontWeight: 600, color: pct > 0 ? 'var(--text)' : 'var(--text2)', whiteSpace: 'nowrap' }}>{pct}%</span>
@@ -346,7 +346,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
           let sd = 0, st = 0
           for (const t of stage.trades) { st += 2; if (t.materials) sd++; if (t.labour) sd++ }
           return (
-            <div key={stage.id} style={{ border: '0.5px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+            <div key={stage.id} style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
               {/* Stage header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--surface2)' }}>
                 <button onClick={() => setCollapsed(c => ({ ...c, [stage.id]: !isC }))}

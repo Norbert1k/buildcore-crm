@@ -70,7 +70,7 @@ export default function RateLibraryTab() {
 
   return (
     <div>
-      {error && <div style={{ padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search description, section, project…" style={{ flex: 1, minWidth: 180, fontSize: 13 }} />
@@ -83,12 +83,12 @@ export default function RateLibraryTab() {
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 8, color: 'var(--text3)', fontSize: 13 }}>
+        <div style={{ padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', color: 'var(--text3)', fontSize: 13 }}>
           No rates harvested yet. The nightly harvest collects rates from every CSA in the system —
           or trigger it manually (see deploy notes). Once it runs, your historical rates appear here.
         </div>
       ) : (
-        <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
           <div style={{ display: 'grid', gridTemplateColumns: RGRID, gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 10, color: 'var(--text3)' }}>
             <span>DESCRIPTION</span><span>SECTION</span><span style={{ textAlign: 'right' }}>UNIT</span>
             <span style={{ textAlign: 'right' }}>RATE</span><span style={{ textAlign: 'right' }}>MATERIAL</span>

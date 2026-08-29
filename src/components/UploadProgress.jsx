@@ -109,7 +109,7 @@ export default function UploadProgress({ uploadState }) {
 
         {/* Errors */}
         {errors.length > 0 && (
-          <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, fontSize: 12, color: 'var(--red)' }}>
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--red)' }}>
             {errors.length} file{errors.length !== 1 ? 's' : ''} failed to upload
           </div>
         )}

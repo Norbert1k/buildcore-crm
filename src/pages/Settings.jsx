@@ -459,7 +459,7 @@ export default function Settings() {
                     style={{
                       position: 'relative',
                       padding: 0,
-                      borderRadius: 10,
+                      borderRadius: 'var(--radius)',
                       border: isActive ? '2px solid var(--accent)' : '1px solid var(--border)',
                       background: 'transparent',
                       cursor: 'pointer',
@@ -997,7 +997,7 @@ function ChangePasswordModal({ onClose }) {
                 { label: 'Number', ok: /[0-9]/.test(newPass) },
                 { label: 'Passwords match', ok: newPass === confirm && confirm.length > 0 },
               ].map(r => (
-                <span key={r.label} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: r.ok ? 'var(--green-bg)' : 'var(--surface2)', color: r.ok ? 'var(--green)' : 'var(--text3)', fontWeight: 500 }}>
+                <span key={r.label} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius)', background: r.ok ? 'var(--green-bg)' : 'var(--surface2)', color: r.ok ? 'var(--green)' : 'var(--text3)', fontWeight: 500 }}>
                   {r.ok ? '✓' : '○'} {r.label}
                 </span>
               ))}
@@ -1295,7 +1295,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {isHard ? (
           <>
-            <div style={{ padding: 12, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 8, fontSize: 13, color: 'var(--red)' }}>
+            <div style={{ padding: 12, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--red)' }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>This cannot be undone</div>
               <div>
                 Permanently deletes <strong>{user.email}</strong> and removes
@@ -1318,7 +1318,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           </>
         ) : (
           <>
-            <div style={{ padding: 12, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 8, fontSize: 13, color: 'var(--amber)' }}>
+            <div style={{ padding: 12, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--amber)' }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>Revoke portal access</div>
               <div>
                 Removes <strong>{user.email}</strong> from the
@@ -1331,7 +1331,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           </>
         )}
         {error && (
-          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 6, fontSize: 12, color: 'var(--red)' }}>
+          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--red)' }}>
             {error}
           </div>
         )}
@@ -1454,7 +1454,7 @@ function EscalationRatesSection({ profile }) {
             {rates.map(r => {
               const s = suggest[r.category]
               return (
-                <div key={r.category} style={{ border: '0.5px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}>
+                <div key={r.category} style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, fontWeight: 500, minWidth: 150 }}>
                       {r.category === 'DEFAULT' ? 'Default (uncategorised)' : titleCase(r.category)}
@@ -1478,7 +1478,7 @@ function EscalationRatesSection({ profile }) {
                   </div>
 
                   {s && !s.loading && (s.pct != null || s.error) && (
-                    <div style={{ marginTop: 8, fontSize: 12, padding: '8px 10px', background: 'var(--surface2)', borderRadius: 6 }}>
+                    <div style={{ marginTop: 8, fontSize: 12, padding: '8px 10px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
                       {s.error ? (
                         <span style={{ color: 'var(--red)' }}>{s.error}</span>
                       ) : (

@@ -160,7 +160,7 @@ export default function PriceJobTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {error && <div style={{ padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>}
+      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>}
 
       {/* Job meta */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -199,7 +199,7 @@ export default function PriceJobTab() {
       </div>
 
       {/* Escalation controls */}
-      <div style={{ background: 'var(--surface2)', borderRadius: 10, padding: '12px 14px' }}>
+      <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
           <span style={{ fontSize: 13, fontWeight: 600 }}>Price escalation</span>
           <span style={{ fontSize: 12, color: 'var(--text3)' }}>ages each price to the build date</span>
@@ -218,7 +218,7 @@ export default function PriceJobTab() {
                 <div key={cat} style={{
                   background: isOverridden ? 'rgba(230,162,60,0.10)' : 'var(--surface)',
                   border: `0.5px solid ${isOverridden ? 'rgba(230,162,60,0.45)' : 'var(--border)'}`,
-                  borderRadius: 8, padding: '7px 10px',
+                  borderRadius: 'var(--radius)', padding: '7px 10px',
                 }}>
                   <div style={{ fontSize: 11, color: isOverridden ? 'var(--amber)' : 'var(--text2)', marginBottom: 5 }}>
                     {cat === 'DEFAULT' ? 'Default' : titleCase(cat)}
@@ -248,11 +248,11 @@ export default function PriceJobTab() {
           <button className="btn btn-sm" onClick={addManualLine}>+ Add line</button>
         </div>
         {pricedLines.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', padding: 16, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 8 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', padding: 16, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)' }}>
             No lines yet. Add manually, or drop a tender doc once parsing is enabled.
           </div>
         ) : (
-          <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 10, color: 'var(--text3)' }}>
               <span>DESCRIPTION</span><span>CATEGORY</span><span style={{ textAlign: 'right' }}>QTY</span><span>UNIT</span><span>PRICE DATE</span><span style={{ textAlign: 'right' }}>BASE £</span><span style={{ textAlign: 'right' }}>AGE</span><span style={{ textAlign: 'right' }}>ESCALATED £</span><span></span><span></span>
             </div>
@@ -333,7 +333,7 @@ function DropZone({ title, subtitle, accent, files, onFiles, onRemove }) {
         style={{
           border: `0.5px dashed ${over ? accent : 'var(--border)'}`,
           background: over ? 'var(--surface2)' : 'var(--surface)',
-          borderRadius: 10, padding: 18, textAlign: 'center', cursor: 'pointer',
+          borderRadius: 'var(--radius)', padding: 18, textAlign: 'center', cursor: 'pointer',
         }}>
         <div style={{ fontSize: 22, color: accent }}>⬆</div>
         <div style={{ fontSize: 13, fontWeight: 500, marginTop: 4 }}>{title}</div>

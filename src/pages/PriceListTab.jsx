@@ -197,8 +197,8 @@ export default function PriceListTab() {
   // ── Styles ─────────────────────────────────────────────────────────────────
   const cell = { padding: '6px 8px', fontSize: 12, borderBottom: '0.5px solid var(--border)' }
   const th = { ...cell, color: 'var(--text3)', textAlign: 'left', fontWeight: 600 }
-  const btnPrimary = { background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 500 }
-  const btnPlain = { background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 6, padding: '7px 14px', cursor: 'pointer', fontSize: 13 }
+  const btnPrimary = { background: '#185FA5', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '7px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 500 }
+  const btnPlain = { background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '7px 14px', cursor: 'pointer', fontSize: 13 }
   const lbl = { fontSize: 11, color: 'var(--text3)', marginBottom: 3, display: 'block' }
 
   return (
@@ -222,12 +222,12 @@ export default function PriceListTab() {
       </div>
 
       {error && (
-        <div style={{ padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>
+        <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>
       )}
 
       {/* ── PDF REVIEW SCREEN ──────────────────────────────────────────────── */}
       {reviewRows && (
-        <div style={{ border: '2px solid #185FA5', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+        <div style={{ border: '2px solid #185FA5', borderRadius: 'var(--radius)', padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
             Review extracted prices — {reviewSource}
           </div>
@@ -289,7 +289,7 @@ export default function PriceListTab() {
 
       {/* ── MANUAL ADD / EDIT FORM ─────────────────────────────────────────── */}
       {editing && (
-        <div style={{ border: '0.5px solid var(--border)', borderRadius: 10, padding: 14, marginBottom: 16, background: 'var(--surface2)' }}>
+        <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: 14, marginBottom: 16, background: 'var(--surface2)' }}>
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>
             {editing === 'new' ? 'Add a price' : 'Edit price'}
           </div>

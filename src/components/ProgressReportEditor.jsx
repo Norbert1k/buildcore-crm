@@ -513,7 +513,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
 function Overlay({ children, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1500, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: 'var(--bg)', borderRadius: 8, width: '100%', maxWidth: 1100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', width: '100%', maxWidth: 1100, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {children}
       </div>
     </div>
@@ -603,11 +603,11 @@ function ProgrammeTab({ report, patch }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontSize: 12, color: 'var(--text2)', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 6 }}>
+      <div style={{ fontSize: 12, color: 'var(--text2)', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
         Track % completion across trade categories. Add or remove groups and line items as needed for this project.
       </div>
       {groups.map((g, gIdx) => (
-        <div key={gIdx} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
+        <div key={gIdx} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input value={g.name} onChange={e => setGroup(gIdx, { ...g, name: e.target.value })}
               style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
@@ -797,7 +797,7 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
 
   return (
     <div>
-      <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 6, fontSize: 12, color: 'var(--text2)' }}>
+      <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--text2)' }}>
         Upload progress photos (any quantity). They'll auto-flow into pages on the PDF export.
         {!reportSaved && <div style={{ marginTop: 4, color: '#b87a00' }}>⚠ Save the report first before uploading photos.</div>}
       </div>
@@ -817,7 +817,7 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
           {photos.map(p => (
-            <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 6, overflow: 'hidden', background: 'var(--surface2)', border: '0.5px solid var(--border)' }}>
+            <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface2)', border: '0.5px solid var(--border)' }}>
               {previewMap[p.id] ? (
                 <img src={previewMap[p.id]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={p.file_name} />
               ) : (

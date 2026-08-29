@@ -34,9 +34,9 @@ export default function PricedJobsHistory() {
   }
 
   if (loading) return <div style={{ fontSize: 13, color: 'var(--text3)', padding: 20 }}>Loading history…</div>
-  if (error) return <div style={{ padding: '9px 12px', borderRadius: 6, background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>
+  if (error) return <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>
   if (jobs.length === 0) return (
-    <div style={{ fontSize: 13, color: 'var(--text3)', padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 8 }}>
+    <div style={{ fontSize: 13, color: 'var(--text3)', padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)' }}>
       No priced jobs saved yet. Price a job and click "Save to history".
     </div>
   )
@@ -46,7 +46,7 @@ export default function PricedJobsHistory() {
       {jobs.map(j => {
         const isOpen = open === j.id
         return (
-          <div key={j.id} style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+          <div key={j.id} style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
             <div onClick={() => setOpen(isOpen ? null : j.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer' }}>
               <div style={{ flex: 1, minWidth: 0 }}>

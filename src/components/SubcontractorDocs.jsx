@@ -31,7 +31,7 @@ function FileTypeBadge({ fileName, size = 34 }) {
   const color = isWord ? '#1B5EAE' : isExcel ? '#1D7B45' : isPpt ? '#C55A25' : null
   const letter = isWord ? 'W' : isExcel ? 'X' : isPpt ? 'P' : null
   if (!color) return <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="1"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-  return <div style={{ width: size, height: size, borderRadius: 6, background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 14, fontWeight: 700, color }}>{letter}</span></div>
+  return <div style={{ width: size, height: size, borderRadius: 'var(--radius)', background: color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 14, fontWeight: 700, color }}>{letter}</span></div>
 }
 async function readDropEntries(e) {
   const items = e.dataTransfer?.items
@@ -48,9 +48,9 @@ async function readDropEntries(e) {
   return { files: result.files, folders: [...result.folders] }
 }
 
-const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
+const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
 const PENCIL = <svg width="11" height="11" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/><rect x="10" y="7" width="4" height="4" fill="#FDD835"/><polygon points="10,18 14,18 12,23" fill="#fff"/><rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/></svg>
 const BIN = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
 
@@ -67,7 +67,7 @@ function ConfirmDlg({ message, onOk, onCancel }) {
     </div>
   )
 }
-function CountBadge({ count }) { if (!count) return null; return <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 8, fontWeight: 500, background: 'var(--accent)', color: '#fff', minWidth: 18, textAlign: 'center', display: 'inline-block' }}>{count}</span> }
+function CountBadge({ count }) { if (!count) return null; return <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 'var(--radius)', fontWeight: 500, background: 'var(--accent)', color: '#fff', minWidth: 18, textAlign: 'center', display: 'inline-block' }}>{count}</span> }
 function ViewToggle({ viewMode, setView }) {
   const modes = [
     { mode: 'grid', icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg> },
@@ -78,7 +78,7 @@ function ViewToggle({ viewMode, setView }) {
 }
 function BulkBar({ selected, onZip, onClear }) {
   if (selected.size === 0) return null
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', marginBottom: 8, background: 'var(--accent-light, var(--surface2))', borderRadius: 6, fontSize: 11, border: '0.5px solid var(--accent)' }}>
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', marginBottom: 8, background: 'var(--accent-light, var(--surface2))', borderRadius: 'var(--radius)', fontSize: 11, border: '0.5px solid var(--accent)' }}>
     <span style={{ fontWeight: 600, color: 'var(--accent)' }}>{selected.size} selected</span>
     <button onClick={onZip} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 3 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip selected</button>
     <button onClick={onClear} style={Btn}>Clear</button>
@@ -107,7 +107,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
   return (
     <>
       <div draggable={!renaming} onDragStart={e => { e.dataTransfer.setData('text/plain', file.id); e.dataTransfer.effectAllowed = 'move' }}
-        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', position: 'relative', transition: 'border .1s' }}>
+        style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', position: 'relative', transition: 'border .1s' }}>
         {/* Checkbox */}
         <div onClick={e => { e.stopPropagation(); onSelect(file.id) }}
           style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -165,11 +165,11 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
   return (
     <>
       <div draggable={!renaming} onDragStart={e => { e.dataTransfer.setData('text/plain', file.id); e.dataTransfer.effectAllowed = 'move' }}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 6, border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', transition: 'border .1s', marginBottom: 4 }}>
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 'var(--radius)', border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', cursor: renaming ? 'default' : 'grab', transition: 'border .1s', marginBottom: 4 }}>
         <div onClick={e => { e.stopPropagation(); onSelect(file.id) }} style={{ width: 16, height: 16, borderRadius: 3, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.3)'), background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
-        <div style={{ width: 32, height: 32, borderRadius: 5, background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {iconLetter ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -199,7 +199,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8 }}>
       {files.map(f => <FileCard key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete} selected={selected.has(f.id)} onSelect={onSelect} />)}
-      {canManage && <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: viewMode === 'compact' ? 80 : 120, cursor: 'pointer', fontSize: 11, color: 'var(--text3)' }}>
+      {canManage && <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', minHeight: viewMode === 'compact' ? 80 : 120, cursor: 'pointer', fontSize: 11, color: 'var(--text3)' }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         + Add files
         <input type="file" multiple style={{ display: 'none' }} onChange={e => onUpload(Array.from(e.target.files))} />
@@ -392,8 +392,8 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
     <div style={{ marginBottom: 12 }}>
       <UploadProgress uploadState={uploadProgress} />
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: '0.5px solid var(--border)', borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: folder.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 'var(--radius)', cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: '0.5px solid var(--border)', borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 'var(--radius)', background: folder.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth="1.6"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -402,7 +402,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           {showAddFolder ? <>
-            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
             <button onClick={addCustomSubfolder} disabled={savingFolder} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
             <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
           </> : <>
@@ -425,7 +425,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
           {subfolders.map(sf => <SubFolder key={sf.key} sf={sf} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadCustomSubfolders(); loadRootFiles() }} />)}
           {files.length === 0 && subfolders.length === 0 ? (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 80, border: '0.5px dashed var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+            <label onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 80, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
             </label>
@@ -434,7 +434,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
       )}
       {showPOPicker && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 12, width: 'min(700px, 100%)', maxHeight: '80vh', overflow: 'auto', border: '0.5px solid var(--border)', padding: 18 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', width: 'min(700px, 100%)', maxHeight: '80vh', overflow: 'auto', border: '0.5px solid var(--border)', padding: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <span style={{ fontSize: 15, fontWeight: 600 }}>Purchase Orders</span>
               <button onClick={() => setShowPOPicker(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>✕</button>
@@ -444,7 +444,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
             ))}
             {poGroups().length === 0 && <div style={{ padding: 18, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>No saved purchase orders left.</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-              <button onClick={newPOFromPicker} style={{ fontSize: 12.5, padding: '7px 14px', border: 'none', borderRadius: 6, background: '#448a40', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+              <button onClick={newPOFromPicker} style={{ fontSize: 12.5, padding: '7px 14px', border: 'none', borderRadius: 'var(--radius)', background: '#448a40', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
                 + New PO
               </button>
             </div>
@@ -471,10 +471,10 @@ function POGroupRow({ group, onAmend, onDeleteVersion }) {
   const cur = group.current
   const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   return (
-    <div style={{ border: '0.5px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
+    <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', fontSize: 12.5, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 600, flexShrink: 0 }}>{cur.order_number}{cur.revision ? ` Rev ${cur.revision}` : ''}</span>
-        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: cur.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: cur.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{cur.status}</span>
+        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 'var(--radius)', background: cur.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: cur.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{cur.status}</span>
         <span style={{ color: 'var(--text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtD(cur.order_date)}</span>
         {cur.contract_value != null && <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>£{Number(cur.contract_value).toLocaleString()}</span>}
         <span style={{ display: 'inline-flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
@@ -496,9 +496,9 @@ function POGroupRow({ group, onAmend, onDeleteVersion }) {
           {group.versions.map(v => (
             <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px 7px 24px', borderTop: '0.5px solid var(--border)', fontSize: 12 }}>
               <span style={{ flexShrink: 0 }}>{v.revision ? `Rev ${v.revision}` : 'Original'}</span>
-              <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 10, background: v.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface)', color: v.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{v.status}</span>
+              <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 'var(--radius)', background: v.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface)', color: v.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{v.status}</span>
               <span style={{ color: 'var(--text3)', flex: 1 }}>{fmtD(v.created_at)}</span>
-              <button onClick={() => onDeleteVersion(v, group)} style={{ fontSize: 10.5, padding: '2px 9px', border: '0.5px solid var(--red, #E24B4A)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red, #E24B4A)', flexShrink: 0 }}>
+              <button onClick={() => onDeleteVersion(v, group)} style={{ fontSize: 10.5, padding: '2px 9px', border: '0.5px solid var(--red, #E24B4A)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red, #E24B4A)', flexShrink: 0 }}>
                 Delete
               </button>
             </div>
@@ -511,7 +511,7 @@ function POGroupRow({ group, onAmend, onDeleteVersion }) {
     </div>
   )
 }
-const pkBtn = { fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text)', flexShrink: 0 }
+const pkBtn = { fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text)', flexShrink: 0 }
 
 // ── SubFolder (recursive child folders) ──────────────────────
 function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, onPreview, onReload }) {
@@ -552,9 +552,9 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
     <div style={{ marginBottom: 2 }}>
       <UploadProgress uploadState={uploadProgress} />
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 'var(--radius)', cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }} onMouseLeave={e => { if (!open) e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent' }}>
-        <div style={{ width: 24, height: 24, borderRadius: 5, background: '#F1EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ fontSize: 13 }}>📁</span></div>
+        <div style={{ width: 24, height: 24, borderRadius: 'var(--radius)', background: '#F1EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ fontSize: 13 }}>📁</span></div>
         {renaming ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setRenaming(false) }} onClick={e => e.stopPropagation()} style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
           : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{label}</span>}
         {!open && <CountBadge count={fileCount} />}
@@ -563,7 +563,7 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
             <button onClick={() => { setRenameVal(label); setRenaming(true) }} style={Btn} title="Rename">{PENCIL}</button>
             {confirmDel ? <><button onClick={deleteFolder} style={BtnR}>Confirm</button><button onClick={() => setConfirmDel(false)} style={Btn}>✕</button></> : <button onClick={() => setConfirmDel(true)} style={BtnR} title="Delete">{BIN}</button>}
             {showAddSub ? <>
-              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addChild(); if (e.key === 'Escape') setShowAddSub(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addChild(); if (e.key === 'Escape') setShowAddSub(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
               <button onClick={addChild} style={BtnG}>Add</button><button onClick={() => setShowAddSub(false)} style={Btn}>✕</button>
             </> : <button onClick={() => setShowAddSub(true)} style={Btn}>+ Sub</button>}
           </>}
@@ -575,7 +575,7 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ marginLeft: 14, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
           {children.map(ch => <SubFolder key={ch.folder_key} sf={{ key: ch.folder_key, label: ch.label, custom: true }} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadFiles(); loadChildren() }} />)}
           {files.length === 0 && children.length === 0 ? (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 8, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+            <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
             </label>

@@ -251,7 +251,7 @@ function AllSubcontractorsTab({ designTeam }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 500 }}>Trade:</span>
           <select value={tradeFilter} onChange={e => setTradeFilter(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, cursor: 'pointer', minWidth: 160 }}>
+            style={{ padding: '6px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, cursor: 'pointer', minWidth: 160 }}>
             <option value="all">All trades ({subs.length})</option>
             {availableTrades.map(t => (
               <option key={t} value={t}>
@@ -261,7 +261,7 @@ function AllSubcontractorsTab({ designTeam }) {
           </select>
           {tradeFilter !== 'all' && (
             <button onClick={() => setTradeFilter('all')} title="Clear trade filter"
-              style={{ fontSize: 11, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
+              style={{ fontSize: 11, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
               ✕ Clear
             </button>
           )}
@@ -280,7 +280,7 @@ function AllSubcontractorsTab({ designTeam }) {
       </div>
 
       {tradeFilter !== 'all' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', borderRadius: 6, fontSize: 13, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}>
           <span style={{ fontWeight: 500 }}>Showing {list.length} {tradeFilter}</span>
           <span style={{ opacity: 0.6 }}>— alphabetical by company</span>
           <button onClick={() => setTradeFilter('all')} style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 8px', border: '1px solid currentColor', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
@@ -360,9 +360,9 @@ function AllSubcontractorsTab({ designTeam }) {
                       <Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill>
                       <div style={{ marginTop: 4 }}>
                         {s.approved ? (
-                          <span style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 10, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Approved for Payment</span>
+                          <span style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Approved for Payment</span>
                         ) : (
-                          <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber-border)', borderRadius: 10, padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>⏳ Pending Approval</span>
+                          <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>⏳ Pending Approval</span>
                         )}
                       </div>
                     </td>

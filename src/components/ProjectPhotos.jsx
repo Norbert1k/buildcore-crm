@@ -323,7 +323,7 @@ export default function ProjectPhotos({ projectId }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           <button
             onClick={() => { setOpenFolder(null); setSelectedIds(new Set()); setLightboxIndex(null) }}
-            style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: 'var(--text2)' }}>
+            style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: 'var(--text2)' }}>
             ← All folders
           </button>
           <div style={{ fontSize: 16, fontWeight: 600 }}>{folder.name}</div>
@@ -350,7 +350,7 @@ export default function ProjectPhotos({ projectId }) {
           <div style={{
             display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
             background: 'var(--surface2)', border: '1px solid var(--border)',
-            borderRadius: 6, padding: '8px 12px', marginBottom: 12,
+            borderRadius: 'var(--radius)', padding: '8px 12px', marginBottom: 12,
             position: 'sticky', top: 8, zIndex: 10,
           }}>
             <div style={{ fontSize: 12, fontWeight: 600 }}>
@@ -458,7 +458,7 @@ export default function ProjectPhotos({ projectId }) {
       {!telegramGroup ? (
         <div style={{
           background: 'linear-gradient(135deg, #229ED9 0%, #1A8AC8 100%)',
-          borderRadius: 10,
+          borderRadius: 'var(--radius)',
           padding: '14px 18px',
           marginBottom: 16,
           color: 'white',
@@ -476,7 +476,7 @@ export default function ProjectPhotos({ projectId }) {
           </div>
           {canManage && (
             <button onClick={() => setShowConnect(true)} style={{
-              background: 'white', color: '#1A8AC8', border: 0, borderRadius: 6,
+              background: 'white', color: '#1A8AC8', border: 0, borderRadius: 'var(--radius)',
               padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
             }}>Connect</button>
           )}
@@ -485,7 +485,7 @@ export default function ProjectPhotos({ projectId }) {
         <div style={{
           background: 'var(--surface2)',
           border: '1px solid var(--border)',
-          borderRadius: 8,
+          borderRadius: 'var(--radius)',
           padding: '10px 14px',
           marginBottom: 16,
           display: 'flex',
@@ -513,7 +513,7 @@ export default function ProjectPhotos({ projectId }) {
         <div style={{
           background: 'var(--surface)',
           border: '1px dashed var(--border)',
-          borderRadius: 8,
+          borderRadius: 'var(--radius)',
           padding: '32px 20px',
           textAlign: 'center',
           color: 'var(--text3)',
@@ -559,7 +559,7 @@ function FolderCard({ folder, thumbUrl, canManage, onOpen, onToggleVisibility })
     <div style={{
       background: 'var(--surface)',
       border: '1px solid var(--border)',
-      borderRadius: 10,
+      borderRadius: 'var(--radius)',
       overflow: 'hidden',
       cursor: 'pointer',
       transition: 'transform 0.1s, box-shadow 0.15s',
@@ -624,7 +624,7 @@ function PhotoTile({ photo, url, selected, onToggleSelect, onClick }) {
         backgroundSize: 'contain',
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'center',
-        borderRadius: 6,
+        borderRadius: 'var(--radius)',
         cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
@@ -743,7 +743,7 @@ function Lightbox({ photos, index, thumbs, onClose, onPrev, onNext, canManage, o
         ) : (
           <div style={{ width: 400, height: 300, background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>Loading…</div>
         )}
-        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 6, padding: '10px 14px', color: 'white', fontSize: 12, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 'var(--radius)', padding: '10px 14px', color: 'white', fontSize: 12, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             {photo.caption && <div style={{ fontWeight: 600, marginBottom: 2 }}>{photo.caption}</div>}
             <div style={{ opacity: 0.7 }}>
@@ -830,7 +830,7 @@ function ConnectTelegramModal({ projectId, profileId, onClose, onConnected }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background: 'var(--surface)', borderRadius: 10, maxWidth: 480, width: '100%',
+        background: 'var(--surface)', borderRadius: 'var(--radius)', maxWidth: 480, width: '100%',
         padding: 24, boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
       }}>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Connect Telegram group</div>
@@ -849,7 +849,7 @@ function ConnectTelegramModal({ projectId, profileId, onClose, onConnected }) {
               value={chatId}
               onChange={e => setChatId(e.target.value)}
               placeholder="-1001234567890"
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, background: 'var(--surface)', color: 'var(--text)' }}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, background: 'var(--surface)', color: 'var(--text)' }}
               required />
           </div>
           <div style={{ marginBottom: 16 }}>
@@ -859,7 +859,7 @@ function ConnectTelegramModal({ projectId, profileId, onClose, onConnected }) {
               value={chatTitle}
               onChange={e => setChatTitle(e.target.value)}
               placeholder="Hopton Road Site Team"
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 5, fontSize: 13, background: 'var(--surface)', color: 'var(--text)' }} />
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, background: 'var(--surface)', color: 'var(--text)' }} />
           </div>
 
           {error && <div style={{ fontSize: 12, color: '#A32D2D', marginBottom: 12 }}>{error}</div>}

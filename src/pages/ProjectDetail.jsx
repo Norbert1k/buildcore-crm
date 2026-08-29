@@ -136,7 +136,7 @@ function ProjectFileSearch({ projectId }) {
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', transition: 'background .1s' }}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <div style={{ width: 28, height: 28, borderRadius: 5, background: f.section === 'H&S Handover' ? '#e8f5e7' : '#E6F1FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <div style={{ width: 28, height: 28, borderRadius: 'var(--radius)', background: f.section === 'H&S Handover' ? '#e8f5e7' : '#E6F1FB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {f.section === 'H&S Handover'
                   ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                   : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#378ADD" strokeWidth="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -821,8 +821,8 @@ export default function ProjectDetail() {
           cards so the document tabs sit higher. State remembered per browser. */}
       {overviewCollapsed ? (
         <div onClick={toggleOverview}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', userSelect: 'none', padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 12, marginBottom: 16 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 8, background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', userSelect: 'none', padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 16 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius)', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
           </div>
           <div style={{ minWidth: 0 }}>
@@ -1022,7 +1022,7 @@ export default function ProjectDetail() {
 
       {/* Employers Agent — always visible directly under Project Description */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: projectEAs.length > 0 ? 8 : 0, padding: '8px 12px', background: '#042C53', borderRadius: 6, borderLeft: '3px solid #5b9bd5' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: projectEAs.length > 0 ? 8 : 0, padding: '8px 12px', background: '#042C53', borderRadius: 'var(--radius)', borderLeft: '3px solid #5b9bd5' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
             <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
           </svg>
@@ -1588,7 +1588,7 @@ export default function ProjectDetail() {
             </Field>
           </div>
           {showEditAssign && showEditAssign.variation_amount > 0 && (
-            <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 6, padding: '10px 12px', fontSize: 12, color: 'var(--text2)' }}>
+            <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 12, color: 'var(--text2)' }}>
               <div style={{ fontWeight: 600, color: 'var(--amber)', marginBottom: 2 }}>Note: Variation of +{formatCurrency(showEditAssign.variation_amount)} is attached to this assignment.</div>
               <div>Use the +VAR button on the row to manage variations separately.</div>
             </div>
@@ -1834,7 +1834,7 @@ function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
           <div style={{ color: 'var(--text3)', fontSize: 12 }}>Loading preview...</div>
         ) : isMpp ? (
           <div style={{ textAlign: 'center', padding: 20 }}>
-            <div style={{ width: 56, height: 56, background: '#1a73e8', borderRadius: 8, margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 56, height: 56, background: '#1a73e8', borderRadius: 'var(--radius)', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" fill="white" fillOpacity=".2"/><path d="M7 8h10M7 12h6M7 16h8" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </div>
             <div style={{ fontSize: 12, fontWeight: 700, color: '#1a73e8' }}>Microsoft Project</div>
@@ -1842,14 +1842,14 @@ function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: 20 }}>
-            <div style={{ width: 56, height: 56, background: 'var(--surface3, var(--border))', borderRadius: 8, margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 56, height: 56, background: 'var(--surface3, var(--border))', borderRadius: 'var(--radius)', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="var(--text3)" strokeWidth="1.5"/><polyline points="14 2 14 8 20 8" stroke="var(--text3)" strokeWidth="1.5"/></svg>
             </div>
             <div style={{ fontSize: 11, color: 'var(--text3)' }}>{prog.file_name.split('.').pop().toUpperCase()} file</div>
           </div>
         )}
         {/* Overlay download button */}
-        <button onClick={onDownload} style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button onClick={onDownload} style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 'var(--radius)', padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <span style={{ fontSize: 11, color: 'white', fontWeight: 600 }}>Download</span>
         </button>

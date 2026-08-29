@@ -129,7 +129,7 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
             <div style={{ display: 'flex', gap: 6 }}>
               {divisions.map(d => (
                 <button key={d} onClick={() => setDivision(d)}
-                  style={{ flex: 1, padding: '5px 6px', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+                  style={{ flex: 1, padding: '5px 6px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
                     border: division === d ? `1.5px solid ${d === 'fitout' ? '#0E7490' : '#448a40'}` : '1px solid var(--border)',
                     background: division === d ? (d === 'fitout' ? 'rgba(14,116,144,0.10)' : 'rgba(68,138,64,0.10)') : 'transparent',
                     color: division === d ? (d === 'fitout' ? '#0E7490' : '#448a40') : 'var(--text3)' }}>

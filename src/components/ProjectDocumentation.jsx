@@ -164,7 +164,7 @@ const FOLDER_ICONS = {
 function FolderIcon({ folderKey, color, bg, size = 20 }) {
   const Icon = FOLDER_ICONS[folderKey]
   return (
-    <div style={{ width: 36, height: 36, borderRadius: 8, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+    <div style={{ width: 36, height: 36, borderRadius: 'var(--radius)', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       {Icon ? <Icon color={color} size={size} /> : (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6">
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -388,7 +388,7 @@ function FileTypeBadge({ fileName, fileType, size = 34 }) {
     </svg>
   )
   return (
-    <div style={{ width: size, height: size + 8, background: color, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ width: size, height: size + 8, background: color, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <span style={{ color: '#fff', fontSize: size * 0.5, fontWeight: 700, fontFamily: 'Arial' }}>{letter}</span>
     </div>
   )
@@ -396,7 +396,7 @@ function FileTypeBadge({ fileName, fileType, size = 34 }) {
 function ConfirmDlg({ message, onOk, onCancel }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onCancel}>
-      <div style={{ background: 'var(--surface)', borderRadius: 10, padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)', wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message}</div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={onCancel} style={Btn}>Cancel</button>
@@ -532,7 +532,7 @@ function ZipProgressOverlay({ progress }) {
   const compressPct = percent != null ? Math.round(percent) : null
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, padding: '24px 28px', minWidth: 360, maxWidth: 460 }}>
+      <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '24px 28px', minWidth: 360, maxWidth: 460 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>{label}</div>
         {total > 0 && compressPct == null && (
           <>
@@ -566,15 +566,15 @@ function ZipProgressOverlay({ progress }) {
 const PENCIL = <svg width="11" height="11" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/><rect x="10" y="7" width="4" height="4" fill="#FDD835"/><polygon points="10,18 14,18 12,23" fill="#fff"/><rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/></svg>
 const BIN = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
 
-const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)',     borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 5, background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 5, background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)',     borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 
 // ── Count Badge (pill showing file count on subfolder rows) ───────────────────
 function CountBadge({ count }) {
   if (!count) return null
   return (
-    <div style={{ background: 'var(--surface2)', color: 'var(--text3)', fontSize: 10, fontWeight: 500, padding: '1px 7px', borderRadius: 10, flexShrink: 0 }}>{count}</div>
+    <div style={{ background: 'var(--surface2)', color: 'var(--text3)', fontSize: 10, fontWeight: 500, padding: '1px 7px', borderRadius: 'var(--radius)', flexShrink: 0 }}>{count}</div>
   )
 }
 
@@ -609,16 +609,16 @@ function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
   }
   return (
     <>
-      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
+      <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-        <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
-        {onMove && <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
-        <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 6, border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
+        <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
+        {onMove && <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
+        <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
       </div>
       {showMove && moveTargets && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 600 }} onClick={() => setShowMove(false)} />
-          <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 10, minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
+          <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
             <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
             <div onClick={() => { onMove(null); setShowMove(false) }} style={{ padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'} onMouseLeave={e => e.currentTarget.style.background = ''}>
               📂 Root (no subfolder)
@@ -695,7 +695,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
       <div draggable={!renaming} onDragStart={handleDragStart}
         style={{
           border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)',
-          borderRadius: 8, overflow: 'hidden', background: 'var(--surface)',
+          borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)',
           cursor: renaming ? 'default' : 'grab', position: 'relative',
           transition: 'border .1s, opacity .1s',
           // Reduced opacity makes hidden files visually distinct in CRM
@@ -841,7 +841,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
       <div draggable={!renaming} onDragStart={handleDragStart}
         style={{
           display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px',
-          borderRadius: 6,
+          borderRadius: 'var(--radius)',
           border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)',
           background: 'var(--surface)',
           cursor: renaming ? 'default' : 'grab',
@@ -852,7 +852,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
           style={{ width: 16, height: 16, borderRadius: 3, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.3)'), background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
-        <div style={{ width: 32, height: 32, borderRadius: 5, background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {iconLetter ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span>
             : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
         </div>
@@ -944,7 +944,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
       ))}
       {canManage && (
         <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
-          style={{ border: '0.5px dashed var(--border)', borderRadius: 8, minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 10 }}>
+          style={{ border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 10 }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add files
           <input type="file" multiple style={{ display: 'none' }} onChange={e => onUpload(Array.from(e.target.files))} />
@@ -1317,10 +1317,10 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         draggable={isCustom && !renaming}
         onDragStart={e => { if (!isCustom) return; e.stopPropagation(); e.dataTransfer.setData('subfolder', subfolder.key); e.dataTransfer.effectAllowed = 'move' }}
         onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={isPhotosSubfolder ? undefined : onDrop}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 6, cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', paddingLeft: 10 + depth * 12, borderRadius: 'var(--radius)', cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
-        <div style={{ width: 24, height: 24, borderRadius: 5, background: isCustom ? '#F1EFE8' : folder.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: 24, height: 24, borderRadius: 'var(--radius)', background: isCustom ? '#F1EFE8' : folder.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {isCustom
             ? <span style={{ fontSize: 13 }}>📁</span>
             : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth="1.5">
@@ -1345,7 +1345,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             style={{
               fontSize: 10,
               padding: '3px 8px',
-              borderRadius: 12,
+              borderRadius: 'var(--radius)',
               border: '0.5px solid var(--border)',
               background: clientVisible ? '#448a4020' : 'transparent',
               color: clientVisible ? '#448a40' : 'var(--text3)',
@@ -1410,7 +1410,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                   ? <>
                       <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus
                         onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                        style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+                        style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
                       <button onClick={addChildFolder} disabled={savingSub} style={BtnG}>{savingSub ? '...' : 'Add'}</button>
                       <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={Btn}>✕</button>
                     </>
@@ -1470,7 +1470,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
           )}
 
           {isPrSubfolder && progressReports.length > 0 && (
-            <div style={{ marginBottom: 10, padding: 10, border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)' }}>
+            <div style={{ marginBottom: 10, padding: 10, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)' }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                 {subLabel} — Progress Reports ({progressReports.length})
               </div>
@@ -1540,7 +1540,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
 
           {files.length === 0 && childFolders.length === 0 && !isPrSubfolder ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
@@ -2020,7 +2020,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
       <ZipProgressOverlay progress={zipProgress} />
       {/* Folder header */}
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDropFolder}
-        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 8, cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 'var(--radius)', cursor: 'pointer', borderLeft: `3px solid ${folder.color}`, background: open ? 'var(--surface2)' : 'var(--surface)', border: `0.5px solid var(--border)`, borderLeftWidth: 3, borderLeftColor: folder.color, transition: 'background 0.1s' }}>
         <FolderIcon folderKey={folder.key} color={folder.color} bg={folder.bg} />
         <div style={{ flex: 1, minWidth: 0 }} onClick={e => { if (renamingFolder) e.stopPropagation() }}>
           {renamingFolder
@@ -2051,7 +2051,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
               style={{
                 fontSize: 10,
                 padding: '3px 8px',
-                borderRadius: 12,
+                borderRadius: 'var(--radius)',
                 border: '0.5px solid var(--border)',
                 background: clientVisible ? '#448a4020' : 'transparent',
                 color: clientVisible ? '#448a40' : 'var(--text3)',
@@ -2073,7 +2073,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 5, background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
               <button onClick={addCustomSubfolder} disabled={savingFolder} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
               <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
             </>
@@ -2169,7 +2169,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
 
           {/* Progress reports list (folder 05 only) */}
           {folder.key === '05-progress-report' && progressReports.length > 0 && (
-            <div style={{ marginBottom: 14, padding: 12, border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)' }}>
+            <div style={{ marginBottom: 14, padding: 12, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)' }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
                 Saved Progress Reports ({progressReports.length})
               </div>
@@ -2289,7 +2289,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           {/* Empty state */}
           {files.length === 0 && subfolders.length === 0 && canManage && (
             <label onDragOver={e => e.preventDefault()} onDrop={onDropBody}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 56, border: '0.5px dashed var(--border)', borderRadius: 6, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 56, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
@@ -2362,7 +2362,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
       {/* AI generation spinner */}
       {generating && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: 'var(--surface)', borderRadius: 8, padding: 32, textAlign: 'center', maxWidth: 380 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 32, textAlign: 'center', maxWidth: 380 }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Reading your programme PDF…</div>
             <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 16 }}>
@@ -2379,7 +2379,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
           onClick={() => setGeneratePreview(null)}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background: 'var(--surface)', borderRadius: 8, maxWidth: 720, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', maxWidth: 720, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>AI Extracted Tasks</div>
@@ -2456,7 +2456,7 @@ function AddTopFolderButton({ onAdd }) {
 
   if (!show) return (
     <button onClick={() => setShow(true)}
-      style={{ marginTop: 8, fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      style={{ marginTop: 8, fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Add folder
     </button>
@@ -2465,7 +2465,7 @@ function AddTopFolderButton({ onAdd }) {
     <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Folder name" autoFocus
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setShow(false) }}
-        style={{ fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'var(--surface2)', color: 'var(--text)', flex: 1, minWidth: 260 }} />
+        style={{ fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', flex: 1, minWidth: 260 }} />
       <button onClick={save} disabled={saving} style={BtnG}>{saving ? '...' : 'Add'}</button>
       <button onClick={() => setShow(false)} style={Btn}>Cancel</button>
     </div>
@@ -2608,7 +2608,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
     <div>
       <ZipProgressOverlay progress={zipProgress} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ display: 'inline-flex', border: '0.5px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+        <div style={{ display: 'inline-flex', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
           <button onClick={() => setDocView('classic')}
             style={{ fontSize: 12, padding: '6px 12px', border: 'none', cursor: 'pointer', background: docView === 'classic' ? 'var(--accent)' : 'transparent', color: docView === 'classic' ? '#fff' : 'var(--text2)' }}>
             Classic
@@ -2620,7 +2620,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
         </div>
         {docView === 'classic' && (
           <button onClick={zipAll} disabled={zippingAll}
-            style={{ fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            style={{ fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
             {zippingAll ? 'Zipping...' : 'Zip all documents'}
           </button>
@@ -2661,7 +2661,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
 function EmlViewer({ file, parsed, onClose, onDownload }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 8, maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 14, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {file.file_name}</div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

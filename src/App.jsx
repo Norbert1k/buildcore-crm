@@ -95,7 +95,7 @@ function NotificationBell() {
     <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(o => !o)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', padding: 6, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', position: 'relative', padding: 6, borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         title="Notifications"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -451,7 +451,7 @@ function LiveReminderPopup({ reminder, onClose, onAfterAction }) {
     }}>
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--blue-border, rgba(91,155,213,0.4))',
-        borderRadius: 10, width: 380, maxWidth: '100%',
+        borderRadius: 'var(--radius)', width: 380, maxWidth: '100%',
         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
       }}>
         <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>

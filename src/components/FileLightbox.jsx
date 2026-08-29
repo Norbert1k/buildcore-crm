@@ -212,7 +212,7 @@ export default function FileLightbox({
               color: 'white',
               fontSize: 12, padding: '6px 12px',
               border: '0.5px solid rgba(255,255,255,0.25)',
-              borderRadius: 6, background: 'rgba(255,255,255,0.06)',
+              borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.06)',
               cursor: 'pointer',
             }}
           >
@@ -229,7 +229,7 @@ export default function FileLightbox({
               color: 'white',
               fontSize: 12, padding: '6px 12px',
               border: '0.5px solid rgba(255,255,255,0.25)',
-              borderRadius: 6, textDecoration: 'none',
+              borderRadius: 'var(--radius)', textDecoration: 'none',
               background: 'rgba(255,255,255,0.06)',
             }}
           >
@@ -242,7 +242,7 @@ export default function FileLightbox({
             color: 'white',
             fontSize: 14, padding: '6px 10px', lineHeight: 1,
             border: '0.5px solid rgba(255,255,255,0.25)',
-            borderRadius: 6, background: 'transparent', cursor: 'pointer',
+            borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', gap: 4,
           }}
           aria-label="Close preview"
@@ -293,7 +293,7 @@ export default function FileLightbox({
           style={{
             flex: 1, minWidth: 0,
             background: kind === 'image' ? 'transparent' : 'white',
-            borderRadius: 8, overflow: 'hidden',
+            borderRadius: 'var(--radius)', overflow: 'hidden',
             boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}
@@ -343,7 +343,7 @@ export default function FileLightbox({
                   display: 'inline-block',
                   fontSize: 12, padding: '8px 16px',
                   background: '#534AB7', color: 'white',
-                  borderRadius: 6, textDecoration: 'none',
+                  borderRadius: 'var(--radius)', textDecoration: 'none',
                 }}
               >
                 Open in new tab

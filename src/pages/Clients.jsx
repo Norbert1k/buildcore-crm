@@ -44,7 +44,7 @@ function ClientAvatar({ name, website, color, size = 40 }) {
 
   const showLogo = logoUrl && !failed && !timedOut
   return (
-    <div style={{ width: size, height: size, borderRadius: 10, background: showLogo ? '#fff' : color.bg, border: showLogo ? '0.5px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.3, fontWeight: 700, color: color.color, flexShrink: 0, overflow: 'hidden' }}>
+    <div style={{ width: size, height: size, borderRadius: 'var(--radius)', background: showLogo ? '#fff' : color.bg, border: showLogo ? '0.5px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.3, fontWeight: 700, color: color.color, flexShrink: 0, overflow: 'hidden' }}>
       {showLogo
         ? <img src={logoUrl} alt={name} onError={() => setFailed(true)}
             style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 6 }} />
@@ -177,17 +177,17 @@ export default function Clients() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end', flexShrink: 0 }}>
                   {c.activeCount > 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, fontWeight: 600, background: 'var(--green-bg)', color: 'var(--green)' }}>
+                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--green-bg)', color: 'var(--green)' }}>
                       {c.activeCount} active
                     </span>
                   )}
                   {c.projects.length - c.activeCount > 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
+                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
                       {c.projects.length - c.activeCount} complete
                     </span>
                   )}
                   {c.projects.length === 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 8, fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
+                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
                       no projects
                     </span>
                   )}

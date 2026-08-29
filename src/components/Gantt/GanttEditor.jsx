@@ -856,7 +856,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 0, border: '0.5px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', gap: 0, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
           {Object.entries(ZOOM_LEVELS).map(([k, v]) => (
             <button key={k} onClick={() => setZoom(k)} style={{ fontSize: 11, padding: '4px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: zoom === k ? '#448a40' : 'var(--surface)', color: zoom === k ? 'white' : 'var(--text2)' }}>{v.name}</button>
           ))}
@@ -873,7 +873,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           <button className="btn btn-sm" onClick={() => setShowVersionsMenu(v => !v)}>Versions ({versions.length})</button>
           {showVersionsMenu && (
             <div onMouseLeave={() => setShowVersionsMenu(false)}
-              style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, minWidth: 280, maxHeight: 320, overflow: 'auto', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+              style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 280, maxHeight: 320, overflow: 'auto', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
               {versions.length === 0 && <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>No versions saved yet.</div>}
               {versions.map(v => (
                 <div key={v.id} onClick={() => loadVersion(v.id)}
@@ -1090,7 +1090,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 function Overlay({ children, onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1500, display: 'flex', alignItems: 'stretch', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: 'var(--bg)', borderRadius: 8, width: '100%', maxWidth: 1700, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius)', width: '100%', maxWidth: 1700, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {children}
       </div>
     </div>

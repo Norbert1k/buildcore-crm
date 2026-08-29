@@ -116,7 +116,7 @@ export default function PerformanceTab({ subcontractorId, subName, subEmail, rat
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
                     <span style={{ fontWeight: 600, fontSize: 13, color: rt.color }}>{rt.label}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text3)', background: 'var(--surface2)', padding: '1px 7px', borderRadius: 10 }}>{CATEGORIES[rating.category] || rating.category}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text3)', background: 'var(--surface2)', padding: '1px 7px', borderRadius: 'var(--radius)' }}>{CATEGORIES[rating.category] || rating.category}</span>
                     {rating.projects?.project_name && (
                       <span style={{ fontSize: 11, color: 'var(--blue)' }}>📋 {rating.projects.project_name}</span>
                     )}

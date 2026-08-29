@@ -298,7 +298,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                             flex: 1, minWidth: 0,
                             background: 'var(--surface2)',
                             padding: '8px 10px',
-                            borderRadius: 6,
+                            borderRadius: 'var(--radius)',
                             borderLeft: `3px solid ${covered ? '#3B6D11' : 'var(--border)'}`,
                           }}>
                           <div style={{ fontSize: 10, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -319,7 +319,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                 Quotes <span style={{ color: 'var(--text3)', fontWeight: 400 }}>({quotes.length})</span>
               </div>
               {quotes.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 6, marginBottom: 16 }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', marginBottom: 16 }}>
                   No quotes recorded for this task yet.
                 </div>
               ) : (
@@ -398,7 +398,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                 Documents
               </div>
               {VISIBLE_CATEGORIES.every(cat => filesByCategory.get(cat.value).length === 0) ? (
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 6 }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
                   No quotes, drawings, or emails uploaded.
                 </div>
               ) : (
@@ -422,7 +422,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                               || f.mime_type === 'application/pdf'
                               || f.mime_type === 'message/rfc822'
                             return (
-                              <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--surface2)', borderRadius: 6 }}>
+                              <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
                                 <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {f.file_name}
                                 </div>

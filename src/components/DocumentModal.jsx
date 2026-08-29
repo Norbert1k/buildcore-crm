@@ -373,7 +373,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                           <label key={k}
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 6,
-                              padding: '6px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                              padding: '6px 10px', borderRadius: 'var(--radius)', fontSize: 12, cursor: 'pointer',
                               background: on ? 'var(--accent)' : 'var(--surface)',
                               color: on ? '#fff' : 'var(--text)',
                               border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border)'),
@@ -397,7 +397,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                   </div>
                 ))}
                 {types.length > 1 && (
-                  <div style={{ background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', padding: '6px 10px', borderRadius: 5, fontSize: 11, fontWeight: 500 }}>
+                  <div style={{ background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', padding: '6px 10px', borderRadius: 'var(--radius)', fontSize: 11, fontWeight: 500 }}>
                     ✓ Will create {types.length} linked rows. One file, one set of details — all {types.length} will share expiry, reference, and notes.
                   </div>
                 )}
@@ -426,7 +426,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                       <button type="button" key={p.label}
                         onClick={() => setCoverAmount(t, String(p.val))}
                         style={{
-                          fontSize: 12, padding: '6px 12px', borderRadius: 6, cursor: 'pointer',
+                          fontSize: 12, padding: '6px 12px', borderRadius: 'var(--radius)', cursor: 'pointer',
                           background: active ? 'var(--accent)' : 'var(--surface2)',
                           color: active ? '#fff' : 'var(--text)',
                           border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
@@ -463,7 +463,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
               style={{
                 padding: '18px 14px',
                 border: '1.5px dashed ' + (errors.file ? 'var(--red-border)' : dragging ? 'var(--accent)' : 'var(--border)'),
-                borderRadius: 8,
+                borderRadius: 'var(--radius)',
                 background: dragging ? 'rgba(68, 138, 64, 0.08)' : 'var(--surface2)',
                 textAlign: 'center',
                 cursor: 'pointer',
@@ -516,7 +516,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
             <div style={{
               marginTop: 10,
               padding: '8px 12px',
-              borderRadius: 6,
+              borderRadius: 'var(--radius)',
               fontSize: 12,
               background: scanning ? 'rgba(68,138,64,0.06)' :
                           scanResult?.confidence === 'error' ? 'rgba(217,53,53,0.06)' :
@@ -563,7 +563,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                         marginLeft: 8,
                         fontSize: 10, fontWeight: 500,
                         padding: '1px 6px',
-                        borderRadius: 8,
+                        borderRadius: 'var(--radius)',
                         background: scanResult.confidence === 'high' ? 'rgba(68,138,64,0.15)' :
                                     scanResult.confidence === 'medium' ? 'rgba(186,117,23,0.15)' :
                                     'rgba(160,160,160,0.15)',
