@@ -18,7 +18,7 @@ function IconClients() {
 
 // The logo swap needs to recognise ALL dark themes, not just 'dark'.
 // As new themes get added this set must be kept in sync with index.css.
-const DARK_THEMES = new Set(['dark', 'forest', 'slate'])
+const DARK_THEMES = new Set(['dark', 'forest', 'slate', 'blueprint'])
 function isDarkTheme() {
   const t = document.documentElement.getAttribute('data-theme') || 'light'
   return DARK_THEMES.has(t)

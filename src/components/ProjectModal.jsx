@@ -38,7 +38,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
 
   useEffect(() => {
     supabase.from('profiles').select('id, full_name, role').order('full_name').then(({ data }) => setManagers(sortBy(data || [], 'full_name')))
-    supabase.from('clients').select('id, name').order('name').then(({ data }) => setClients(sortBy(data || [], 'name')))
+    supabase.from('clients').select('id, name').eq('division', division).order('name').then(({ data }) => setClients(sortBy(data || [], 'name')))
     // Auto-generate project ref only for new projects that are not Tender
     if (!project && form.status !== 'tender') {
       generateRef()

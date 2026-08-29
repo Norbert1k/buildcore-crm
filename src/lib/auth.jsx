@@ -12,7 +12,9 @@ function themeFor(profileData, div) {
   // 'light' — a profile with no saved theme must never stomp the look the
   // user was already running (that regression forced light on every refresh).
   const remembered = localStorage.getItem('theme') || 'light'
-  if (div === 'fitout') return profileData?.theme_fitout || profileData?.theme || remembered
+  // Fit-out defaults to its signature Blueprint theme (Stage 6) until the
+  // user explicitly picks something else for that division.
+  if (div === 'fitout') return profileData?.theme_fitout || 'blueprint'
   return profileData?.theme || remembered
 }
 
@@ -20,6 +22,20 @@ function applyTheme(theme) {
   const t = theme || 'light'
   document.documentElement.setAttribute('data-theme', t)
   localStorage.setItem('theme', t)
+}
+
+// Style = shape language (standard/studio/blueprint/gallery), independent of
+// colour. Saved per division like colour: style / style_fitout.
+function applyStyle(style) {
+  const v = style || 'standard'
+  document.documentElement.setAttribute('data-style', v)
+  localStorage.setItem('ui_style', v)
+}
+function styleFor(profileData, div) {
+  const remembered = localStorage.getItem('ui_style') || 'standard'
+  // Fit-out's signature default is the Blueprint shape language.
+  if (div === 'fitout') return profileData?.style_fitout || 'blueprint'
+  return profileData?.style || remembered
 }
 
 export function AuthProvider({ children }) {
@@ -75,6 +91,7 @@ export function AuthProvider({ children }) {
       document.documentElement.setAttribute('data-division', resolved)
       localStorage.setItem(`ccg_division_${userId}`, resolved)
       applyTheme(themeFor(data, resolved))
+      applyStyle(styleFor(data, resolved))
     }
     if (data?.role === 'site_manager') {
       const { data: access } = await supabase.from('user_project_access').select('project_id').eq('user_id', userId)
@@ -89,6 +106,13 @@ export function AuthProvider({ children }) {
     const col = division === 'fitout' ? 'theme_fitout' : 'theme'
     setProfile(p => ({ ...p, [col]: theme }))
     if (user) await supabase.from('profiles').update({ [col]: theme }).eq('id', user.id)
+  }
+
+  async function setStyle(style) {
+    applyStyle(style)
+    const col = division === 'fitout' ? 'style_fitout' : 'style'
+    setProfile(p => ({ ...p, [col]: style }))
+    if (user) await supabase.from('profiles').update({ [col]: style }).eq('id', user.id)
   }
 
   async function signIn(email, password) {
@@ -116,6 +140,7 @@ export function AuthProvider({ children }) {
     // division applies its own saved theme.
     document.documentElement.setAttribute('data-division', d)
     applyTheme(themeFor(profile, d))
+    applyStyle(styleFor(profile, d))
     if (user) localStorage.setItem(`ccg_division_${user.id}`, d)
   }
 
@@ -192,7 +217,7 @@ export function AuthProvider({ children }) {
   const canViewActivity = () => ['admin', 'project_manager', 'operations_manager', 'project_director'].includes(role)
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, canViewActivity, projectAccess, role, setTheme, mfaVerified, markMfaVerified, division, divisions, setDivision }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signOut, can, canAccessProject, canViewActivity, projectAccess, role, setTheme, setStyle, mfaVerified, markMfaVerified, division, divisions, setDivision }}>
       {children}
     </AuthContext.Provider>
   )

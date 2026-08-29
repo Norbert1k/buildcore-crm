@@ -237,6 +237,77 @@ tbody tr:hover td { background: var(--surface2); }
   --purple-bg:   rgba(155,135,224,0.12);
 }
 
+/* ── BLUEPRINT — the Fit-Out division's signature theme ──────────────────
+   Dark, squared edges, hairline borders, electric-teal accents; numerals
+   render tabular for a technical-drawing feel. Chosen for Stage 6. */
+[data-theme="blueprint"] {
+  --bg:          #0D1519;
+  --surface:     #101B21;
+  --surface2:    #15242C;
+  --border:      #1C2E36;
+  --border2:     #29424D;
+  --text:        #DCE9EE;
+  --text2:       #8FA6B0;
+  --text3:       #5E7681;
+  --accent:      #22B8D4;
+  --accent-dark: #1795AD;
+  --accent-light:rgba(34,184,212,0.14);
+  --green:       #4DC98A;
+  --green-bg:    rgba(77,201,138,0.12);
+  --green-border:rgba(77,201,138,0.28);
+  --red:         #E06C6C;
+  --red-bg:      rgba(224,108,108,0.12);
+  --red-border:  rgba(224,108,108,0.25);
+  --amber:       #E6A23C;
+  --amber-bg:    rgba(230,162,60,0.12);
+  --amber-border:rgba(230,162,60,0.25);
+  --blue:        #22B8D4;
+  --blue-bg:     rgba(34,184,212,0.12);
+  --blue-border: rgba(34,184,212,0.25);
+  --purple:      #9B87E0;
+  --purple-bg:   rgba(155,135,224,0.12);
+  --radius:      3px;
+}
+[data-theme="blueprint"] body { background: var(--bg); color: var(--text); }
+[data-theme="blueprint"] .sidebar { background: #101B21; border-color: #1C2E36; }
+
+/* ── STYLE AXIS — shape language, independent of colour palette ──────────
+   data-style on <html>: standard | studio | blueprint | gallery.
+   Standard = today's look (no overrides). Each style works over ANY colour
+   theme; both are saved per division. */
+
+/* Studio — soft & warm: generous radii, gentle shadows, pill nav */
+[data-style="studio"] { --radius: 14px; }
+[data-style="studio"] .card, [data-style="studio"] .stat-card {
+  border-radius: 14px; box-shadow: 0 2px 10px rgba(10, 25, 35, 0.07); }
+[data-style="studio"] .nav-item { border-radius: 10px; margin: 0 8px; }
+[data-style="studio"] .btn, [data-style="studio"] input, [data-style="studio"] select { border-radius: 10px; }
+[data-style="studio"] .pill { border-radius: 999px; }
+
+/* Blueprint — sharp & technical: squared, hairline, mono numerals */
+[data-style="blueprint"] { --radius: 3px; }
+[data-style="blueprint"] body { font-variant-numeric: tabular-nums; }
+[data-style="blueprint"] .card, [data-style="blueprint"] .stat-card { border-radius: 3px; }
+[data-style="blueprint"] .btn, [data-style="blueprint"] input, [data-style="blueprint"] select, [data-style="blueprint"] .pill { border-radius: 2px; }
+[data-style="blueprint"] .nav-item { border-radius: 0; }
+[data-style="blueprint"] .nav-item.active {
+  background: var(--accent-light); color: var(--accent);
+  border-left: 3px solid var(--accent); }
+[data-style="blueprint"] .stat-card { border-left-width: 2px; }
+
+/* Gallery — airy & minimal: quiet borders, underline accents */
+[data-style="gallery"] { --radius: 8px; }
+[data-style="gallery"] .card, [data-style="gallery"] .stat-card { border-radius: 8px; }
+[data-style="gallery"] .stat-card { border-left: none; border-top: 2px solid var(--accent); }
+[data-style="gallery"] .nav-item { border-radius: 0; background: transparent; }
+[data-style="gallery"] .nav-item.active {
+  background: transparent; color: var(--accent); font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--accent); }
+[data-style="gallery"] .section-header, [data-style="gallery"] .nav-section { letter-spacing: 0.12em; }
+[data-theme="blueprint"] .pill-teal { background: rgba(14,116,144,.22); color: #4FC3E0; }
+[data-theme="blueprint"] .pill-indigo { background: rgba(67,56,202,.25); color: #A5B4FC; }
+[data-theme="blueprint"] .pill-slate { background: rgba(100,125,150,.25); color: #B8C7D6; }
+
 [data-theme="dark"] body { background: var(--bg); color: var(--text); }
 [data-theme="dark"] .sidebar { background: #13151f; border-color: rgba(255,255,255,0.07); }
 [data-theme="dark"] .nav-item:hover,

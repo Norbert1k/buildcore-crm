@@ -113,7 +113,7 @@ export default function Login() {
   }
 
   const theme = document.documentElement.getAttribute('data-theme') || 'light'
-  const isDark = theme === 'dark' || theme === 'forest' || theme === 'slate'
+  const isDark = theme === 'dark' || theme === 'forest' || theme === 'slate' || theme === 'blueprint'
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg, #f5f4f0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>

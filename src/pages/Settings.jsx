@@ -155,16 +155,21 @@ const THEME_OPTIONS = [
   { value: 'sand',   label: 'Sand',   preview: { bg: '#F4EEDD', sidebar: '#FBF7EB', border: '#E2D5B5', text: '#412402', accent: '#854F0B', accentBg: '#FAEEDA' } },
   { value: 'slate',  label: 'Slate',  preview: { bg: '#1A1E2A', sidebar: '#20253A', border: 'rgba(133,183,235,0.10)', text: '#E6F1FB', accent: '#85B7EB', accentBg: 'rgba(55,138,221,0.18)' } },
   { value: 'pearl',  label: 'Pearl White', preview: { bg: '#FFFFFF', sidebar: '#FFFFFF', border: '#E2E0D8', text: '#1C1B18', accent: '#5B9BD5', accentBg: '#EFF6FB' } },
+  // The Fit-Out division's signature look (Stage 6) — available to both
+  // divisions, and Fit-Out's default when no theme has been chosen.
+  { value: 'blueprint', label: 'Blueprint', preview: { bg: '#0D1519', sidebar: '#101B21', border: '#1C2E36', text: '#DCE9EE', accent: '#22B8D4', accentBg: 'rgba(34,184,212,0.14)' } },
 ]
 
 export default function Settings() {
-  const { profile, can, signOut, setTheme, division } = useAuth()
+  const { profile, can, signOut, setTheme, setStyle, division } = useAuth()
   const navigate = useNavigate()
   const [activeTheme, setActiveTheme] = useState(() => document.documentElement.getAttribute('data-theme') || localStorage.getItem('theme') || 'light')
   // Each division has its own theme — resync the highlighted swatch when the
   // division switcher applies the other division's saved theme.
+  const [activeStyle, setActiveStyle] = useState(() => document.documentElement.getAttribute('data-style') || 'standard')
   useEffect(() => {
     setActiveTheme(document.documentElement.getAttribute('data-theme') || 'light')
+    setActiveStyle(document.documentElement.getAttribute('data-style') || 'standard')
   }, [division])
   const [users, setUsers] = useState([])
   const [projects, setProjects] = useState([])
@@ -187,7 +192,8 @@ export default function Settings() {
   useEffect(() => {
     if (can('manage_users')) { loadUsers(); loadProjects() }
     else setLoading(false)
-  }, [])
+    // Reload on division switch — the staff list is division-scoped.
+  }, [division])
 
   async function loadUsers() {
     setLoading(true)
@@ -201,7 +207,7 @@ export default function Settings() {
       supabase.from('profiles').select('*').order('full_name'),
       supabase.from('user_project_access').select('*'),
       supabase.from('client_users').select('id, email, full_name, role, client_id, created_at'),
-      supabase.from('clients').select('id, name'),
+      supabase.from('clients').select('id, name, division'),
       supabase.from('projects').select('id, project_name, project_ref, client_id'),
     ])
 
@@ -257,9 +263,14 @@ export default function Settings() {
     // don't create duplicates. id is a sentinel "portal:<id>" so React keys
     // remain unique and the renderer can detect via _portalOnly.
     const profileEmails = new Set(profiles.map(p => (p.email || '').toLowerCase()).filter(Boolean))
+    // External (portal) users are divisional through their CLIENT: a portal
+    // account belongs to a client, and the client belongs to a division —
+    // so the fit-out view lists only fit-out clients' portal users.
+    const clientDivision = new Map((clientsRes.data || []).map(c => [c.id, c.division || 'construction']))
     const portalOnly = clientUsers.filter(cu => {
       const k = (cu.email || '').toLowerCase()
-      return k && !profileEmails.has(k)
+      if (!k || profileEmails.has(k)) return false
+      return (clientDivision.get(cu.client_id) || 'construction') === division
     })
     const portalOnlyRows = portalOnly.map(cu => ({
       id: `portal:${cu.id}`,
@@ -278,12 +289,16 @@ export default function Settings() {
       _portalClientId: cu.client_id,
     }))
 
-    setUsers(sortBy([...profileRows, ...portalOnlyRows], 'full_name'))
+    // Staff list follows the ACTIVE division: a user shows here when their
+    // divisions include it (dual-division admins appear in both). Portal
+    // client rows are external accounts and stay division-agnostic for now.
+    const inDivision = (p) => ((p.divisions && p.divisions.length) ? p.divisions : ['construction']).includes(division)
+    setUsers(sortBy([...profileRows.filter(inDivision), ...portalOnlyRows], 'full_name'))
     setLoading(false)
   }
 
   async function loadProjects() {
-    const { data } = await supabase.from('projects').select('id, project_name, project_ref').order('project_name')
+    const { data } = await supabase.from('projects').select('id, project_name, project_ref').eq('division', division).order('project_name')
     setProjects(sortBy(data || [], 'project_name'))
   }
 
@@ -316,17 +331,19 @@ export default function Settings() {
 
     if (error) { setAddError(error.message); setSaving(false); return }
     if (data?.user) {
-      await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, must_change_password: true })
+      const newDivisions = addForm.division === 'both' ? ['construction', 'fitout'] : [addForm.division || division]
+      await supabase.from('profiles').upsert({ id: data.user.id, email: addForm.email, full_name: addForm.full_name, role: addForm.role, divisions: newDivisions, must_change_password: true })
     }
     setSaving(false)
     setAddSuccess(`Account created for ${addForm.full_name}. They can log in at crm.cltd.co.uk`)
-    setAddForm({ email: '', full_name: '', password: '', role: 'viewer' })
+    setAddForm({ email: '', full_name: '', password: '', role: 'viewer', division })
     loadUsers()
   }
 
   async function updateUser() {
     setSaving(true)
-    await supabase.from('profiles').update({ full_name: editForm.full_name, role: editForm.role }).eq('id', showEditUser.id)
+    const updDivisions = editForm.division === 'both' ? ['construction', 'fitout'] : [editForm.division || 'construction']
+    await supabase.from('profiles').update({ full_name: editForm.full_name, role: editForm.role, divisions: updDivisions }).eq('id', showEditUser.id)
 
     // Update project access for site managers
     await supabase.from('user_project_access').delete().eq('user_id', showEditUser.id)
@@ -394,9 +411,41 @@ export default function Settings() {
           <div className="card card-pad">
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Appearance</div>
             <div style={{ fontSize: 12, color: division === 'fitout' ? '#0E7490' : '#448a40', fontWeight: 600, marginBottom: 10 }}>
-              Theme for the {division === 'fitout' ? 'Fit-Out' : 'Construction'} division
-              <span style={{ color: 'var(--text3)', fontWeight: 400 }}> — each division keeps its own</span>
+              Appearance for the {division === 'fitout' ? 'Fit-Out' : 'Construction'} division
+              <span style={{ color: 'var(--text3)', fontWeight: 400 }}> — style and colour are separate choices, each division keeps its own</span>
             </div>
+
+            {/* ── STYLE — shape language, independent of colour ── */}
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>STYLE</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 18 }}>
+              {[
+                { value: 'standard',  label: 'Standard',  desc: 'Today\u2019s look',        r: 8,  demo: 'rounded' },
+                { value: 'studio',    label: 'Studio',    desc: 'Soft & warm',             r: 14, demo: 'pill' },
+                { value: 'blueprint', label: 'Blueprint', desc: 'Sharp & technical',       r: 2,  demo: 'square' },
+                { value: 'gallery',   label: 'Gallery',   desc: 'Airy & minimal',          r: 8,  demo: 'underline' },
+              ].map(st => {
+                const on = activeStyle === st.value
+                return (
+                  <button key={st.value} onClick={() => { setStyle(st.value); setActiveStyle(st.value) }}
+                    style={{ textAlign: 'left', padding: 10, cursor: 'pointer', fontFamily: 'inherit',
+                      background: 'var(--surface)', borderRadius: st.r,
+                      border: on ? '2px solid var(--accent)' : '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+                      <span style={{ width: 26, height: 14, background: 'var(--accent)', opacity: .85,
+                        borderRadius: st.demo === 'pill' ? 99 : st.demo === 'square' ? 1 : st.demo === 'underline' ? 0 : 5,
+                        borderBottom: st.demo === 'underline' ? '3px solid var(--accent)' : 'none',
+                        ...(st.demo === 'underline' ? { background: 'var(--surface2)' } : {}) }} />
+                      <span style={{ width: 14, height: 14, background: 'var(--surface2)',
+                        borderRadius: st.demo === 'pill' ? 99 : st.demo === 'square' ? 1 : 5, border: '1px solid var(--border)' }} />
+                    </div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: on ? 'var(--accent)' : 'var(--text)' }}>{st.label}</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{st.desc}</div>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>COLOUR</div>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
@@ -539,7 +588,7 @@ export default function Settings() {
                           projectMap={projectMap}
                           onNavigateProject={(id) => navigate(`/projects/${id}`)}
                           onNavigateClient={(id) => navigate(`/clients/${id}`)}
-                          onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
+                          onEdit={() => { const d = (u.divisions && u.divisions.length) ? u.divisions : ['construction']; setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [], division: d.length > 1 ? 'both' : d[0] }); setShowEditUser(u) }}
                           onDelete={() => setShowDeleteUser({ user: u, mode: 'profile' })}
                         />
                       ))}
@@ -579,7 +628,7 @@ export default function Settings() {
                             projectMap={projectMap}
                             onNavigateProject={(id) => navigate(`/projects/${id}`)}
                             onNavigateClient={(id) => navigate(`/clients/${id}`)}
-                            onEdit={() => { setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [] }); setShowEditUser(u) }}
+                            onEdit={() => { const d = (u.divisions && u.divisions.length) ? u.divisions : ['construction']; setEditForm({ full_name: u.full_name, role: u.role, projectIds: u.projectIds || [], division: d.length > 1 ? 'both' : d[0] }); setShowEditUser(u) }}
                             onDelete={() => setShowDeleteUser({
                               user: u,
                               // Portal-only users (synthetic rows from
@@ -626,7 +675,8 @@ export default function Settings() {
           separation) — the connection itself must also be revoked on the
           Xero side (see Stage 4 notes). */}
 
-      {profile?.role === 'admin' && <EscalationRatesSection profile={profile} />}
+      {/* Escalation Rates removed with Price Jobs (Stage 4) — the section
+          existed solely to feed the Price Jobs pricing engine. */}
 
       {/* Change Password Modal */}
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
@@ -662,6 +712,13 @@ export default function Settings() {
               <Field label="Full Name *"><input value={addForm.full_name} onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Jane Smith" autoFocus /></Field>
               <Field label="Email Address *"><input type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@cltd.co.uk" /></Field>
               <Field label="Temporary Password *"><PasswordInput value={addForm.password} onChange={e => setAddForm(f => ({ ...f, password: e.target.value }))} placeholder="Min. 6 characters" /></Field>
+              <Field label="Division">
+                <select value={addForm.division || division} onChange={e => setAddForm(f => ({ ...f, division: e.target.value }))}>
+                  <option value="construction">Construction</option>
+                  <option value="fitout">Fit-Out</option>
+                  <option value="both">Both divisions</option>
+                </select>
+              </Field>
               <Field label="Role">
                 <select value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))}>
                   {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
@@ -693,6 +750,13 @@ export default function Settings() {
             <Field label="Role">
               <select value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value, projectIds: e.target.value !== 'site_manager' ? [] : f.projectIds }))}>
                 {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </Field>
+            <Field label="Division">
+              <select value={editForm.division || 'construction'} onChange={e => setEditForm(f => ({ ...f, division: e.target.value }))}>
+                <option value="construction">Construction</option>
+                <option value="fitout">Fit-Out</option>
+                <option value="both">Both divisions</option>
               </select>
             </Field>
           </div>
