@@ -41,6 +41,17 @@ input, select, textarea {
   -webkit-appearance: none; appearance: none;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(68,138,64,.1); }
+/* The blanket input rule above strips checkboxes/radios of their native
+   rendering (appearance:none + width:100% + padding) — they become empty
+   full-width bars with invisible ticks. Restore their nature app-wide. */
+input[type="checkbox"], input[type="radio"] {
+  -webkit-appearance: auto; appearance: auto;
+  width: 15px; height: 15px; min-width: 15px;
+  padding: 0; margin: 0; flex: 0 0 auto;
+  border: none; background: transparent; box-shadow: none;
+  accent-color: var(--accent);
+}
+input[type="checkbox"]:focus, input[type="radio"]:focus { box-shadow: none; }
 input::placeholder { color: var(--text3); }
 label { font-size: 12px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 4px; }
 textarea { resize: vertical; min-height: 80px; }
