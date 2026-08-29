@@ -202,7 +202,7 @@ export default function Settings() {
       supabase.from('profiles').select('*').order('full_name'),
       supabase.from('user_project_access').select('*'),
       supabase.from('client_users').select('id, email, full_name, role, client_id, created_at'),
-      supabase.from('clients').select('id, name'),
+      supabase.from('clients').select('id, name, division'),
       supabase.from('projects').select('id, project_name, project_ref, client_id'),
     ])
 
@@ -258,9 +258,14 @@ export default function Settings() {
     // don't create duplicates. id is a sentinel "portal:<id>" so React keys
     // remain unique and the renderer can detect via _portalOnly.
     const profileEmails = new Set(profiles.map(p => (p.email || '').toLowerCase()).filter(Boolean))
+    // External (portal) users are divisional through their CLIENT: a portal
+    // account belongs to a client, and the client belongs to a division —
+    // so the fit-out view lists only fit-out clients' portal users.
+    const clientDivision = new Map((clientsRes.data || []).map(c => [c.id, c.division || 'construction']))
     const portalOnly = clientUsers.filter(cu => {
       const k = (cu.email || '').toLowerCase()
-      return k && !profileEmails.has(k)
+      if (!k || profileEmails.has(k)) return false
+      return (clientDivision.get(cu.client_id) || 'construction') === division
     })
     const portalOnlyRows = portalOnly.map(cu => ({
       id: `portal:${cu.id}`,
@@ -633,7 +638,8 @@ export default function Settings() {
           separation) — the connection itself must also be revoked on the
           Xero side (see Stage 4 notes). */}
 
-      {profile?.role === 'admin' && <EscalationRatesSection profile={profile} />}
+      {/* Escalation Rates removed with Price Jobs (Stage 4) — the section
+          existed solely to feed the Price Jobs pricing engine. */}
 
       {/* Change Password Modal */}
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
