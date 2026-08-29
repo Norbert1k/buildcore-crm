@@ -97,7 +97,16 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
     },
   ]
 
-  const visibleItems = allNavItems.filter(item => perms.nav.includes(item.key))
+  // Fit-Out division trims the navigation: no Quotes, no Task Tracker
+  // (tasks are fully suppressed in fit-out), no Price Jobs. Sub-items with
+  // these keys (e.g. Employers Agent under Subcontractors) are trimmed too.
+  const FITOUT_HIDDEN_NAV = new Set(['quotes', 'tasks', 'websearch'])
+  const divisionAllows = (key) => division !== 'fitout' || !FITOUT_HIDDEN_NAV.has(key)
+  const visibleItems = allNavItems
+    .filter(item => perms.nav.includes(item.key) && divisionAllows(item.key))
+    .map(item => item.children
+      ? { ...item, children: item.children.filter(ch => divisionAllows(ch.key) && !(division === 'fitout' && ch.label === 'Employers Agent')) }
+      : item)
 
   return (
     <>

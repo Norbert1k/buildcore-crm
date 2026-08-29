@@ -1015,7 +1015,9 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {/* Employers Agent — always visible directly under Project Description */}
+      {/* Employers Agent — construction projects only (fit-out has its own
+          agents model; the whole EA block is suppressed there) */}
+      {project.division !== 'fitout' && (
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: projectEAs.length > 0 ? 8 : 0, padding: '8px 12px', background: '#042C53', borderRadius: 6, borderLeft: '3px solid #5b9bd5' }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -1103,6 +1105,7 @@ export default function ProjectDetail() {
           </div>
         )}
       </div>
+      )}
       </div>
       )}
 
@@ -1113,10 +1116,12 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
           Documents
         </div>
+        {project.division !== 'fitout' && (
         <div className={`filter-tab ${activeTab === 'procurement' ? 'active' : ''}`} onClick={() => { setActiveTab('procurement'); localStorage.setItem(_tabKey, 'procurement') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
           Procurement
         </div>
+        )}
         <div className={`filter-tab ${activeTab === 'ccg_team' ? 'active' : ''}`} onClick={() => { setActiveTab('ccg_team'); localStorage.setItem(_tabKey, 'ccg_team') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           CCG Team<span className="tab-badge">{team.length}</span>
@@ -1129,10 +1134,12 @@ export default function ProjectDetail() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
           Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
         </div>
+        {project.division !== 'fitout' && (
         <div className={`filter-tab ${activeTab === 'quotes' ? 'active' : ''}`} onClick={() => { setActiveTab('quotes'); localStorage.setItem(_tabKey, 'quotes') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
           Quotes
         </div>
+        )}
         {can('view_hs_handover') && project?.status !== 'tender' && (
         <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
@@ -1354,7 +1361,7 @@ export default function ProjectDetail() {
         </div>
       )}
 
-      {activeTab === 'procurement' && (
+      {activeTab === 'procurement' && project.division !== 'fitout' && (
         <ProcurementTab
           projectId={id}
           project={project}
@@ -1587,7 +1594,7 @@ export default function ProjectDetail() {
         </div>
       </Modal>
 
-      {activeTab === 'quotes' && (
+      {activeTab === 'quotes' && project.division !== 'fitout' && (
         <ProjectQuotesTab projectId={id} />
       )}
 
