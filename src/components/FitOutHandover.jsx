@@ -237,7 +237,7 @@ export default function FitOutHandover({ projectId, projectName }) {
               {status === 'off' && <span className="pill pill-gray" style={{ fontSize: 10 }}>Not on this job</span>}
               {isLead && (
                 <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text3)', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={s.enabled} onChange={e => toggleSection(def.key, e.target.checked)} /> on this job
+                  <input type="checkbox" style={{ width: 15, height: 15, flex: '0 0 auto', margin: 0, accentColor: 'var(--accent)' }} checked={s.enabled} onChange={e => toggleSection(def.key, e.target.checked)} /> on this job
                 </label>
               )}
             </div>
@@ -247,7 +247,7 @@ export default function FitOutHandover({ projectId, projectName }) {
                 {/* Checklist */}
                 {items.map(item => (
                   <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12.5, cursor: canEdit ? 'pointer' : 'default' }}>
-                    <input type="checkbox" checked={item.done} disabled={!canEdit} onChange={() => toggleCheck(item)} />
+                    <input type="checkbox" style={{ width: 15, height: 15, flex: '0 0 auto', margin: 0, accentColor: 'var(--accent)' }} checked={item.done} disabled={!canEdit} onChange={() => toggleCheck(item)} />
                     <span style={{ flex: 1, textDecoration: item.done ? 'none' : 'none', color: item.done ? 'var(--text)' : 'var(--text2)' }}>{item.label}</span>
                     {item.done && item.done_at && <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>{names[item.done_by] || ''} · {fmtDate(item.done_at)}</span>}
                   </label>
@@ -287,7 +287,7 @@ export default function FitOutHandover({ projectId, projectName }) {
                   )}
                   {s.lead_signed_at && isLead && (
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={s.released} onChange={e => setReleased(def.key, e.target.checked)} />
+                      <input type="checkbox" style={{ width: 15, height: 15, flex: '0 0 auto', margin: 0, accentColor: 'var(--accent)' }} checked={s.released} onChange={e => setReleased(def.key, e.target.checked)} />
                       Release to client portal
                     </label>
                   )}
