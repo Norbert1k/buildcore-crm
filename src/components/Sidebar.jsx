@@ -108,7 +108,9 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
             <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
             <div>
               <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)' }}>CRM System</div>
+              <div style={{ fontSize: 10, color: division === 'fitout' ? '#0E7490' : 'var(--text3)', fontWeight: division === 'fitout' ? 600 : 400 }}>
+                {division === 'fitout' ? 'Fit-Out Division' : 'CRM System'}
+              </div>
             </div>
           </div>
         </div>

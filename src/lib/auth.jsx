@@ -59,6 +59,7 @@ export function AuthProvider({ children }) {
       const choice = localStorage.getItem('ccg_division_choice')
       const resolved = held.includes(saved) ? saved : (held.includes(choice) ? choice : held[0])
       setDivisionState(resolved)
+      document.documentElement.setAttribute('data-division', resolved)
       localStorage.setItem(`ccg_division_${userId}`, resolved)
     }
     if (data?.theme) applyTheme(data.theme)
@@ -95,6 +96,9 @@ export function AuthProvider({ children }) {
   function setDivision(d) {
     if (!divisions.includes(d)) return
     setDivisionState(d)
+    // Fit-out mode re-themes the app chrome (see [data-division="fitout"] in
+    // index.css) so switching divisions is visually unmistakable.
+    document.documentElement.setAttribute('data-division', d)
     if (user) localStorage.setItem(`ccg_division_${user.id}`, d)
   }
 

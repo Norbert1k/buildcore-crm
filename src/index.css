@@ -509,3 +509,14 @@ tbody tr:hover td { background: var(--surface2); }
 [data-theme="pearl"] .btn-danger { background: #FCEBEB !important; border-color: #F7C1C1 !important; color: #A32D2D !important; }
 
 html { transition: background-color 0.2s, color 0.2s; }
+
+/* ── Fit-Out division mode ─────────────────────────────────────────────────
+   Applied via data-division on <html> (set by the auth provider). Flips the
+   accent system teal so the active division is visually unmistakable —
+   nav highlight, primary buttons, focus rings, section headers, stat cards.
+   Status pills keep their semantic colours. Full visual refresh = Stage 6. */
+[data-division="fitout"] {
+  --accent: #0E7490;
+  --accent-dark: #0A5666;
+  --accent-light: #E0F2F7;
+}
