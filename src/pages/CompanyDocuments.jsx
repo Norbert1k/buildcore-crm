@@ -494,7 +494,7 @@ function SubfolderSection({ subfolder, categoryKey, color, canManage, onPreview,
     setChildFolders(data || [])
   }
   async function moveFile(docId) {
-    await supabase.from('company_documents').update({ subfolder_key: subfolder.key }).eq('id', docId)
+    await supabase.from('company_documents').update({ subfolder_key: subfolder.key, category: categoryKey }).eq('id', docId)
     loadFiles(); if (onReload) onReload(docId)
     refreshTree?.()
   }
@@ -739,7 +739,7 @@ function CategoryFolder({ cat, canManage, onPreview, treeVersion, refreshTree })
     setAllSubfolders(grouped)
   }
   async function moveToRoot(docId) {
-    await supabase.from('company_documents').update({ subfolder_key: null }).eq('id', docId)
+    await supabase.from('company_documents').update({ subfolder_key: null, category: cat.key }).eq('id', docId)
     loadFiles()
     refreshTree?.()
   }
