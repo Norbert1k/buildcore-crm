@@ -23,6 +23,13 @@ function fmtSize(b) {
   return (b / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
+// Pass the CRM's light/dark state to the embedded Design view so they match.
+const DARK_THEMES = new Set(['dark', 'forest', 'slate', 'blueprint'])
+function withTheme(url) {
+  const t = document.documentElement.getAttribute('data-theme') || 'light'
+  return url + (url.includes('?') ? '&' : '?') + 'theme=' + (DARK_THEMES.has(t) ? 'dark' : 'light')
+}
+
 export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocuments }) {
   const [proj, setProj] = useState(null)
   const [link, setLink] = useState(null)            // { linked, project?, code }
@@ -56,7 +63,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
     setEmbed({ state: 'loading', url: null, message: '' })
     const { data, error } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'handoff', embed: true } })
     if (error || !data) { setEmbed({ state: 'error', url: null, message: 'Couldn’t reach the Design portal.' }); return }
-    if (data.status === 'ok') setEmbed({ state: 'ok', url: data.url, message: '' })
+    if (data.status === 'ok') setEmbed({ state: 'ok', url: withTheme(data.url), message: '' })
     else if (data.status === 'no_account') setEmbed({ state: 'no_account', url: null, message: '' })
     else if (data.status === 'no_access') setEmbed({ state: 'no_access', url: null, message: '' })
     else setEmbed({ state: 'error', url: null, message: data.message || 'Couldn’t open the Design portal.' })
@@ -172,7 +179,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
               : 'No Design portal project found'}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-            {linked ? 'Live from design.cltd.co.uk · view only here'
+            {linked ? 'Live from design.cltd.co.uk · uploads here go straight into the Design portal'
               : link && !link.error ? `Looked for code “${proj?.design_code || proj?.project_ref || '—'}” — showing CRM drawings only`
               : ''}
           </div>
