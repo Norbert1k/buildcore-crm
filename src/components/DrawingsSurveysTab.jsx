@@ -69,6 +69,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
   const [sending, setSending] = useState(false)
   const [openGroups, setOpenGroups] = useState(() => new Set())   // collapsed by default
   const [checkedAt, setCheckedAt] = useState(null)
+  const [showDone, setShowDone] = useState(false)   // files already in Design are hidden by default (display only)
 
   useEffect(() => {
     function onMessage(e) {
@@ -206,6 +207,13 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
   const canSend = linked && embed.state === 'ok' && designReady
   const allFiles = groups.flatMap(g => g.files)
   const notInDesign = inventory ? allFiles.filter(f => !inDesign(inventory, f.file_name)) : []
+  // Hide what's already in the Design portal — purely a view filter, the CRM
+  // files themselves are untouched.
+  const hideDone = !!inventory && !showDone
+  const doneCount = inventory ? allFiles.length - notInDesign.length : 0
+  const shownGroups = groups
+    .map(g => ({ ...g, shown: hideDone ? g.files.filter(f => !inDesign(inventory, f.file_name)) : g.files }))
+    .filter(g => g.shown.length > 0)
   const togglePick = id => setPicked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   // ── CRM section (shared by every state) ──
@@ -218,15 +226,20 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
             {!linked ? 'Drawings & surveys (CRM)' : isDesignSource ? 'Archive — CRM drawings' : 'CRM drawings — not yet moved to the Design portal'}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-            {crmLoading ? 'Loading…' : `${fileCount} file${fileCount === 1 ? '' : 's'} in Project Information › Drawings / Surveys & Reports`}
+            {crmLoading ? 'Loading…' : inventory
+              ? `${notInDesign.length} still to move · ${doneCount} already in Design${hideDone ? ' (hidden)' : ''}`
+              : `${fileCount} file${fileCount === 1 ? '' : 's'} in Project Information › Drawings / Surveys & Reports`}
             {' · '}uploads and changes are made in Documents
           </div>
         </div>
         {canSend && (
           <button className="btn btn-sm" onClick={e => { e.stopPropagation(); askInventory() }} title={checkedAt ? `Last checked ${checkedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : 'Check the Design portal again'}>↻ Recheck</button>
         )}
-        {groups.length > 1 && (
-          <button className="btn btn-sm" onClick={e => { e.stopPropagation(); setOpenGroups(prev => prev.size ? new Set() : new Set(groups.map(g => g.path))) }}>{openGroups.size ? 'Collapse all' : 'Expand all'}</button>
+        {inventory && doneCount > 0 && (
+          <button className="btn btn-sm" onClick={e => { e.stopPropagation(); setShowDone(v => !v) }}>{showDone ? 'Hide' : 'Show'} {doneCount} in Design</button>
+        )}
+        {shownGroups.length > 1 && (
+          <button className="btn btn-sm" onClick={e => { e.stopPropagation(); setOpenGroups(prev => prev.size ? new Set() : new Set(shownGroups.map(g => g.path))) }}>{openGroups.size ? 'Collapse all' : 'Expand all'}</button>
         )}
         {canSend && inventory && notInDesign.length > 0 && (
           <button className="btn btn-sm" onClick={e => { e.stopPropagation(); setPicked(new Set(notInDesign.map(f => f.id))) }}>Select {notInDesign.length} not in Design</button>
@@ -241,7 +254,8 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
       {(!linked || !isDesignSource || archiveOpen) && !crmLoading && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '6px 14px 12px' }}>
           {groups.length === 0 && <div style={{ fontSize: 12, color: 'var(--text3)', padding: '8px 0' }}>No drawings or surveys stored in the CRM for this project.</div>}
-          {groups.map(g => (
+          {groups.length > 0 && shownGroups.length === 0 && <div style={{ fontSize: 12, color: 'var(--green)', padding: '8px 0' }}>Everything here is already in the Design portal.</div>}
+          {shownGroups.map(g => (
             <div key={g.path} style={{ marginTop: 6 }}>
               {(() => {
                 const isOpen = openGroups.has(g.path)
@@ -251,7 +265,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
                   <div onClick={() => setOpenGroups(prev => { const n = new Set(prev); n.has(g.path) ? n.delete(g.path) : n.add(g.path); return n })}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
                     <span style={{ width: 12, color: 'var(--text3)', fontSize: 11 }}>{isOpen ? '▾' : '▸'}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.path}>{g.path} · {g.files.length}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.path}>{g.path} · {g.shown.length}</span>
                     {inventory && (missing.length
                       ? <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }}>{missing.length} not in Design</span>
                       : <span className="pill pill-green" style={{ fontSize: 10, flexShrink: 0 }}>All in Design</span>)}
@@ -261,7 +275,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
                   </div>
                 )
               })()}
-              {openGroups.has(g.path) && g.files.map(f => (
+              {openGroups.has(g.path) && g.shown.map(f => (
                 <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: '1px solid var(--border)', fontSize: 12.5 }}>
                   {canSend && <input type="checkbox" checked={picked.has(f.id)} onChange={() => togglePick(f.id)} />}
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</span>
