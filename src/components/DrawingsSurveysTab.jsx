@@ -32,23 +32,77 @@ function withTheme(url) {
   return url + (url.includes('?') ? '&' : '?') + 'theme=' + (DARK_THEMES.has(t) ? 'dark' : 'light')
 }
 
-// ── Is a CRM file already in the Design portal? (heuristic, read-only) ──
-// Matches on the filename without extension, or on a drawing-number token
-// (e.g. 294-4GA-01) where one starts with the other — so "294-4GA-01-P3"
-// matches the portal's "294-4GA-01 Ground floor GA".
+// ── Is a CRM file already in the Design portal? (read-only) ──
+// Same drawing-number + revision rules as the Design portal (src/lib/revision.ts):
+//   Design has the same or a NEWER revision → 'in'     (hidden here)
+//   CRM copy is NEWER than Design           → 'newer'  (needs moving)
+//   both have revisions that can't compare  → 'check'
+//   not found at all                        → 'missing'
+// Files without a drawing number fall back to name matching.
 const DESIGN_ORIGIN = 'https://design.cltd.co.uk'
-const stem = n => String(n || '').replace(/\.[a-z0-9]{1,5}$/i, '').trim().toLowerCase()
+const stripExt = n => String(n || '').replace(/\.[a-z0-9]{1,5}$/i, '').trim()
+const stem = n => stripExt(n).toLowerCase()
 const loose = n => stem(n).replace(/\(\d+\)$/, '').replace(/[^a-z0-9]+/g, '')
-const tokensOf = n => (stem(n).replace(/_/g, '-').match(/[a-z0-9]+(?:-[a-z0-9]+){2,}/g) || []).filter(t => t.length >= 6)
+const REV_PATTERNS = [
+  /\brev(?:ision)?[\s._-]*([A-Z]{1,2}\d{0,3}|\d{1,3})\b/i,
+  /[\s([_-]((?:P|T|C)\d{1,3})[\])]?\s*$/i,
+  /[\s([_-]((?:P|T|C)\d{2})(?=[\s._-])/i,
+]
+function parseRevision(name) {
+  const base = stripExt(name)
+  for (const re of REV_PATTERNS) {
+    const m = base.match(re)
+    if (m) return { rev: m[1].toUpperCase().replace(/^([PTC])0+(\d)/, '$1$2').replace(/^0+(\d)/, '$1'), base: (base.slice(0, m.index) + base.slice(m.index + m[0].length)).trim() }
+  }
+  return { rev: null, base }
+}
+function parseDrawing(name) {
+  const { rev, base } = parseRevision(name)
+  const tokens = (base.match(/[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)+/g) || [])
+    .filter(t => /\d/.test(t) && t.replace(/[^A-Za-z0-9]/g, '').length >= 5)
+    .sort((a, b) => b.length - a.length)
+  return tokens.length ? { key: tokens[0].toUpperCase().replace(/[_.]/g, '-'), rev, byNumber: true } : { key: null, rev, byNumber: false }
+}
+function revParts(r) {
+  const s = r.toUpperCase()
+  let m = s.match(/^([PTC])(\d+)$/); if (m) return { kind: 'coded', rank: 'PTC'.indexOf(m[1]), n: Number(m[2]) }
+  m = s.match(/^([A-Z]{1,2})$/); if (m) return { kind: 'letter', rank: 0, n: s.length * 100 + (s.charCodeAt(s.length - 1) - 64) + (s.length > 1 ? (s.charCodeAt(0) - 64) * 26 : 0) }
+  m = s.match(/^(\d+)$/); if (m) return { kind: 'number', rank: 0, n: Number(m[1]) }
+  return null
+}
+function compareRev(a, b) {
+  if (!a || !b) return null
+  if (a.toUpperCase() === b.toUpperCase()) return 0
+  const pa = revParts(a), pb = revParts(b)
+  if (!pa || !pb || pa.kind !== pb.kind) return null
+  if (pa.rank !== pb.rank) return pa.rank > pb.rank ? 1 : -1
+  return pa.n === pb.n ? 0 : pa.n > pb.n ? 1 : -1
+}
 function buildInventory(names) {
-  return { stems: new Set(names.map(stem)), loose: new Set(names.map(loose)), tokens: names.flatMap(tokensOf) }
+  const byKey = new Map()   // drawing number → newest revision in Design
+  for (const n of names) {
+    const p = parseDrawing(n)
+    if (!p.byNumber) continue
+    const cur = byKey.get(p.key)
+    if (cur === undefined || compareRev(p.rev, cur) === 1 || (cur === null && p.rev)) byKey.set(p.key, p.rev)
+  }
+  return { stems: new Set(names.map(stem)), loose: new Set(names.map(loose)), byKey }
 }
-function inDesign(inv, name) {
+function designStatus(inv, name) {
   if (!inv) return null
-  if (inv.stems.has(stem(name)) || inv.loose.has(loose(name))) return true
-  const mine = tokensOf(name)
-  return mine.some(t => inv.tokens.some(d => d.startsWith(t) || t.startsWith(d)))
+  const p = parseDrawing(name)
+  if (p.byNumber && inv.byKey.has(p.key)) {
+    const dRev = inv.byKey.get(p.key)
+    if (!p.rev || !dRev) return { status: 'in' }
+    const c = compareRev(p.rev, dRev)
+    if (c === 1) return { status: 'newer', designRev: dRev }
+    if (c === null) return { status: 'check', designRev: dRev }
+    return { status: 'in' }
+  }
+  if (inv.stems.has(stem(name)) || inv.loose.has(loose(name))) return { status: 'in' }
+  return { status: 'missing' }
 }
+const inDesign = (inv, name) => designStatus(inv, name)?.status === 'in'
 
 export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocuments }) {
   const [proj, setProj] = useState(null)
@@ -279,9 +333,13 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
                 <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: '1px solid var(--border)', fontSize: 12.5 }}>
                   {canSend && <input type="checkbox" checked={picked.has(f.id)} onChange={() => togglePick(f.id)} />}
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</span>
-                  {inventory && (inDesign(inventory, f.file_name)
-                    ? <span className="pill pill-green" style={{ fontSize: 10, flexShrink: 0 }}>In Design</span>
-                    : <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }}>Not in Design</span>)}
+                  {inventory && (() => {
+                    const st = designStatus(inventory, f.file_name)
+                    if (st.status === 'in') return <span className="pill pill-green" style={{ fontSize: 10, flexShrink: 0 }}>In Design</span>
+                    if (st.status === 'newer') return <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }} title="This CRM copy is a later revision than the Design portal's">Newer than Design (Rev {st.designRev})</span>
+                    if (st.status === 'check') return <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }} title="Same drawing number, revisions can't be compared">Check revision · Design Rev {st.designRev}</span>
+                    return <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }}>Not in Design</span>
+                  })()}
                   <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{fmtSize(f.file_size)}</span>
                   <a onClick={() => openCrmFile(f, false)} style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: 12, flexShrink: 0 }}>View</a>
                   <a onClick={() => openCrmFile(f, true)} style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: 12, flexShrink: 0 }}>Download</a>
