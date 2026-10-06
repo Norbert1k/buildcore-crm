@@ -73,7 +73,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
       const m = e.data || {}
       if (m.type === 'ccg-ready') { setDesignReady(true); askInventory() }
       if (m.type === 'ccg-inventory-result') setInventory(buildInventory(m.names || []))
-      if (m.type === 'ccg-intake-result') setSendMsg(m.ok ? 'Sent — choose where they go in the Design view above.' : (m.message || 'The Design portal refused the files.'))
+      if (m.type === 'ccg-intake-result') setSendMsg(m.ok ? 'Sent — check the auto-sort plan in the Design view above, then start.' : (m.message || 'The Design portal refused the files.'))
       if (m.type === 'ccg-intake-done') { setSendMsg('Filed in the Design portal. CRM copies kept.'); setPicked(new Set()); askInventory() }
     }
     window.addEventListener('message', onMessage)
@@ -143,7 +143,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
       .eq('project_id', projectId).in('subfolder_key', keys)
       .order('created_at', { ascending: false })
     const byPath = {}
-    ;(files || []).forEach(f => { const p = pathOf[f.subfolder_key] || 'Other'; (byPath[p] ||= []).push({ ...f, root: rootOf[f.subfolder_key] }) })
+    ;(files || []).forEach(f => { const p = pathOf[f.subfolder_key] || 'Other'; (byPath[p] ||= []).push({ ...f, root: rootOf[f.subfolder_key], path: p }) })
     setGroups(Object.keys(byPath).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
       .map(p => ({ path: p, files: byPath[p].sort((a, b) => a.file_name.localeCompare(b.file_name, undefined, { numeric: true })) })))
     setCrmLoading(false)
@@ -174,16 +174,18 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
     if (!all.length || !iframeRef.current) return
     setSending(true); setSendMsg(`Preparing ${all.length} file${all.length === 1 ? '' : 's'}…`)
     const files = []
+    const meta = []   // CRM folder path per file — lets the portal auto-sort
     let failed = 0
     for (const f of all) {
       const { data, error } = await supabase.storage.from('project-docs').download(f.storage_path)
       if (error || !data) { failed++; continue }
       files.push(new File([data], f.file_name, { type: data.type || 'application/octet-stream' }))
+      meta.push({ path: f.path || '', root: f.root || '' })
     }
     setSending(false)
     if (!files.length) { setSendMsg('Couldn’t read those files from the CRM.'); return }
     const hint = all.every(f => f.root === 'reports') ? 'reports' : 'drawings'
-    iframeRef.current.contentWindow?.postMessage({ type: 'ccg-intake', files, hint }, DESIGN_ORIGIN)
+    iframeRef.current.contentWindow?.postMessage({ type: 'ccg-intake', files, meta, hint }, DESIGN_ORIGIN)
     iframeRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
     setSendMsg(`Sending ${files.length} file${files.length === 1 ? '' : 's'}…${failed ? ` (${failed} couldn’t be read)` : ''}`)
   }
