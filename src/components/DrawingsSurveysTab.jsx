@@ -38,13 +38,14 @@ function withTheme(url) {
 // matches the portal's "294-4GA-01 Ground floor GA".
 const DESIGN_ORIGIN = 'https://design.cltd.co.uk'
 const stem = n => String(n || '').replace(/\.[a-z0-9]{1,5}$/i, '').trim().toLowerCase()
+const loose = n => stem(n).replace(/\(\d+\)$/, '').replace(/[^a-z0-9]+/g, '')
 const tokensOf = n => (stem(n).replace(/_/g, '-').match(/[a-z0-9]+(?:-[a-z0-9]+){2,}/g) || []).filter(t => t.length >= 6)
 function buildInventory(names) {
-  return { stems: new Set(names.map(stem)), tokens: names.flatMap(tokensOf) }
+  return { stems: new Set(names.map(stem)), loose: new Set(names.map(loose)), tokens: names.flatMap(tokensOf) }
 }
 function inDesign(inv, name) {
   if (!inv) return null
-  if (inv.stems.has(stem(name))) return true
+  if (inv.stems.has(stem(name)) || inv.loose.has(loose(name))) return true
   const mine = tokensOf(name)
   return mine.some(t => inv.tokens.some(d => d.startsWith(t) || t.startsWith(d)))
 }
@@ -66,18 +67,27 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
   const [picked, setPicked] = useState(() => new Set())
   const [sendMsg, setSendMsg] = useState('')
   const [sending, setSending] = useState(false)
+  const [openGroups, setOpenGroups] = useState(() => new Set())   // collapsed by default
+  const [checkedAt, setCheckedAt] = useState(null)
 
   useEffect(() => {
     function onMessage(e) {
       if (e.origin !== DESIGN_ORIGIN) return
       const m = e.data || {}
       if (m.type === 'ccg-ready') { setDesignReady(true); askInventory() }
-      if (m.type === 'ccg-inventory-result') setInventory(buildInventory(m.names || []))
+      if (m.type === 'ccg-inventory-result') { setInventory(buildInventory(m.names || [])); setCheckedAt(new Date()) }
       if (m.type === 'ccg-intake-result') setSendMsg(m.ok ? 'Sent — check the auto-sort plan in the Design view above, then start.' : (m.message || 'The Design portal refused the files.'))
       if (m.type === 'ccg-intake-done') { setSendMsg('Filed in the Design portal. CRM copies kept.'); setPicked(new Set()); askInventory() }
     }
     window.addEventListener('message', onMessage)
-    return () => window.removeEventListener('message', onMessage)
+    const onVisible = () => { if (document.visibilityState === 'visible') askInventory() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
   }, [])
 
   function askInventory() {
@@ -212,6 +222,12 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
             {' · '}uploads and changes are made in Documents
           </div>
         </div>
+        {canSend && (
+          <button className="btn btn-sm" onClick={e => { e.stopPropagation(); askInventory() }} title={checkedAt ? `Last checked ${checkedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : 'Check the Design portal again'}>↻ Recheck</button>
+        )}
+        {groups.length > 1 && (
+          <button className="btn btn-sm" onClick={e => { e.stopPropagation(); setOpenGroups(prev => prev.size ? new Set() : new Set(groups.map(g => g.path))) }}>{openGroups.size ? 'Collapse all' : 'Expand all'}</button>
+        )}
         {canSend && inventory && notInDesign.length > 0 && (
           <button className="btn btn-sm" onClick={e => { e.stopPropagation(); setPicked(new Set(notInDesign.map(f => f.id))) }}>Select {notInDesign.length} not in Design</button>
         )}
@@ -226,9 +242,26 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
         <div style={{ borderTop: '1px solid var(--border)', padding: '6px 14px 12px' }}>
           {groups.length === 0 && <div style={{ fontSize: 12, color: 'var(--text3)', padding: '8px 0' }}>No drawings or surveys stored in the CRM for this project.</div>}
           {groups.map(g => (
-            <div key={g.path} style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{g.path} · {g.files.length}</div>
-              {g.files.map(f => (
+            <div key={g.path} style={{ marginTop: 6 }}>
+              {(() => {
+                const isOpen = openGroups.has(g.path)
+                const missing = inventory ? g.files.filter(f => !inDesign(inventory, f.file_name)) : []
+                const allPicked = missing.length > 0 && missing.every(f => picked.has(f.id))
+                return (
+                  <div onClick={() => setOpenGroups(prev => { const n = new Set(prev); n.has(g.path) ? n.delete(g.path) : n.add(g.path); return n })}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
+                    <span style={{ width: 12, color: 'var(--text3)', fontSize: 11 }}>{isOpen ? '▾' : '▸'}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.path}>{g.path} · {g.files.length}</span>
+                    {inventory && (missing.length
+                      ? <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }}>{missing.length} not in Design</span>
+                      : <span className="pill pill-green" style={{ fontSize: 10, flexShrink: 0 }}>All in Design</span>)}
+                    {canSend && missing.length > 0 && (
+                      <button className="btn btn-sm" style={{ flexShrink: 0 }} onClick={e => { e.stopPropagation(); setPicked(prev => { const n = new Set(prev); missing.forEach(f => allPicked ? n.delete(f.id) : n.add(f.id)); return n }) }}>{allPicked ? 'Unselect' : 'Select'} {missing.length}</button>
+                    )}
+                  </div>
+                )
+              })()}
+              {openGroups.has(g.path) && g.files.map(f => (
                 <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: '1px solid var(--border)', fontSize: 12.5 }}>
                   {canSend && <input type="checkbox" checked={picked.has(f.id)} onChange={() => togglePick(f.id)} />}
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</span>
