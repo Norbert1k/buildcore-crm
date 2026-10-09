@@ -8,7 +8,6 @@ import GoogleDriveBrowser from '../components/GoogleDrivePicker'
 import ProjectModal from '../components/ProjectModal'
 import EAModal from '../components/EAModal'
 import ProjectDocumentation from '../components/ProjectDocumentation'
-import CaseStudyEditor from '../components/CaseStudyEditor'
 import CaseStudyUploads from '../components/CaseStudyUploads'
 import HSHandover from '../components/HSHandover'
 import FitOutHandover from '../components/FitOutHandover'
@@ -1735,72 +1734,19 @@ export default function ProjectDetail() {
 // Lightweight wrapper shown in the Case Study tab. Detects if a case
 // study exists for this project; shows "Create" or summary card,
 // opens CaseStudyEditor in a fullscreen overlay.
-function CaseStudyPanel({ projectId, projectName, canManage }) {
-  const [loading, setLoading] = useState(true)
-  const [doc, setDoc] = useState(null)
-  const [showEditor, setShowEditor] = useState(false)
-
-  async function reload() {
-    setLoading(true)
-    try {
-      const { data } = await supabase.from('case_studies')
-        .select('id, title, photos, updated_at, created_at')
-        .eq('project_id', projectId).maybeSingle()
-      setDoc(data || null)
-    } catch (e) { console.warn('[CaseStudyPanel] load', e); setDoc(null) }
-    setLoading(false)
-  }
-  useEffect(() => { reload() }, [projectId])
-
-  if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading…</div>
-  }
-
+function CaseStudyPanel({ projectId, canManage }) {
+  // Upload-only for now: the finished case study PDF is attached here.
+  // The auto-generated builder (CaseStudyEditor) is retired from the UI —
+  // its component and any saved case_studies rows are left untouched.
   return (
     <div>
       <div className="section-header" style={{ marginBottom: 16 }}>
         <div>
           <div className="section-title">Case Study</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Upload the finished case study, or build one in the editor below. Edits don't affect the project record.</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Upload the finished case study for this project.</div>
         </div>
       </div>
-
       <CaseStudyUploads projectId={projectId} canManage={canManage} />
-
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '4px 0 8px' }}>Case study builder</div>
-
-      {!doc ? (
-        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>
-          No case study built in the editor yet.
-          {canManage && (
-            <div style={{ marginTop: 14 }}>
-              <button className="btn" onClick={() => setShowEditor(true)}>Create in editor</button>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="card card-pad" style={{ padding: 18, display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'space-between' }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>{doc.title || projectName || 'Case Study'}</div>
-            <div style={{ fontSize: 11, color: 'var(--text3)' }}>
-              {(doc.photos?.length || 0)} photo{(doc.photos?.length || 0) === 1 ? '' : 's'}
-              {' · Last updated '}
-              {doc.updated_at ? new Date(doc.updated_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            <button className="btn btn-sm" onClick={() => setShowEditor(true)}>{canManage ? 'Open / Edit' : 'View'}</button>
-          </div>
-        </div>
-      )}
-
-      {showEditor && (
-        <CaseStudyEditor
-          projectId={projectId}
-          projectName={projectName}
-          onClose={() => { setShowEditor(false); reload() }}
-        />
-      )}
     </div>
   )
 }
