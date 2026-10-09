@@ -75,6 +75,7 @@ export default function Clients() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
+  const [toDelete, setToDelete] = useState(null)   // client row being deleted
 
   const isAdmin = profile?.role === 'admin'
 
@@ -192,6 +193,13 @@ export default function Clients() {
                     </span>
                   )}
                 </div>
+                {isAdmin && (
+                  <button title={c.projects.length ? 'Has projects — cannot be deleted' : 'Delete client'}
+                    onClick={e => { e.stopPropagation(); setToDelete(c) }}
+                    style={{ flexShrink: 0, padding: '4px 8px', fontSize: 11, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', color: 'var(--red)', cursor: 'pointer', opacity: c.projects.length ? 0.35 : 1 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  </button>
+                )}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ flexShrink: 0 }}>
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
@@ -202,6 +210,85 @@ export default function Clients() {
       )}
 
       {showAdd && <AddClientModal onClose={() => setShowAdd(false)} onSaved={() => { setShowAdd(false); load() }} />}
+      {toDelete && <DeleteClientModal client={toDelete} onClose={() => setToDelete(null)} onDeleted={() => { setToDelete(null); load() }} />}
+    </div>
+  )
+}
+
+// Delete a client that's no longer used. Safety rules:
+//  • refused while ANY project (either division) still points at the client
+//  • removes the client's contacts and portal logins first, then the client
+//  • the name must be typed to confirm — this can't be undone
+function DeleteClientModal({ client, onClose, onDeleted }) {
+  const [info, setInfo] = useState(null)      // { projects: [...], contacts: n, portal: n }
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: projs }, { count: contacts }, { count: portal }] = await Promise.all([
+        supabase.from('projects').select('id, project_name, project_ref').eq('client_id', client.id),
+        supabase.from('client_contacts').select('id', { count: 'exact', head: true }).eq('client_id', client.id),
+        supabase.from('client_users').select('id', { count: 'exact', head: true }).eq('client_id', client.id),
+      ])
+      setInfo({ projects: projs || [], contacts: contacts || 0, portal: portal || 0 })
+    })()
+  }, [client.id])
+
+  async function doDelete() {
+    setBusy(true); setError('')
+    // Re-check at the moment of deletion.
+    const { count: still } = await supabase.from('projects').select('id', { count: 'exact', head: true }).eq('client_id', client.id)
+    if (still) { setError('This client still has projects linked — reassign or delete them first.'); setBusy(false); return }
+    const steps = [
+      ['contacts', supabase.from('client_contacts').delete().eq('client_id', client.id)],
+      ['portal logins', supabase.from('client_users').delete().eq('client_id', client.id)],
+    ]
+    for (const [label, q] of steps) {
+      const { error: e } = await q
+      if (e) { setError(`Couldn't remove the client's ${label}: ${e.message}`); setBusy(false); return }
+    }
+    const { error: e } = await supabase.from('clients').delete().eq('id', client.id)
+    if (e) { setError(`Couldn't delete the client: ${e.message}`); setBusy(false); return }
+    onDeleted()
+  }
+
+  const blocked = info && info.projects.length > 0
+  const ok = typed.trim().toLowerCase() === String(client.name || '').trim().toLowerCase()
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => !busy && onClose()}>
+      <div className="card" style={{ width: '100%', maxWidth: 440, padding: 20 }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Delete client</div>
+        {!info ? (
+          <div style={{ fontSize: 13, color: 'var(--text3)' }}>Checking…</div>
+        ) : blocked ? (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: '0 0 8px' }}><b>{client.name}</b> can't be deleted — it still has {info.projects.length} project{info.projects.length === 1 ? '' : 's'}:</p>
+            <ul style={{ fontSize: 12, color: 'var(--text2)', margin: '0 0 12px 18px' }}>
+              {info.projects.slice(0, 8).map(p => <li key={p.id}>{p.project_ref ? `${p.project_ref} · ` : ''}{p.project_name}</li>)}
+              {info.projects.length > 8 && <li>…and {info.projects.length - 8} more</li>}
+            </ul>
+            <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>Reassign those projects to another client (or delete them) first.</p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}><button className="btn" onClick={onClose}>Close</button></div>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--text2)', margin: '0 0 10px' }}>
+              This permanently removes <b>{client.name}</b>{info.contacts || info.portal ? <>, along with {[info.contacts && `${info.contacts} contact${info.contacts === 1 ? '' : 's'}`, info.portal && `${info.portal} client-portal login${info.portal === 1 ? '' : 's'}`].filter(Boolean).join(' and ')}</> : ''}. It can't be undone.
+            </p>
+            <label style={{ fontSize: 12, color: 'var(--text3)' }}>Type the client name to confirm</label>
+            <input value={typed} onChange={e => setTyped(e.target.value)} placeholder={client.name} autoFocus
+              style={{ width: '100%', marginTop: 4, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 13 }} />
+            {error && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>{error}</div>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+              <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
+              <button className="btn btn-danger" onClick={doDelete} disabled={!ok || busy}>{busy ? 'Deleting…' : 'Delete client'}</button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
