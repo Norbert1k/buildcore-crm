@@ -9,6 +9,7 @@ import ProjectModal from '../components/ProjectModal'
 import EAModal from '../components/EAModal'
 import ProjectDocumentation from '../components/ProjectDocumentation'
 import CaseStudyEditor from '../components/CaseStudyEditor'
+import CaseStudyUploads from '../components/CaseStudyUploads'
 import HSHandover from '../components/HSHandover'
 import FitOutHandover from '../components/FitOutHandover'
 import ConstructionHandoverStatus from '../components/ConstructionHandoverStatus'
@@ -1760,19 +1761,20 @@ function CaseStudyPanel({ projectId, projectName, canManage }) {
       <div className="section-header" style={{ marginBottom: 16 }}>
         <div>
           <div className="section-title">Case Study</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>An editable, exportable project case study. Edits don't affect the project record.</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Upload the finished case study, or build one in the editor below. Edits don't affect the project record.</div>
         </div>
-        {canManage && !doc && (
-          <button className="btn btn-primary btn-sm" onClick={() => setShowEditor(true)}>+ Create Case Study</button>
-        )}
       </div>
+
+      <CaseStudyUploads projectId={projectId} canManage={canManage} />
+
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '4px 0 8px' }}>Case study builder</div>
 
       {!doc ? (
         <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>
-          No case study yet.
+          No case study built in the editor yet.
           {canManage && (
             <div style={{ marginTop: 14 }}>
-              <button className="btn btn-primary" onClick={() => setShowEditor(true)}>Create Case Study</button>
+              <button className="btn" onClick={() => setShowEditor(true)}>Create in editor</button>
             </div>
           )}
         </div>
