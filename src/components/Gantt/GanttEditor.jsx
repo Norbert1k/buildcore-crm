@@ -5,7 +5,9 @@ import { Spinner, Modal, Field, IconPlus, IconTrash, ConfirmDialog } from '../ui
 import {
   parseDate, fmtDate, fmtDateUK, addDays, diffDays, DAY_MS,
   newTask, flattenTasks, getDateBounds, durationFromDates, endFromStartAndDuration, rollupGroups,
+  STAGES, stageColor, effectiveStage,
 } from './ganttUtils'
+import { buildProgrammePdf } from './programmePdf'
 
 const ZOOM_LEVELS = {
   day:   { name: 'Day',   pxPerDay: 28 },
@@ -49,6 +51,10 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   const [selectedTaskId, setSelectedTaskId] = useState(null)
   const [showVersionsMenu, setShowVersionsMenu] = useState(false)
   const [showSaveDialog, setShowSaveDialog] = useState(false)
+  // Export dialog — header details for the CCG programme layout. Remembered
+  // per project in this browser so the next issue only needs a new revision.
+  const [exportForm, setExportForm] = useState(null)
+  const [exporting, setExporting] = useState(false)
   const [versionNote, setVersionNote] = useState('')
   const [confirmDeleteTask, setConfirmDeleteTask] = useState(null)
   const [confirmCloseDirty, setConfirmCloseDirty] = useState(false)
@@ -257,360 +263,91 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
   }
 
   // Export the current Gantt to PDF (CCG landscape letterhead style)
+  // ── Export: CCG programme layout (see programmePdf.js) ──────────────────
   async function exportPDF() {
+    const key = `ccg-prog-export:${projectId}${buildingOrdinal != null ? ':' + buildingOrdinal : ''}`
+    let saved = {}
+    try { saved = JSON.parse(localStorage.getItem(key) || '{}') } catch { /* ignore */ }
+    let proj = null
     try {
-      // Lazy-load jsPDF if not already
+      const { data } = await supabase.from('projects')
+        .select('project_ref, project_name, site_address, city, postcode, client_name, status')
+        .eq('id', projectId).maybeSingle()
+      proj = data
+    } catch { /* ignore */ }
+    const isTender = (proj?.status || '').toLowerCase() === 'tender'
+    const addr = [proj?.site_address, proj?.city, proj?.postcode].filter(Boolean).join(', ')
+    const scope = buildingOrdinal != null ? ` — ${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`}` : ''
+    const setUp = rolledTasks.filter(t => effectiveStage(t, rolledTasks.some(x => x.parent_id === t.id)) === 'SET-UP')
+      .map(t => t.start_date).sort()[0]
+    setExportForm({
+      key,
+      title: saved.title || (isTender ? 'TENDER PROGRAMME' : 'CONSTRUCTION PROGRAMME'),
+      projectNo: saved.projectNo || proj?.project_ref || '',
+      projectTitle: saved.projectTitle || [(proj?.project_name || projectName) + scope, addr].filter(Boolean).join(', '),
+      client: saved.client || proj?.client_name || '',
+      status: saved.status || (isTender ? 'TENDER' : (proj?.status || '').toUpperCase() || 'CONSTRUCTION'),
+      revision: activeVersion ? `Rev ${activeVersion.version_number}` : (saved.revision || 'Draft'),
+      possession: saved.possession || setUp || bounds.min?.toISOString?.().slice(0, 10) || '',
+      shutdown: saved.shutdown !== false,
+      notes: saved.notes || '',
+    })
+  }
+
+  async function runExport() {
+    const f = exportForm; if (!f) return
+    setExporting(true)
+    try {
+      try { localStorage.setItem(f.key, JSON.stringify({ ...f, key: undefined })) } catch { /* ignore */ }
       const loadScript = (src) => new Promise((resolve, reject) => {
-        const s = document.createElement('script'); s.src = src
-        s.onload = resolve; s.onerror = () => reject(new Error('Failed to load ' + src))
-        document.head.appendChild(s)
+        const el = document.createElement('script'); el.src = src
+        el.onload = resolve; el.onerror = () => reject(new Error('Failed to load ' + src))
+        document.head.appendChild(el)
       })
       if (!window.jspdf) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
       const { jsPDF } = window.jspdf
-
-      // Load CCG logo
-      let logoDataUrl = null
+      let logo = null
       try {
-        const resp = await fetch('/cltd-logo.jpg')
+        const resp = await fetch('/logo.png')
         if (resp.ok) {
           const blob = await resp.blob()
-          logoDataUrl = await new Promise(res => {
-            const r = new FileReader(); r.onloadend = () => res(r.result); r.readAsDataURL(blob)
-          })
+          logo = await new Promise(res => { const r = new FileReader(); r.onloadend = () => res(r.result); r.readAsDataURL(blob) })
         }
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
 
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3' })
-      const pageW = doc.internal.pageSize.getWidth()   // 420mm
-      const pageH = doc.internal.pageSize.getHeight()  // 297mm
+      // Every group expanded for the export, groups rolled up from children.
+      const rows = flattenTasks(rollupGroups(tasks.map(t => ({ ...t, collapsed: false }))))
+      const today = new Date()
+      const { doc } = buildProgrammePdf(jsPDF, rows, {
+        title: f.title, projectNo: f.projectNo, projectTitle: f.projectTitle, client: f.client,
+        possession: f.possession ? parseDate(f.possession) : null, status: f.status, revision: f.revision,
+        revisionDate: `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getFullYear()).slice(2)}`,
+        email: profile?.email || '', shutdown: f.shutdown,
+        notes: String(f.notes || '').split('\n').map(x => x.trim()).filter(Boolean),
+      }, logo)
 
-      const drawLetterhead = () => {
-        if (logoDataUrl) { try { doc.addImage(logoDataUrl, 'JPEG', pageW - 28, 8, 18, 18) } catch (e) {} }
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(45, 45, 45)
-        doc.text('City Construction Group', 15, 16)
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(90, 90, 90)
-        doc.text('One Canada Square · Canary Wharf · London E14 5AA · 0203 948 1930 · info@cltd.co.uk · www.cltd.co.uk', 15, 22)
-        doc.setDrawColor(207, 207, 207); doc.setLineWidth(0.2)
-        doc.line(15, 26, pageW - 15, 26)
-      }
-
-      drawLetterhead()
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(45, 45, 45)
-      // Per-building scope appears in the header title so a user looking at
-      // the PDF later can tell which programme they're seeing.
-      const titleScope = buildingOrdinal != null
-        ? ` — ${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`}`
-        : ''
-      doc.text(`Programme — ${projectName}${titleScope}`, 15, 34)
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(100, 100, 100)
-      const versionLabel = activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'Working draft'
-      doc.text(`${versionLabel} · Generated: ${new Date().toLocaleString('en-GB')}`, 15, 40)
-
-      // Build a versioned filename: '<Project> - Programme - v3 - 2026-04-27.pdf' or '... - draft - ...'.
-      // For per-building programmes include the building label in the filename
-      // so multiple PDFs from the same project don't overwrite each other.
-      const verPart = activeVersion ? `v${activeVersion.version_number}` : 'draft'
-      const datePart = new Date().toISOString().slice(0, 10)
-      const fileScope = buildingOrdinal != null
-        ? ` (${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`})`
-        : ''
-      const rawFileName = `${projectName} - Programme${fileScope} - ${verPart} - ${datePart}.pdf`
-      // Strip filesystem-unsafe characters for both download and storage paths
+      const fileScope = buildingOrdinal != null ? ` (${buildingLabel || `Building ${String(buildingOrdinal).padStart(2, '0')}`})` : ''
+      const rawFileName = `${projectName} - ${f.title ? f.title.charAt(0) + f.title.slice(1).toLowerCase() : 'Programme'}${fileScope} - ${f.revision || 'draft'} - ${today.toISOString().slice(0, 10)}.pdf`
       const safeFileName = rawFileName.replace(/[\/\\<>:"|?*]+/g, '').replace(/\s+/g, ' ').trim() || 'Programme.pdf'
-
-      if (flat.length === 0) {
-        doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 150, 150)
-        doc.text('No tasks in this programme yet.', pageW / 2, 80, { align: 'center' })
-        doc.save(safeFileName)
-        return
-      }
-
-      // Layout: Engineering schedule (Option 1) — MS Project-style columns
-      // on the left, two-tier date header on the right.
-      //
-      // Column widths in mm (left edge of each):
-      //   ID        15  (width 8)
-      //   Task      23  (width 60)
-      //   Duration  83  (width 16)
-      //   Start     99  (width 20)
-      //   Finish   119  (width 20)
-      // Total left section ends at 139mm. Timeline gets the rest:
-      //   timelineX0 = 139 + 4 = 143mm
-      //   timelineW  = 420 - 143 - 15 = 262mm
-      const startY = 46
-      const colX = {
-        id:       15,
-        task:     23,
-        duration: 83,
-        start:    99,
-        finish:  119,
-      }
-      const taskColEnd = 139
-      const timelineX0 = taskColEnd + 4
-      const timelineW = pageW - timelineX0 - 15
-      const rowH = 5.5  // mm per task row
-      const headerH = 16  // two-tier header (month tier + week tier)
-      const legendH = 8   // reserved space at the bottom for the legend
-      const bottomY = pageH - 14 - legendH
-
-      // Compute date range for the bars
-      const minDate = bounds.min, maxDate = bounds.max
-      const totalD = diffDays(minDate, maxDate) + 1
-      const mmPerDay = timelineW / totalD
-
-      const dayToXmm = (d) => timelineX0 + diffDays(minDate, parseDate(d)) * mmPerDay
-      const todayDt = new Date()
-      const todayInRange = todayDt >= minDate && todayDt <= maxDate
-      const todayXmm = todayInRange ? timelineX0 + diffDays(minDate, todayDt) * mmPerDay : null
-
-      // Two-tier date axis. Top tier = months; bottom tier = week-start
-      // day numbers (Mondays). Always uses week granularity for the lower
-      // tier regardless of screen zoom — PDFs are static so we pick the
-      // most-print-friendly setting.
-      const drawAxis = (yTop) => {
-        const monthRowH = 7
-        const weekRowH = headerH - monthRowH
-
-        // Frame
-        doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.2)
-        doc.line(15, yTop, pageW - 15, yTop)
-        doc.line(15, yTop + headerH, pageW - 15, yTop + headerH)
-        doc.line(15, yTop + monthRowH, pageW - 15, yTop + monthRowH)
-        // Vertical column separators in the left section
-        doc.line(colX.task - 0.5,     yTop, colX.task - 0.5,     yTop + headerH)
-        doc.line(colX.duration - 0.5, yTop, colX.duration - 0.5, yTop + headerH)
-        doc.line(colX.start - 0.5,    yTop, colX.start - 0.5,    yTop + headerH)
-        doc.line(colX.finish - 0.5,   yTop, colX.finish - 0.5,   yTop + headerH)
-        // Separator between left section and timeline
-        doc.line(timelineX0 - 4, yTop, timelineX0 - 4, yTop + headerH)
-
-        // Column headers — span both tiers, vertically centered
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
-        doc.text('ID',       colX.id + 1,       yTop + 10)
-        doc.text('Task name', colX.task + 1,    yTop + 10)
-        doc.text('Duration', colX.duration + 1, yTop + 10)
-        doc.text('Start',    colX.start + 1,    yTop + 10)
-        doc.text('Finish',   colX.finish + 1,   yTop + 10)
-
-        // Top tier — month boundaries. Walk days, draw month label at
-        // the start of each new month within the timeline range.
-        let lastMonth = -1
-        for (let i = 0; i < totalD; i++) {
-          const d = addDays(minDate, i)
-          const m = d.getUTCMonth()
-          if (m !== lastMonth) {
-            const x = timelineX0 + i * mmPerDay
-            // Vertical month boundary line (full height of axis)
-            doc.setDrawColor(120, 120, 120); doc.setLineWidth(0.3)
-            doc.line(x, yTop, x, yTop + headerH)
-            // Month label — short month + 2-digit year
-            const label = d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' })
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(60, 60, 60)
-            doc.text(label, x + 1, yTop + 5)
-            lastMonth = m
-          }
-        }
-
-        // Bottom tier — week-start day numbers (Mondays). Smaller text.
-        const minLabelGapMm = 5
-        let lastLabelX = -100
-        for (let i = 0; i < totalD; i++) {
-          const d = addDays(minDate, i)
-          const dow = d.getUTCDay()
-          // Tick on every Monday (dow=1) plus the very first day in case
-          // the range starts mid-week.
-          if (dow !== 1 && i !== 0) continue
-          const x = timelineX0 + i * mmPerDay
-          // Tick line into the bottom tier only
-          doc.setDrawColor(220, 220, 220); doc.setLineWidth(0.1)
-          doc.line(x, yTop + monthRowH, x, yTop + headerH)
-          // Day label (just the day number)
-          if ((x - lastLabelX) > minLabelGapMm) {
-            const label = String(d.getUTCDate()).padStart(2, '0')
-            doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(110, 110, 110)
-            doc.text(label, x + 0.8, yTop + monthRowH + 4)
-            lastLabelX = x
-          }
-        }
-      }
-
-      // Legend strip at the bottom of every page. Placed below the row
-      // area in the reserved `legendH` space. Helps subbies/clients
-      // recognise summary vs task vs milestone shapes at a glance.
-      const drawLegend = () => {
-        const y = pageH - 12
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(110, 110, 110)
-        let cx = 15
-        // Task swatch
-        doc.setFillColor(68, 138, 64)
-        doc.rect(cx, y - 1.6, 8, 1.6, 'F')
-        doc.text('Task', cx + 11, y)
-        cx += 11 + doc.getTextWidth('Task') + 8
-        // Summary swatch (thicker bar with end caps)
-        doc.setFillColor(45, 106, 50)
-        doc.rect(cx, y - 2.3, 8, 2.4, 'F')
-        doc.rect(cx, y - 3, 1, 3.6, 'F')
-        doc.rect(cx + 7, y - 3, 1, 3.6, 'F')
-        doc.text('Summary', cx + 11, y)
-        cx += 11 + doc.getTextWidth('Summary') + 8
-        // Milestone swatch (diamond)
-        const dx = cx + 2, dy = y - 1
-        doc.setFillColor(45, 106, 50)
-        doc.triangle(dx, dy - 2, dx + 2, dy, dx, dy + 2, 'F')
-        doc.triangle(dx, dy - 2, dx - 2, dy, dx, dy + 2, 'F')
-        doc.text('Milestone', cx + 11, y)
-      }
-
-      // Draw each task page-by-page
-      let cursorY = startY
-      drawAxis(cursorY)
-      cursorY += headerH
-
-      for (let i = 0; i < flat.length; i++) {
-        if (cursorY + rowH > bottomY) {
-          drawLegend()
-          doc.addPage()
-          drawLetterhead()
-          cursorY = 34
-          drawAxis(cursorY)
-          cursorY += headerH
-        }
-        const t = flat[i]
-        const isGroup = t._hasChildren
-        const isMilestone = !isGroup && t.start_date === t.end_date
-        const dur = durationFromDates(parseDate(t.start_date), parseDate(t.end_date))
-
-        // Row separator (bottom border of this row)
-        doc.setDrawColor(230, 230, 230); doc.setLineWidth(0.1)
-        doc.line(15, cursorY + rowH, pageW - 15, cursorY + rowH)
-        // Vertical column separators
-        doc.line(colX.task - 0.5,     cursorY, colX.task - 0.5,     cursorY + rowH)
-        doc.line(colX.duration - 0.5, cursorY, colX.duration - 0.5, cursorY + rowH)
-        doc.line(colX.start - 0.5,    cursorY, colX.start - 0.5,    cursorY + rowH)
-        doc.line(colX.finish - 0.5,   cursorY, colX.finish - 0.5,   cursorY + rowH)
-        doc.line(timelineX0 - 4,      cursorY, timelineX0 - 4,      cursorY + rowH)
-
-        // Today line — drawn inside the timeline column only
-        if (todayXmm !== null) {
-          doc.setDrawColor(204, 0, 0); doc.setLineWidth(0.3)
-          doc.setLineDashPattern([1, 1], 0)
-          doc.line(todayXmm, cursorY, todayXmm, cursorY + rowH)
-          doc.setLineDashPattern([], 0)
-        }
-
-        // ── Left columns ─────────────────────────────────────
-        // ID
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 80)
-        doc.text(String(i + 1), colX.id + 1, cursorY + 4)
-
-        // Task name with hierarchical indent + bold for summary rows
-        doc.setFont('helvetica', isGroup ? 'bold' : 'normal'); doc.setFontSize(8); doc.setTextColor(45, 45, 45)
-        const nameX = colX.task + 1 + t._depth * 3
-        const nameMaxW = colX.duration - nameX - 1
-        const nameLines = doc.splitTextToSize(t.name || '(untitled)', nameMaxW)
-        doc.text(nameLines[0], nameX, cursorY + 4)
-
-        // Duration: '0 d' for milestones, weeks when divisible by 5 or 7
-        // working days, days otherwise.
-        let durLabel
-        if (isMilestone) durLabel = '0 d'
-        else if (dur >= 7 && dur % 7 === 0) durLabel = `${dur / 7} wks`
-        else if (dur >= 5 && dur % 5 === 0) durLabel = `${dur / 5} wks`
-        else durLabel = `${dur} d`
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(80, 80, 80)
-        doc.text(durLabel, colX.duration + 1, cursorY + 4)
-
-        // Start / Finish — short UK format with weekday for clarity
-        const sd = parseDate(t.start_date), ed = parseDate(t.end_date)
-        const fmtCell = (d) => d ? d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' }) : ''
-        doc.text(fmtCell(sd), colX.start + 1,  cursorY + 4)
-        doc.text(fmtCell(ed), colX.finish + 1, cursorY + 4)
-
-        // ── Bar / shape on the timeline ──────────────────────
-        const x = dayToXmm(t.start_date)
-        const w = Math.max(0.6, dur * mmPerDay)
-        // Task colour — used only for non-summary, non-milestone bars.
-        const hex = (t.color || '#448a40').replace('#', '')
-        const r = parseInt(hex.substring(0, 2), 16) || 68
-        const g = parseInt(hex.substring(2, 4), 16) || 138
-        const b = parseInt(hex.substring(4, 6), 16) || 64
-
-        if (isMilestone) {
-          // Diamond marker for zero-duration tasks (centered on the date)
-          const dx = x, dy = cursorY + rowH / 2
-          doc.setFillColor(45, 106, 50)
-          doc.triangle(dx, dy - 1.6, dx + 1.6, dy, dx, dy + 1.6, 'F')
-          doc.triangle(dx, dy - 1.6, dx - 1.6, dy, dx, dy + 1.6, 'F')
-        } else if (isGroup) {
-          // Summary bar — thicker dark green with end caps
-          doc.setFillColor(45, 106, 50)
-          doc.rect(x, cursorY + 1.5, w, 1.6, 'F')
-          doc.rect(x, cursorY + 0.6, 1, 3.4, 'F')
-          doc.rect(x + w - 1, cursorY + 0.6, 1, 3.4, 'F')
-        } else {
-          // Standard task bar — green
-          doc.setFillColor(r, g, b)
-          doc.roundedRect(x, cursorY + 1.5, w, rowH - 3, 0.5, 0.5, 'F')
-          // Progress overlay
-          if (t.progress > 0) {
-            doc.setFillColor(0, 0, 0)
-            doc.setGState(new doc.GState({ opacity: 0.25 }))
-            doc.roundedRect(x, cursorY + 1.5, Math.max(0.3, w * (t.progress / 100)), rowH - 3, 0.5, 0.5, 'F')
-            doc.setGState(new doc.GState({ opacity: 1 }))
-          }
-          // No date label inside the bar — Start/Finish columns now show
-          // those values explicitly.
-        }
-        cursorY += rowH
-      }
-
-      // Legend on the final page
-      drawLegend()
-
-      // Footer on every page
-      const pageCount = doc.internal.getNumberOfPages()
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i)
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(160, 160, 160)
-        doc.text('City Construction Group', pageW / 2, pageH - 8, { align: 'center' })
-        doc.text(`Page ${i} of ${pageCount}`, pageW - 15, pageH - 8, { align: 'right' })
-      }
-
       doc.save(safeFileName)
+      setExportForm(null)
 
-      // Auto-save the same PDF into the project's '06. Project Programme' folder.
-      // Failures are swallowed quietly — the user already has the download in hand.
+      // Also file the PDF in the project's '06. Project Programme' folder (best effort).
       try {
         const arrayBuffer = doc.output('arraybuffer')
-        const fileSize = arrayBuffer.byteLength
         const storagePath = `projects/${projectId}/06-project-programme/${Date.now()}-${safeFileName}`
-        const blob = new Blob([arrayBuffer], { type: 'application/pdf' })
-        const { error: upErr } = await supabase.storage.from('project-docs').upload(storagePath, blob, {
-          contentType: 'application/pdf',
-          upsert: false,
-        })
-        if (upErr) {
-          console.warn('[Gantt] PDF auto-upload to storage failed:', upErr.message || upErr)
-        } else {
-          const { error: dbErr } = await supabase.from('project_doc_files').insert({
-            project_id: projectId,
-            folder_key: '06-project-programme',
-            file_name: safeFileName,
-            file_size: fileSize,
-            storage_path: storagePath,
-          })
-          if (dbErr) console.warn('[Gantt] PDF auto-upload DB insert failed:', dbErr.message || dbErr)
-        }
-      } catch (e) {
-        console.warn('[Gantt] PDF auto-upload threw:', e?.message || e)
-      }
+        const { error: upErr } = await supabase.storage.from('project-docs').upload(storagePath, new Blob([arrayBuffer], { type: 'application/pdf' }), { contentType: 'application/pdf', upsert: false })
+        if (!upErr) await supabase.from('project_doc_files').insert({ project_id: projectId, folder_key: '06-project-programme', file_name: safeFileName, file_size: arrayBuffer.byteLength, storage_path: storagePath })
+        else console.warn('[Gantt] PDF auto-upload failed:', upErr.message || upErr)
+      } catch (e) { console.warn('[Gantt] PDF auto-upload threw:', e?.message || e) }
     } catch (err) {
       console.error('[Gantt] export PDF failed:', err)
       alert('Export failed: ' + (err?.message || err))
+    } finally {
+      setExporting(false)
     }
   }
 
-  // Add new task at root
   function addTask() {
     const t = newTask({})
     setTasks(prev => [...prev, t])
@@ -1065,6 +802,40 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
       </div>
 
       {/* Save dialog */}
+      <Modal open={!!exportForm} onClose={() => !exporting && setExportForm(null)} title="Export programme (PDF)" size="md"
+        footer={<>
+          <button className="btn" onClick={() => setExportForm(null)} disabled={exporting}>Cancel</button>
+          <button className="btn btn-primary" onClick={runExport} disabled={exporting}>{exporting ? 'Exporting…' : 'Export PDF'}</button>
+        </>}>
+        {exportForm && (() => {
+          const set = (k) => (e) => setExportForm(f => ({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr)', gap: 8 }}>
+                <Field label="Title"><input value={exportForm.title} onChange={set('title')} /></Field>
+                <Field label="Status"><input value={exportForm.status} onChange={set('status')} /></Field>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,2fr)', gap: 8 }}>
+                <Field label="Project no"><input value={exportForm.projectNo} onChange={set('projectNo')} /></Field>
+                <Field label="Client"><input value={exportForm.client} onChange={set('client')} /></Field>
+              </div>
+              <Field label="Project title"><input value={exportForm.projectTitle} onChange={set('projectTitle')} /></Field>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 8 }}>
+                <Field label="Revision no"><input value={exportForm.revision} onChange={set('revision')} /></Field>
+                <Field label="Possession (week 1)"><input type="date" value={exportForm.possession} onChange={set('possession')} /></Field>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)' }}>
+                <input type="checkbox" checked={exportForm.shutdown} onChange={set('shutdown')} /> Christmas shutdown (shaded, excluded from working days)
+              </label>
+              <Field label="Notes under the key (one per line)">
+                <textarea value={exportForm.notes} onChange={set('notes')} style={{ minHeight: 70 }} placeholder="e.g. Programme assumes contract award by Jan 2027…" />
+              </Field>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Practical completion and contract period are calculated from the programme. A copy is filed in 06. Project Programme.</div>
+            </div>
+          )
+        })()}
+      </Modal>
+
       <Modal open={showSaveDialog} onClose={() => !saving && setShowSaveDialog(false)} title="Save as new version" size="sm"
         footer={<>
           <button className="btn" onClick={() => setShowSaveDialog(false)} disabled={saving}>Cancel</button>
@@ -1213,6 +984,21 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
             style={{ appearance: 'auto', WebkitAppearance: 'auto', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', accentColor: '#448a40' }} />
           <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', marginTop: 4 }}>{task.progress || 0}%</div>
         </Field>
+        {!isGroup && (
+          <Field label="Stage">
+            <select value={task.stage || ''} onChange={e => {
+              const st = e.target.value || null
+              const patch = { stage: st }
+              if (st && stageColor(st)) patch.color = stageColor(st)
+              if (st === 'MILESTONE') patch.end_date = task.start_date
+              onChange(patch)
+            }}>
+              <option value="">— Auto{effectiveStage(task) ? ` (${effectiveStage(task)})` : ''} —</option>
+              {STAGES.map(st => <option key={st.key} value={st.key}>{st.key}</option>)}
+            </select>
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>Sets the bar colour and the STAGE column on exported programmes</div>
+          </Field>
+        )}
         <Field label="Color">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {COLORS.map(c => (
