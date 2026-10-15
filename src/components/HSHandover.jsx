@@ -638,8 +638,14 @@ function getColor(node, depth) {
   return '#888780'
 }
 
+// ── Internal drag-and-drop (move files / custom folders between folders) ──
+// Custom MIME types keep internal moves separate from OS file uploads.
+const HS_FILES_MIME = 'application/x-ccg-hs-files'
+const HS_FOLDER_MIME = 'application/x-ccg-hs-folder'
+const hasType = (e, t) => Array.from(e.dataTransfer?.types || []).includes(t)
+
 // ── File Card ─────────────────────────────────────────────────
-function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }) {
+function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview, onDragStart }) {
   const { profile } = useAuth()
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -678,14 +684,14 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }
 
   return (
     <>
-      <div draggable={!renaming} style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)', fontSize: 12, position: 'relative', transition: 'border .1s' }}>
+      <div draggable={!renaming && !!onDragStart} onDragStart={e => onDragStart?.(e, file)} style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)', fontSize: 12, position: 'relative', transition: 'border .1s', cursor: onDragStart ? 'grab' : undefined }}>
         <div onClick={e => { e.stopPropagation(); onSelect && onSelect(file.id) }}
           style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
         <div style={{ height: 120, background: 'var(--surface2)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', cursor: 'pointer' }} onClick={() => onPreview ? onPreview(file, url) : null}>
           {isImg && url
-            ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ? <img src={url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : isPdf && url
             ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
             : <TypeBadge />
@@ -734,7 +740,7 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview }
 }
 
 // ── HS File List Row ──────────────────────────────────────────────────────────
-function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPreview }) {
+function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPreview, onDragStart }) {
   const { profile } = useAuth()
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -767,7 +773,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 'var(--radius)', border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', transition: 'border .1s' }}>
+      <div draggable={!renaming && !!onDragStart} onDragStart={e => onDragStart?.(e, file)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 'var(--radius)', border: selected ? '1.5px solid var(--accent)' : '0.5px solid var(--border)', background: 'var(--surface)', transition: 'border .1s', cursor: onDragStart ? 'grab' : undefined }}>
         <div onClick={e => { e.stopPropagation(); onSelect && onSelect(file.id) }}
           style={{ width: 16, height: 16, borderRadius: 3, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.3)'), background: selected ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -834,6 +840,8 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   const [renamingNode, setRenamingNode] = useState(false)
   const [renameNodeVal, setRenameNodeVal] = useState('')
   const [confirmDelNode, setConfirmDelNode] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [moving, setMoving] = useState('')
 
   const color = node.color || sectionColor || '#888780'
   const bg = node.bg || '#F1EFE8'
@@ -847,6 +855,110 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   useEffect(() => {
     if (open) loadFiles()
   }, [open])
+
+  // Refresh when files are dragged into or out of this folder elsewhere in the tree
+  useEffect(() => {
+    function onMoved(ev) {
+      const keys = ev.detail?.keys || []
+      if (!keys.includes(node.key)) return
+      setSelected(new Set())
+      if (open) loadFiles()
+    }
+    window.addEventListener('hs-moved', onMoved)
+    return () => window.removeEventListener('hs-moved', onMoved)
+  }, [open, node.key])
+
+  // Only one folder is highlighted as the drop target at a time
+  useEffect(() => {
+    function onTarget(ev) { if (ev.detail !== node.key) setDragOver(false) }
+    function clear() { setDragOver(false) }
+    window.addEventListener('hs-dragtarget', onTarget)
+    window.addEventListener('dragend', clear)
+    window.addEventListener('drop', clear)
+    return () => {
+      window.removeEventListener('hs-dragtarget', onTarget)
+      window.removeEventListener('dragend', clear)
+      window.removeEventListener('drop', clear)
+    }
+  }, [node.key])
+
+  const customEntry = (customFolders || []).find(f => f.folder_key === node.key)
+  const isMovableFolder = canManage && !!customEntry && !customEntry._archive
+
+  // Start dragging a file (or the whole selection, if this file is part of it)
+  function startFileDrag(e, f) {
+    if (!canManage) { e.preventDefault(); return }
+    const ids = selected.has(f.id) ? Array.from(selected) : [f.id]
+    e.dataTransfer.setData(HS_FILES_MIME, JSON.stringify({ ids, from: node.key }))
+    e.dataTransfer.setData('text/plain', ids.length > 1 ? `${ids.length} files` : f.file_name)
+    e.dataTransfer.effectAllowed = 'move'
+    e.stopPropagation()
+  }
+
+  function startFolderDrag(e) {
+    if (!isMovableFolder || renamingNode) { e.preventDefault(); return }
+    e.dataTransfer.setData(HS_FOLDER_MIME, JSON.stringify({ key: node.key, parent: customEntry.parent_key }))
+    e.dataTransfer.setData('text/plain', node.label)
+    e.dataTransfer.effectAllowed = 'move'
+    e.stopPropagation()
+  }
+
+  function onDragOverFolder(e) {
+    e.preventDefault(); e.stopPropagation()
+    const internal = hasType(e, HS_FILES_MIME) || hasType(e, HS_FOLDER_MIME)
+    if (internal && !canManage) { e.dataTransfer.dropEffect = 'none'; return }
+    e.dataTransfer.dropEffect = internal ? 'move' : 'copy'
+    if (!dragOver) {
+      setDragOver(true)
+      window.dispatchEvent(new CustomEvent('hs-dragtarget', { detail: node.key }))
+    }
+  }
+  function onDragLeaveFolder(e) {
+    if (e.currentTarget.contains(e.relatedTarget)) return
+    setDragOver(false)
+  }
+
+  // Keys of a custom folder and every custom folder beneath it
+  function customDescendants(rootKey) {
+    const out = new Set([rootKey])
+    let frontier = [rootKey]
+    while (frontier.length) {
+      const next = []
+      for (const k of frontier) for (const cf of (customFolders || [])) {
+        if (cf.parent_key === k && !out.has(cf.folder_key)) { out.add(cf.folder_key); next.push(cf.folder_key) }
+      }
+      frontier = next
+    }
+    return out
+  }
+
+  async function moveFilesHere(payload) {
+    const { ids = [], from } = payload || {}
+    if (!ids.length || from === node.key) return
+    setMoving(`Moving ${ids.length} file${ids.length !== 1 ? 's' : ''}…`)
+    const { error } = await supabase.from('hs_files').update({ folder_key: node.key })
+      .in('id', ids).eq('project_id', projectId)
+    setMoving('')
+    if (error) { alert('Could not move: ' + error.message); return }
+    window.dispatchEvent(new CustomEvent('hs-moved', { detail: { keys: [from, node.key] } }))
+    onCustomFolderAdded?.()
+    if (!open) setOpen(true)
+  }
+
+  async function moveFolderHere(payload) {
+    const { key, parent } = payload || {}
+    if (!key || key === node.key || parent === node.key) return
+    if (customDescendants(key).has(node.key)) { alert("A folder can't be moved inside itself."); return }
+    const src = (customFolders || []).find(f => f.folder_key === key)
+    if (!src || src._archive) return
+    setMoving(`Moving "${src.label}"…`)
+    const { error } = await supabase.from('hs_folders').update({ parent_key: node.key })
+      .eq('folder_key', key).eq('project_id', projectId)
+    setMoving('')
+    if (error) { alert('Could not move folder: ' + error.message); return }
+    onCustomFolderAdded?.()
+    if (!open) setOpen(true)
+  }
 
   async function loadFiles() {
     const { data } = await supabase.from('hs_files').select('*')
@@ -876,6 +988,17 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
   async function onDrop(e) {
     e.preventDefault(); e.stopPropagation()
+    setDragOver(false)
+    const filesPayload = e.dataTransfer.getData(HS_FILES_MIME)
+    const folderPayload = e.dataTransfer.getData(HS_FOLDER_MIME)
+    if (filesPayload || folderPayload) {
+      if (!canManage) return
+      try {
+        if (filesPayload) await moveFilesHere(JSON.parse(filesPayload))
+        else await moveFolderHere(JSON.parse(folderPayload))
+      } catch (err) { alert('Move failed: ' + (err?.message || err)) }
+      return
+    }
     const drop = await readDropEntries(e)
     if (drop.folders.length > 0) {
       const keyMap = {}
@@ -1008,10 +1131,16 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       <UploadProgress uploadState={uploadProgress} />
       {/* Folder row */}
       <div
-        onDragOver={e => e.preventDefault()}
+        draggable={isMovableFolder && !renamingNode && !showAddFolder}
+        onDragStart={startFolderDrag}
+        onDragEnd={() => setDragOver(false)}
+        onDragOver={onDragOverFolder}
+        onDragLeave={onDragLeaveFolder}
         onDrop={onDrop}
         onClick={() => setOpen(o => !o)}
+        title={isMovableFolder ? 'Drag to move this folder' : undefined}
         style={{
+          outline: dragOver ? '2px dashed var(--accent)' : 'none', outlineOffset: -2,
           display: 'flex', alignItems: 'center', gap: 10, padding: isSection ? '11px 14px' : '8px 12px',
           borderRadius: isSection ? 8 : 6,
           cursor: 'pointer',
@@ -1058,7 +1187,9 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
                 style={{ fontSize: isSection ? 13 : 12, fontWeight: isSection ? 600 : 500, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
             : <div style={{ fontSize: isSection ? 13 : 12, fontWeight: isSection ? 600 : 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.label}</div>
           }
-          {totalCount > 0 && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{totalCount} file{totalCount !== 1 ? 's' : ''}</div>}
+          {moving
+            ? <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 1 }}>{moving}</div>
+            : totalCount > 0 && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{totalCount} file{totalCount !== 1 ? 's' : ''}</div>}
         </div>
 
         {/* Actions */}
@@ -1111,8 +1242,8 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
       {/* Open content */}
       {open && (
-        <div onDragOver={e => e.preventDefault()} onDrop={onDrop}
-          style={{ marginLeft: isSection ? 16 : 12, paddingLeft: 10, borderLeft: `1.5px solid ${color}30`, marginBottom: isSection ? 8 : 4, paddingTop: 4, paddingBottom: 4 }}>
+        <div onDragOver={onDragOverFolder} onDragLeave={onDragLeaveFolder} onDrop={onDrop}
+          style={{ outline: dragOver ? '2px dashed var(--accent)' : 'none', outlineOffset: 2, borderRadius: 4, marginLeft: isSection ? 16 : 12, paddingLeft: 10, borderLeft: `1.5px solid ${color}30`, marginBottom: isSection ? 8 : 4, paddingTop: 4, paddingBottom: 4 }}>
           {/* Sub-folders */}
           {node.children?.map(child => (
             <FolderNode key={child.key} node={child} projectId={projectId} depth={depth + 1}
@@ -1146,10 +1277,10 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
           {files.length > 0 && (
             viewMode === 'list'
               ? <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8, marginBottom: 8 }}>
-                  {files.map(f => <HSFileListRow key={f.id} file={f} onDelete={() => setConfirmDelete(f)} canDelete={canManage} selected={selected.has(f.id)} onSelect={toggleSelect} onPreview={onPreview} />)}
+                  {files.map(f => <HSFileListRow key={f.id} file={f} onDelete={() => setConfirmDelete(f)} canDelete={canManage} selected={selected.has(f.id)} onSelect={toggleSelect} onPreview={onPreview} onDragStart={canManage ? startFileDrag : undefined} />)}
                 </div>
               : <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8, marginTop: 8, marginBottom: 8 }}>
-                  {files.map(f => <HSFileCard key={f.id} file={f} onDelete={() => setConfirmDelete(f)} canDelete={canManage} selected={selected.has(f.id)} onSelect={toggleSelect} onPreview={onPreview} />)}
+                  {files.map(f => <HSFileCard key={f.id} file={f} onDelete={() => setConfirmDelete(f)} canDelete={canManage} selected={selected.has(f.id)} onSelect={toggleSelect} onPreview={onPreview} onDragStart={canManage ? startFileDrag : undefined} />)}
                 </div>
           )}
 
@@ -1600,7 +1731,7 @@ export default function HSHandover({ projectId, projectName }) {
 
       {/* Note */}
       <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 11, color: 'var(--text3)' }}>
-        Template structure fixed — add sub-folders within sections as needed per project. Only PDFs are embedded in compiled exports; other file types appear in the appendix index.
+        Template structure fixed — add sub-folders within sections as needed per project. Drag files onto any folder to move them; drag your own sub-folders to re-file them (selected files move together). Only PDFs are embedded in compiled exports; other file types appear in the appendix index.
       </div>
 
       {/* Preview modal */}
