@@ -54,12 +54,12 @@ export default function TaskDetail() {
   const location = useLocation()
   const { can, profile } = useAuth()
   // Smart back navigation. If we got here from another page in the app
-  // (the normal case: user clicked a task row in the Task Tracker), use
+  // (the normal case: user clicked a quote request in Quotes or on a job), use
   // navigate(-1) so the browser restores the previous URL exactly —
   // including any filter query params like ?assignee={chris}. If the
   // user landed on this page directly (fresh tab, deep link from an
   // email, etc.), there's no history to go back to so we fall back to
-  // /tasks. React Router uses location.key === 'default' as the signal
+  // Quotes. React Router uses location.key === 'default' as the signal
   // for "first entry, no history yet".
   function goBack() {
     if (location.key && location.key !== 'default') {
@@ -1026,7 +1026,7 @@ export default function TaskDetail() {
   const st = STATUS_LABELS[task.status] || STATUS_LABELS.active
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={goBack}><IconChevron size={13} dir="left" /> Back to Task Tracker</button>
+      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={goBack}><IconChevron size={13} dir="left" /> {location.key && location.key !== 'default' ? 'Back' : 'Back to Quotes'}</button>
       {/* Header */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
