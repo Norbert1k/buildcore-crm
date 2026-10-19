@@ -75,7 +75,7 @@ Read the document and return ONLY JSON:
  "reference": "guarantee / certificate / drawing number as printed" | null,
  "system": "the building system it covers, e.g. 'Garland Evo — flat roofs and balconies'" | null,
  "dates": { "issued": "DD/MM/YYYY"|null, "completion": "DD/MM/YYYY"|null, "start": "DD/MM/YYYY"|null, "expiry": "DD/MM/YYYY"|null, "revision": "DD/MM/YYYY"|null },
- "parties": { "owner": str|null, "owner_address": str|null, "main_contractor": str|null, "installer": str|null },
+ "parties": { "owner": str|null, "owner_address": str|null, "site_address": str|null, "main_contractor": str|null, "installer": str|null },
  "contacts": [ { "org": str, "role": str, "address": str|null, "phone": str|null, "email": str|null } ],
  "products": [ { "code": str|null, "name": str, "qty": str|null } ],
  "build_up": [ { "layer": str, "thickness": str|null, "notes": str|null } ],
@@ -96,6 +96,9 @@ Filing rules for suggested_folder (use the closest folder in the list):
  - O&M manuals, data sheets and guarantees into the catalogue folder for their trade (roof, windows, lifts, MVHR…).
  - Invoices, quotations, orders and correspondence: client_facing false.
  The "path hint" is the folder the file came from on the sender's computer — use it as a clue, not a rule.
+Parties: "owner" is the building owner / developer / client the work was done for — never the occupier, the person who signed the form,
+ City Construction Group or any of its staff. "owner_address" is that owner's own office or registered address, only if printed —
+ never the installation, property or plot address. Put the property / plot / installation address the document is about in "site_address".
 Rules: UK dates DD/MM/YYYY. Copy numbers exactly as printed. Never guess — use null. Keep text short and factual.`
 
 async function read(sb: any, body: any) {

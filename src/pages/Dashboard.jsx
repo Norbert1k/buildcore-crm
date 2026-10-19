@@ -38,14 +38,17 @@ export default function Dashboard() {
   useEffect(() => { if (allowedSubs !== undefined) load() }, [division, allowedSubs])
 
   async function load() {
-    const [projRes, docsRes, subsCount, subsActive] = await Promise.all([
-      supabase.from('projects').select('id, project_ref, project_name, status, client_name, client_id, town, city, start_date, end_date, value').eq('division', division).order('project_ref', { ascending: false }),
+    // select('*') — never fails because a column is missing on one database
+    const [projRes, docsRes, subsCount, subsActive, clientRes] = await Promise.all([
+      supabase.from('projects').select('*').eq('division', division).order('project_ref', { ascending: false }),
       supabase.from('documents_with_status').select('id, document_name, document_type, expiry_date, status, subcontractor_id, subcontractors(company_name, trade)').in('status', ['expired', 'expiring_soon']).order('expiry_date'),
       allowedSubs ? supabase.from('subcontractors').select('id, status').in('id', [...allowedSubs]) : supabase.from('subcontractors').select('id', { count: 'exact', head: true }),
       allowedSubs ? Promise.resolve(null) : supabase.from('subcontractors').select('id', { count: 'exact', head: true }).in('status', ['active', 'approved']),
+      supabase.from('clients').select('id, name'),
     ])
+    const clientName = Object.fromEntries((clientRes?.data || []).map(c => [c.id, c.name]))
     for (const [n, r] of [['projects', projRes], ['docs', docsRes]]) if (r?.error) console.error('[Dashboard] ' + n, r.error)
-    const projects = (projRes.data || []).filter(p => canAccessProject(p.id))
+    const projects = (projRes.data || []).filter(p => canAccessProject(p.id)).map(p => ({ ...p, client_name: p.client_name || clientName[p.client_id] || '' }))
     const mine = allowedSubs ? (subsCount.data || []) : null
     setData({ projects, alerts: docsRes.data || [],
       subsTotal: mine ? mine.length : (subsCount.count || 0),

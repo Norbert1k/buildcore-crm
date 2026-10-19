@@ -1474,3 +1474,6 @@ html .proj-tabs .filter-tab { font-size: 13.5px; }
 .qr-chips::-webkit-scrollbar { display: none; }
 .qr-tools .qr-chips { order: 3; flex: 1 1 100%; flex-wrap: wrap; overflow: visible; }
 @media (max-width: 900px) { .qr-tools .qr-chips { flex-wrap: nowrap; overflow-x: auto; } }
+.om-conf-own { display: flex; gap: 8px; margin-top: 10px; }
+.om-conf-own input { flex: 1; padding: 7px 10px; font-size: 14px; }
+.om-units { margin: -4px 0 14px; padding: 8px 12px; border-radius: var(--radius); background: var(--surface2); color: var(--text2); font-size: 14px; }

@@ -207,7 +207,11 @@ export default function OmBuilder({ projectId, project, readiness }) {
   }
 
   // ── Draft and issue ─────────────────────────────────────────────────────
-  const analysis = useMemo(() => files && pack ? analyse({ project, files: files.filter(f => f.folder_key !== '_inbox' || f.ai), options: pack.options }) : null, [files, pack, project])
+  // Staff names — a document naming our own PM as "owner" is not the owner
+  const [staffNames, setStaffNames] = useState([])
+  useEffect(() => { supabase.from('profiles').select('full_name').then(({ data }) => setStaffNames((data || []).map(p => p.full_name).filter(Boolean))) }, [])
+  const analysis = useMemo(() => files && pack ? analyse({ project, files: files.filter(f => f.folder_key !== '_inbox' || f.ai), options: pack.options, staffNames }) : null, [files, pack, project, staffNames])
+  const [ownValue, setOwnValue] = useState({})   // decision typed by hand, per conflict
   // Out of date when a Handover document was read after the draft, or the settings/decisions changed
   const lastChange = useMemo(() => (files || []).filter(f => f._table === 'hs_files' && f.ai && !f.ai.error)
     .reduce((m, f) => Math.max(m, new Date(f.ai.read_at || 0).getTime()), 0), [files])
@@ -317,9 +321,18 @@ export default function OmBuilder({ projectId, project, readiness }) {
               </button>
             ))}
           </div>
+          {canEdit && (
+            <div className="om-conf-own">
+              <input value={ownValue[c.key] || ''} onChange={e => setOwnValue(t => ({ ...t, [c.key]: e.target.value }))} placeholder={`None of these — type the correct ${c.label.toLowerCase()}`} />
+              <button className="btn btn-sm" disabled={!(ownValue[c.key] || '').trim()} onClick={() => setOverride(c.key, ownValue[c.key].trim())}>Use this</button>
+            </div>
+          )}
           <div className="om-conf-hint">Pick the right one — it's used throughout the manuals. Ask the issuer to correct the other document.</div>
         </div>
       ))}
+      {(analysis?.units?.length || 0) > 1 && openDecisions.length === 0 && (
+        <div className="om-units">{analysis.units.length} home / plot addresses found on this job — they're kept as the individual properties, not treated as a conflict.</div>
+      )}
 
       {/* ── Settings ─────────────────────────────────────────────── */}
       {panel === 'settings' && (
