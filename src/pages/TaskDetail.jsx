@@ -1121,7 +1121,7 @@ export default function TaskDetail() {
         <div className="qd-won">
           <div><b>Awarded to {won.vendor_name_text}</b>{won.amount != null && <> at <b>{money(won.amount)}</b> + VAT</>}</div>
           {won.subcontractor_id && po && (po.existing
-            ? <span className="qd-po-ok">✓ PO raised{po.existing.po_number ? ` · ${po.existing.po_number}` : ''}</span>
+            ? <span className="qd-po-ok">✓ PO raised{po.existing.order_number ? ` · ${po.existing.order_number}` : ''}</span>
             : po.projectSubId && can('manage_projects') && <button className="btn btn-sm btn-primary" onClick={() => setShowPO(true)}>Raise PO</button>)}
           {!won.subcontractor_id && <span className="qd-muted">Supplier — order through Procurement as usual.</span>}
         </div>

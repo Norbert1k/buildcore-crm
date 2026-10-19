@@ -8,21 +8,28 @@
 import { supabase } from './supabase'
 
 // folders: { key: 'Section 8 › 8.4 Catalogue › 03. Roof', … } — Claude picks one
-export async function readDocument(file, table, folders) {
-  const { data, error } = await supabase.functions.invoke('handover-ai', { body: { action: 'read', table, file_id: file.id, folders, hint: file.hint || '' } })
+// buildings: [{ key: 'b1', name: 'Residential Building' }, …] on multi-building
+// jobs — Claude also says which building the document belongs to
+export async function readDocument(file, table, folders, buildings) {
+  const body = { action: 'read', table, file_id: file.id, folders, hint: file.hint || '' }
+  if (buildings?.length) body.buildings = buildings
+  const { data, error } = await supabase.functions.invoke('handover-ai', { body })
   if (error) throw error
   return data?.ai || null
 }
 
-export async function composePack(projectId, options, overrides) {
-  const { data, error } = await supabase.functions.invoke('handover-ai', { body: { action: 'compose', project_id: projectId, options, overrides } })
+// building: { key, name } to write the manual for one building of a multi-building job
+export async function composePack(projectId, options, overrides, building) {
+  const body = { action: 'compose', project_id: projectId, options, overrides }
+  if (building) body.building = building
+  const { data, error } = await supabase.functions.invoke('handover-ai', { body })
   if (error) throw error
   return data   // { status: 'ok', packs: { om, tenant? } } | { status: 'insufficient', missing: [] }
 }
 
 // Stamp the issue onto each pack and hand it to the print service, which uses
 // the same renderer as the on-screen preview (omRenderCore.js).
-export async function renderPack(projectId, packs, { approvedBy }) {
+export async function renderPack(projectId, packs, { approvedBy, building }) {
   const today = new Date()
   const stamp = p => p && ({
     ...p,
@@ -36,7 +43,7 @@ export async function renderPack(projectId, packs, { approvedBy }) {
   const res = await fetch('/api/om-render', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token || ''}` },
-    body: JSON.stringify({ project_id: projectId, packs: stamped }),
+    body: JSON.stringify({ project_id: projectId, packs: stamped, ...(building ? { building } : {}) }),
   })
   let out = null
   try { out = await res.json() } catch {}

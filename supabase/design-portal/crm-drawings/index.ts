@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
         path = (vs.find((v: any) => !v.is_archived) || vs[0])?.storage_path ?? null; name = (f as any).name;
       }
       if (!path) return json({ status: "not_found" }, 404);
-      const { data: signed, error } = await sb.storage.from("project-files").createSignedUrl(path, 600);
+      const { data: signed, error } = await sb.storage.from("project-files").createSignedUrl(path, 600, { download: name || true }); // "Download" saves the file; the CRM preview reads it into memory either way
       if (error) throw error;
       return json({ status: "ok", url: signed.signedUrl, kind: kindOf(name), name });
     }

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/om-render — prints and issues an O&M pack (Vercel function).
 //
-// Body: { project_id, issue: 'Issue 02', packs: { om, tenant? } }
+// Body: { project_id, packs: { om, tenant? }, building?: { key, name } }  (issue number is worked out here)
 // Only admin / project manager / operations manager / project director.
 // For each pack: prints the CCG standard layout (server/omPrint.js), binds the
 // appendix documents in from storage, saves the PDF to the job's Handover
@@ -58,9 +58,14 @@ export default async function handler(req, res) {
 
   const { project_id, packs } = req.body || {}
   if (!project_id || !packs?.om) return res.status(400).json({ error: 'project_id and packs.om are required' })
+  // Multi-building jobs: one building's manuals ({ key: 'b2', name: 'Sports Hall' })
+  const bld = req.body?.building?.key && req.body?.building?.name ? { key: String(req.body.building.key).slice(0, 20), name: String(req.body.building.name).slice(0, 80) } : null
 
   // Next issue number, worked out here so two people can't issue the same number
-  const { count } = await sb.from('om_issues').select('id', { count: 'exact', head: true }).eq('project_id', project_id).eq('kind', 'om')
+  // (numbered separately for each building)
+  let cq = sb.from('om_issues').select('id', { count: 'exact', head: true }).eq('project_id', project_id).eq('kind', 'om')
+  if (bld) cq = cq.eq('building', bld.key)
+  const { count } = await cq
   const issue = `Issue ${String((count || 0) + 1).padStart(2, '0')}`
   const today = new Date()
   const stamp = p => ({ ...p, doc: { ...p.doc, issue, status: null, status_short: null,
@@ -88,7 +93,8 @@ export default async function handler(req, res) {
       const p = stamp(pack)
       const { bytes, pages } = await printPack(p, A, loadSource, browser)
       const label = kind === 'tenant' ? 'Tenant O&M' : 'O&M Manual'
-      printed.push({ kind, bytes, pages, fileName: safe(`${p.job.name} — ${label} — ${issue}.pdf`), folder: folderFor(kind, p) })
+      const jobName = bld && !String(p.job?.name || '').includes(bld.name) ? `${p.job.name} — ${bld.name}` : p.job.name
+      printed.push({ kind, bytes, pages, fileName: safe(`${jobName} — ${label} — ${issue}.pdf`), folder: folderFor(kind, p) })
     }
   } catch (e) {
     console.error('[om-render] print', e)
@@ -106,11 +112,13 @@ export default async function handler(req, res) {
       if (upErr) throw new Error('Upload failed: ' + upErr.message)
       const { data: file, error: fErr } = await sb.from('hs_files').insert({
         project_id, folder_key: f.folder, file_name: f.fileName, file_size: f.bytes.length, storage_path: storagePath, origin: 'om_builder',
+        ...(bld ? { building: bld.key } : {}),
       }).select('id').single()
       if (fErr) throw new Error('Saving the file record failed: ' + fErr.message)
       const { error: issErr } = await sb.from('om_issues').insert({
         project_id, kind: f.kind, issue_no: issue, status: 'issued', file_name: f.fileName, pages: f.pages, hs_file_id: file?.id,
         approved_by: profile.full_name, created_by: user.id,
+        ...(bld ? { building: bld.key } : {}),
       })
       if (issErr) throw new Error('Recording the issue failed: ' + issErr.message)
       out.push({ kind: f.kind, file_id: file?.id, file_name: f.fileName, pages: f.pages, folder_key: f.folder })

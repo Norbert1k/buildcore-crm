@@ -270,7 +270,13 @@ function NewQuoteRequest({ open, onClose, projectId }) {
       if (form.return_by) row.return_by = form.return_by
       if (form.budget) row.budget = Number(String(form.budget).replace(/[£,\s]/g, '')) || null
       let { data: task, error } = await supabase.from('tasks').insert(row).select().single()
-      if (error && /return_by|budget|is_quote/.test(error.message)) { delete row.return_by; delete row.budget; delete row.is_quote; ({ data: task, error } = await supabase.from('tasks').insert(row).select().single()) }
+      // A column whose SQL hasn't been run yet: drop just that one and try again
+      for (let tries = 0; error && tries < 3; tries++) {
+        const col = ['is_quote', 'return_by', 'budget'].find(c => c in row && new RegExp(c).test(error.message))
+        if (!col) break
+        delete row[col]
+        ;({ data: task, error } = await supabase.from('tasks').insert(row).select().single())
+      }
       if (error) throw error
       if (profile?.id) await supabase.from('task_assignees').insert({ task_id: task.id, user_id: profile.id })
       await supabase.from('task_activity').insert({ task_id: task.id, actor_id: profile?.id, action: 'created', details: { title: row.title, priority: row.priority } })

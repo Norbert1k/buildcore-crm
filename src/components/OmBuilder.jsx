@@ -41,9 +41,26 @@ const fmt = d => d ? new Date(d).toLocaleDateString('en-GB', { day: '2-digit', m
 // Storage keys reject em/en dashes and other non-ASCII characters ("Invalid key")
 const safeName = n => String(n).replace(/[\u2014\u2013]/g, '-').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^\x20-\x7E]/g, '').replace(/[#?%{}\\^~\[\]`>|<]/g, '-').replace(/\s{2,}/g, ' ').trim() || 'file'
+// DD/MM/YYYY (how dates are kept in the manual) ⇄ YYYY-MM-DD (date inputs)
+const toIso = d => { const m = String(d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : '' }
+const fromIso = d => { const [y, m, dd] = String(d).split('-'); return `${dd}/${m}/${y}` }
 const changed = keys => window.dispatchEvent(new CustomEvent('hs-moved', { detail: { keys } }))
 
-export default function OmBuilder({ projectId, project, readiness }) {
+// Which building a Handover file belongs to: 'b1'… / 'site' / null (not tagged)
+const inBuilding = (f, key) => f._table !== 'hs_files' || !f.building || f.building === 'site' || f.building === key
+// Tag untagged files by the building's name appearing in the file name or reading
+export function guessBuilding(f, buildings) {
+  const text = [f.file_name, f.ai?.title, f.ai?.system, f._hint].filter(Boolean).join(' ').toLowerCase()
+  const hits = buildings.filter(b => b.name.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !['building', 'block', 'phase', 'the'].includes(w)).some(w => text.includes(w)))
+  return hits.length === 1 ? hits[0].key : null
+}
+
+export default function OmBuilder({ projectId, project, readiness, multi = false, has038 = false, buildings = [], building = null, onPickBuilding }) {
+  // Multi-building job: bkey is the building in view; null = the all-buildings overview
+  const bkey = multi ? (building?.key || null) : ''
+  // Once 038 has run, settings are saved per job AND building ('' = the whole job,
+  // which every single-building job uses) — the old one-per-job rule is gone
+  const perBuilding = has038
   const { can, role, profile } = useAuth()
   // Settings, decisions, drafts (and the Claude reads they trigger): project leads.
   // Dropping documents: anyone who can upload to the Handover folders.
@@ -61,6 +78,7 @@ export default function OmBuilder({ projectId, project, readiness }) {
   const [dragOver, setDragOver] = useState(false)
   const [panel, setPanel] = useState(null)          // 'settings' | 'details' | null
   const [recent, setRecent] = useState([])          // what the last drop did
+  const [detailsTab, setDetailsTab] = useState(null) // open Details on a given tab
   const inputRef = useRef(null)
   const folderRef = useRef(null)
   const labels = useMemo(folderLabels, [])
@@ -74,21 +92,28 @@ export default function OmBuilder({ projectId, project, readiness }) {
     return () => window.removeEventListener('hs-files-read', on)
   }, [projectId])
 
+  const [allPacks, setAllPacks] = useState([])      // multi-building: every building's settings
+  const [allIssues, setAllIssues] = useState([])
   async function load(catchUp) {
-    const [hs, docs, pk, iss] = await Promise.all([
+    const [hs, docs, pkAll, iss] = await Promise.all([
       supabase.from('hs_files').select('*').eq('project_id', projectId),
       supabase.from('project_doc_files').select('*').eq('project_id', projectId),
-      supabase.from('om_packs').select('*').eq('project_id', projectId).maybeSingle(),
+      supabase.from('om_packs').select('*').eq('project_id', projectId),
       supabase.from('om_issues').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
     ])
+    const packRows = pkAll.data || []
+    setAllPacks(packRows)
+    const pk = { data: multi ? packRows.find(r => (r.building || '') === (bkey || '')) || null : packRows.find(r => !r.building) || packRows[0] || null }
     // Manuals issued here are not source material for the next one
     const all = [
       ...(hs.data || []).filter(f => f.origin !== 'om_builder').map(f => ({ ...f, _table: 'hs_files', _source: 'Handover' })),
       ...(docs.data || []).map(f => ({ ...f, _table: 'project_doc_files', _source: 'Documents' })),
     ]
     setFiles(all)
-    setPack(p => p || pk.data || { project_id: projectId, options: { ...DEFAULT_OPTIONS }, overrides: {}, draft: null, draft_at: null })
-    setIssues(iss.data || [])
+    // A building of a multi-building job defaults to a whole-building O&M
+    setPack(p => p || pk.data || { project_id: projectId, options: { ...DEFAULT_OPTIONS, ...(multi ? { type: 'building' } : {}) }, overrides: {}, draft: null, draft_at: null })
+    setIssues(multi ? (iss.data || []).filter(i => (i.building || '') === (bkey || '')) : (iss.data || []))
+    setAllIssues(iss.data || [])
     // Catch-up: read Handover files not read yet (never the Documents tab — invoices etc.)
     const unread = all.filter(f => f._table === 'hs_files' && !f.ai && f.folder_key !== '_inbox' && /\.(pdf|png|jpe?g)$/i.test(f.file_name || ''))
     if (catchUp && unread.length && canEdit) readAll(unread, all)
@@ -99,8 +124,8 @@ export default function OmBuilder({ projectId, project, readiness }) {
     let current = all
     for (let i = 0; i < list.length; i++) {
       try {
-        const ai = await readDocument(list[i], list[i]._table, labels)
-        current = current.map(f => f.id === list[i].id ? { ...f, ai } : f)
+        const ai = await readDocument(list[i], list[i]._table, labels, multi ? buildings : undefined)
+        current = current.map(f => f.id === list[i].id ? { ...f, ai, building: f.building || ai?.building || null } : f)
         setFiles(current)
       } catch (e) { console.error('[handover] read', e) }
       setReading(r => ({ ...r, done: i + 1 }))
@@ -116,7 +141,9 @@ export default function OmBuilder({ projectId, project, readiness }) {
       const next = fn(prev)
       clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(async () => {
-        const { error } = await supabase.from('om_packs').upsert({ project_id: projectId, options: next.options, overrides: next.overrides, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
+        const row = { project_id: projectId, options: next.options, overrides: next.overrides, updated_at: new Date().toISOString() }
+        if (perBuilding) row.building = bkey || ''
+        const { error } = await supabase.from('om_packs').upsert(row, { onConflict: perBuilding ? 'project_id,building' : 'project_id' })
         if (error) setToast('Could not save: ' + error.message)
       }, delay)
       return next
@@ -145,7 +172,9 @@ export default function OmBuilder({ projectId, project, readiness }) {
       const path = `projects/${projectId}/hs/_inbox/${Date.now()}-${safeName(file.name)}`
       const { error: upErr } = await supabase.storage.from('hs-handover').upload(path, file)
       if (upErr) { setToast(`Couldn't upload ${file.name}`); continue }
-      const { data } = await supabase.from('hs_files').insert({ project_id: projectId, folder_key: '_inbox', file_name: file.name, file_size: file.size, storage_path: path }).select().single()
+      const row = { project_id: projectId, folder_key: '_inbox', file_name: file.name, file_size: file.size, storage_path: path }
+      if (multi && bkey) row.building = bkey      // dropped while viewing a building → that building
+      const { data } = await supabase.from('hs_files').insert(row).select().single()
       if (data) added.push({ ...data, _hint: rel, _table: 'hs_files', _source: 'Handover' })
       setReading(r => ({ ...r, done: added.length }))
     }
@@ -156,13 +185,13 @@ export default function OmBuilder({ projectId, project, readiness }) {
     for (let i = 0; i < added.length; i++) {
       const f = added[i]
       try {
-        const ai = await readDocument({ ...f, hint: f._hint }, 'hs_files', labels)
+        const ai = await readDocument({ ...f, hint: f._hint }, 'hs_files', labels, multi ? buildings : undefined)
         let folder = f.folder_key
         if (ai?.suggested_folder && labels[ai.suggested_folder] && ai.confidence !== 'low' && ai.client_facing !== false) {
           folder = ai.suggested_folder
           await supabase.from('hs_files').update({ folder_key: folder }).eq('id', f.id)
         }
-        let me = { ...f, ai, folder_key: folder }
+        let me = { ...f, ai, folder_key: folder, building: f.building || ai?.building || null }
         current = current.map(x => x.id === f.id ? me : x)
         // Revisions: older copy of the same drawing goes to Superseded
         for (const mv of revisionMoves(HS_STRUCTURE, me, current)) {
@@ -210,11 +239,29 @@ export default function OmBuilder({ projectId, project, readiness }) {
   // Staff names — a document naming our own PM as "owner" is not the owner
   const [staffNames, setStaffNames] = useState([])
   useEffect(() => { supabase.from('profiles').select('full_name').then(({ data }) => setStaffNames((data || []).map(p => p.full_name).filter(Boolean))) }, [])
-  const analysis = useMemo(() => files && pack ? analyse({ project, files: files.filter(f => f.folder_key !== '_inbox' || f.ai), options: pack.options, staffNames }) : null, [files, pack, project, staffNames])
+  // A building's manual uses its own documents plus whole-site and untagged ones
+  const scoped = useMemo(() => !files ? null : multi && bkey ? files.filter(f => inBuilding(f, bkey)) : files, [files, multi, bkey])
+  const analysis = useMemo(() => scoped && pack ? analyse({ project, files: scoped.filter(f => f.folder_key !== '_inbox' || f.ai), options: pack.options, overrides: pack.overrides || {}, staffNames }) : null, [scoped, pack, project, staffNames])
+  const untagged = multi ? (files || []).filter(f => f._table === 'hs_files' && !f.building && f.origin !== 'om_builder') : []
+  async function setFileBuilding(f, key) {
+    const { error } = await supabase.from('hs_files').update({ building: key || null }).eq('id', f.id)
+    if (error) return setToast('Could not tag: ' + error.message)
+    setFiles(fs => fs.map(x => x.id === f.id ? { ...x, building: key || null } : x))
+  }
+  async function autoTag() {
+    let n = 0
+    for (const f of untagged) {
+      const k = guessBuilding(f, buildings)
+      if (!k) continue
+      const { error } = await supabase.from('hs_files').update({ building: k }).eq('id', f.id).is('building', null)
+      if (!error) { n++; setFiles(fs => fs.map(x => x.id === f.id ? { ...x, building: k } : x)) }
+    }
+    setToast(n ? `${n} document${n === 1 ? '' : 's'} tagged by name · ${untagged.length - n} left to tag by hand` : 'No building names found in the file names — tag them by hand in Details › Documents')
+  }
   const [ownValue, setOwnValue] = useState({})   // decision typed by hand, per conflict
   // Out of date when a Handover document was read after the draft, or the settings/decisions changed
-  const lastChange = useMemo(() => (files || []).filter(f => f._table === 'hs_files' && f.ai && !f.ai.error)
-    .reduce((m, f) => Math.max(m, new Date(f.ai.read_at || 0).getTime()), 0), [files])
+  const lastChange = useMemo(() => (scoped || []).filter(f => f._table === 'hs_files' && f.ai && !f.ai.error)
+    .reduce((m, f) => Math.max(m, new Date(f.ai.read_at || 0).getTime()), 0), [scoped])
   const draftStale = !!pack?.draft && (!pack.draft_at || new Date(pack.draft_at).getTime() < lastChange || pack.draft.key !== draftKey(pack))
   const openDecisions = (analysis?.conflicts || []).filter(c => pack?.overrides?.[c.key] == null)
 
@@ -225,16 +272,21 @@ export default function OmBuilder({ projectId, project, readiness }) {
     setComposing(true)
     const key = draftKey(pack)
     try {
-      const res = await composePack(projectId, pack.options, pack.overrides)
+      const res = await composePack(projectId, pack.options, pack.overrides, multi && bkey ? building : undefined)
       const draft = { ...res, key }, draft_at = new Date().toISOString()
       // Save only the draft — never overwrite settings or decisions made meanwhile
       setPack(p => ({ ...p, draft, draft_at }))
-      const { data: upd, error } = await supabase.from('om_packs').update({ draft, draft_at }).eq('project_id', projectId).select('id')
+      let uq = supabase.from('om_packs').update({ draft, draft_at }).eq('project_id', projectId)
+      if (perBuilding) uq = uq.eq('building', bkey || '')
+      const { data: upd, error } = await uq.select('id')
       if (!error && !(upd || []).length) {
         const cur = packRef.current || pack
-        await supabase.from('om_packs').upsert({ project_id: projectId, options: cur.options, overrides: cur.overrides, draft, draft_at }, { onConflict: 'project_id' })
+        const row = { project_id: projectId, options: cur.options, overrides: cur.overrides, draft, draft_at }
+        if (perBuilding) row.building = bkey || ''
+        await supabase.from('om_packs').upsert(row, { onConflict: perBuilding ? 'project_id,building' : 'project_id' })
       }
       if (error) setToast('Draft built but not saved: ' + error.message)
+      else if (!(upd || []).length) { const { data: chk } = await (perBuilding ? supabase.from('om_packs').select('id').eq('project_id', projectId).eq('building', bkey || '') : supabase.from('om_packs').select('id').eq('project_id', projectId)); if (!(chk || []).length) setToast('Draft built but not saved — try Rebuild') }
       if (open && res?.status === 'ok') setPreview({ tab: 'om' })
     } catch (e) { setToast('Could not build the draft: ' + e.message) }
     composingRef.current = false
@@ -255,7 +307,7 @@ export default function OmBuilder({ projectId, project, readiness }) {
     if (draftStale) { setToast('The draft is out of date — rebuild it before issuing'); return }
     setIssuing(true)
     try {
-      const out = await renderPack(projectId, pack.draft.packs, { approvedBy: profile?.full_name })
+      const out = await renderPack(projectId, pack.draft.packs, { approvedBy: profile?.full_name, building: multi && bkey ? building : undefined })
       setToast(`${out.issue_no} issued — saved to ${labels[out.folder_key] || 'Section 8'}`)
       setPreview(null)
       changed([out.folder_key])
@@ -271,20 +323,25 @@ export default function OmBuilder({ projectId, project, readiness }) {
   const b = o.building || {}
   const hrb = isHRB(b)
   const inbox = files.filter(f => f.folder_key === '_inbox')
-  const typed = files.filter(f => f.ai)
+  const typed = scoped.filter(f => f.ai)
   const groups = Object.entries(typed.reduce((acc, f) => { (acc[f.ai.doc_type] ||= []).push(f); return acc }, {}))
     .sort((a, b2) => Object.keys(DOC_TYPES).indexOf(a[0]) - Object.keys(DOC_TYPES).indexOf(b2[0]))
   const draftOk = pack.draft?.status === 'ok'
   const lastIssue = issues.find(i => i.kind === 'om')
   const packsOn = [o.type === 'building' ? 'Building O&M' : 'Package O&M', o.warranty && 'Warranty', o.tenant && 'Tenant O&M', o.golden_thread && 'Golden Thread'].filter(Boolean)
   const toggle = p => setPanel(cur => cur === p ? null : p)
+  const overview = multi && !bkey
 
   return (
     <div className="om">
+      {overview ? (
+        <BuildingsOverview buildings={buildings} files={files} allPacks={allPacks} allIssues={allIssues} project={project} staffNames={staffNames}
+          onPick={onPickBuilding} reading={reading} canDrop={canDrop} untagged={untagged} setFileBuilding={setFileBuilding} labels={labels} onAutoTag={autoTag} />
+      ) : (<>
       {/* ── Status card ─────────────────────────────────────────── */}
       <div className="om-head card">
         <div className="om-head-main">
-          <div className="om-title">H&S File & O&M</div>
+          <div className="om-title">H&S File & O&M{building ? <span className="om-title-b"> — {building.name}</span> : null}</div>
           <div className="om-sub">Everything for handover in one place. Drop documents or whole folders below — each is read and filed into the right folder, and the O&M manuals are kept up to date.</div>
           <div className="om-packs">{packsOn.map(p => <span key={p} className={`pill ${p === 'Golden Thread' ? 'pill-amber' : 'pill-gray'}`}>{p}</span>)}
             {canEdit && <button className="om-link" onClick={() => toggle('settings')}>{panel === 'settings' ? 'Close settings' : 'Change'}</button>}</div>
@@ -298,7 +355,7 @@ export default function OmBuilder({ projectId, project, readiness }) {
               : pack.draft?.status === 'insufficient' ? <span className="pill pill-amber">Needs more documents</span>
               : <span className="pill pill-gray">No draft yet</span>}
             {analysis.missing > 0 && <button className="pill pill-amber om-pillbtn" onClick={() => toggle('details')}>{analysis.missing} missing</button>}
-            {analysis.warnings.length > 0 && <button className="pill pill-gray om-pillbtn" onClick={() => toggle('details')}>{analysis.warnings.length} to check</button>}
+            {analysis.warnings.length > 0 && <button className="pill pill-gray om-pillbtn" onClick={() => toggle('details')}>{new Set(analysis.warnings.map(w => w.file.id)).size} documents to query</button>}
             {lastIssue && <span className="pill pill-gray">{lastIssue.issue_no} · {fmt(lastIssue.created_at)}</span>}
             {readiness && <span className={`pill ${readiness.outstanding ? 'pill-gray' : 'pill-green'}`} title={`${readiness.outstanding} expected documents not found yet`}>H&S file {readiness.pct}% · {readiness.signed}/{readiness.total} signed off</span>}
           </div>
@@ -370,6 +427,14 @@ export default function OmBuilder({ projectId, project, readiness }) {
         </section>
       )}
 
+      </>)}
+      {multi && !overview && untagged.length > 0 && (
+        <div className="om-untagged">
+          <span><b>{untagged.length} document{untagged.length === 1 ? '' : 's'}</b> not tagged to a building yet — {overview ? 'tag them below' : "they're included in every building's manual until tagged"}.</span>
+          {canDrop && <button className="btn btn-sm" onClick={autoTag}>Tag by name</button>}
+          {!overview && <button className="btn btn-sm" onClick={() => { setPanel('details'); setDetailsTab('docs') }}>Tag by hand</button>}
+        </div>
+      )}
       {/* ── Drop zone ───────────────────────────────────────────── */}
       {canDrop && (
         <div className={`om-drop big${dragOver ? ' over' : ''}`}
@@ -417,70 +482,10 @@ export default function OmBuilder({ projectId, project, readiness }) {
       )}
 
       {/* ── Details ─────────────────────────────────────────────── */}
-      {panel === 'details' && (
-        <div className="om-grid">
-          <div className="om-col">
-            <section className="card om-card">
-              <div className="om-card-h">Ready to build {analysis.missing === 0 ? <span className="pill pill-green">All found</span> : <span className="pill pill-amber">{analysis.missing} missing</span>}</div>
-              {analysis.readiness.map(g => (
-                <div key={g.group} className="om-ready">
-                  <div className="om-mini-h">{g.group}</div>
-                  {g.items.map(i => (
-                    <div key={i.key} className={`om-ri s-${i.status}`}>
-                      <span className="om-ri-i">{i.status === 'ok' ? '✓' : i.status === 'optional' ? '–' : '!'}</span>
-                      <span className="om-ri-l">{i.label}</span>
-                      <span className="om-ri-d">{i.detail}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              {Object.keys(pack.overrides || {}).length > 0 && (
-                <div className="om-ready">
-                  <div className="om-mini-h">Decided</div>
-                  {Object.entries(pack.overrides).map(([k, v]) => (
-                    <div key={k} className="om-ri s-ok"><span className="om-ri-i">✓</span><span className="om-ri-l">{k === 'owner_address' ? 'Owner address' : k === 'owner' ? 'Building owner' : k}</span><span className="om-ri-d">{v} {canEdit && <button className="om-link" onClick={() => setOverride(k, null)}>change</button>}</span></div>
-                  ))}
-                </div>
-              )}
-            </section>
-            {analysis.warnings.length > 0 && (
-              <section className="card om-card">
-                <div className="om-card-h">Worth checking <span className="pill pill-amber">{analysis.warnings.length}</span></div>
-                {analysis.warnings.map((w, i) => <div key={i} className="om-warn"><div>{w.msg}</div><span>{w.file.file_name}</span></div>)}
-              </section>
-            )}
-            <section className="card om-card">
-              <div className="om-card-h">Issued</div>
-              {issues.length === 0 && <div className="om-empty">Nothing issued yet.</div>}
-              {issues.map(i => (
-                <div key={i.id} className="om-issue"><b>{i.issue_no}</b><span>{fmt(i.created_at)}{i.pages ? ` · ${i.pages} pages` : ''}{i.approved_by ? ` · ${i.approved_by}` : ''}</span>
-                  <button className="om-link" onClick={() => download(i)}>Download</button><em>{i.file_name}</em></div>
-              ))}
-            </section>
-          </div>
-          <div className="om-col">
-            <section className="card om-card">
-              <div className="om-card-h">What Claude found <span className="om-count">{files.length} documents · {analysis.read} read</span></div>
-              <div className="om-docs">
-                {groups.length === 0 && !reading && <div className="om-empty">Nothing read yet.</div>}
-                {groups.map(([type, list]) => (
-                  <div key={type} className="om-dgroup">
-                    <div className="om-mini-h"><span className={`om-dot t-${DOC_TYPES[type]?.tone || 'gray'}`} />{DOC_TYPES[type]?.label || type} <span>{list.length}</span></div>
-                    {list.map(f => (
-                      <div key={f.id} className="om-doc">
-                        <div className="om-doc-main">
-                          <div className="om-doc-n">{f.ai.title || f.file_name}</div>
-                          <div className="om-doc-s">{[f.ai.issuer, f.ai.reference, f.ai.dates?.expiry && `to ${f.ai.dates.expiry}`].filter(Boolean).join(' · ')}</div>
-                        </div>
-                        <div className="om-doc-where">{f.ai.client_facing === false ? <span className="pill pill-gray">Internal</span> : <span title={labels[f.folder_key]}>{f._source === 'Documents' ? 'Documents tab' : (labels[f.folder_key] || f.folder_key)}</span>}</div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        </div>
+      {panel === 'details' && !overview && (
+        <DetailsPanel analysis={analysis} pack={pack} canEdit={canEdit} setOverride={setOverride} files={scoped} groups={groups}
+          labels={labels} issues={issues} download={download} projectId={projectId} reading={reading}
+          multi={multi} buildings={buildings} setFileBuilding={canDrop ? setFileBuilding : null} startTab={detailsTab} key={detailsTab || 'd'} />
       )}
 
       {pack.draft?.status === 'insufficient' && panel === 'details' && (
@@ -493,6 +498,211 @@ export default function OmBuilder({ projectId, project, readiness }) {
       )}
       {toast && <div className="om-toast">{toast}</div>}
     </div>
+  )
+}
+
+// Tag a Handover file to a building (or the whole site)
+function BuildingSelect({ f, buildings, onChange }) {
+  if (!onChange) {
+    const b = buildings.find(x => x.key === f.building)
+    return <span className="om-btag">{b ? b.name : f.building === 'site' ? 'Whole site' : 'Not tagged'}</span>
+  }
+  return (
+    <select className={`om-bsel${f.building ? '' : ' none'}`} value={f.building || ''} onChange={e => onChange(f, e.target.value)} title="Which building this document is for">
+      <option value="">Not tagged</option>
+      <option value="site">Whole site</option>
+      {buildings.map(b => <option key={b.key} value={b.key}>{b.name}</option>)}
+    </select>
+  )
+}
+
+// All buildings at a glance — each building's own manual, then anything untagged
+function BuildingsOverview({ buildings, files, allPacks, allIssues, project, staffNames, onPick, reading, canDrop, untagged, setFileBuilding, labels, onAutoTag }) {
+  const [showAll, setShowAll] = useState(false)
+  const site = files.filter(f => f._table === 'hs_files' && f.building === 'site').length
+  return (
+    <>
+      <div className="om-head card">
+        <div className="om-head-main">
+          <div className="om-title">H&S File & O&M — all buildings</div>
+          <div className="om-sub">Each building has its own O&M manual. Documents tagged to a building go into its manual; whole-site documents go into all of them. Drop documents below — Claude reads each one and says which building it's for.</div>
+        </div>
+        <div className="om-head-side"><div className="om-state">
+          {reading && <span className="pill pill-blue">{reading.label} {reading.done}/{reading.total}…</span>}
+          <span className="pill pill-gray">{site} whole-site document{site === 1 ? '' : 's'}</span>
+        </div></div>
+      </div>
+      <div className="om-bgrid">
+        {buildings.map(b => {
+          const pk = allPacks.find(p => p.building === b.key)
+          const o = pk?.options || DEFAULT_OPTIONS
+          const own = files.filter(f => f._table === 'hs_files' && f.building === b.key)
+          const scope = files.filter(f => inBuilding(f, b.key))
+          const a = analyse({ project, files: scope.filter(f => f.folder_key !== '_inbox' || f.ai), options: o, overrides: pk?.overrides || {}, staffNames })
+          const last = allIssues.find(i => i.building === b.key && i.kind === 'om')
+          const packs = [o.type === 'building' ? 'Building O&M' : 'Package O&M', o.tenant && 'Tenant O&M', o.golden_thread && 'Golden Thread'].filter(Boolean)
+          return (
+            <button key={b.key} type="button" className="card om-bcard" onClick={() => onPick?.(b.key)}>
+              <span className="om-bcard-n">{b.name}</span>
+              <span className="om-bcard-p">{pk ? packs.join(' · ') : 'Not set up yet'}</span>
+              <span className="om-bcard-s">
+                <span>{own.length} document{own.length === 1 ? '' : 's'}</span>
+                {a.missing > 0 ? <span className="om-bad">{a.missing} missing</span> : <span className="om-good">✓ ready</span>}
+                <span>{pk?.draft?.status === 'ok' ? 'Draft built' : 'No draft'}</span>
+                <span>{last ? `${last.issue_no} issued` : 'Not issued'}</span>
+              </span>
+              <span className="om-bcard-go">Open →</span>
+            </button>
+          )
+        })}
+      </div>
+      {untagged.length > 0 && (
+        <section className="card om-card">
+          <div className="om-card-h">Not tagged to a building <span className="pill pill-amber">{untagged.length}</span>
+            {canDrop && <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={onAutoTag}>Tag by name</button>}</div>
+          <div className="om-pane-note" style={{ marginBottom: 6 }}>Untagged documents go into every building's manual. Pick a building, or "Whole site" for things like site drainage and utilities.</div>
+          {(showAll ? untagged : untagged.slice(0, 12)).map(f => (
+            <div key={f.id} className="om-doc">
+              <div className="om-doc-main"><div className="om-doc-n">{f.ai?.title || f.file_name}</div><div className="om-doc-s">{labels[f.folder_key] || f.folder_key}</div></div>
+              <BuildingSelect f={f} buildings={buildings} onChange={canDrop ? setFileBuilding : null} />
+            </div>
+          ))}
+          {untagged.length > 12 && <button className="om-more" onClick={() => setShowAll(v => !v)}>{showAll ? 'Show fewer' : `Show all ${untagged.length}`}</button>}
+        </section>
+      )}
+    </>
+  )
+}
+
+// ── Details: four tabs instead of one long page ─────────────────────────────
+// To do · Queries (grouped, hideable) · Documents (collapsed by type) · Issued
+const QUERY_GROUPS = [
+  ['dates',   'Dates to check',            /\b(future|date|dated|year|expir|out of date|older|newer)\b/i],
+  ['generic', 'Generic, not job-specific', /\b(generic|template|terms and conditions|marketing|brochure|copy\b|copyright|standard trading|not project[- ]specific)\b/i],
+  ['missing', 'Missing on the document',   /\b(no |not (specified|identified|shown|provided|stated|included|filled)|missing|blank|without|n\/a)\b/i],
+  ['other',   'Other queries',             /[\s\S]*/],
+]
+function DetailsPanel({ analysis, pack, canEdit, setOverride, files, groups, labels, issues, download, projectId, reading, multi, buildings, setFileBuilding, startTab }) {
+  const [tab, setTab] = useState(startTab || 'todo')
+  const [showOk, setShowOk] = useState(false)
+  const [openDoc, setOpenDoc] = useState(null)
+  const [openType, setOpenType] = useState(null)
+  const hideKey = `om:hidden:${projectId}`
+  const [hidden, setHidden] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem(hideKey) || '[]')) } catch { return new Set() } })
+  const hide = id => setHidden(h => { const n = new Set(h); n.add(id); try { localStorage.setItem(hideKey, JSON.stringify([...n])) } catch { /* ignore */ } return n })
+  const unhideAll = () => { setHidden(new Set()); try { localStorage.removeItem(hideKey) } catch { /* ignore */ } }
+
+  const items = analysis.readiness.flatMap(g => g.items.map(it => ({ ...it, group: g.group })))
+  const todo = items.filter(i => i.status === 'missing')
+  const done = items.filter(i => i.status !== 'missing')
+  // Queries: one row per document, grouped by kind of query
+  const byDoc = new Map()
+  analysis.warnings.forEach(w => { if (!hidden.has(w.file.id)) { const e = byDoc.get(w.file.id) || { file: w.file, msgs: [] }; e.msgs.push(w.msg); byDoc.set(w.file.id, e) } })
+  const qGroups = QUERY_GROUPS.map(([key, label]) => ({ key, label, docs: [] }))
+  for (const d of byDoc.values()) {
+    const kinds = d.msgs.map(m => (QUERY_GROUPS.find(([, , re]) => re.test(String(m || ''))) || QUERY_GROUPS[3])[0])
+    const main = ['generic', 'dates', 'missing', 'other'].find(k => kinds.includes(k))
+    qGroups.find(g => g.key === main).docs.push(d)
+  }
+  const qCount = byDoc.size
+  const decided = Object.entries(pack.overrides || {})
+  const nameOf = k => ({ owner_address: 'Owner address', owner: 'Building owner', practical_completion: 'Practical completion' })[k] || k
+  const TABS = [['todo', 'To do', todo.length], ['queries', 'Queries', qCount], ['docs', 'Documents', analysis.read], ['issued', 'Issued', issues.length]]
+
+  return (
+    <section className="card om-card om-details">
+      <div className="om-tabs" role="tablist">
+        {TABS.map(([k, l, n]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}{n ? <span>{n}</span> : null}</button>)}
+      </div>
+
+      {tab === 'todo' && (
+        <div className="om-pane">
+          {todo.length === 0 ? <div className="om-allgood">✓ Everything needed for the manual has been found.</div> : todo.map(i => (
+            <div key={i.group + i.key} className="om-todo">
+              <span className="om-todo-i">!</span>
+              <div className="om-todo-b">
+                <b>{i.label}</b> <small>{i.group}</small>
+                <div className="om-todo-d">{i.detail}</div>
+                {i.action === 'completion' && canEdit && (
+                  <label className="om-ri-date">Practical completion (applies to all systems):
+                    <input type="date" value={toIso(pack.overrides?.practical_completion)} onChange={e => setOverride('practical_completion', e.target.value ? fromIso(e.target.value) : null)} />
+                  </label>
+                )}
+              </div>
+            </div>
+          ))}
+          {decided.length > 0 && (
+            <div className="om-decided">
+              {decided.map(([k, v]) => <span key={k} className="om-chip-ok">✓ {nameOf(k)}: <b>{v}</b>{canEdit && <button className="om-link" onClick={() => setOverride(k, null)}>change</button>}</span>)}
+            </div>
+          )}
+          <button type="button" className="om-more" onClick={() => setShowOk(v => !v)}>{showOk ? 'Hide' : 'Show'} the {done.length} item{done.length === 1 ? '' : 's'} already found</button>
+          {showOk && done.map(i => (
+            <div key={i.group + i.key} className="om-okrow"><span>✓</span><b>{i.label}</b><em>{i.detail}</em></div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'queries' && (
+        <div className="om-pane">
+          <div className="om-pane-note">Points Claude noticed while reading — for you to check with the issuer. They don't stop you issuing.{hidden.size > 0 && <> · <button className="om-link" onClick={unhideAll}>show {hidden.size} hidden</button></>}</div>
+          {qCount === 0 && <div className="om-allgood">✓ Nothing to query.</div>}
+          {qGroups.filter(g => g.docs.length).map(g => (
+            <div key={g.key} className="om-qgroup">
+              <div className="om-qgroup-h">{g.label} <span>{g.docs.length}</span></div>
+              {g.docs.map(d => (
+                <div key={d.file.id} className={`om-qdoc${openDoc === d.file.id ? ' open' : ''}`}>
+                  <button type="button" className="om-qdoc-h" onClick={() => setOpenDoc(openDoc === d.file.id ? null : d.file.id)}>
+                    <span className="om-qdoc-n">{d.file.ai?.title || d.file.file_name}</span>
+                    <span className="om-qdoc-c">{d.msgs.length} point{d.msgs.length === 1 ? '' : 's'}</span>
+                  </button>
+                  {openDoc === d.file.id && (
+                    <div className="om-qdoc-b">
+                      <ul>{d.msgs.map((m, i) => <li key={i}>{m}</li>)}</ul>
+                      <div className="om-qdoc-f"><span>{d.file.file_name}</span><button className="om-link" onClick={() => hide(d.file.id)}>Hide — checked</button></div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'docs' && (
+        <div className="om-pane">
+          <div className="om-pane-note">{files.length} documents {multi ? 'for this building (its own, whole-site and untagged)' : 'on the job'} · {analysis.read} read by Claude{reading ? ' · reading…' : ''}</div>
+          {groups.length === 0 && <div className="om-empty">Nothing read yet.</div>}
+          {groups.sort((a, b) => b[1].length - a[1].length).map(([type, list]) => (
+            <div key={type} className={`om-tgroup${openType === type ? ' open' : ''}`}>
+              <button type="button" className="om-tgroup-h" onClick={() => setOpenType(openType === type ? null : type)}>
+                <span className={`om-dot t-${DOC_TYPES[type]?.tone || 'gray'}`} />{DOC_TYPES[type]?.label || type}<span className="om-tgroup-n">{list.length}</span><span className="om-tgroup-x">{openType === type ? '▴' : '▾'}</span>
+              </button>
+              {openType === type && list.map(f => (
+                <div key={f.id} className="om-doc">
+                  <div className="om-doc-main">
+                    <div className="om-doc-n">{f.ai.title || f.file_name}</div>
+                    <div className="om-doc-s">{[f.ai.issuer, f.ai.reference, f.ai.dates?.expiry && `to ${f.ai.dates.expiry}`].filter(Boolean).join(' · ')}</div>
+                  </div>
+                  <div className="om-doc-where">{f.ai.client_facing === false ? <span className="pill pill-gray">Internal</span> : <span title={labels[f.folder_key]}>{f._source === 'Documents' ? 'Documents tab' : (labels[f.folder_key] || f.folder_key)}</span>}</div>
+                  {multi && f._table === 'hs_files' && <BuildingSelect f={f} buildings={buildings} onChange={setFileBuilding} />}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'issued' && (
+        <div className="om-pane">
+          {issues.length === 0 && <div className="om-empty">Nothing issued yet.</div>}
+          {issues.map(i => (
+            <div key={i.id} className="om-issue"><b>{i.issue_no}</b><span>{fmt(i.created_at)}{i.pages ? ` · ${i.pages} pages` : ''}{i.approved_by ? ` · ${i.approved_by}` : ''}</span>
+              <button className="om-link" onClick={() => download(i)}>Download</button><em>{i.file_name}</em></div>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
 

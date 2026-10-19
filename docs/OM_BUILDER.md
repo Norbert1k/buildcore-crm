@@ -31,7 +31,8 @@ Nothing is deleted or overwritten. Issued manuals are never used as source mater
 ## Go-live checklist
 1. Supabase → SQL Editor: run `supabase-sql/034_om_builder.sql` (additive only).
 2. Supabase → Edge Functions → new function `handover-ai`: paste `supabase/functions/handover-ai/index.ts`
-   (single file). Uses the existing `ANTHROPIC_API_KEY` secret. Keep "Verify JWT" on.
+   (single file). Uses the existing `ANTHROPIC_API_KEY` secret. "Verify JWT" OFF (the function checks
+   the signed-in user itself; the legacy-secret check can reject valid logins).
 3. Supabase → Storage → `hs-handover` bucket: upload size limit at least 50 MB (issued manuals with
    manufacturer documents bound in can be 15–40 MB).
 4. Vercel → Project → Settings → Environment Variables (Production + Preview):
@@ -39,9 +40,19 @@ Nothing is deleted or overwritten. Issued manuals are never used as source mater
    (Supabase → Project Settings → API → service_role). Never prefix this one with VITE_.
 5. Push the code on a new branch; Vercel builds a Preview link. Test there, then merge to main.
 
+## Multi-building jobs (e.g. Merton)
+- Needs `supabase-sql/038_handover_buildings.sql`. Buildings come from the job's numbered folders
+  ("01. CCG PB - Residential", "01. CSA - Residential Building", …) — the same ones the CFF/CSA use.
+- Handover shows a building bar: All buildings (overview + untagged documents) and one tab per building.
+  Each building has its own O&M settings, readiness, draft and issue numbers ("Merton — Sports Hall — O&M
+  Manual — Issue 01"). Documents are tagged per building (Claude suggests it while reading; "Tag by name";
+  or by hand in Details › Documents). Untagged and "Whole site" documents go into every building's manual.
+- Push the code before running 038 (old code saves settings with the old one-per-job rule).
+
 ## After go-live
-- Drawings tab shows the Design portal register once the portal's `design-link` function gets `list` and
-  `file_url` actions; until then it shows the old Drawings & Surveys view automatically.
+- Drawings tab shows the Design portal register through `design-link` (CRM) → `crm-drawings` (Design
+  project, read-only, Verify JWT off, shared secret `CRM_DRAWINGS_SECRET` = CRM's `DESIGN_DRAWINGS_SECRET`).
+  Jobs not in Design keep the old Drawings & Surveys view automatically.
 - Site-manager limits are enforced in the app. To enforce them in the database too, add RLS on projects /
   subcontractors / project_subcontractors based on `user_project_access` (test carefully — it can lock people out).
 - Issue numbers start at Issue 01 for each job in the CRM; a job already issued outside the CRM

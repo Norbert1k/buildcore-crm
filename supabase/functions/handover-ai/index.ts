@@ -85,7 +85,8 @@ Read the document and return ONLY JSON:
  "flags": [ "anything a careful document controller would query — inconsistencies, missing dates, out-of-date versions, references that don't match" ],
  "suggested_folder": "one key from the folder list",
  "client_facing": true|false,   // false for invoices, quotations, internal correspondence
- "confidence": "high|medium|low"
+ "confidence": "high|medium|low",
+ "building": "only when a BUILDINGS list is given: the key of the building this document is for, \"site\" if it covers the whole site (site drainage, utilities, external works, the H&S file), or null if unclear"
 }
 Filing rules for suggested_folder (use the closest folder in the list):
  - Drawings: file by what the drawing shows — fire strategy drawings → Fire Strategy; floor plans / GA plans → Floor Plans;
@@ -125,11 +126,18 @@ async function read(sb: any, body: any) {
         content.push({ type: "image", source: { type: "base64", media_type: mt, data: b64(bytes) } })
       } else note = "The image is too large to view — judge from the file name and path only; set confidence low."
     }
-    content.push({ type: "text", text: `File name: ${name}\nPath hint: ${body.hint || "—"}\n${note}\n\nHandover folders (pick suggested_folder from these keys):\n${folders}\n\nReturn the JSON only.` })
+    const blds: { key: string; name: string }[] = Array.isArray(body.buildings) ? body.buildings.filter((b: any) => b?.key && b?.name).slice(0, 20) : []
+    const bText = blds.length ? `\n\nBUILDINGS on this job (set "building" to one key, "site" or null):\n${blds.map(b => `${b.key} = ${b.name}`).join("\n")}` : ""
+    content.push({ type: "text", text: `File name: ${name}\nPath hint: ${body.hint || "—"}\n${note}\n\nHandover folders (pick suggested_folder from these keys):\n${folders}${bText}\n\nReturn the JSON only.` })
     const ai = await claude(READ_SYSTEM, content, 3000)
     ai.read_at = new Date().toISOString()
     ai.model = MODEL
+    if (!blds.length || !(ai.building === "site" || blds.some(b => b.key === ai.building))) delete ai.building
     await sb.from(table).update({ ai }).eq("id", row.id)
+    // Tag the file to its building — only if nobody has tagged it already
+    if (ai.building && table === "hs_files") {
+      try { await sb.from("hs_files").update({ building: ai.building }).eq("id", row.id).is("building", null) } catch { /* 038 not run yet */ }
+    }
     return json({ ai })
   } catch (e) {
     // Busy / rate-limited: leave it unread so it's tried again next time
@@ -191,12 +199,16 @@ const refSection = (id: string) => [EXs().scotsbridge, EXs().resi, EXs().tenant]
 
 async function compose(sb: any, body: any) {
   const pid = body.project_id
-  const [{ data: project }, { data: hs }, { data: docs }, { data: team }] = await Promise.all([
+  // One building of a multi-building job: { key: 'b2', name: 'Sports Hall' }
+  const bld = body.building?.key && body.building?.name ? { key: String(body.building.key), name: String(body.building.name) } : null
+  const [{ data: project }, { data: hsAll }, { data: docs }, { data: team }] = await Promise.all([
     sb.from("projects").select("*").eq("id", pid).single(),
-    sb.from("hs_files").select("id, file_name, folder_key, ai, origin").eq("project_id", pid),
+    sb.from("hs_files").select(bld ? "id, file_name, folder_key, ai, origin, building" : "id, file_name, folder_key, ai, origin").eq("project_id", pid),
     sb.from("project_doc_files").select("id, file_name, ai").eq("project_id", pid),
     sb.from("project_team_members").select("name, role, email, phone").eq("project_id", pid),
   ])
+  // For one building: its own documents plus whole-site and untagged ones
+  const hs = bld ? (hsAll || []).filter((f: any) => !f.building || f.building === "site" || f.building === bld.key) : hsAll
   // Compact readings — only what the writing needs
   const slim = (r: any) => ({ table: r.table, id: r.id, file: r.file, doc_type: r.doc_type, title: r.title, issuer: r.issuer, reference: r.reference,
     system: r.system, dates: r.dates, parties: r.parties, contacts: (r.contacts || []).slice(0, 6), products: (r.products || []).slice(0, 25),
@@ -210,8 +222,9 @@ async function compose(sb: any, body: any) {
   if (useful.length < 3) return json({ status: "insufficient", missing: ["manufacturer guarantees or O&M manuals", "drawings", "certificates or data sheets"] })
 
   const o = body.options || {}
-  const ref = String(project?.project_ref || "").replace(/[^\w]/g, "")
+  const ref = String(project?.project_ref || "").replace(/[^\w]/g, "") + (bld ? "-" + bld.key.toUpperCase() : "")
   const context = [
+    ...(bld ? [{ type: "text", text: `THIS MANUAL COVERS ONE BUILDING of a multi-building job: "${bld.name}". Use job.name "${project?.project_name} — ${bld.name}", put "${bld.name}" in the titles and running title, and describe only this building (whole-site items such as drainage and utilities may be included where they serve it).` }] : []),
     { type: "text", text: `PROJECT:\n${JSON.stringify({ name: project?.project_name, ref: project?.project_ref, address: [project?.site_address || project?.address, project?.town, project?.postcode].filter(Boolean).join(", "), client: project?.client_name, description: project?.description, start: project?.start_date, end: project?.end_date, team })}` },
     { type: "text", text: `OPTIONS:\n${JSON.stringify(o)}\n\nDECISIONS:\n${JSON.stringify(body.overrides || {})}` },
     { type: "text", text: `READINGS (${readings.length}):\n${JSON.stringify(readings)}` },
@@ -250,7 +263,7 @@ each { letter, title, source, note, file: { table, id } } using ids from the rea
     packs.tenant = { ...t, css_extra: "tenant.css", doc: { ...(t.doc || {}), layout: "a5" }, sections: tenantSections, appendices: [] }
   }
   for (const p of Object.values(packs) as any[]) if (!p.job || !p.doc || !p.sections.length) throw new Error("Compose returned an incomplete pack")
-  return json({ status: "ok", packs, composed_at: new Date().toISOString(), model: MODEL })
+  return json({ status: "ok", packs, building: bld, composed_at: new Date().toISOString(), model: MODEL })
 }
 
 const STAFF = ["admin", "project_manager", "operations_manager", "project_director", "director_viewer", "accountant", "site_manager", "document_controller", "viewer"]

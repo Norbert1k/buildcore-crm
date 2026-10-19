@@ -265,7 +265,7 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
               <div><span>Issued</span>{fmtDate(preview.file.issued_at)}</div>
               <div className="dr-preview-actions">
                 {preview.blobUrl && <button type="button" className="btn btn-sm btn-primary" onClick={() => setFull(true)}>⤢ Full screen</button>}
-                {preview.url && <a className="btn btn-sm" href={preview.url} download={preview.file.file_name}>Download</a>}
+                {preview.url && <a className="btn btn-sm" href={preview.url} download={preview.file.file_name} target="_blank" rel="noopener noreferrer">Download</a>}
               </div>
               {(() => {
                 const key = preview.file.number
@@ -285,7 +285,7 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
             <b>{preview.file.number || preview.file.file_name}{preview.file.rev ? ` · Rev ${preview.file.rev}` : ''}</b>
             <span className="dr-muted">{preview.file.title}</span>
             <span style={{ flex: 1 }} />
-            {preview.url && <a className="btn btn-sm" href={preview.url} download={preview.file.file_name}>Download</a>}
+            {preview.url && <a className="btn btn-sm" href={preview.url} download={preview.file.file_name} target="_blank" rel="noopener noreferrer">Download</a>}
             <button type="button" className="btn btn-sm" onClick={() => setFull(false)} autoFocus>✕ Close</button>
           </div>
           <div className="dr-full-body"><Viewer preview={preview} big /></div>

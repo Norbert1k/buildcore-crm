@@ -39,7 +39,13 @@ const REQUIREMENTS = {
     { key: 'data',     label: 'Product data sheets',         need: ['product_data'], min: 1 },
     { key: 'sds',      label: 'Safety data sheets (COSHH)',  need: ['sds'], min: 1 },
     { key: 'maint',    label: 'Maintenance requirements',    test: f => f.maintenance.length > 0, detail: f => `${f.maintenance.length} tasks found in the manufacturers' documents` },
-    { key: 'compl',    label: 'Completion date for every system', test: f => f.systems.every(s => s.completion), detail: f => f.systems.filter(s => !s.completion).map(s => `No completion date: ${s.name}`).join(' · ') || `${f.systems.length} systems dated` },
+    { key: 'compl',    label: 'Completion date (starts the guarantees)', test: f => !!f.completion || f.guaranteed.every(s => s.completion),
+      detail: f => {
+        if (f.completion) return `Practical completion ${f.completion}${f.guaranteed.some(s => s.completion) ? ' · own dates used where a guarantee states one' : ''}`
+        const no = f.guaranteed.filter(s => !s.completion)
+        if (!no.length) return `${f.guaranteed.length} guaranteed system${f.guaranteed.length === 1 ? '' : 's'} dated`
+        return `${no.length} guaranteed system${no.length === 1 ? '' : 's'} with no date (${no.slice(0, 3).map(s => s.name).join(', ')}${no.length > 3 ? ` +${no.length - 3} more` : ''}) — set the practical completion date`
+      }, action: 'completion' },
   ],
   building: [
     { key: 'project',  label: 'Project, client and contacts', test: f => !!(f.project?.address || f.project?.site_address) },
@@ -95,7 +101,7 @@ function splitAddresses(owners, project) {
   return { units, office }
 }
 
-export function analyse({ project, files, options, staffNames = [] }) {
+export function analyse({ project, files, options, overrides = {}, staffNames = [] }) {
   const read = files.filter(f => f.ai)
   const byType = {}
   read.forEach(f => { (byType[f.ai.doc_type] ||= []).push(f) })
@@ -110,7 +116,22 @@ export function analyse({ project, files, options, staffNames = [] }) {
     if (f.ai.dates?.completion && !cur.completion) cur.completion = f.ai.dates.completion
     sysMap.set(k, cur)
   })
-  const systems = [...sysMap.values()]
+  // Same product line read from several documents ("Garland — flat roofs",
+  // "Garland Stressply Evolution — flat roofs and balconies") is one system:
+  // merge by the name before the dash, minus generic trade words.
+  const GENERIC = /\b(drainage|plumbing|roofing|electrical|surface|water|foul|system|systems|the)\b/g
+  const brandKey = n => String(n || '').split(/\s[—–-]\s/)[0].toLowerCase().replace(GENERIC, ' ').replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/)[0] || ''
+  const merged = new Map()
+  for (const sys of sysMap.values()) {
+    const k = brandKey(sys.name) || norm(sys.name)
+    const cur = merged.get(k)
+    if (!cur) merged.set(k, { ...sys, sources: [...sys.sources] })
+    else { cur.sources.push(...sys.sources); if (!cur.completion && sys.completion) cur.completion = sys.completion; if (sys.name.length < cur.name.length) cur.name = sys.name }
+  }
+  const systems = [...merged.values()]
+  // Only systems backed by a guarantee or warranty need a start (completion) date
+  const guaranteed = systems.filter(s => s.sources.some(f => ['guarantee', 'warranty'].includes(f.ai.doc_type)))
+  const completion = overrides?.practical_completion || null
 
   // Parties stated in the documents
   const owners = []
@@ -144,14 +165,14 @@ export function analyse({ project, files, options, staffNames = [] }) {
 
   // Warnings — things Claude flagged while reading, plus age checks
   const warnings = []
-  read.forEach(f => (f.ai.flags || []).forEach(msg => warnings.push({ msg, file: f })))
+  read.forEach(f => (f.ai.flags || []).forEach(msg => { if (String(msg || '').trim()) warnings.push({ msg: String(msg).trim(), file: f }) }))
   ;(byType.sds || []).forEach(f => {
     const y = Number(String(f.ai.dates?.revision || f.ai.dates?.issued || '').slice(-4))
     if (y && new Date().getFullYear() - y > 5) warnings.push({ msg: `Safety data sheet revised ${y} — ask the supplier for the current version`, file: f })
   })
 
   const maintenance = read.flatMap(f => (f.ai.maintenance || []).map(m => ({ ...m, file: f })))
-  const facts = { project, options, systems, owners, maintenance, byType }
+  const facts = { project, options, systems, guaranteed, completion, owners, maintenance, byType }
 
   const kind = options?.type === 'building' ? 'building' : 'package'
   const lists = [['O&M manual', REQUIREMENTS[kind]]]
@@ -162,7 +183,7 @@ export function analyse({ project, files, options, staffNames = [] }) {
     items: reqs.map(r => {
       if (r.test) {
         const ok = r.test(facts)
-        return { key: r.key, label: r.label, status: ok ? 'ok' : 'missing', detail: r.detail ? r.detail(facts) : (ok ? 'Found' : 'Not found yet') }
+        return { key: r.key, label: r.label, status: ok ? 'ok' : 'missing', detail: r.detail ? r.detail(facts) : (ok ? 'Found' : 'Not found yet'), action: r.action }
       }
       const found = r.need.flatMap(t => byType[t] || [])
       const status = found.length >= Math.max(1, r.min) ? 'ok' : r.min === 0 ? 'optional' : 'missing'

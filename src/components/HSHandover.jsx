@@ -22,15 +22,27 @@ const deepCount = (counts, key) => Object.entries(counts || {}).reduce((sum, [k,
 // dozens of files); a failed read never blocks the upload.
 const readQueue = []
 let reading = false
+// Multi-building jobs: the job's buildings (so Claude can say which one a
+// document belongs to) and the building being viewed (new uploads are tagged
+// to it straight away). Set by HandoverFile.
+let readBuildings = []
+let uploadBuilding = null
+export function setHandoverBuildings(list, current) { readBuildings = list || []; uploadBuilding = current || null }
 function readInBackground(row) {
-  if (!row?.id || !/\.(pdf|png|jpe?g)$/i.test(row.file_name || '')) return
-  readQueue.push(row)
+  if (!row?.id) return
+  const tagged = uploadBuilding ? { ...row, _building: uploadBuilding } : row
+  if (!/\.(pdf|png|jpe?g)$/i.test(row.file_name || '')) {
+    if (tagged._building) supabase.from('hs_files').update({ building: tagged._building }).eq('id', row.id).then(() => {}, () => {})
+    return
+  }
+  readQueue.push(tagged)
   if (reading) return
   reading = true
   ;(async () => {
     while (readQueue.length) {
       const next = readQueue.shift()
-      try { await readDocument(next, 'hs_files') } catch {}
+      if (next._building) { try { await supabase.from('hs_files').update({ building: next._building }).eq('id', next.id) } catch { /* 038 not run */ } }
+      try { await readDocument(next, 'hs_files', undefined, readBuildings) } catch {}
       window.dispatchEvent(new CustomEvent('hs-files-read'))
     }
     reading = false
