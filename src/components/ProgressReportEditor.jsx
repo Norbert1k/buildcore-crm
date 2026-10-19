@@ -457,7 +457,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             📋 {report.report_number} — {projectName}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
             {report.id ? 'Editing existing report' : 'New report (not yet saved)'}
           </div>
         </div>
@@ -477,7 +477,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         {tabs.map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id)}
             style={{
-              padding: '10px 14px', fontSize: 12, fontWeight: 500, fontFamily: 'inherit',
+              padding: '10px 14px', fontSize: 13, fontWeight: 500, fontFamily: 'inherit',
               border: 'none', borderBottom: '2px solid ' + (activeTab === t.id ? 'var(--accent)' : 'transparent'),
               background: 'transparent', cursor: 'pointer',
               color: activeTab === t.id ? 'var(--text)' : 'var(--text3)',
@@ -603,28 +603,28 @@ function ProgrammeTab({ report, patch }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ fontSize: 12, color: 'var(--text2)', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
+      <div style={{ fontSize: 13, color: 'var(--text2)', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
         Track % completion across trade categories. Add or remove groups and line items as needed for this project.
       </div>
       {groups.map((g, gIdx) => (
         <div key={gIdx} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <input value={g.name} onChange={e => setGroup(gIdx, { ...g, name: e.target.value })}
-              style={{ flex: 1, fontSize: 13, fontWeight: 600, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+              style={{ flex: 1, fontSize: 14, fontWeight: 600, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
             <button className="btn btn-sm btn-danger" onClick={() => removeGroup(gIdx)} title="Remove group"><IconTrash size={11} /></button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {g.items.map((it, iIdx) => (
               <div key={iIdx} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 30px', gap: 8, alignItems: 'center' }}>
                 <input value={it.label} onChange={e => updateItem(gIdx, iIdx, { label: e.target.value })}
-                  style={{ fontSize: 12, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)' }} />
+                  style={{ fontSize: 13, padding: '4px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)' }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   <input type="number" min="0" max="100" value={it.percent} onChange={e => updateItem(gIdx, iIdx, { percent: Math.max(0, Math.min(100, parseInt(e.target.value, 10) || 0)) })}
-                    style={{ width: 60, fontSize: 12, padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)' }} />
-                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>%</span>
+                    style={{ width: 60, fontSize: 13, padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)' }} />
+                  <span style={{ fontSize: 12, color: 'var(--text3)' }}>%</span>
                 </div>
                 <button onClick={() => removeItem(gIdx, iIdx)}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 13 }} title="Remove">✕</button>
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14 }} title="Remove">✕</button>
               </div>
             ))}
             <button className="btn btn-sm" onClick={() => addItem(gIdx)} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
@@ -646,11 +646,11 @@ function StatementTab({ report, patch }) {
       <Section title="1.4 Project Manager's Statement">
         <textarea value={report.pm_statement || ''} onChange={e => patch('pm_statement', e.target.value)}
           placeholder="Works progressing across structure, envelope and initial MEP installations..."
-          style={{ minHeight: 280, fontSize: 12, lineHeight: 1.6 }} />
+          style={{ minHeight: 280, fontSize: 13, lineHeight: 1.6 }} />
       </Section>
       <Section title="2. Health & Safety Matters">
         <textarea value={report.hs_text || ''} onChange={e => patch('hs_text', e.target.value)}
-          style={{ minHeight: 80, fontSize: 12 }} />
+          style={{ minHeight: 80, fontSize: 13 }} />
       </Section>
     </div>
   )
@@ -797,7 +797,7 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
 
   return (
     <div>
-      <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--text2)' }}>
+      <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)' }}>
         Upload progress photos (any quantity). They'll auto-flow into pages on the PDF export.
         {!reportSaved && <div style={{ marginTop: 4, color: '#b87a00' }}>⚠ Save the report first before uploading photos.</div>}
       </div>
@@ -811,7 +811,7 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
       </div>
 
       {photos.length === 0 ? (
-        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 40, fontSize: 12 }}>
+        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 40, fontSize: 13 }}>
           No photos yet.
         </div>
       ) : (
@@ -821,10 +821,10 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
               {previewMap[p.id] ? (
                 <img src={previewMap[p.id]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={p.file_name} />
               ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 11 }}>Loading…</div>
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 12 }}>Loading…</div>
               )}
               <button onClick={() => onDelete(p.id)}
-                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(204,0,0,0.85)', color: 'white', border: 'none', borderRadius: 3, padding: '2px 6px', cursor: 'pointer', fontSize: 10, fontWeight: 700 }}>✕</button>
+                style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(204,0,0,0.85)', color: 'white', border: 'none', borderRadius: 3, padding: '2px 6px', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>✕</button>
             </div>
           ))}
         </div>
@@ -837,7 +837,7 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
 function Section({ title, children }) {
   return (
     <div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{title}</div>
       <div>{children}</div>
     </div>
   )
@@ -850,10 +850,10 @@ function Grid2({ children }) {
 function Table({ headers, children }) {
   return (
     <div style={{ overflow: 'auto', border: '0.5px solid var(--border)', borderRadius: 4, marginBottom: 8 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ background: 'var(--surface2)' }}>
-            {headers.map((h, i) => <th key={i} style={{ padding: '6px 8px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--text3)', borderBottom: '0.5px solid var(--border)' }}>{h}</th>)}
+            {headers.map((h, i) => <th key={i} style={{ padding: '6px 8px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text3)', borderBottom: '0.5px solid var(--border)' }}>{h}</th>)}
           </tr>
         </thead>
         <tbody>{children}</tbody>
@@ -863,8 +863,8 @@ function Table({ headers, children }) {
 }
 
 const S = {
-  cell: { width: '100%', padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 3, background: 'var(--surface)', color: 'var(--text)', fontSize: 11, fontFamily: 'inherit' },
-  removeBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 13, padding: 4 },
+  cell: { width: '100%', padding: '4px 6px', border: '0.5px solid var(--border)', borderRadius: 3, background: 'var(--surface)', color: 'var(--text)', fontSize: 12, fontFamily: 'inherit' },
+  removeBtn: { background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text3)', fontSize: 14, padding: 4 },
 }
 
 // ─── Standalone PDF export (callable from outside the editor) ───

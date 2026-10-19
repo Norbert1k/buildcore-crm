@@ -301,7 +301,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
     }
   }
 
-  if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13 }}>Loading procurement…</div>
+  if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 14 }}>Loading procurement…</div>
   if (!doc) return null
 
   // Progress: count materials+labour ticks done vs total.
@@ -311,7 +311,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
 
   return (
     <div style={{ padding: '4px 0 24px' }}>
-      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
       {/* Merton building sub-tabs */}
       {merton && (
@@ -319,7 +319,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
           {MERTON_BUILDINGS.map(b => (
             <div key={b.key} onClick={() => setActiveBuilding(b.key)}
               style={{
-                padding: '7px 14px', fontSize: 13, cursor: 'pointer',
+                padding: '7px 14px', fontSize: 14, cursor: 'pointer',
                 fontWeight: activeBuilding === b.key ? 600 : 400,
                 color: activeBuilding === b.key ? 'var(--text)' : 'var(--text3)',
                 borderBottom: activeBuilding === b.key ? '2px solid #185FA5' : '2px solid transparent',
@@ -337,13 +337,13 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
             <div style={{ flex: 1, height: 10, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', minWidth: pct > 0 ? 4 : 0, background: pct === 100 ? 'var(--green, #5cb85c)' : '#185FA5', transition: 'width .2s' }} />
             </div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: pct > 0 ? 'var(--text)' : 'var(--text2)', whiteSpace: 'nowrap' }}>{pct}%</span>
-            <span style={{ fontSize: 11, color: 'var(--text3)', whiteSpace: 'nowrap' }}>{done}/{total} procured</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: pct > 0 ? 'var(--text)' : 'var(--text2)', whiteSpace: 'nowrap' }}>{pct}%</span>
+            <span style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap' }}>{done}/{total} procured</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          {saveState === 'saving' && <span style={{ fontSize: 11, color: 'var(--text3)' }}>Saving…</span>}
-          {saveState === 'saved' && <span style={{ fontSize: 11, color: 'var(--green)' }}>Saved</span>}
+          {saveState === 'saving' && <span style={{ fontSize: 12, color: 'var(--text3)' }}>Saving…</span>}
+          {saveState === 'saved' && <span style={{ fontSize: 12, color: 'var(--green)' }}>Saved</span>}
           <button className="btn btn-sm" onClick={exportExcel}>Export Excel</button>
           <button className="btn btn-sm" onClick={exportPDF}>Export PDF</button>
           <button className="btn btn-sm" onClick={addStage}>+ Stage</button>
@@ -363,12 +363,12 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
               {/* Stage header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: 'var(--surface2)' }}>
                 <button onClick={() => setCollapsed(c => ({ ...c, [stage.id]: !isC }))}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', fontSize: 13, padding: 0, width: 16 }}>
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', fontSize: 14, padding: 0, width: 16 }}>
                   {isC ? '▸' : '▾'}
                 </button>
                 <input value={stage.name} onChange={e => renameStage(si, e.target.value)}
-                  style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, background: 'none', border: 'none', padding: '2px 4px' }} />
-                <span style={{ fontSize: 11, color: sd === st && st > 0 ? 'var(--green)' : 'var(--text3)', whiteSpace: 'nowrap' }}>{sd}/{st}</span>
+                  style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, background: 'none', border: 'none', padding: '2px 4px' }} />
+                <span style={{ fontSize: 12, color: sd === st && st > 0 ? 'var(--green)' : 'var(--text3)', whiteSpace: 'nowrap' }}>{sd}/{st}</span>
                 <div style={{ display: 'flex', gap: 2 }}>
                   <button onClick={() => moveStage(si, -1)} disabled={si === 0} style={iconBtn}>↑</button>
                   <button onClick={() => moveStage(si, 1)} disabled={si === data.stages.length - 1} style={iconBtn}>↓</button>
@@ -379,7 +379,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
               {!isC && (
                 <div>
                   {/* Column header */}
-                  <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, padding: '6px 10px', fontSize: 10, color: 'var(--text3)', borderTop: '0.5px solid var(--border)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, padding: '6px 10px', fontSize: 11, color: 'var(--text3)', borderTop: '0.5px solid var(--border)' }}>
                     <span>TRADE / ELEMENT</span>
                     <span style={{ textAlign: 'center' }}>MAT</span>
                     <span style={{ textAlign: 'center' }}>LAB</span>
@@ -390,19 +390,19 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
                     <span></span>
                   </div>
                   {stage.trades.length === 0 && (
-                    <div style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text3)' }}>No trades in this stage yet.</div>
+                    <div style={{ padding: '8px 10px', fontSize: 13, color: 'var(--text3)' }}>No trades in this stage yet.</div>
                   )}
                   {stage.trades.map((t, ti) => (
                     <div key={t.id} style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, padding: '5px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center' }}>
-                      <input value={t.name} onChange={e => updateTrade(si, ti, 'name', e.target.value)} placeholder="trade / element" style={{ fontSize: 12 }} />
+                      <input value={t.name} onChange={e => updateTrade(si, ti, 'name', e.target.value)} placeholder="trade / element" style={{ fontSize: 13 }} />
                       <span style={{ textAlign: 'center' }}><Tick on={t.materials} onClick={() => updateTrade(si, ti, 'materials', !t.materials)} /></span>
                       <span style={{ textAlign: 'center' }}><Tick on={t.labour} onClick={() => updateTrade(si, ti, 'labour', !t.labour)} /></span>
-                      <input value={t.procured_from} onChange={e => updateTrade(si, ti, 'procured_from', e.target.value)} placeholder="supplier / subbie" style={{ fontSize: 12 }} />
-                      <select value={t.status} onChange={e => updateTrade(si, ti, 'status', e.target.value)} style={{ fontSize: 12 }}>
+                      <input value={t.procured_from} onChange={e => updateTrade(si, ti, 'procured_from', e.target.value)} placeholder="supplier / subbie" style={{ fontSize: 13 }} />
+                      <select value={t.status} onChange={e => updateTrade(si, ti, 'status', e.target.value)} style={{ fontSize: 13 }}>
                         {STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                       </select>
-                      <input type="date" value={t.target_date || ''} onChange={e => updateTrade(si, ti, 'target_date', e.target.value)} style={{ fontSize: 11 }} />
-                      <input value={t.notes} onChange={e => updateTrade(si, ti, 'notes', e.target.value)} placeholder="—" style={{ fontSize: 12 }} />
+                      <input type="date" value={t.target_date || ''} onChange={e => updateTrade(si, ti, 'target_date', e.target.value)} style={{ fontSize: 12 }} />
+                      <input value={t.notes} onChange={e => updateTrade(si, ti, 'notes', e.target.value)} placeholder="—" style={{ fontSize: 13 }} />
                       <div style={{ display: 'flex', gap: 2 }}>
                         <button onClick={() => moveTrade(si, ti, -1)} disabled={ti === 0} style={iconBtn}>↑</button>
                         <button onClick={() => moveTrade(si, ti, 1)} disabled={ti === stage.trades.length - 1} style={iconBtn}>↓</button>
@@ -432,7 +432,7 @@ function Tick({ on, onClick }) {
         width: 18, height: 18, borderRadius: 4, cursor: 'pointer', padding: 0,
         border: `1.5px solid ${on ? 'var(--green, #5cb85c)' : 'var(--border)'}`,
         background: on ? 'var(--green, #5cb85c)' : 'transparent',
-        color: '#fff', fontSize: 12, lineHeight: '14px', display: 'inline-flex',
+        color: '#fff', fontSize: 13, lineHeight: '14px', display: 'inline-flex',
         alignItems: 'center', justifyContent: 'center',
       }}>
       {on ? '✓' : ''}
@@ -443,7 +443,7 @@ function Tick({ on, onClick }) {
 const GRID = '1.6fr 36px 36px 1.2fr 1fr 1fr 1.4fr 56px'
 const iconBtn = {
   background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)',
-  fontSize: 12, padding: '2px 4px', lineHeight: 1,
+  fontSize: 13, padding: '2px 4px', lineHeight: 1,
 }
 
 function loadScript(src) {

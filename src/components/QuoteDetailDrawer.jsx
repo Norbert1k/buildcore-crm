@@ -241,14 +241,14 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
           flexShrink: 0,
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+            <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
               {project ? `${project.project_ref ? project.project_ref + ' · ' : ''}${project.project_name}` : ''}
             </div>
             <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {task?.title || (loading ? 'Loading…' : 'Task')}
             </div>
             {assigneeNames && (
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
                 Assigned to {assigneeNames}
               </div>
             )}
@@ -281,7 +281,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
               {/* Multi-building coverage strip — only for multi-building projects. */}
               {buildings.length > 1 && quotes.length > 0 && (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
                     Building coverage
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
@@ -301,10 +301,10 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                             borderRadius: 'var(--radius)',
                             borderLeft: `3px solid ${covered ? '#3B6D11' : 'var(--border)'}`,
                           }}>
-                          <div style={{ fontSize: 10, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {b.name}
                           </div>
-                          <div style={{ fontSize: 11, marginTop: 2, color: covered ? '#3B6D11' : 'var(--text3)' }}>
+                          <div style={{ fontSize: 12, marginTop: 2, color: covered ? '#3B6D11' : 'var(--text3)' }}>
                             {covered ? `✓ ${coveringCount} quote${coveringCount === 1 ? '' : 's'}` : '— no quote yet'}
                           </div>
                         </div>
@@ -315,18 +315,18 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
               )}
 
               {/* Quotes section */}
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
                 Quotes <span style={{ color: 'var(--text3)', fontWeight: 400 }}>({quotes.length})</span>
               </div>
               {quotes.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', marginBottom: 16 }}>
+                <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', marginBottom: 16 }}>
                   No quotes recorded for this task yet.
                 </div>
               ) : (
                 <div className="table-wrap" style={{ marginBottom: 20 }}>
-                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                  <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
                     <thead>
-                      <tr style={{ background: 'var(--surface2)', color: 'var(--text3)', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                      <tr style={{ background: 'var(--surface2)', color: 'var(--text3)', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                         <th style={{ padding: '8px 10px', fontWeight: 600 }}>Vendor</th>
                         <th style={{ padding: '8px 10px', fontWeight: 600, textAlign: 'right' }}>Amount</th>
                         <th style={{ padding: '8px 10px', fontWeight: 600 }}>Status</th>
@@ -353,7 +353,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                           <tr key={q.id} style={{ borderTop: '1px solid var(--border)' }}>
                             <td style={{ padding: '8px 10px' }}>
                               <div>{q.vendor_name_text}</div>
-                              <div style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{KIND_LABEL[kind]}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>{KIND_LABEL[kind]}</div>
                               {buildings.length > 1 && q.building_ordinals && q.building_ordinals.length > 0 && (
                                 <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                                   {q.building_ordinals.map(ord => {
@@ -362,7 +362,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                                     return (
                                       <span key={ord} style={{
                                         background: '#E6F1FB', color: '#0C447C',
-                                        fontSize: 10, padding: '1px 6px', borderRadius: 99,
+                                        fontSize: 11, padding: '1px 6px', borderRadius: 99,
                                       }}>{b.name}</span>
                                     )
                                   })}
@@ -394,11 +394,11 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
               )}
 
               {/* Documents section */}
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
                 Documents
               </div>
               {VISIBLE_CATEGORIES.every(cat => filesByCategory.get(cat.value).length === 0) ? (
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
+                <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
                   No quotes, drawings, or emails uploaded.
                 </div>
               ) : (
@@ -408,8 +408,8 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                     if (catFiles.length === 0) return null
                     return (
                       <div key={cat.value}>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
-                          <span style={{ marginRight: 5, fontSize: 12 }}>{cat.icon}</span>{cat.label} ({catFiles.length})
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+                          <span style={{ marginRight: 5, fontSize: 13 }}>{cat.icon}</span>{cat.label} ({catFiles.length})
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           {catFiles.map(f => {
@@ -423,7 +423,7 @@ export default function QuoteDetailDrawer({ taskId, onClose }) {
                               || f.mime_type === 'message/rfc822'
                             return (
                               <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
-                                <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {f.file_name}
                                 </div>
                                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>

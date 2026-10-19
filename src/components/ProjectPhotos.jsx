@@ -304,7 +304,7 @@ export default function ProjectPhotos({ projectId }) {
 
   // ── Render ─────────────────────────────────────────────────────────────
   if (loading) {
-    return <div style={{ padding: 20, color: 'var(--text3)', fontSize: 13 }}>Loading photos…</div>
+    return <div style={{ padding: 20, color: 'var(--text3)', fontSize: 14 }}>Loading photos…</div>
   }
 
   // Folder detail view
@@ -323,11 +323,11 @@ export default function ProjectPhotos({ projectId }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           <button
             onClick={() => { setOpenFolder(null); setSelectedIds(new Set()); setLightboxIndex(null) }}
-            style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '6px 10px', fontSize: 12, cursor: 'pointer', color: 'var(--text2)' }}>
+            style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '6px 10px', fontSize: 13, cursor: 'pointer', color: 'var(--text2)' }}>
             ← All folders
           </button>
           <div style={{ fontSize: 16, fontWeight: 600 }}>{folder.name}</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>{folder.photos.length} photo{folder.photos.length === 1 ? '' : 's'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>{folder.photos.length} photo{folder.photos.length === 1 ? '' : 's'}</div>
           {canManage && (
             <button
               onClick={() => toggleFolderVisibility(folder.slug, folder.name)}
@@ -336,7 +336,7 @@ export default function ProjectPhotos({ projectId }) {
                 background: folder.visible ? '#EAF3DE' : 'var(--surface2)',
                 color: folder.visible ? '#27500A' : 'var(--text2)',
                 border: '1px solid ' + (folder.visible ? '#C0DD97' : 'var(--border)'),
-                borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                borderRadius: 999, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
               }}>
               {folder.visible ? '● Visible to client' : '○ Hidden from client'}
             </button>
@@ -353,7 +353,7 @@ export default function ProjectPhotos({ projectId }) {
             borderRadius: 'var(--radius)', padding: '8px 12px', marginBottom: 12,
             position: 'sticky', top: 8, zIndex: 10,
           }}>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>
               {selectedCount} selected
             </div>
             <button
@@ -361,7 +361,7 @@ export default function ProjectPhotos({ projectId }) {
               disabled={bulkBusy !== null}
               style={{
                 background: 'var(--accent, #448a40)', color: 'white', border: 0,
-                borderRadius: 4, padding: '6px 12px', fontSize: 11, fontWeight: 600,
+                borderRadius: 4, padding: '6px 12px', fontSize: 12, fontWeight: 600,
                 cursor: bulkBusy ? 'wait' : 'pointer', opacity: bulkBusy ? 0.6 : 1,
               }}>
               {bulkBusy === 'downloading'
@@ -374,7 +374,7 @@ export default function ProjectPhotos({ projectId }) {
                 disabled={bulkBusy !== null}
                 style={{
                   background: '#A32D2D', color: 'white', border: 0,
-                  borderRadius: 4, padding: '6px 12px', fontSize: 11, fontWeight: 600,
+                  borderRadius: 4, padding: '6px 12px', fontSize: 12, fontWeight: 600,
                   cursor: bulkBusy ? 'wait' : 'pointer', opacity: bulkBusy ? 0.6 : 1,
                 }}>
                 {bulkBusy === 'deleting' ? 'Deleting…' : `Delete (${selectedCount})`}
@@ -385,7 +385,7 @@ export default function ProjectPhotos({ projectId }) {
               disabled={bulkBusy !== null}
               style={{
                 background: 'transparent', color: 'var(--text2)', border: '1px solid var(--border)',
-                borderRadius: 4, padding: '6px 12px', fontSize: 11, cursor: 'pointer',
+                borderRadius: 4, padding: '6px 12px', fontSize: 12, cursor: 'pointer',
               }}>
               Clear
             </button>
@@ -407,7 +407,7 @@ export default function ProjectPhotos({ projectId }) {
               style={{
                 background: 'transparent', color: 'var(--text2)',
                 border: '1px solid var(--border)', borderRadius: 4,
-                padding: '6px 12px', fontSize: 11, cursor: 'pointer', marginLeft: 'auto',
+                padding: '6px 12px', fontSize: 12, cursor: 'pointer', marginLeft: 'auto',
               }}>
               {folder.photos.every(p => selectedIds.has(p.id)) ? 'Deselect all' : 'Select all'}
             </button>
@@ -470,14 +470,14 @@ export default function ProjectPhotos({ projectId }) {
           <div style={{ flexShrink: 0, fontSize: 28 }}>📷</div>
           <div style={{ flex: 1, minWidth: 220 }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>Connect a Telegram group</div>
-            <div style={{ fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.5 }}>
               Site team sends photos to a project Telegram group with captions like &quot;Fire Stopping&quot; — they appear here automatically, sorted into folders.
             </div>
           </div>
           {canManage && (
             <button onClick={() => setShowConnect(true)} style={{
               background: 'white', color: '#1A8AC8', border: 0, borderRadius: 'var(--radius)',
-              padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+              padding: '8px 16px', fontSize: 14, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
             }}>Connect</button>
           )}
         </div>
@@ -491,7 +491,7 @@ export default function ProjectPhotos({ projectId }) {
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          fontSize: 12,
+          fontSize: 13,
           color: 'var(--text2)',
         }}>
           <span style={{ fontSize: 18 }}>📷</span>
@@ -502,7 +502,7 @@ export default function ProjectPhotos({ projectId }) {
           {canManage && (
             <button onClick={disconnectTelegram} style={{
               background: 'transparent', border: '1px solid var(--border)', borderRadius: 4,
-              padding: '3px 8px', fontSize: 11, cursor: 'pointer', color: 'var(--text2)',
+              padding: '3px 8px', fontSize: 12, cursor: 'pointer', color: 'var(--text2)',
             }}>Disconnect</button>
           )}
         </div>
@@ -517,7 +517,7 @@ export default function ProjectPhotos({ projectId }) {
           padding: '32px 20px',
           textAlign: 'center',
           color: 'var(--text3)',
-          fontSize: 13,
+          fontSize: 14,
         }}>
           {telegramGroup
             ? 'No photos yet. Send a photo to the Telegram group to get started.'
@@ -581,10 +581,10 @@ function FolderCard({ folder, thumbUrl, canManage, onOpen, onToggleVisibility })
       <div style={{ padding: '10px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {folder.name}
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
               {folder.photos.length} photo{folder.photos.length === 1 ? '' : 's'}
             </div>
           </div>
@@ -596,7 +596,7 @@ function FolderCard({ folder, thumbUrl, canManage, onOpen, onToggleVisibility })
               border: '1px solid ' + (folder.visible ? '#C0DD97' : 'var(--border)'),
               borderRadius: 999,
               padding: '3px 8px',
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: 600,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
@@ -659,7 +659,7 @@ function PhotoTile({ photo, url, selected, onToggleSelect, onClick }) {
         <div style={{
           position: 'absolute', bottom: 0, left: 0, right: 0,
           background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
-          color: 'white', fontSize: 10, padding: '14px 8px 6px',
+          color: 'white', fontSize: 11, padding: '14px 8px 6px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {photo.caption}
@@ -743,7 +743,7 @@ function Lightbox({ photos, index, thumbs, onClose, onPrev, onNext, canManage, o
         ) : (
           <div style={{ width: 400, height: 300, background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>Loading…</div>
         )}
-        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 'var(--radius)', padding: '10px 14px', color: 'white', fontSize: 12, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 'var(--radius)', padding: '10px 14px', color: 'white', fontSize: 13, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             {photo.caption && <div style={{ fontWeight: 600, marginBottom: 2 }}>{photo.caption}</div>}
             <div style={{ opacity: 0.7 }}>
@@ -755,18 +755,18 @@ function Lightbox({ photos, index, thumbs, onClose, onPrev, onNext, canManage, o
           {onDownload && (
             <button onClick={onDownload} style={{
               background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.3)',
-              borderRadius: 4, padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              borderRadius: 4, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}>Download</button>
           )}
           {canManage && (
             <button onClick={onDelete} style={{
               background: '#A32D2D', color: 'white', border: 0, borderRadius: 4,
-              padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
             }}>Delete photo</button>
           )}
           <button onClick={onClose} style={{
             background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 4,
-            padding: '6px 12px', fontSize: 11, cursor: 'pointer',
+            padding: '6px 12px', fontSize: 12, cursor: 'pointer',
           }}>Close</button>
         </div>
       </div>
@@ -834,7 +834,7 @@ function ConnectTelegramModal({ projectId, profileId, onClose, onConnected }) {
         padding: 24, boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
       }}>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Connect Telegram group</div>
-        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 18, lineHeight: 1.6 }}>
           1. In Telegram, add the BuildCore Photos bot to your project group.<br/>
           2. In the group, send <code style={{ background: 'var(--surface2)', padding: '1px 5px', borderRadius: 3 }}>/register</code>.<br/>
           3. The bot replies with a chat ID — paste it below.
@@ -842,27 +842,27 @@ function ConnectTelegramModal({ projectId, profileId, onClose, onConnected }) {
 
         <form onSubmit={submit}>
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Chat ID *</label>
+            <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Chat ID *</label>
             <input
               type="text"
               autoFocus
               value={chatId}
               onChange={e => setChatId(e.target.value)}
               placeholder="-1001234567890"
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, background: 'var(--surface)', color: 'var(--text)' }}
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }}
               required />
           </div>
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Group name (optional)</label>
+            <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Group name (optional)</label>
             <input
               type="text"
               value={chatTitle}
               onChange={e => setChatTitle(e.target.value)}
               placeholder="Hopton Road Site Team"
-              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 13, background: 'var(--surface)', color: 'var(--text)' }} />
+              style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, background: 'var(--surface)', color: 'var(--text)' }} />
           </div>
 
-          {error && <div style={{ fontSize: 12, color: '#A32D2D', marginBottom: 12 }}>{error}</div>}
+          {error && <div style={{ fontSize: 13, color: '#A32D2D', marginBottom: 12 }}>{error}</div>}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>

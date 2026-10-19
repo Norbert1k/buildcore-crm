@@ -348,7 +348,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
       }
     >
       {errors._global && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
+        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>
           {errors._global}
         </div>
       )}
@@ -365,7 +365,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 10, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
                 {Object.entries(docGroups).map(([group, keys]) => (
                   <div key={group}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{group}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{group}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {keys.map(k => {
                         const on = types.includes(k)
@@ -373,7 +373,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                           <label key={k}
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 6,
-                              padding: '6px 10px', borderRadius: 'var(--radius)', fontSize: 12, cursor: 'pointer',
+                              padding: '6px 10px', borderRadius: 'var(--radius)', fontSize: 13, cursor: 'pointer',
                               background: on ? 'var(--accent)' : 'var(--surface)',
                               color: on ? '#fff' : 'var(--text)',
                               border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border)'),
@@ -397,7 +397,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                   </div>
                 ))}
                 {types.length > 1 && (
-                  <div style={{ background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', padding: '6px 10px', borderRadius: 'var(--radius)', fontSize: 11, fontWeight: 500 }}>
+                  <div style={{ background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', padding: '6px 10px', borderRadius: 'var(--radius)', fontSize: 12, fontWeight: 500 }}>
                     ✓ Will create {types.length} linked rows. One file, one set of details — all {types.length} will share expiry, reference, and notes.
                   </div>
                 )}
@@ -426,7 +426,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                       <button type="button" key={p.label}
                         onClick={() => setCoverAmount(t, String(p.val))}
                         style={{
-                          fontSize: 12, padding: '6px 12px', borderRadius: 'var(--radius)', cursor: 'pointer',
+                          fontSize: 13, padding: '6px 12px', borderRadius: 'var(--radius)', cursor: 'pointer',
                           background: active ? 'var(--accent)' : 'var(--surface2)',
                           color: active ? '#fff' : 'var(--text)',
                           border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border)'),
@@ -444,7 +444,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                   placeholder="Custom amount in £ (e.g. 7500000 for £7.5m)"
                 />
                 {current && parseInt(current, 10) > 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
                     = £{Number(current).toLocaleString('en-GB')}
                   </div>
                 )}
@@ -473,21 +473,21 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', wordBreak: 'break-all' }}>{file.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{(file.size / 1024).toFixed(1)} KB</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', wordBreak: 'break-all' }}>{file.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)' }}>{(file.size / 1024).toFixed(1)} KB</div>
                   </div>
                   <button type="button" onClick={e => { e.stopPropagation(); setFile(null) }}
-                    style={{ fontSize: 11, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
+                    style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
                     Remove
                   </button>
                 </div>
               ) : editing && doc?.file_name ? (
-                <div style={{ fontSize: 12, color: 'var(--text2)' }}>
+                <div style={{ fontSize: 13, color: 'var(--text2)' }}>
                   <div style={{ fontWeight: 500, color: 'var(--text)', marginBottom: 4 }}>📎 {doc.file_name}</div>
                   <div>Drop a new file here to replace, or click to browse</div>
                 </div>
               ) : (
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
                   <div style={{ marginBottom: 4, fontWeight: 500, color: 'var(--text2)' }}>
                     📎 Drop your file here or click to browse
                   </div>
@@ -517,7 +517,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
               marginTop: 10,
               padding: '8px 12px',
               borderRadius: 'var(--radius)',
-              fontSize: 12,
+              fontSize: 13,
               background: scanning ? 'rgba(68,138,64,0.06)' :
                           scanResult?.confidence === 'error' ? 'rgba(217,53,53,0.06)' :
                           'rgba(68,138,64,0.06)',
@@ -546,7 +546,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                   <span style={{ color: 'var(--red)' }}>⚠️</span>
                   <div>
                     <div style={{ fontWeight: 500 }}>AI scan failed</div>
-                    <div style={{ marginTop: 2, fontSize: 11, color: 'var(--text3)' }}>
+                    <div style={{ marginTop: 2, fontSize: 12, color: 'var(--text3)' }}>
                       {scanResult.notes || 'You can fill the fields manually.'}
                     </div>
                   </div>
@@ -561,7 +561,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                         : 'Scan complete — no fields could be extracted'}
                       <span style={{
                         marginLeft: 8,
-                        fontSize: 10, fontWeight: 500,
+                        fontSize: 11, fontWeight: 500,
                         padding: '1px 6px',
                         borderRadius: 'var(--radius)',
                         background: scanResult.confidence === 'high' ? 'rgba(68,138,64,0.15)' :
@@ -573,11 +573,11 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
                       }}>{scanResult.confidence} confidence</span>
                     </div>
                     {scanResult.notes && (
-                      <div style={{ marginTop: 3, fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                      <div style={{ marginTop: 3, fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>
                         {scanResult.notes}
                       </div>
                     )}
-                    <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text3)' }}>
+                    <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text3)' }}>
                       Please review the values below before saving.
                     </div>
                   </div>
@@ -606,12 +606,12 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
           {autoFilledFields.has('expiry_date') && <AutoFilledHint />}
         </Field>
         {days !== null && days < 0 && (
-          <div className="full" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--red)' }}>
+          <div className="full" style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, color: 'var(--red)' }}>
             This date is in the past — document will be marked as expired.
           </div>
         )}
         {days !== null && days >= 0 && days <= 30 && (
-          <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 12, color: 'var(--amber)' }}>
+          <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, color: 'var(--amber)' }}>
             This document expires in {days} day{days !== 1 ? 's' : ''} — it will trigger an alert.
           </div>
         )}
@@ -630,7 +630,7 @@ export default function DocumentModal({ doc, subcontractorId, onClose, onSaved }
 // field value. Disappears as soon as the user edits the field manually.
 function AutoFilledHint() {
   return (
-    <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
       <span style={{ color: 'var(--accent)' }}>✨</span>
       <span>Auto-filled — review</span>
     </div>

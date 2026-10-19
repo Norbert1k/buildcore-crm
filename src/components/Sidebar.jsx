@@ -107,8 +107,8 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
             <div>
-              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.2 }}>City Construction</div>
-              <div style={{ fontSize: 10, color: division === 'fitout' ? '#0E7490' : 'var(--text3)', fontWeight: division === 'fitout' ? 600 : 400 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, lineHeight: 1.2 }}>City Construction</div>
+              <div style={{ fontSize: 11, color: division === 'fitout' ? '#0E7490' : 'var(--text3)', fontWeight: division === 'fitout' ? 600 : 400 }}>
                 {division === 'fitout' ? 'Fit-Out Division' : 'Construction Division'}
               </div>
             </div>
@@ -122,7 +122,7 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
             <div style={{ display: 'flex', gap: 6 }}>
               {divisions.map(d => (
                 <button key={d} onClick={() => setDivision(d)}
-                  style={{ flex: 1, padding: '5px 6px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
+                  style={{ flex: 1, padding: '5px 6px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
                     border: division === d ? `1.5px solid ${d === 'fitout' ? '#0E7490' : '#448a40'}` : '1px solid var(--border)',
                     background: division === d ? (d === 'fitout' ? 'rgba(14,116,144,0.10)' : 'rgba(68,138,64,0.10)') : 'transparent',
                     color: division === d ? (d === 'fitout' ? '#0E7490' : '#448a40') : 'var(--text3)' }}>
@@ -131,7 +131,7 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
               ))}
             </div>
           ) : (
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase',
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, textTransform: 'uppercase',
               color: division === 'fitout' ? '#0E7490' : '#448a40' }}>
               {division === 'fitout' ? 'Fit-Out Division' : 'Construction Division'}
             </div>
@@ -181,8 +181,8 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
           <div className="nav-user">
             <Avatar name={profile.full_name} size="sm" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)' }}>{ROLES[role]?.label || role}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.full_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>{ROLES[role]?.label || role}</div>
             </div>
           </div>
         )}

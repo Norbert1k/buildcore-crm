@@ -81,7 +81,7 @@ function Thumb({ file }) {
     <div style={{ height: 220, background: '#fff', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflow: 'hidden' }}>
       {state === 'done' && img
         ? <img src={img} alt="" style={{ width: '100%', objectFit: 'cover', objectPosition: 'top' }} />
-        : <div style={{ alignSelf: 'center', fontSize: 12, color: '#888' }}>{state === 'loading' ? 'Loading preview…' : (file.file_name.split('.').pop() || 'file').toUpperCase()}</div>}
+        : <div style={{ alignSelf: 'center', fontSize: 13, color: '#888' }}>{state === 'loading' ? 'Loading preview…' : (file.file_name.split('.').pop() || 'file').toUpperCase()}</div>}
     </div>
   )
 }
@@ -145,8 +145,8 @@ export default function CaseStudyUploads({ projectId, canManage }) {
       onDrop={e => { e.preventDefault(); setDragOver(false); upload(e.dataTransfer.files) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Uploaded case studies</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Uploaded case studies</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
             Finished case-study documents for this project. The newest is marked current; earlier uploads are kept.
           </div>
         </div>
@@ -159,12 +159,12 @@ export default function CaseStudyUploads({ projectId, canManage }) {
         )}
       </div>
 
-      {busy && <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 10 }}>{busy}</div>}
+      {busy && <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>{busy}</div>}
 
       {loading ? (
-        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Loading…</div>
+        <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading…</div>
       ) : files.length === 0 ? (
-        <div style={{ border: `1.5px dashed ${dragOver ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--radius)', padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
+        <div style={{ border: `1.5px dashed ${dragOver ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--radius)', padding: 28, textAlign: 'center', fontSize: 13, color: 'var(--text3)' }}>
           {canManage ? 'Drop a case study PDF here, or use Upload.' : 'No case study uploaded yet.'}
         </div>
       ) : (
@@ -174,12 +174,12 @@ export default function CaseStudyUploads({ projectId, canManage }) {
               <div style={{ cursor: 'pointer' }} onClick={() => open(f, false)}><Thumb file={f} /></div>
               <div style={{ padding: '8px 10px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.file_name}>{f.file_name}</div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={f.file_name}>{f.file_name}</div>
                   {i === 0
-                    ? <span className="pill pill-green" style={{ fontSize: 10, flexShrink: 0 }}>Current</span>
-                    : <span className="pill pill-gray" style={{ fontSize: 10, flexShrink: 0 }}>Previous</span>}
+                    ? <span className="pill pill-green" style={{ fontSize: 11, flexShrink: 0 }}>Current</span>
+                    : <span className="pill pill-gray" style={{ fontSize: 11, flexShrink: 0 }}>Previous</span>}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', margin: '2px 0 8px' }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', margin: '2px 0 8px' }}>
                   {fmtSize(f.file_size)} · {new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>

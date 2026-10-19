@@ -311,7 +311,7 @@ export default function ProjectTracker() {
               userMarkerRef.current = L.marker([lat, lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map)
               userMarkerRef.current.bindPopup(`
                 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:4px;text-align:center;">
-                  <div style="font-size:13px;font-weight:600;color:#DAA520;">Your Location</div>
+                  <div style="font-size:14px;font-weight:600;color:#DAA520;">Your Location</div>
                 </div>
               `)
             }
@@ -362,16 +362,16 @@ export default function ProjectTracker() {
       marker.bindPopup(`
         <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-width:220px;padding:4px;">
           <div style="font-size:14px;font-weight:600;margin-bottom:6px;color:#1a1a1a;">${p.project_name}</div>
-          ${p.project_ref ? `<div style="font-size:11px;color:#888;margin-bottom:8px;">#${p.project_ref}</div>` : ''}
-          <div style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#555;">
+          ${p.project_ref ? `<div style="font-size:12px;color:#888;margin-bottom:8px;">#${p.project_ref}</div>` : ''}
+          <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:#555;">
             ${p.client_name ? `<div><span style="color:#999;">Client:</span> ${p.client_name}</div>` : ''}
             ${location ? `<div><span style="color:#999;">Location:</span> ${location}</div>` : ''}
             ${p.director?.full_name ? `<div><span style="color:#999;">Assigned:</span> ${p.director.full_name}</div>` : ''}
             ${value ? `<div><span style="color:#999;">Value:</span> <strong>${value}</strong></div>` : ''}
           </div>
           <div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;">
-            <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;color:white;background:${color};">${statusLabel}</span>
-            <a href="/projects/${p.id}" style="font-size:12px;color:#448a40;font-weight:600;text-decoration:none;cursor:pointer;" onclick="event.preventDefault();window.__navigateToProject__('${p.id}')">View Project &rarr;</a>
+            <span style="display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;color:white;background:${color};">${statusLabel}</span>
+            <a href="/projects/${p.id}" style="font-size:13px;color:#448a40;font-weight:600;text-decoration:none;cursor:pointer;" onclick="event.preventDefault();window.__navigateToProject__('${p.id}')">View Project &rarr;</a>
           </div>
         </div>
       `, { maxWidth: 300 })
@@ -500,7 +500,7 @@ export default function ProjectTracker() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Project Tracker</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{projects.length} projects</p>
+          <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>{projects.length} projects</p>
         </div>
       </div>
 
@@ -530,7 +530,7 @@ export default function ProjectTracker() {
               <span style={{ fontSize: 26, fontWeight: 600, color: 'var(--green)', lineHeight: 1 }}>
                 {valueByStatus.active > 0 ? formatCurrency(valueByStatus.active) : '£0'}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--text2)', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 live · {counts.active || 0} {counts.active === 1 ? 'site' : 'sites'}
               </span>
             </div>
@@ -541,7 +541,7 @@ export default function ProjectTracker() {
               <span style={{ fontSize: 22, fontWeight: 600, color: '#9b87e0', lineHeight: 1 }}>
                 {tenderTotal > 0 ? formatCurrency(tenderTotal) : '£0'}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--text2)', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              <span style={{ fontSize: 12, color: 'var(--text2)', marginLeft: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 tender · {tenderCount} {tenderCount === 1 ? 'project' : 'projects'}
               </span>
             </div>
@@ -550,9 +550,9 @@ export default function ProjectTracker() {
               {furthestFromLondon && (
                 <div>
                   <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-                    {Math.round(furthestFromLondon.distance)}<span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 2 }}>mi</span>
+                    {Math.round(furthestFromLondon.distance)}<span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 2 }}>mi</span>
                   </span>
-                  <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 6 }}>
                     furthest · {furthestFromLondon.project.project_name}
                   </span>
                 </div>
@@ -562,9 +562,9 @@ export default function ProjectTracker() {
                   <span style={{ fontSize: 14, fontWeight: 600, color: '#FFD700' }}>
                     {nearestToUser.distance < 1
                       ? nearestToUser.distance.toFixed(1)
-                      : Math.round(nearestToUser.distance)}<span style={{ fontSize: 10, color: 'rgba(255,215,0,0.6)', marginLeft: 2 }}>mi</span>
+                      : Math.round(nearestToUser.distance)}<span style={{ fontSize: 11, color: 'rgba(255,215,0,0.6)', marginLeft: 2 }}>mi</span>
                   </span>
-                  <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 6 }}>
                     nearest · {nearestToUser.project.project_name}
                   </span>
                 </div>
@@ -579,10 +579,10 @@ export default function ProjectTracker() {
           {regionalSpread.length > 0 && (
             <div style={{ marginTop: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <span style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                   Regional spread
                 </span>
-                <span style={{ fontSize: 10, color: 'var(--text3)' }}>
+                <span style={{ fontSize: 11, color: 'var(--text3)' }}>
                   {regionsCovered.length} {regionsCovered.length === 1 ? 'region' : 'regions'}
                 </span>
               </div>
@@ -668,15 +668,15 @@ export default function ProjectTracker() {
             </svg>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#448a40', display: 'inline-block' }} />
             Live Projects
-            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{liveProjects.length}</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{liveProjects.length}</span>
             {!liveOpen && liveProjects.length > 0 && (
-              <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
+              <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
             )}
           </div>
         </div>
         {liveOpen && (
           liveProjects.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No live projects in current filter.</div>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No live projects in current filter.</div>
           ) : (
             <div className="table-wrap">
               <table>
@@ -694,10 +694,10 @@ export default function ProjectTracker() {
                     <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
                       <td>
                         <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                        {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
+                        {p.project_ref && <div style={{ fontSize: 12, color: 'var(--text3)' }}>#{p.project_ref}</div>}
                       </td>
                       <td>{p.client_name || '\u2014'}</td>
-                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
+                      <td style={{ color: 'var(--text2)', fontSize: 13 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
                       {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
                       <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
                     </tr>
@@ -720,15 +720,15 @@ export default function ProjectTracker() {
             </svg>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9b87e0', display: 'inline-block' }} />
             Tender Projects
-            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{tenderProjects.length}</span>
+            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{tenderProjects.length}</span>
             {!tenderOpen && tenderProjects.length > 0 && (
-              <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
+              <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
             )}
           </div>
         </div>
         {tenderOpen && (
           tenderProjects.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No projects at tender stage.</div>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No projects at tender stage.</div>
           ) : (
             <div className="table-wrap">
               <table>
@@ -746,10 +746,10 @@ export default function ProjectTracker() {
                     <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
                       <td>
                         <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                        {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>#{p.project_ref}</div>}
+                        {p.project_ref && <div style={{ fontSize: 12, color: 'var(--text3)' }}>#{p.project_ref}</div>}
                       </td>
                       <td>{p.client_name || '\u2014'}</td>
-                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
+                      <td style={{ color: 'var(--text2)', fontSize: 13 }}>{[p.site_address, p.city, p.postcode].filter(Boolean).join(', ') || '\u2014'}</td>
                       {can('view_project_value') && <td style={{ fontWeight: 500 }}>{p.value ? formatCurrency(p.value) : '\u2014'}</td>}
                       <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label}</Pill></td>
                     </tr>
@@ -815,7 +815,7 @@ function PickerButton({ label, sublabel, active, onClick }) {
       onClick={onClick}
       style={{
         padding: '4px 10px',
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: active ? 600 : 500,
         background: active ? 'var(--accent)' : 'transparent',
         color: active ? 'white' : 'var(--text2)',
@@ -830,7 +830,7 @@ function PickerButton({ label, sublabel, active, onClick }) {
     >
       {label}
       {sublabel && (
-        <span style={{ fontSize: 10, opacity: 0.7, fontWeight: 400 }}>{sublabel}</span>
+        <span style={{ fontSize: 11, opacity: 0.7, fontWeight: 400 }}>{sublabel}</span>
       )}
     </button>
   )
@@ -859,7 +859,7 @@ function StatusFilterPill({ label, count, active, accentColor, onClick }) {
         color: activeColor,
         border: `0.5px solid ${active ? accentColor + '4D' : 'var(--border)'}`,
         borderRadius: 99,
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: active ? 600 : 500,
         cursor: 'pointer',
         whiteSpace: 'nowrap',
@@ -868,7 +868,7 @@ function StatusFilterPill({ label, count, active, accentColor, onClick }) {
     >
       <span style={{ width: 7, height: 7, borderRadius: '50%', background: accentColor, flexShrink: 0 }} />
       {label}
-      <span style={{ fontSize: 11, opacity: 0.6, fontWeight: 400 }}>{count}</span>
+      <span style={{ fontSize: 12, opacity: 0.6, fontWeight: 400 }}>{count}</span>
     </button>
   )
 }
@@ -930,7 +930,7 @@ function RegionalSpreadBar({ spread }) {
             display: 'flex',
             alignItems: 'center',
             gap: 4,
-            fontSize: 10,
+            fontSize: 11,
             color: 'var(--text2)',
           }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: seg.color, flexShrink: 0 }} />

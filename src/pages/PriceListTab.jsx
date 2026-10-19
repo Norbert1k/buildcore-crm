@@ -195,11 +195,11 @@ export default function PriceListTab() {
   }
 
   // ── Styles ─────────────────────────────────────────────────────────────────
-  const cell = { padding: '6px 8px', fontSize: 12, borderBottom: '0.5px solid var(--border)' }
+  const cell = { padding: '6px 8px', fontSize: 13, borderBottom: '0.5px solid var(--border)' }
   const th = { ...cell, color: 'var(--text3)', textAlign: 'left', fontWeight: 600 }
-  const btnPrimary = { background: '#185FA5', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '7px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 500 }
-  const btnPlain = { background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '7px 14px', cursor: 'pointer', fontSize: 13 }
-  const lbl = { fontSize: 11, color: 'var(--text3)', marginBottom: 3, display: 'block' }
+  const btnPrimary = { background: '#185FA5', color: '#fff', border: 'none', borderRadius: 'var(--radius)', padding: '7px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 500 }
+  const btnPlain = { background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '7px 14px', cursor: 'pointer', fontSize: 14 }
+  const lbl = { fontSize: 12, color: 'var(--text3)', marginBottom: 3, display: 'block' }
 
   return (
     <div>
@@ -217,12 +217,12 @@ export default function PriceListTab() {
         <button style={btnPrimary} onClick={startAdd}>+ Add price</button>
       </div>
 
-      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>
+      <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 12 }}>
         Upload a supplier price list or quote — the system reads the rows for you to review before saving. Every price is dated, so the list keeps a history.
       </div>
 
       {error && (
-        <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>
+        <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 13, marginBottom: 12 }}>{error}</div>
       )}
 
       {/* ── PDF REVIEW SCREEN ──────────────────────────────────────────────── */}
@@ -231,7 +231,7 @@ export default function PriceListTab() {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
             Review extracted prices — {reviewSource}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 10 }}>
             Read from the PDF by AI. Check every row, untick anything wrong, edit as needed, then save. {reviewNotes}
           </div>
           <div style={{ overflowX: 'auto' }}>
@@ -325,9 +325,9 @@ export default function PriceListTab() {
 
       {/* ── THE LIST ───────────────────────────────────────────────────────── */}
       {loading ? (
-        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 40, fontSize: 13 }}>Loading price list…</div>
+        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 40, fontSize: 14 }}>Loading price list…</div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 40, fontSize: 13 }}>
+        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 40, fontSize: 14 }}>
           {items.length === 0
             ? 'No prices yet. Upload a supplier PDF or add a price to get started.'
             : 'No entries match your search.'}
@@ -360,8 +360,8 @@ export default function PriceListTab() {
                   <td style={cell}>{it.vat_basis ? (it.vat_basis === 'excl' ? 'Excl' : 'Inc') : '—'}</td>
                   <td style={cell}>{fmtDate(it.price_date)}</td>
                   <td style={{ ...cell, whiteSpace: 'nowrap' }}>
-                    <button onClick={() => startEdit(it)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#185FA5', fontSize: 12, marginRight: 8 }}>Edit</button>
-                    <button onClick={() => deleteRow(it.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#993C1D', fontSize: 12 }}>Delete</button>
+                    <button onClick={() => startEdit(it)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#185FA5', fontSize: 13, marginRight: 8 }}>Edit</button>
+                    <button onClick={() => deleteRow(it.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#993C1D', fontSize: 13 }}>Delete</button>
                   </td>
                 </tr>
               ))}

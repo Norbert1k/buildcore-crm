@@ -87,7 +87,7 @@ export default function GlobalSearch() {
           onChange={e => setQuery(e.target.value)}
           onFocus={() => results && setOpen(true)}
           placeholder="Search projects, clients, subcontractors…  ( / )"
-          style={{ paddingLeft: 32, paddingRight: 10, fontSize: 13, height: 36 }}
+          style={{ paddingLeft: 32, paddingRight: 10, fontSize: 14, height: 36 }}
         />
         {query && (
           <button onClick={() => { setQuery(''); setOpen(false); setResults(null) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
@@ -96,8 +96,8 @@ export default function GlobalSearch() {
 
       {open && query && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', zIndex: 500, overflow: 'hidden', maxHeight: 400, overflowY: 'auto' }}>
-          {loading && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>Searching...</div>}
-          {!loading && !hasResults && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No results for "{query}"</div>}
+          {loading && <div style={{ padding: '12px 16px', fontSize: 14, color: 'var(--text3)' }}>Searching...</div>}
+          {!loading && !hasResults && <div style={{ padding: '12px 16px', fontSize: 14, color: 'var(--text3)' }}>No results for "{query}"</div>}
           {!loading && hasResults && (
             <>
               {results.subs.length > 0 && (
@@ -139,7 +139,7 @@ export default function GlobalSearch() {
 function Section({ title, children }) {
   return (
     <div>
-      <div style={{ padding: '8px 14px 4px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.07em', borderTop: '1px solid var(--border)' }}>{title}</div>
+      <div style={{ padding: '8px 14px 4px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.07em', borderTop: '1px solid var(--border)' }}>{title}</div>
       {children}
     </div>
   )
@@ -153,10 +153,10 @@ function ResultRow({ icon, title, sub, status, onClick }) {
       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
       <span style={{ fontSize: 16 }}>{icon}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
-        {sub && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{sub}</div>}
+        <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        {sub && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{sub}</div>}
       </div>
-      {status && <div style={{ fontSize: 11, color: statusColors[status] || 'var(--text3)', textTransform: 'capitalize', flexShrink: 0 }}>{status.replace('_', ' ')}</div>}
+      {status && <div style={{ fontSize: 12, color: statusColors[status] || 'var(--text3)', textTransform: 'capitalize', flexShrink: 0 }}>{status.replace('_', ' ')}</div>}
     </div>
   )
 }

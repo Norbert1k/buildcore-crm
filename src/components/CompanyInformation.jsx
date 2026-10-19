@@ -90,10 +90,10 @@ export default function CompanyInformation() {
             <button onClick={save} disabled={saving} style={{ ...btn, ...btnGreen }}>{saving ? 'Saving…' : 'Save'}</button>
           </span>
         )}
-        {!editing && <span style={{ color: 'var(--text3)', fontSize: 13 }}>{open ? '▾' : '▸'}</span>}
+        {!editing && <span style={{ color: 'var(--text3)', fontSize: 14 }}>{open ? '▾' : '▸'}</span>}
       </div>
 
-      {error && <div style={{ padding: '8px 14px', color: '#993C1D', background: '#FAECE7', fontSize: 12 }}>{error}</div>}
+      {error && <div style={{ padding: '8px 14px', color: '#993C1D', background: '#FAECE7', fontSize: 13 }}>{error}</div>}
 
       {(open || editing) && (
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -158,9 +158,9 @@ export default function CompanyInformation() {
                   <input value={s.phone} onChange={e => setListItem('staff', i, 'phone', e.target.value)} placeholder="Phone" style={inp} />
                   <button onClick={() => removeListItem('staff', i)} style={removeBtn}>✕</button>
                 </> : <>
-                  <span style={{ fontSize: 13 }}>{s.name}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>{s.role}</span>
-                  <span style={{ fontSize: 12, color: 'var(--text2)' }}>{s.phone}</span>
+                  <span style={{ fontSize: 14 }}>{s.name}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text2)' }}>{s.role}</span>
+                  <span style={{ fontSize: 13, color: 'var(--text2)' }}>{s.phone}</span>
                 </>}
               </div>
             ))}
@@ -175,7 +175,7 @@ function Section({ title, children, onAdd }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.4, color: 'var(--text3)', textTransform: 'uppercase' }}>{title}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: 0.4, color: 'var(--text3)', textTransform: 'uppercase' }}>{title}</span>
         <div style={{ flex: 1, height: '0.5px', background: 'var(--border)' }} />
         {onAdd && <button onClick={onAdd} style={btn}>+ Add</button>}
       </div>
@@ -187,22 +187,22 @@ function Section({ title, children, onAdd }) {
 function Field({ label, v, editing, onChange, link }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: 10, alignItems: 'center' }}>
-      <span style={{ fontSize: 12, color: 'var(--text3)' }}>{label}</span>
+      <span style={{ fontSize: 13, color: 'var(--text3)' }}>{label}</span>
       {editing
         ? <input value={v || ''} onChange={e => onChange(e.target.value)} style={inp} />
         : link && v
-          ? <a href={v} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--blue, #378ADD)', wordBreak: 'break-all' }}>{v}</a>
-          : <span style={{ fontSize: 13, color: 'var(--text)' }}>{v || '—'}</span>}
+          ? <a href={v} target="_blank" rel="noreferrer" style={{ fontSize: 14, color: 'var(--blue, #378ADD)', wordBreak: 'break-all' }}>{v}</a>
+          : <span style={{ fontSize: 14, color: 'var(--text)' }}>{v || '—'}</span>}
     </div>
   )
 }
 
 function LockedNote() {
-  return <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>🔒 Restricted — you don't have permission to view this section.</span>
+  return <span style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>🔒 Restricted — you don't have permission to view this section.</span>
 }
 
-const btn = { fontSize: 11, lineHeight: '22px', padding: '0 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }
+const btn = { fontSize: 12, lineHeight: '22px', padding: '0 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }
 const btnGreen = { border: '0.5px solid #448a40', color: '#448a40' }
-const inp = { fontSize: 13, width: '100%' }
+const inp = { fontSize: 14, width: '100%' }
 const listCard = { position: 'relative', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }
-const removeBtn = { position: 'absolute', top: 6, right: 6, background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 13 }
+const removeBtn = { position: 'absolute', top: 6, right: 6, background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 14 }

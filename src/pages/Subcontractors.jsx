@@ -44,7 +44,7 @@ function EmployersAgentTab() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>{eas.length} registered employer{eas.length !== 1 ? 's' : ''} agent{eas.length !== 1 ? 's' : ''}</p>
+        <p style={{ color: 'var(--text2)', fontSize: 14 }}>{eas.length} registered employer{eas.length !== 1 ? 's' : ''} agent{eas.length !== 1 ? 's' : ''}</p>
         {can('manage_subcontractors') && (
           <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
             <IconPlus size={14} /> Add EA
@@ -81,12 +81,12 @@ function EmployersAgentTab() {
                 <tr key={ea.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
                         {initials(ea.company_name)}
                       </div>
                       <div>
                         <div style={{ fontWeight: 500 }}>{ea.company_name}</div>
-                        {ea.website && <div className="td-muted" style={{ fontSize: 11 }}>{ea.website.replace('https://','').replace('http://','')}</div>}
+                        {ea.website && <div className="td-muted" style={{ fontSize: 12 }}>{ea.website.replace('https://','').replace('http://','')}</div>}
                       </div>
                     </div>
                   </td>
@@ -104,7 +104,7 @@ function EmployersAgentTab() {
                   </td>
                   <td>
                     {ea.payment_submission_email ? (
-                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--blue)' }}>{ea.payment_submission_email}</span>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--blue)' }}>{ea.payment_submission_email}</span>
                     ) : <span style={{ color: 'var(--text3)' }}>—</span>}
                   </td>
                   <td>
@@ -238,7 +238,7 @@ function AllSubcontractorsTab({ designTeam }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>{subs.length} registered {designTeam ? 'design team members' : 'contractors'}</p>
+        <p style={{ color: 'var(--text2)', fontSize: 14 }}>{subs.length} registered {designTeam ? 'design team members' : 'contractors'}</p>
         {can('manage_subcontractors') && (
           <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
             <IconPlus size={14} /> {designTeam ? 'Add Design Team' : 'Add Subcontractor'}
@@ -252,9 +252,9 @@ function AllSubcontractorsTab({ designTeam }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, trade, city…" style={{ paddingLeft: 32, width: 260 }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 500 }}>Trade:</span>
+          <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 500 }}>Trade:</span>
           <select value={tradeFilter} onChange={e => setTradeFilter(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, cursor: 'pointer', minWidth: 160 }}>
+            style={{ padding: '6px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, cursor: 'pointer', minWidth: 160 }}>
             <option value="all">All trades ({subs.length})</option>
             {availableTrades.map(t => (
               <option key={t} value={t}>
@@ -264,7 +264,7 @@ function AllSubcontractorsTab({ designTeam }) {
           </select>
           {tradeFilter !== 'all' && (
             <button onClick={() => setTradeFilter('all')} title="Clear trade filter"
-              style={{ fontSize: 11, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
+              style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
               ✕ Clear
             </button>
           )}
@@ -283,10 +283,10 @@ function AllSubcontractorsTab({ designTeam }) {
       </div>
 
       {tradeFilter !== 'all' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', borderRadius: 'var(--radius)', fontSize: 14, marginBottom: 12 }}>
           <span style={{ fontWeight: 500 }}>Showing {list.length} {tradeFilter}</span>
           <span style={{ opacity: 0.6 }}>— alphabetical by company</span>
-          <button onClick={() => setTradeFilter('all')} style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 8px', border: '1px solid currentColor', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
+          <button onClick={() => setTradeFilter('all')} style={{ marginLeft: 'auto', fontSize: 12, padding: '3px 8px', border: '1px solid currentColor', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
             Show all trades
           </button>
         </div>
@@ -311,7 +311,7 @@ function AllSubcontractorsTab({ designTeam }) {
                     style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                     title={`Sort by ${label}`}>
                     {label}
-                    <span style={{ marginLeft: 4, fontSize: 9, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
+                    <span style={{ marginLeft: 4, fontSize: 10, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
                       {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : '▲'}
                     </span>
                   </th>
@@ -342,7 +342,7 @@ function AllSubcontractorsTab({ designTeam }) {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <div style={{ fontWeight: 500 }}>{s.company_name}</div>
                             {s.blacklisted && (
-                              <span style={{ fontSize: 9, fontWeight: 700, background: '#c00', color: 'white', borderRadius: 3, padding: '2px 6px', letterSpacing: '0.05em' }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, background: '#c00', color: 'white', borderRadius: 3, padding: '2px 6px', letterSpacing: '0.05em' }}>
                                 ⛔ BLACKLISTED
                               </span>
                             )}

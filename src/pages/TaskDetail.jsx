@@ -1033,7 +1033,7 @@ export default function TaskDetail() {
           <div style={{ width: 14, height: 14, borderRadius: '50%', background: pri.color, flexShrink: 0, marginTop: 5 }} title={pri.label + ' priority'} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{task.title}</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12, color: 'var(--text3)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: 'var(--text3)' }}>
               <Pill cls={st.cls}>{st.label}</Pill>
               <span>Priority: <strong style={{ color: pri.color }}>{pri.label}</strong></span>
               <span>•</span>
@@ -1057,7 +1057,7 @@ export default function TaskDetail() {
           </div>
         </div>
         {project && (
-          <div style={{ fontSize: 12, color: 'var(--text2)', paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
+          <div style={{ fontSize: 13, color: 'var(--text2)', paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
             <strong style={{ color: 'var(--text3)' }}>Project:</strong>{' '}
             <Link to={`/projects/${project.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>
               {project.project_ref ? `${project.project_ref} — ` : ''}{project.project_name}
@@ -1065,7 +1065,7 @@ export default function TaskDetail() {
           </div>
         )}
         {task.description && (
-          <div style={{ marginTop: 12, padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+          <div style={{ marginTop: 12, padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
             {task.description}
           </div>
         )}
@@ -1073,7 +1073,7 @@ export default function TaskDetail() {
       {/* Assignees card */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Assigned to</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Assigned to</div>
           <div style={{ display: 'flex', gap: 6 }}>
             {!isAssignee && task.status !== 'closed' && (
               <button className="btn btn-sm" onClick={claimTask}>Claim</button>
@@ -1087,7 +1087,7 @@ export default function TaskDetail() {
           </div>
         </div>
         {assignees.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>Unassigned — anyone can claim this task.</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>Unassigned — anyone can claim this task.</div>
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {assignees.map(a => <Pill key={a.user_id} cls="pill-blue">{a.profiles?.full_name || 'Unknown'}</Pill>)}
@@ -1096,27 +1096,27 @@ export default function TaskDetail() {
       </div>
       {/* Notes */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Progress Notes</div>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Progress Notes</div>
         {canComment ? (
           <div style={{ marginBottom: 12 }}>
             <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
               placeholder="Add a progress update, question, or status note…"
-              style={{ width: '100%', minHeight: 70, fontSize: 13, padding: 10, fontFamily: 'inherit' }}
+              style={{ width: '100%', minHeight: 70, fontSize: 14, padding: 10, fontFamily: 'inherit' }}
               onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addNote() }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <div style={{ fontSize: 10, color: 'var(--text3)' }}>Ctrl/Cmd + Enter to post</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Ctrl/Cmd + Enter to post</div>
               <button className="btn btn-sm btn-primary" onClick={addNote} disabled={savingNote || !noteText.trim()}>
                 {savingNote ? 'Posting…' : 'Post Note'}
               </button>
             </div>
           </div>
         ) : (
-          <div style={{ marginBottom: 12, padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 11, color: 'var(--text3)', textAlign: 'center', fontStyle: 'italic' }}>
+          <div style={{ marginBottom: 12, padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--text3)', textAlign: 'center', fontStyle: 'italic' }}>
             Only assigned team members can post notes. Claim this task to contribute.
           </div>
         )}
         {notes.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No notes yet. Be the first to post an update.</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No notes yet. Be the first to post an update.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {notes.map(n => {
@@ -1124,16 +1124,16 @@ export default function TaskDetail() {
               return (
                 <div key={n.id} style={{ padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', borderLeft: '3px solid var(--accent)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(n.created_at).toLocaleString('en-GB')}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(n.created_at).toLocaleString('en-GB')}</div>
                       {/* Edit and delete buttons hidden while THIS note is in
                           edit mode — they live next to the textarea instead. */}
                       {!isEditing && canEditNote(n) && (
-                        <button onClick={() => startEditNote(n)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: 0 }} title="Edit note">✎</button>
+                        <button onClick={() => startEditNote(n)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }} title="Edit note">✎</button>
                       )}
                       {!isEditing && canDeleteNote(n) && (
-                        <button onClick={() => deleteNote(n.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 11, padding: 0 }} title="Delete note">✕</button>
+                        <button onClick={() => deleteNote(n.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }} title="Delete note">✕</button>
                       )}
                     </div>
                   </div>
@@ -1143,7 +1143,7 @@ export default function TaskDetail() {
                         value={editingNoteText}
                         onChange={e => setEditingNoteText(e.target.value)}
                         autoFocus
-                        style={{ width: '100%', minHeight: 80, padding: 8, fontSize: 13, lineHeight: 1.5, fontFamily: 'inherit', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
+                        style={{ width: '100%', minHeight: 80, padding: 8, fontSize: 14, lineHeight: 1.5, fontFamily: 'inherit', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
                       />
                       <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
                         <button className="btn btn-sm" onClick={cancelEditNote} disabled={savingEdit}>Cancel</button>
@@ -1153,7 +1153,7 @@ export default function TaskDetail() {
                       </div>
                     </div>
                   ) : (
-                    <div style={{ fontSize: 13, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.note}</div>
+                    <div style={{ fontSize: 14, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.note}</div>
                   )}
                 </div>
               )
@@ -1201,7 +1201,7 @@ export default function TaskDetail() {
         return (
           <div className="card card-pad" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>
                 Quote comparison{quotes.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{quotes.length}</span>}
               </div>
               {canManageQuotes && (
@@ -1209,13 +1209,13 @@ export default function TaskDetail() {
               )}
             </div>
             {quotes.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
+              <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
                 No quotes yet. Click "Add quote" to record one.
               </div>
             ) : (
               <>
                 <div style={{ overflow: 'auto' }}>
-                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                  <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
                     <thead>
                       <tr style={{ color: 'var(--text3)', fontWeight: 400, textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
                         <th style={{ padding: '6px 8px', fontWeight: 500 }}>Vendor</th>
@@ -1258,10 +1258,10 @@ export default function TaskDetail() {
                             <td style={{ padding: '8px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                 <span>{q.vendor_name_text}</span>
-                                {q.supplier_id && <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Supplier</span>}
+                                {q.supplier_id && <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Supplier</span>}
                                 {q.subcontractor_id && (vendors.find(v => v.id === q.subcontractor_id && v.kind === 'design_team')
-                                  ? <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Design Team</span>
-                                  : <span style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Sub</span>
+                                  ? <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Design Team</span>
+                                  : <span style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Sub</span>
                                 )}
                               </div>
                               {/* Multi-building chips */}
@@ -1273,13 +1273,13 @@ export default function TaskDetail() {
                                     return (
                                       <span key={ord} style={{
                                         background: '#E6F1FB', color: '#0C447C',
-                                        fontSize: 9, padding: '1px 5px', borderRadius: 99,
+                                        fontSize: 10, padding: '1px 5px', borderRadius: 99,
                                       }}>{b.name}</span>
                                     )
                                   })}
                                 </div>
                               )}
-                              {q.notes && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{q.notes.length > 80 ? q.notes.slice(0, 80) + '…' : q.notes}</div>}
+                              {q.notes && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{q.notes.length > 80 ? q.notes.slice(0, 80) + '…' : q.notes}</div>}
                             </td>
                             <td style={{ padding: '8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                               {q.amount != null ? `${q.currency === 'GBP' ? '£' : (q.currency + ' ')}${Number(q.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
@@ -1291,7 +1291,7 @@ export default function TaskDetail() {
                               {q.amount_vat != null ? (
                                 <>
                                   {`${q.currency === 'GBP' ? '£' : (q.currency + ' ')}${Number(q.amount_vat).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                                  {q.vat_rate != null && <div style={{ fontSize: 9, color: 'var(--text3)' }}>{q.vat_rate}%</div>}
+                                  {q.vat_rate != null && <div style={{ fontSize: 10, color: 'var(--text3)' }}>{q.vat_rate}%</div>}
                                 </>
                               ) : <span style={{ color: 'var(--text3)' }}>—</span>}
                             </td>
@@ -1305,7 +1305,7 @@ export default function TaskDetail() {
                             </td>
                             <td style={{ padding: '8px' }}>
                               <span style={{
-                                display: 'inline-block', fontSize: 10, padding: '2px 8px', borderRadius: 99,
+                                display: 'inline-block', fontSize: 11, padding: '2px 8px', borderRadius: 99,
                                 background: statusStyle.bg, color: statusStyle.fg, fontWeight: 600,
                                 textTransform: 'capitalize',
                               }}>{q.status}</span>
@@ -1335,13 +1335,13 @@ export default function TaskDetail() {
                   </table>
                 </div>
                 {singleCohort && singleCohort.priced.length >= 2 && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text2)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text2)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                     <span>Average: £{singleCohort.avg.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     <span>Spread: £{(singleCohort.highest.amount - singleCohort.lowest.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({(((singleCohort.highest.amount - singleCohort.lowest.amount) / singleCohort.lowest.amount) * 100).toFixed(1)}%)</span>
                   </div>
                 )}
                 {!singleCohort && cohorts.size > 1 && (
-                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--text3)', fontStyle: 'italic' }}>
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>
                     Quotes cover different scopes — comparison runs separately within each scope.
                   </div>
                 )}
@@ -1353,7 +1353,7 @@ export default function TaskDetail() {
       {/* Files */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Files & Emails</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Files & Emails</div>
           {canUpload && (
             <label className="btn btn-sm btn-primary" style={{ cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
               {uploading ? 'Uploading…' : '+ Upload'}
@@ -1362,12 +1362,12 @@ export default function TaskDetail() {
           )}
         </div>
         {!canUpload && files.length === 0 && (
-          <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', padding: 16, fontStyle: 'italic' }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: 16, fontStyle: 'italic' }}>
             Only assigned team members can upload files.
           </div>
         )}
         {files.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
+          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>
             No files uploaded. Drag and drop, or click Upload. Supports any file type including .eml emails.
           </div>
         ) : (
@@ -1392,11 +1392,11 @@ export default function TaskDetail() {
                     {/* Category header: small caps, count next to label */}
                     <div style={{
                       display: 'flex', alignItems: 'center', gap: 8,
-                      fontSize: 10, fontWeight: 600, color: 'var(--text2)',
+                      fontSize: 11, fontWeight: 600, color: 'var(--text2)',
                       textTransform: 'uppercase', letterSpacing: '.06em',
                       marginBottom: 6,
                     }}>
-                      <span style={{ fontSize: 13 }}>{cat.icon}</span>
+                      <span style={{ fontSize: 14 }}>{cat.icon}</span>
                       <span>{cat.label}</span>
                       <span style={{ color: 'var(--text3)', fontWeight: 400 }}>{catFiles.length}</span>
                     </div>
@@ -1414,12 +1414,12 @@ export default function TaskDetail() {
                         const qFmt = (n) => qCcy + Number(n || 0).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                         return (
                           <div key={f.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: 8, background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
-                            <div style={{ width: 28, height: 28, borderRadius: 4, background: isEml ? '#e3f2fd' : 'var(--surface)', color: isEml ? '#1565c0' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 4, background: isEml ? '#e3f2fd' : 'var(--surface)', color: isEml ? '#1565c0' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
                               {isEml ? '✉' : '📄'}
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</div>
-                              <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                              <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                                 {fmtBytes(f.file_size)} • {f.profiles?.full_name || 'Unknown'} • {new Date(f.uploaded_at).toLocaleDateString('en-GB')}
                               </div>
                               {/* VAT breakdown — only when a quote record is
@@ -1427,7 +1427,7 @@ export default function TaskDetail() {
                                   Files with no linked quote, or quotes saved
                                   before VAT existed, simply omit this line. */}
                               {hasVat && (
-                                <div style={{ display: 'flex', gap: 12, marginTop: 3, fontSize: 10, flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: 12, marginTop: 3, fontSize: 11, flexWrap: 'wrap' }}>
                                   <span style={{ color: 'var(--text3)' }}>
                                     Net <span style={{ color: 'var(--text2)' }}>{qFmt(linkedQuote.amount_net)}</span>
                                   </span>
@@ -1451,7 +1451,7 @@ export default function TaskDetail() {
                                   onChange={(e) => changeFileCategory(f, e.target.value)}
                                   title="Change category"
                                   style={{
-                                    fontSize: 11, padding: '3px 4px', borderRadius: 4,
+                                    fontSize: 12, padding: '3px 4px', borderRadius: 4,
                                     border: '1px solid var(--border)', background: 'var(--surface)',
                                     color: 'var(--text2)', cursor: 'pointer',
                                   }}
@@ -1500,23 +1500,23 @@ export default function TaskDetail() {
       {/* Activity log */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>
             Activity{activity.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{activity.length}</span>}
           </div>
         </div>
         {activity.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No activity yet.</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No activity yet.</div>
         ) : (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {(showAllActivity ? activity : activity.slice(0, 3)).map(a => (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, padding: '4px 0' }}>
+                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, padding: '4px 0' }}>
                   <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--text3)', flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
                     <strong style={{ color: 'var(--text)' }}>{a.profiles?.full_name || 'Someone'}</strong>{' '}
                     <span style={{ color: 'var(--text2)' }}>{formatActivityAction(a)}</span>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>{new Date(a.created_at).toLocaleString('en-GB')}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(a.created_at).toLocaleString('en-GB')}</div>
                 </div>
               ))}
             </div>
@@ -1526,7 +1526,7 @@ export default function TaskDetail() {
                 onClick={() => setShowAllActivity(v => !v)}
                 style={{
                   marginTop: 8, padding: '6px 10px',
-                  fontSize: 11, fontWeight: 500,
+                  fontSize: 12, fontWeight: 500,
                   background: 'transparent', border: '1px solid var(--border)',
                   borderRadius: 4, color: 'var(--text2)', cursor: 'pointer',
                   width: '100%',
@@ -1561,7 +1561,7 @@ export default function TaskDetail() {
           <button className="btn" onClick={() => setShowAssignModal(false)} disabled={savingAssign}>Cancel</button>
           <button className="btn btn-primary" onClick={saveAssignees} disabled={savingAssign}>{savingAssign ? 'Saving…' : 'Save'}</button>
         </>}>
-        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Click to toggle assignees. Multiple people can be assigned.</div>
+        <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 10 }}>Click to toggle assignees. Multiple people can be assigned.</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {allUsers.map(u => {
             const sel = selectedAssignees.has(u.id)
@@ -1575,7 +1575,7 @@ export default function TaskDetail() {
                   })
                 }}
                 style={{
-                  padding: '5px 12px', fontSize: 12, borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit',
+                  padding: '5px 12px', fontSize: 13, borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit',
                   border: '1px solid ' + (sel ? 'var(--accent)' : 'var(--border)'),
                   background: sel ? 'var(--accent)' : 'var(--surface)',
                   color: sel ? 'white' : 'var(--text)'
@@ -1599,7 +1599,7 @@ export default function TaskDetail() {
           <div className="form-grid">
             {/* Vendor picker. Radio for kind, then the appropriate input. */}
             <div className="full">
-              <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>Vendor</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>Vendor</div>
               <div style={{ display: 'flex', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
                 {[
                   { v: 'supplier',      label: 'Supplier' },
@@ -1607,7 +1607,7 @@ export default function TaskDetail() {
                   { v: 'design_team',   label: 'Design Team' },
                   { v: 'freetext',      label: 'Not in system' },
                 ].map(opt => (
-                  <label key={opt.v} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
+                  <label key={opt.v} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
                     <input type="radio" name="vendor_kind"
                       checked={quoteModal.vendor_kind === opt.v}
                       onChange={() => setQuoteModal(prev => ({
@@ -1683,7 +1683,7 @@ export default function TaskDetail() {
                       + Add as Design Team
                     </button>
                   </div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
                     Picking one opens a form to fill in the full vendor details. Once saved, this quote will be linked to the new record.
                   </div>
                 </div>
@@ -1721,9 +1721,9 @@ export default function TaskDetail() {
                 const aiVat = quoteModal._aiFilled?.vat
                 return (
                   <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: 12, background: 'var(--surface2)' }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em' }}>
                       VAT
-                      {aiVat && <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 9, padding: '1px 6px', borderRadius: 99, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>AI</span>}
+                      {aiVat && <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 10, padding: '1px 6px', borderRadius: 99, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>AI</span>}
                     </div>
                     <div className="form-grid">
                       <Field label="Amount entered is">
@@ -1743,13 +1743,13 @@ export default function TaskDetail() {
                       </Field>
                     </div>
                     <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: '8px 12px', marginTop: 4 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', padding: '3px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', padding: '3px 0' }}>
                         <span>Net (ex VAT)</span><span>{fmt(vb.net)}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text2)', padding: '3px 0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--text2)', padding: '3px 0' }}>
                         <span>VAT @ {quoteModal.vat_rate || '20'}%</span><span>{fmt(vb.vat)}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 600, padding: '5px 0 0', marginTop: 3, borderTop: '0.5px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, fontWeight: 600, padding: '5px 0 0', marginTop: 3, borderTop: '0.5px solid var(--border)' }}>
                         <span>Gross total</span><span style={{ color: '#448a40' }}>{fmt(vb.gross)}</span>
                       </div>
                     </div>
@@ -1792,7 +1792,7 @@ export default function TaskDetail() {
                   )}
                 </div>
               </Field>
-              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
                 Only files in the Quotes category appear here. Upload a quote PDF first if you want to link it.
               </div>
             </div>
@@ -1800,7 +1800,7 @@ export default function TaskDetail() {
             {quoteModal._aiFilled && Object.values(quoteModal._aiFilled).some(Boolean) && (
               <div className="full" style={{
                 background: '#E6F1FB', color: '#0C447C',
-                padding: 10, borderRadius: 4, fontSize: 11,
+                padding: 10, borderRadius: 4, fontSize: 12,
                 borderLeft: '3px solid #185FA5',
               }}>
                 <strong>✨ AI auto-filled some fields</strong>
@@ -1813,7 +1813,7 @@ export default function TaskDetail() {
             {/* Notes */}
             <div className="full">
               <Field label={
-                <span>Notes {quoteModal._aiFilled?.notes && <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 9, padding: '1px 6px', borderRadius: 99, marginLeft: 4 }}>AI</span>}</span>
+                <span>Notes {quoteModal._aiFilled?.notes && <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 10, padding: '1px 6px', borderRadius: 99, marginLeft: 4 }}>AI</span>}</span>
               }>
                 <textarea value={quoteModal.notes}
                   onChange={e => setQuoteModal(prev => ({ ...prev, notes: e.target.value, _aiFilled: prev._aiFilled ? { ...prev._aiFilled, notes: false } : undefined }))}
@@ -1826,11 +1826,11 @@ export default function TaskDetail() {
                 this entirely so the modal stays compact. */}
             {buildings.length > 1 && (
               <div className="full">
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600, letterSpacing: '.04em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>
                     Buildings covered
                     {quoteModal._aiFilled?.building_ordinals && (
-                      <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 9, padding: '1px 6px', borderRadius: 99, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>AI</span>
+                      <span style={{ background: '#E6F1FB', color: '#0C447C', fontSize: 10, padding: '1px 6px', borderRadius: 99, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>AI</span>
                     )}
                   </span>
                   <span style={{ color: 'var(--text3)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
@@ -1846,7 +1846,7 @@ export default function TaskDetail() {
                         padding: '6px 10px',
                         background: sel ? '#E6F1FB' : 'var(--surface2)',
                         color: sel ? '#0C447C' : 'var(--text2)',
-                        borderRadius: 'var(--radius)', fontSize: 12, cursor: 'pointer',
+                        borderRadius: 'var(--radius)', fontSize: 13, cursor: 'pointer',
                         border: sel ? '1px solid #B5D4F4' : '1px solid transparent',
                       }}>
                         <input type="checkbox"
@@ -1875,14 +1875,14 @@ export default function TaskDetail() {
                     )
                   })}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
                   Leave all unticked if the quote covers the whole project.
                 </div>
               </div>
             )}
             {/* Auto-reject hint */}
             {quoteModal.status === 'accepted' && quotes.filter(q => q.id !== quoteModal._id && (q.status === 'pending' || q.status === 'expired')).length > 0 && (
-              <div className="full" style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--surface2)', padding: 8, borderRadius: 4, marginTop: -4 }}>
+              <div className="full" style={{ fontSize: 12, color: 'var(--text2)', background: 'var(--surface2)', padding: 8, borderRadius: 4, marginTop: -4 }}>
                 ℹ Marking this quote Accepted will automatically reject{' '}
                 {quotes.filter(q => q.id !== quoteModal._id && (q.status === 'pending' || q.status === 'expired')).length}{' '}
                 other pending quote(s) on this task.
@@ -1907,7 +1907,7 @@ export default function TaskDetail() {
           }}>
             <div style={{ fontSize: 48, marginBottom: 8 }}>📥</div>
             <div style={{ fontSize: 18, fontWeight: 600 }}>Drop to upload</div>
-            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>
+            <div style={{ fontSize: 14, opacity: 0.85, marginTop: 4 }}>
               Files will be auto-categorised. Single quote PDFs are scanned by AI.
             </div>
           </div>
@@ -2016,17 +2016,17 @@ function EmlViewer({ file, parsed, onClose }) {
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 14, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 600 }}>✉ {file.file_name}</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>✉ {file.file_name}</div>
           <button className="btn btn-sm" onClick={onClose}>Close</button>
         </div>
-        <div style={{ padding: 14, fontSize: 12, borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
+        <div style={{ padding: 14, fontSize: 13, borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
           <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>From:</strong> {parsed.from}</div>
           <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>To:</strong> {parsed.to}</div>
           {parsed.cc && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Cc:</strong> {parsed.cc}</div>}
           {parsed.date && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Date:</strong> {parsed.date}</div>}
           <div><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Subject:</strong> <span style={{ fontWeight: 600 }}>{parsed.subject}</span></div>
         </div>
-        <div style={{ padding: 14, fontSize: 13, lineHeight: 1.6, flex: 1, overflow: 'auto' }}>
+        <div style={{ padding: 14, fontSize: 14, lineHeight: 1.6, flex: 1, overflow: 'auto' }}>
           {parsed.isHtml ? (
             <iframe srcDoc={parsed.body} sandbox="" style={{ width: '100%', height: '60vh', border: '1px solid var(--border)', borderRadius: 4, background: 'white' }} />
           ) : (

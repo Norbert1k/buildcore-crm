@@ -74,7 +74,7 @@ export function Field({ label, children, error }) {
     <div>
       {label && <label>{label}</label>}
       {children}
-      {error && <div style={{ color: 'var(--red)', fontSize: 11, marginTop: 3 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--red)', fontSize: 12, marginTop: 3 }}>{error}</div>}
     </div>
   )
 }

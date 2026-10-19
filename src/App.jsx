@@ -135,7 +135,7 @@ function NotificationBell() {
           <span style={{
             position: 'absolute', top: 2, right: 2,
             background: 'var(--red, #a32d2d)', color: 'white',
-            fontSize: 10, fontWeight: 700, borderRadius: '50%',
+            fontSize: 11, fontWeight: 700, borderRadius: '50%',
             width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
             lineHeight: 1
           }}>{unreadCount > 9 ? '9+' : unreadCount}</span>
@@ -155,12 +155,12 @@ function NotificationBell() {
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>Notifications</div>
               {unreadCount > 0 && (
-                <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 10px' }} onClick={markAllRead}>Mark all read</button>
+                <button className="btn btn-sm" style={{ fontSize: 12, padding: '2px 10px' }} onClick={markAllRead}>Mark all read</button>
               )}
             </div>
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {notifications.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
                   No notifications yet
                 </div>
               ) : notifications.map(n => {
@@ -187,11 +187,11 @@ function NotificationBell() {
                       <div style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{tc.icon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ fontSize: 13, fontWeight: n.read ? 500 : 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{n.title}</div>
+                          <div style={{ fontSize: 14, fontWeight: n.read ? 500 : 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{n.title}</div>
                           {!n.read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green, #448a40)', flexShrink: 0 }} />}
                         </div>
-                        {n.message && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{n.message}</div>}
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                        {n.message && <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 3, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{n.message}</div>}
+                        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
                           {new Date(n.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
@@ -383,7 +383,7 @@ function ProtectedLayout() {
           <div style={{ fontWeight: 600, fontSize: 15, flexShrink: 0 }}>{title}</div>
           <GlobalSearch />
           <NotificationBell />
-          <div style={{ fontSize: 12, color: 'var(--text3)', display: 'none' }} className="topbar-date">
+          <div style={{ fontSize: 13, color: 'var(--text3)', display: 'none' }} className="topbar-date">
             {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
         </div>
@@ -506,9 +506,9 @@ function LiveReminderPopup({ reminder, onClose, onAfterAction }) {
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Task reminder</span>
         </div>
         <div style={{ padding: '16px 18px' }}>
-          {projectLabel && <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{projectLabel}</div>}
+          {projectLabel && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>{projectLabel}</div>}
           <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--text)', marginBottom: 10 }}>{task?.title || 'Task'}</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>You set this reminder {createdAgo}.</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>You set this reminder {createdAgo}.</div>
         </div>
         <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
           <button className="btn btn-sm" onClick={snoozeHour}>Snooze 1h</button>

@@ -50,7 +50,7 @@ export default function ContactsTab({ subcontractorId, contacts, onRefresh }) {
       </div>
 
       {contacts.length === 0 ? (
-        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
           No contacts added yet. Add the key people at this company.
         </div>
       ) : (
@@ -101,15 +101,15 @@ function ContactCard({ contact, canEdit, onEdit, onDelete, onSetPrimary }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{contact.full_name}</div>
-            {contact.is_primary && <Pill cls="pill-green" style={{ fontSize: 10 }}>Primary</Pill>}
+            {contact.is_primary && <Pill cls="pill-green" style={{ fontSize: 11 }}>Primary</Pill>}
           </div>
           {contact.job_title && (
-            <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, marginTop: 2 }}>{contact.job_title}</div>
+            <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, marginTop: 2 }}>{contact.job_title}</div>
           )}
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 14 }}>
         {contact.phone && (
           <a href={`tel:${contact.phone}`} style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text)', textDecoration: 'none' }}>
             <span style={{ fontSize: 14 }}>📞</span>
@@ -129,14 +129,14 @@ function ContactCard({ contact, canEdit, onEdit, onDelete, onSetPrimary }) {
           </a>
         )}
         {contact.notes && (
-          <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 4, fontStyle: 'italic' }}>{contact.notes}</div>
+          <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 4, fontStyle: 'italic' }}>{contact.notes}</div>
         )}
       </div>
 
       {canEdit && (
         <div style={{ display: 'flex', gap: 6, marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
           {!contact.is_primary && (
-            <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: 11 }} onClick={onSetPrimary}>
+            <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }} onClick={onSetPrimary}>
               Set Primary
             </button>
           )}
@@ -203,7 +203,7 @@ function ContactModal({ contact, subcontractorId, onClose, onSaved }) {
       }
     >
       {error && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
+        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>
           {error}
         </div>
       )}
@@ -229,7 +229,7 @@ function ContactModal({ contact, subcontractorId, onClose, onSaved }) {
         <Field label="Notes">
           <input value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="e.g. Best to call mornings" />
         </Field>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, fontWeight: 400 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, fontWeight: 400 }}>
           <input
             type="checkbox"
             checked={form.is_primary}

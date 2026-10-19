@@ -67,7 +67,7 @@ export default function EAModal({ ea, onClose, onSaved }) {
       }
     >
       {errors._global && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
+        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>
           {errors._global}
         </div>
       )}
@@ -98,7 +98,7 @@ export default function EAModal({ ea, onClose, onSaved }) {
           <Field label="Payment Application Submission Email" error={errors.payment_submission_email}>
             <input type="email" value={form.payment_submission_email} onChange={e => set('payment_submission_email', e.target.value)} placeholder="valuations@company.com" />
           </Field>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
             Default email for submitting payment applications. Can be overridden per-project when assigning.
           </div>
         </div>

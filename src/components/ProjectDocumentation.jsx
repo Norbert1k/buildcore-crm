@@ -533,26 +533,26 @@ function ZipProgressOverlay({ progress }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '24px 28px', minWidth: 360, maxWidth: 460 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>{label}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>{label}</div>
         {total > 0 && compressPct == null && (
           <>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Downloading file {current} of {total}</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>Downloading file {current} of {total}</div>
             <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ width: filesPct + '%', height: '100%', background: '#448a40', transition: 'width 0.2s' }} />
             </div>
-            {fileName && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</div>}
+            {fileName && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={fileName}>{fileName}</div>}
           </>
         )}
         {compressPct != null && (
           <>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>Compressing zip… {compressPct}%</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>Compressing zip… {compressPct}%</div>
             <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
               <div style={{ width: compressPct + '%', height: '100%', background: '#448a40', transition: 'width 0.1s' }} />
             </div>
           </>
         )}
         {total === 0 && compressPct == null && (
-          <div style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: '#448a40', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
             Loading file list…
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -566,15 +566,15 @@ function ZipProgressOverlay({ progress }) {
 const PENCIL = <svg width="11" height="11" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/><rect x="10" y="7" width="4" height="4" fill="#FDD835"/><polygon points="10,18 14,18 12,23" fill="#fff"/><rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/></svg>
 const BIN = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
 
-const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)',     borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const Btn  = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)',     borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnG = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnR = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 
 // ── Count Badge (pill showing file count on subfolder rows) ───────────────────
 function CountBadge({ count }) {
   if (!count) return null
   return (
-    <div style={{ background: 'var(--surface2)', color: 'var(--text3)', fontSize: 10, fontWeight: 500, padding: '1px 7px', borderRadius: 'var(--radius)', flexShrink: 0 }}>{count}</div>
+    <div style={{ background: 'var(--surface2)', color: 'var(--text3)', fontSize: 11, fontWeight: 500, padding: '1px 7px', borderRadius: 'var(--radius)', flexShrink: 0 }}>{count}</div>
   )
 }
 
@@ -610,22 +610,22 @@ function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
   return (
     <>
       <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-        <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
-        {onMove && <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
-        <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{selected.size} selected</span>
+        <button onClick={onZip} style={{ fontSize: 13, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
+        {onMove && <button onClick={openMove} style={{ fontSize: 13, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
+        <button onClick={onClear} style={{ fontSize: 13, lineHeight: '26px', padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
       </div>
       {showMove && moveTargets && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 600 }} onClick={() => setShowMove(false)} />
           <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
-            <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
-            <div onClick={() => { onMove(null); setShowMove(false) }} style={{ padding: '10px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'} onMouseLeave={e => e.currentTarget.style.background = ''}>
+            <div style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
+            <div onClick={() => { onMove(null); setShowMove(false) }} style={{ padding: '10px 14px', fontSize: 14, cursor: 'pointer', color: 'var(--text)', borderBottom: '0.5px solid var(--border)' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'} onMouseLeave={e => e.currentTarget.style.background = ''}>
               📂 Root (no subfolder)
             </div>
             {moveTargets.map(t => (
               <div key={t.key} onClick={() => { onMove(t.key); setShowMove(false) }}
-                style={{ padding: '8px 14px 8px 20px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
+                style={{ padding: '8px 14px 8px 20px', fontSize: 14, cursor: 'pointer', color: 'var(--text)' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
                 onMouseLeave={e => e.currentTarget.style.background = ''}>
                 📁 {t.label}
@@ -711,7 +711,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
           <div style={{
             position: 'absolute', top: 6, right: 28, zIndex: 2,
             background: 'rgba(0,0,0,0.7)', color: '#fff',
-            fontSize: 9, fontWeight: 600,
+            fontSize: 10, fontWeight: 600,
             padding: '2px 6px', borderRadius: 3,
             letterSpacing: '0.04em',
           }}>HIDDEN</div>
@@ -723,7 +723,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
             ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
             : <FileTypeBadge fileName={file.file_name} fileType={file.file_type} size={34} />
           }
-          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(file.file_name)}</div>
+          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(file.file_name)}</div>
         </div>
         <div style={{ padding: '6px 8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
@@ -731,9 +731,9 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
               ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
                   onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
-                  style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
+                  style={{ flex: 1, fontSize: 12, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
               : <>
-                  <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
+                  <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
                   {canDelete && (
                     <>
                       <button onClick={toggleFileVisibility} disabled={togglingVisible}
@@ -766,16 +766,16 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
                 </>
             }
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
           <div style={{ display: 'flex', gap: 4 }}>
-            {url && <button onClick={e => { e.stopPropagation(); onPreview(file, url) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-            {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+            {url && <button onClick={e => { e.stopPropagation(); onPreview(file, url) }} style={{ flex: 1, fontSize: 11, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+            {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 11, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
+            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
           </div>
           {onGenerateGantt && isPdf && (
             <button onClick={e => { e.stopPropagation(); onGenerateGantt(file) }}
               title="Use AI to extract tasks from this PDF and load them into the Live Gantt editor"
-              style={{ marginTop: 4, width: '100%', fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid #534AB7', borderRadius: 4, background: '#534AB7', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+              style={{ marginTop: 4, width: '100%', fontSize: 11, lineHeight: '22px', padding: 0, border: '0.5px solid #534AB7', borderRadius: 4, background: '#534AB7', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
               Generate Gantt
             </button>
@@ -853,7 +853,7 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
         <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {iconLetter ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span>
+          {iconLetter ? <span style={{ fontSize: 11, fontWeight: 700, color: iconColor }}>{iconLetter}</span>
             : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -861,14 +861,14 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
             ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
                 onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
-                style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+                style={{ width: '100%', fontSize: 13, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
             : (
               <div onClick={() => onPreview ? onPreview(file, url) : null} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
                   {!clientVisible && (
                     <span style={{
-                      fontSize: 9, fontWeight: 600, padding: '1px 5px',
+                      fontSize: 10, fontWeight: 600, padding: '1px 5px',
                       borderRadius: 3, background: 'rgba(0,0,0,0.4)', color: '#fff',
                       letterSpacing: '0.04em', flexShrink: 0,
                     }}>HIDDEN</span>
@@ -903,15 +903,15 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
                     </>
                   )}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
               </div>
             )
           }
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-          {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-          {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+          {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
+          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
         </div>
       </div>
       {confirmDel && <ConfirmDlg message={'Delete "' + file.file_name + '"?'} onOk={() => { setConfirmDel(false); onDelete(file) }} onCancel={() => setConfirmDel(false)} />}
@@ -944,7 +944,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
       ))}
       {canManage && (
         <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
-          style={{ border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 10 }}>
+          style={{ border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', minHeight: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Add files
           <input type="file" multiple style={{ display: 'none' }} onChange={e => onUpload(Array.from(e.target.files))} />
@@ -1322,7 +1322,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'transparent' }}>
         <div style={{ width: 24, height: 24, borderRadius: 'var(--radius)', background: isCustom ? '#F1EFE8' : folder.color + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           {isCustom
-            ? <span style={{ fontSize: 13 }}>📁</span>
+            ? <span style={{ fontSize: 14 }}>📁</span>
             : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth="1.5">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg>
@@ -1332,10 +1332,10 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
           ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') renameFolder(); if (e.key === 'Escape') setRenaming(false) }}
               onClick={e => e.stopPropagation()}
-              style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
-          : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{subLabel}</span>
+              style={{ flex: 1, fontSize: 13, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+          : <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{subLabel}</span>
         }
-        <span style={{ fontSize: 10, color: 'var(--text3)' }}>{!isPhotosSubfolder && open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
+        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{!isPhotosSubfolder && open && (files.length + childFolders.length) > 0 ? (files.length + childFolders.length) + ' items' : ''}</span>
         {!open && !isPhotosSubfolder && <CountBadge count={fileCount} />}
         {!isCustom && canManage && showsClientVisibilityToggle(folder.key, subfolder.key) && (
           <button
@@ -1343,7 +1343,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
             disabled={togglingVisible}
             title={clientVisible ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
             style={{
-              fontSize: 10,
+              fontSize: 11,
               padding: '3px 8px',
               borderRadius: 'var(--radius)',
               border: '0.5px solid var(--border)',
@@ -1410,7 +1410,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                   ? <>
                       <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus
                         onKeyDown={e => { if (e.key === 'Enter') addChildFolder(); if (e.key === 'Escape') setShowAddSub(false) }}
-                        style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+                        style={{ fontSize: 12, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
                       <button onClick={addChildFolder} disabled={savingSub} style={BtnG}>{savingSub ? '...' : 'Add'}</button>
                       <button onClick={() => { setShowAddSub(false); setNewSubName('') }} style={Btn}>✕</button>
                     </>
@@ -1471,7 +1471,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
 
           {isPrSubfolder && progressReports.length > 0 && (
             <div style={{ marginBottom: 10, padding: 10, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)' }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                 {subLabel} — Progress Reports ({progressReports.length})
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1481,13 +1481,13 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: 'var(--surface)', borderRadius: 4, cursor: 'pointer', border: '0.5px solid var(--border)' }}>
                     <span style={{ fontSize: 14 }}>📋</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>{r.report_number}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.report_number}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                         Last updated {new Date(r.updated_at).toLocaleDateString('en-GB')} · {r.profiles?.full_name || 'Unknown'}
                       </div>
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); setEditingReportId(r.id); setShowProgressEditor(true) }}
-                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
+                      style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
                       Open
                     </button>
                     <button onClick={async (e) => {
@@ -1499,7 +1499,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                         if (!full) { alert('Report not found'); return }
                         await generateProgressReportPdf(full, pics || [], `${projectName} — ${subLabel}`)
                       }}
-                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
+                      style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
                       📄 Export PDF
                     </button>
                     {canManage && (
@@ -1522,13 +1522,13 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                           }
                         }}
                         title="Generate the PDF and save it into the 05 folder so the client portal can view it"
-                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #378ADD', borderRadius: 4, background: publishingReportId === r.id ? 'var(--surface2)' : '#378ADD', cursor: publishingReportId === r.id ? 'wait' : 'pointer', color: publishingReportId === r.id ? 'var(--text2)' : 'white', opacity: publishingReportId && publishingReportId !== r.id ? 0.5 : 1 }}>
+                        style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid #378ADD', borderRadius: 4, background: publishingReportId === r.id ? 'var(--surface2)' : '#378ADD', cursor: publishingReportId === r.id ? 'wait' : 'pointer', color: publishingReportId === r.id ? 'var(--text2)' : 'white', opacity: publishingReportId && publishingReportId !== r.id ? 0.5 : 1 }}>
                         {publishingReportId === r.id ? 'Publishing…' : '📤 Publish to client'}
                       </button>
                     )}
                     {canManage && (
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
-                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
+                        style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
                         Delete
                       </button>
                     )}
@@ -1540,7 +1540,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
 
           {files.length === 0 && childFolders.length === 0 && !isPrSubfolder ? (
             <label onDragOver={e => e.preventDefault()} onDrop={onDrop}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 50, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 12 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
@@ -2033,10 +2033,10 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                   if (e.key === 'Escape') setRenamingFolder(false)
                 }}
                 onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
-                style={{ fontSize: 13, fontWeight: 600, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
-            : <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
+                style={{ fontSize: 14, fontWeight: 600, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
+            : <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
           }
-          <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 1 }}>
+          <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 1 }}>
             {subfolders.length > 0 ? `${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}
             {fileCount > 0 ? `${subfolders.length > 0 ? ' · ' : ''}${fileCount} file${fileCount !== 1 ? 's' : ''}` : ''}
             {subfolders.length === 0 && fileCount === 0 ? 'Empty' : ''}
@@ -2049,7 +2049,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
               disabled={togglingVisible}
               title={clientVisible ? 'Visible in client portal — click to hide' : 'Hidden from client portal — click to show'}
               style={{
-                fontSize: 10,
+                fontSize: 11,
                 padding: '3px 8px',
                 borderRadius: 'var(--radius)',
                 border: '0.5px solid var(--border)',
@@ -2073,7 +2073,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+                style={{ fontSize: 12, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
               <button onClick={addCustomSubfolder} disabled={savingFolder} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
               <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
             </>
@@ -2159,7 +2159,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           {/* Progress reports list (folder 05 only) */}
           {folder.key === '05-progress-report' && progressReports.length > 0 && (
             <div style={{ marginBottom: 14, padding: 12, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)' }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
                 Saved Progress Reports ({progressReports.length})
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -2169,13 +2169,13 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: 'var(--surface)', borderRadius: 4, cursor: 'pointer', border: '0.5px solid var(--border)' }}>
                     <span style={{ fontSize: 14 }}>📋</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600 }}>{r.report_number}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text3)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.report_number}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                         Last updated {new Date(r.updated_at).toLocaleDateString('en-GB')} · {r.profiles?.full_name || 'Unknown'}
                       </div>
                     </div>
                     <button onClick={(e) => { e.stopPropagation(); setEditingReportId(r.id); setShowProgressEditor(true) }}
-                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
+                      style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)' }}>
                       Open
                     </button>
                     <button onClick={async (e) => {
@@ -2188,7 +2188,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                         if (!full) { alert('Report not found'); return }
                         await generateProgressReportPdf(full, pics || [], projectName)
                       }}
-                      style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
+                      style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
                       📄 Export PDF
                     </button>
                     {canManage && subfolders.length === 0 && (
@@ -2211,20 +2211,20 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                           }
                         }}
                         title="Generate the PDF and save it into the 05 folder so the client portal can view it"
-                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid #378ADD', borderRadius: 4, background: publishingReportId === r.id ? 'var(--surface2)' : '#378ADD', cursor: publishingReportId === r.id ? 'wait' : 'pointer', color: publishingReportId === r.id ? 'var(--text2)' : 'white', opacity: publishingReportId && publishingReportId !== r.id ? 0.5 : 1 }}>
+                        style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid #378ADD', borderRadius: 4, background: publishingReportId === r.id ? 'var(--surface2)' : '#378ADD', cursor: publishingReportId === r.id ? 'wait' : 'pointer', color: publishingReportId === r.id ? 'var(--text2)' : 'white', opacity: publishingReportId && publishingReportId !== r.id ? 0.5 : 1 }}>
                         {publishingReportId === r.id ? 'Publishing…' : '📤 Publish to client'}
                       </button>
                     )}
                     {canManage && subfolders.length > 0 && (
                       <span
                         title="This project has separate buildings. Open a building's Progress Report section below and publish from there, so the report appears under that building in the client portal."
-                        style={{ fontSize: 10, color: 'var(--text3)', fontStyle: 'italic', padding: '3px 0' }}>
+                        style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', padding: '3px 0' }}>
                         Publish inside a building ↓
                       </span>
                     )}
                     {canManage && (
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteReport(r.id) }}
-                        style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
+                        style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>
                         Delete
                       </button>
                     )}
@@ -2267,7 +2267,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           {files.length > 0 && (
             <div style={{ marginTop: subfolders.length > 0 ? 10 : 0 }}>
               {subfolders.length > 0 && (
-                <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>General files</div>
               )}
               <FilesGrid files={files} viewMode={viewMode} onPreview={openPreview} canManage={canManage}
                 onDelete={deleteFile} selected={selected} onSelect={toggleSelect} onDrop={onDropBody} onUpload={uploadToFolder}
@@ -2278,7 +2278,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           {/* Empty state */}
           {files.length === 0 && subfolders.length === 0 && canManage && (
             <label onDragOver={e => e.preventDefault()} onDrop={onDropBody}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 56, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 56, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 12 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
@@ -2354,7 +2354,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 32, textAlign: 'center', maxWidth: 380 }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6 }}>Reading your programme PDF…</div>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
               AI is extracting tasks, dates, and groups. Small PDFs take 10–30 seconds; larger or multi-page programmes can take up to 90 seconds.
             </div>
             <div style={{ display: 'inline-block', width: 24, height: 24, border: '3px solid var(--border)', borderTopColor: '#534AB7', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -2372,37 +2372,37 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
             <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>AI Extracted Tasks</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>From: {generatePreview.filename}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>From: {generatePreview.filename}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: generatePreview.confidence === 'high' ? '#e8f5e7' : generatePreview.confidence === 'medium' ? '#fef4e0' : '#fee', color: generatePreview.confidence === 'high' ? '#448a40' : generatePreview.confidence === 'medium' ? '#b87a00' : '#c00', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: generatePreview.confidence === 'high' ? '#e8f5e7' : generatePreview.confidence === 'medium' ? '#fef4e0' : '#fee', color: generatePreview.confidence === 'high' ? '#448a40' : generatePreview.confidence === 'medium' ? '#b87a00' : '#c00', textTransform: 'uppercase' }}>
                   {generatePreview.confidence || 'unknown'} confidence
                 </span>
               </div>
             </div>
-            <div style={{ padding: 14, fontSize: 12, color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ padding: 14, fontSize: 13, color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
               <strong>{generatePreview.tasks.length}</strong> tasks extracted.
               {generatePreview.notes && <div style={{ marginTop: 6, fontStyle: 'italic', color: 'var(--text3)' }}>{generatePreview.notes}</div>}
-              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text3)' }}>
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text3)' }}>
                 Review the list below. If it looks good, click <strong>Open in Gantt Editor</strong> to load these tasks for editing — they won't be saved until you click Save in the editor.
               </div>
             </div>
             <div style={{ flex: 1, overflow: 'auto', padding: 14 }}>
               {generatePreview.tasks.length === 0 ? (
-                <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 30, fontSize: 12 }}>
+                <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 30, fontSize: 13 }}>
                   No tasks were extracted. The PDF may not contain a recognisable Gantt chart, or the AI struggled to read it.
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {generatePreview.tasks.map((t, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px', gap: 10, padding: '6px 10px', background: t.parent_name ? 'var(--surface2)' : undefined, borderRadius: 4, fontSize: 12 }}>
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 110px', gap: 10, padding: '6px 10px', background: t.parent_name ? 'var(--surface2)' : undefined, borderRadius: 4, fontSize: 13 }}>
                       <div style={{ paddingLeft: t.parent_name ? 16 : 0 }}>
                         {t.parent_name && <span style={{ color: 'var(--text3)', marginRight: 4 }}>↳</span>}
                         {t.is_milestone && <span style={{ marginRight: 4 }}>◆</span>}
                         <span style={{ fontWeight: t.parent_name ? 400 : 500 }}>{t.name}</span>
                       </div>
-                      <div style={{ color: 'var(--text3)', fontSize: 11 }}>{t.start_date || '—'}</div>
-                      <div style={{ color: 'var(--text3)', fontSize: 11 }}>{t.end_date || '—'}</div>
+                      <div style={{ color: 'var(--text3)', fontSize: 12 }}>{t.start_date || '—'}</div>
+                      <div style={{ color: 'var(--text3)', fontSize: 12 }}>{t.end_date || '—'}</div>
                     </div>
                   ))}
                 </div>
@@ -2445,7 +2445,7 @@ function AddTopFolderButton({ onAdd }) {
 
   if (!show) return (
     <button onClick={() => setShow(true)}
-      style={{ marginTop: 8, fontSize: 12, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      style={{ marginTop: 8, fontSize: 13, padding: '6px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Add folder
     </button>
@@ -2454,7 +2454,7 @@ function AddTopFolderButton({ onAdd }) {
     <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Folder name" autoFocus
         onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setShow(false) }}
-        style={{ fontSize: 12, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', flex: 1, minWidth: 260 }} />
+        style={{ fontSize: 13, padding: '5px 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', flex: 1, minWidth: 260 }} />
       <button onClick={save} disabled={saving} style={BtnG}>{saving ? '...' : 'Add'}</button>
       <button onClick={() => setShow(false)} style={Btn}>Cancel</button>
     </div>
@@ -2635,20 +2635,20 @@ function EmlViewer({ file, parsed, onClose, onDownload }) {
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 14, borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {file.file_name}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {file.file_name}</div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             {onDownload && <button className="btn btn-sm" onClick={onDownload}>⬇ Download</button>}
             <button className="btn btn-sm" onClick={onClose}>Close</button>
           </div>
         </div>
-        <div style={{ padding: 14, fontSize: 12, borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
+        <div style={{ padding: 14, fontSize: 13, borderBottom: '1px solid var(--border)', background: 'var(--surface2)' }}>
           <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>From:</strong> {parsed.from}</div>
           <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>To:</strong> {parsed.to}</div>
           {parsed.cc && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Cc:</strong> {parsed.cc}</div>}
           {parsed.date && <div style={{ marginBottom: 4 }}><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Date:</strong> {parsed.date}</div>}
           <div><strong style={{ color: 'var(--text3)', minWidth: 60, display: 'inline-block' }}>Subject:</strong> <span style={{ fontWeight: 600 }}>{parsed.subject}</span></div>
         </div>
-        <div style={{ padding: 14, fontSize: 13, lineHeight: 1.6, flex: 1, overflow: 'auto' }}>
+        <div style={{ padding: 14, fontSize: 14, lineHeight: 1.6, flex: 1, overflow: 'auto' }}>
           {parsed.isHtml ? (
             <iframe srcDoc={parsed.body} sandbox="" style={{ width: '100%', height: '60vh', border: '1px solid var(--border)', borderRadius: 4, background: 'white' }} />
           ) : (

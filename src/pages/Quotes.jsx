@@ -242,7 +242,7 @@ export default function Quotes() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Quotes</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>
+          <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>
             {taskGroups.length} task{taskGroups.length === 1 ? '' : 's'} with quotes · {rows.length} quote{rows.length === 1 ? '' : 's'} total
           </p>
         </div>
@@ -251,11 +251,11 @@ export default function Quotes() {
       <NewQuoteRequest open={showNew} onClose={() => setShowNew(false)} />
       {awaiting.length > 0 && (
         <div className="card" style={{ padding: '10px 14px', marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text2)', marginBottom: 6 }}>Awaiting quotes · {awaiting.length}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text2)', marginBottom: 6 }}>Awaiting quotes · {awaiting.length}</div>
           {awaiting.slice(0, 8).map(t => (
-            <div key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ display: 'flex', gap: 10, padding: '6px 0', borderTop: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
+            <div key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ display: 'flex', gap: 10, padding: '6px 0', borderTop: '1px solid var(--border)', cursor: 'pointer', fontSize: 14 }}>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
-              <span style={{ color: 'var(--text3)', fontSize: 12 }}>{t.projects?.project_ref ? `${t.projects.project_ref} · ` : ''}{t.projects?.project_name || ''}</span>
+              <span style={{ color: 'var(--text3)', fontSize: 13 }}>{t.projects?.project_ref ? `${t.projects.project_ref} · ` : ''}{t.projects?.project_name || ''}</span>
             </div>
           ))}
         </div>
@@ -272,9 +272,9 @@ export default function Quotes() {
           marginBottom: 20,
           overflow: 'hidden',
         }}>
-          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ color: 'var(--text3)', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              <tr style={{ color: 'var(--text3)', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                 <th style={{ padding: '10px 16px', fontWeight: 600 }}>Project</th>
                 <th style={{ padding: '10px', fontWeight: 600, textAlign: 'right' }}>Pending</th>
                 <th style={{ padding: '10px', fontWeight: 600, textAlign: 'right' }}>Decided</th>
@@ -296,7 +296,7 @@ export default function Quotes() {
                     <td style={{ padding: '10px 16px' }}>
                       <span style={{ display: 'inline-block', width: 3, height: 16, background: r.color, verticalAlign: 'middle', marginRight: 8 }} />
                       <span style={{ fontWeight: isActive ? 600 : 400 }}>{r.project_name}</span>
-                      {r.project_ref && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text3)' }}>{r.project_ref}</span>}
+                      {r.project_ref && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text3)' }}>{r.project_ref}</span>}
                     </td>
                     <td style={{ padding: '10px', textAlign: 'right', color: r.pending > 0 ? '#BA7517' : 'var(--text3)', fontWeight: r.pending > 0 ? 600 : 400, fontVariantNumeric: 'tabular-nums' }}>
                       {r.pending}
@@ -321,7 +321,7 @@ export default function Quotes() {
                     background: 'rgba(0,0,0,0.02)',
                     cursor: 'pointer',
                   }}>
-                  <td style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--text2)', fontSize: 11 }}>Total</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--text2)', fontSize: 12 }}>Total</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{projectStats.totals.pending}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{projectStats.totals.decided}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(projectStats.totals.committedSum)}</td>
@@ -336,7 +336,7 @@ export default function Quotes() {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', fontSize: 13 }}>🔍</span>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', fontSize: 14 }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search task, project, vendor..." style={{ paddingLeft: 30, width: 280 }} />
         </div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: 'auto', minWidth: 130 }}>
@@ -346,13 +346,13 @@ export default function Quotes() {
           <option value="closed">Closed</option>
         </select>
         {projectFilter !== 'all' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text2)' }}>
             <span>Filtered to {projectStats.rows.find(r => r.project_id === projectFilter)?.project_name || 'project'}</span>
             <button
               type="button"
               onClick={() => setProjectFilter('all')}
               className="btn btn-sm"
-              style={{ padding: '2px 8px', fontSize: 11 }}>
+              style={{ padding: '2px 8px', fontSize: 12 }}>
               Clear
             </button>
           </div>
@@ -370,9 +370,9 @@ export default function Quotes() {
         />
       ) : (
         <div className="table-wrap">
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', fontSize: 12, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Project / Task</th>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Quotes</th>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Status</th>
@@ -389,7 +389,7 @@ export default function Quotes() {
                     onClick={() => setDrawerTaskId(g.task_id)}
                     style={{ cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                         {g.project_ref ? `${g.project_ref} · ` : ''}{g.project_name || '—'}
                       </div>
                       <div style={{ fontWeight: 500 }}>{g.task_title || '(no title)'}</div>
@@ -406,13 +406,13 @@ export default function Quotes() {
                           {accepted.amount != null
                             ? `£${Number(accepted.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : '—'}
-                          <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}>{accepted.vendor_name || accepted.vendor_name_text}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>{accepted.vendor_name || accepted.vendor_name_text}</div>
                         </span>
                       ) : (
                         <span style={{ color: 'var(--text3)' }}>{status === 'pending' ? 'awaiting' : '—'}</span>
                       )}
                     </td>
-                    <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 12 }}>
+                    <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 13 }}>
                       {g.latest_received
                         ? new Date(g.latest_received).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                         : <span style={{ color: 'var(--text3)' }}>—</span>}

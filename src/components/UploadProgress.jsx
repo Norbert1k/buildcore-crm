@@ -75,12 +75,12 @@ export default function UploadProgress({ uploadState }) {
               }
             </div>
             {!done && (
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 2 }}>
                 {current + 1} of {total} · {pct}%
               </div>
             )}
             {done && errors.length === 0 && (
-              <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: 'var(--green)', marginTop: 2 }}>
                 Upload complete
               </div>
             )}
@@ -102,14 +102,14 @@ export default function UploadProgress({ uploadState }) {
 
         {/* Current filename */}
         {!done && currentFile && (
-          <div style={{ fontSize: 12, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 13, color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <span style={{ color: 'var(--text3)' }}>Current: </span>{currentFile}
           </div>
         )}
 
         {/* Errors */}
         {errors.length > 0 && (
-          <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--red)' }}>
+          <div style={{ marginTop: 10, padding: '8px 12px', background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--red)' }}>
             {errors.length} file{errors.length !== 1 ? 's' : ''} failed to upload
           </div>
         )}

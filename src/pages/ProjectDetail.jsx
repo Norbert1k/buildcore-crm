@@ -153,7 +153,7 @@ function ProjectFileSearch({ projectId, isTender }) {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder={hsAllowed ? 'Find a file in Documents or H&S File & O&M…' : 'Find a file in Documents…'}
-          style={{ paddingLeft: 32, paddingRight: 32, fontSize: 13, height: 36, width: '100%' }}
+          style={{ paddingLeft: 32, paddingRight: 32, fontSize: 14, height: 36, width: '100%' }}
         />
         {query && (
           <button onClick={() => { setQuery(''); setResults(null) }} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text3)', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>×</button>
@@ -161,8 +161,8 @@ function ProjectFileSearch({ projectId, isTender }) {
       </div>
       {query && results && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(0,0,0,.12)', zIndex: 200, overflow: 'hidden', maxHeight: 360, overflowY: 'auto' }}>
-          {loading && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>Searching...</div>}
-          {!loading && !hasResults && <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No files found for "{query}"</div>}
+          {loading && <div style={{ padding: '12px 16px', fontSize: 14, color: 'var(--text3)' }}>Searching...</div>}
+          {!loading && !hasResults && <div style={{ padding: '12px 16px', fontSize: 14, color: 'var(--text3)' }}>No files found for "{query}"</div>}
           {!loading && hasResults && allResults.map(f => (
             <div key={f.id} onClick={() => downloadFile(f)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', transition: 'background .1s' }}
@@ -175,8 +175,8 @@ function ProjectFileSearch({ projectId, isTender }) {
                 }
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{f.file_name}</div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{f.file_name}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
                   {f.section}{f.folder_key ? ' · ' + f.folder_key : ''}{f.subfolder_key ? ' / ' + f.subfolder_key : ''}
                 </div>
               </div>
@@ -963,7 +963,7 @@ export default function ProjectDetail() {
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div className="card card-pad" style={{ flex: '1 1 420px', minWidth: 0 }}>
           {/* Name, status and Edit now live in the page header above. */}
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 14 }}>Project details</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 14 }}>Project details</div>
 
           {/* 2-column layout with vertical divider in the middle.
               Left: client / assignee / location.
@@ -972,11 +972,11 @@ export default function ProjectDetail() {
               stay readable against the dark surface. Stacked label-above-value
               style — the left column's location can wrap to multiple lines
               without disrupting the right column. */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 22, fontSize: 13 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr', gap: 22, fontSize: 14 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
               {project.client_name && (
                 <div>
-                  <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Client</div>
+                  <div style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Client</div>
                   {project.client_id ? (
                     <span
                       onClick={() => navigate(`/clients/${project.client_id}`)}
@@ -991,13 +991,13 @@ export default function ProjectDetail() {
               )}
               {project.director?.full_name && (
                 <div>
-                  <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Project Assigned To</div>
+                  <div style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Project Assigned To</div>
                   <span style={{ fontWeight: 600, color: 'var(--text)' }}>{project.director.full_name}</span>
                 </div>
               )}
               {project.manager?.full_name && (
                 <div>
-                  <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Project Manager</div>
+                  <div style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Project Manager</div>
                   <span style={{ fontWeight: 600, color: 'var(--text)' }}>{project.manager.full_name}</span>
                 </div>
               )}
@@ -1005,7 +1005,7 @@ export default function ProjectDetail() {
                 const addr = [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')
                 return addr ? (
                   <div>
-                    <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Location</div>
+                    <div style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Location</div>
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`}
                       target="_blank" rel="noopener noreferrer"
@@ -1025,13 +1025,13 @@ export default function ProjectDetail() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
               {project.start_date && (
                 <div>
-                  <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Start Date</div>
+                  <div style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Start Date</div>
                   <span style={{ fontWeight: 600, color: 'var(--text)' }}>{formatDate(project.start_date)}</span>
                 </div>
               )}
               {project.end_date && (
                 <div>
-                  <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>End Date</div>
+                  <div style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>End Date</div>
                   <span style={{ fontWeight: 600, color: 'var(--text)' }}>{formatDate(project.end_date)}</span>
                 </div>
               )}
@@ -1039,7 +1039,7 @@ export default function ProjectDetail() {
                 const dur = calcDuration(project.start_date, project.end_date)
                 return dur ? (
                   <div>
-                    <div style={{ color: 'var(--text3)', fontSize: 11, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Duration</div>
+                    <div style={{ color: 'var(--text3)', fontSize: 12, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 500 }}>Duration</div>
                     <span style={{ fontWeight: 600, color: 'var(--text)' }}>{dur}</span>
                   </div>
                 ) : null
@@ -1054,7 +1054,7 @@ export default function ProjectDetail() {
             Only visible to users who can view project value. */}
         {can('view_project_value') && (
           <div className="card card-pad" style={{ flex: '1 1 320px', minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
               Financial Summary
             </div>
             {paFinancials.loading ? (
@@ -1075,11 +1075,11 @@ export default function ProjectDetail() {
               return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text3)' }}>Original contract</span>
+                    <span style={{ fontSize: 14, color: 'var(--text3)' }}>Original contract</span>
                     <span style={{ fontSize: 16, fontWeight: 600 }}>{formatCurrency(original)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text3)' }}>
+                    <span style={{ fontSize: 14, color: 'var(--text3)' }}>
                       Variations
                       {variations_count > 0 && <span style={{ color: 'var(--text3)' }}> ({variations_count})</span>}
                     </span>
@@ -1088,17 +1088,17 @@ export default function ProjectDetail() {
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>Total order value</span>
+                    <span style={{ fontSize: 14, fontWeight: 600 }}>Total order value</span>
                     <span style={{ fontSize: 18, fontWeight: 700 }}>{formatCurrency(total_value)}</span>
                   </div>
                   {buildings.length > 1 && (
                     <div style={{ marginTop: 8, paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>
                         By Sub-building
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {buildings.map((b, i) => (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                             <span style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 8 }}>{b.label}</span>
                             <span style={{ color: 'var(--text2)' }}>{formatCurrency(b.original + b.variations_total)}</span>
                           </div>
@@ -1107,7 +1107,7 @@ export default function ProjectDetail() {
                     </div>
                   )}
                   {!hasPaData && (
-                    <div style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', marginTop: 4 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic', marginTop: 4 }}>
                       No Payment Application uploaded yet — showing project's manually entered value.
                     </div>
                   )}
@@ -1120,8 +1120,8 @@ export default function ProjectDetail() {
 
       {project.description && (
         <div className="card card-pad" style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Project Description</div>
-          <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{project.description}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>Project Description</div>
+          <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{project.description}</div>
         </div>
       )}
 
@@ -1150,7 +1150,7 @@ export default function ProjectDetail() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: pea.employer_agents ? 'pointer' : 'default' }}
                         onClick={() => pea.employer_agents && setShowEAProfile(pea.employer_agents)}
                         title={pea.employer_agents ? 'View company profile' : ''}>
-                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
                           {pea.employer_agents?.company_name?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || '?'}
                         </div>
                         <div>
@@ -1158,7 +1158,7 @@ export default function ProjectDetail() {
                             {pea.employer_agents?.company_name}
                           </div>
                           {(pea.employer_agents?.city || pea.employer_agents?.postcode) && (
-                            <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                            <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                               {pea.employer_agents?.city || ''}{pea.employer_agents?.city && pea.employer_agents?.postcode ? ' · ' : ''}{pea.employer_agents?.postcode || ''}
                             </div>
                           )}
@@ -1256,7 +1256,7 @@ export default function ProjectDetail() {
           </div>
 
           {catSubs.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No {catLabel.toLowerCase()} assigned to this project yet.</div>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No {catLabel.toLowerCase()} assigned to this project yet.</div>
           ) : (
             <>
               <div style={{ marginBottom: 16 }}>
@@ -1290,7 +1290,7 @@ export default function ProjectDetail() {
                               </div>
                               <span
                                 onClick={e => { e.stopPropagation(); navigate(`/subcontractors/${ps.subcontractors?.id}`, { state: { from: `/projects/${id}` } }) }}
-                                style={{ fontSize: 10, color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 4, border: '0.5px solid var(--accent)', fontWeight: 500 }}>
+                                style={{ fontSize: 11, color: 'var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap', padding: '2px 6px', borderRadius: 4, border: '0.5px solid var(--accent)', fontWeight: 500 }}>
                                 View Profile
                               </span>
                             </div>
@@ -1302,7 +1302,7 @@ export default function ProjectDetail() {
                           <>
                           <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : (
                             can('manage_projects') ? (
-                              <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowOrderValue(ps); setOrderValueForm('') }}>
+                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowOrderValue(ps); setOrderValueForm('') }}>
                                 + Add
                               </button>
                             ) : <span style={{ color: 'var(--text3)' }}>—</span>
@@ -1312,12 +1312,12 @@ export default function ProjectDetail() {
                               <div>
                                 <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
                                 {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
-                                  <div key={i} style={{ fontSize: 10, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
+                                  <div key={i} style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
                                 ))}
                               </div>
                             ) : (
                               can('manage_projects') && (
-                                <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                                <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
                                   + Add
                                 </button>
                               )
@@ -1334,7 +1334,7 @@ export default function ProjectDetail() {
                           <td>
                             <div style={{ display: 'flex', gap: 4 }}>
                               {can('manage_projects') && (
-                                <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Edit assignment"
+                                <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 8px' }} title="Edit assignment"
                                   onClick={e => {
                                     e.stopPropagation()
                                     setEditAssignForm({
@@ -1350,7 +1350,7 @@ export default function ProjectDetail() {
                                 </button>
                               )}
                               {can('manage_projects') && ps.variation_amount > 0 && (
-                                <button className="btn btn-sm" style={{ fontSize: 10, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
+                                <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 8px' }} title="Add variation" onClick={e => { e.stopPropagation(); setShowVariation(ps); setVariationForm({ amount: '', notes: '' }) }}>
                                   +VAR
                                 </button>
                               )}
@@ -1377,9 +1377,9 @@ export default function ProjectDetail() {
                 const totalAll = totalOrder + totalVar
                 return (
                   <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', padding: '12px 0', borderTop: '2px solid var(--border)', marginTop: 8 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text2)' }}>Total Order: <span style={{ fontWeight: 700, color: 'var(--text)' }}>{formatCurrency(totalOrder)}</span></div>
-                    {totalVar > 0 && <div style={{ fontSize: 12, color: 'var(--amber)' }}>Variations: <span style={{ fontWeight: 700 }}>+{formatCurrency(totalVar)}</span></div>}
-                    <div style={{ fontSize: 12, color: 'var(--green)' }}>Grand Total: <span style={{ fontWeight: 700 }}>{formatCurrency(totalAll)}</span></div>
+                    <div style={{ fontSize: 13, color: 'var(--text2)' }}>Total Order: <span style={{ fontWeight: 700, color: 'var(--text)' }}>{formatCurrency(totalOrder)}</span></div>
+                    {totalVar > 0 && <div style={{ fontSize: 13, color: 'var(--amber)' }}>Variations: <span style={{ fontWeight: 700 }}>+{formatCurrency(totalVar)}</span></div>}
+                    <div style={{ fontSize: 13, color: 'var(--green)' }}>Grand Total: <span style={{ fontWeight: 700 }}>{formatCurrency(totalAll)}</span></div>
                   </div>
                 )
               })()}
@@ -1448,7 +1448,7 @@ export default function ProjectDetail() {
           </div>
 
           {team.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
               No team members assigned yet. Click <strong>Add Team Member</strong> to get started.
             </div>
           ) : (
@@ -1475,7 +1475,7 @@ export default function ProjectDetail() {
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <Avatar name={m.name} size="sm" />
-                            <div style={{ fontWeight: 500, fontSize: 13 }}>{m.name}</div>
+                            <div style={{ fontWeight: 500, fontSize: 14 }}>{m.name}</div>
                           </div>
                         </td>
                         <td>
@@ -1525,13 +1525,13 @@ export default function ProjectDetail() {
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Add Variation</h3>
-            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
+            <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 20 }}>
               {showVariation.subcontractors?.company_name} · Current order: {formatCurrency(showVariation.contract_value)}
               {showVariation.variation_amount > 0 && <> · Existing variation: <span style={{ color: 'var(--amber)' }}>+{formatCurrency(showVariation.variation_amount)}</span></>}
             </div>
             {showVariation.variation_notes && (
-              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 12, color: 'var(--text2)', marginBottom: 16, maxHeight: 100, overflowY: 'auto' }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 4 }}>VARIATION HISTORY</div>
+              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--text2)', marginBottom: 16, maxHeight: 100, overflowY: 'auto' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', marginBottom: 4 }}>VARIATION HISTORY</div>
                 {showVariation.variation_notes.split('\n').map((line, i) => <div key={i}>{line}</div>)}
               </div>
             )}
@@ -1546,7 +1546,7 @@ export default function ProjectDetail() {
               </Field>
             </div>
             {variationForm.amount && (
-              <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, marginTop: 12 }}>
+              <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 14, marginTop: 12 }}>
                 <div style={{ color: 'var(--amber)', fontWeight: 600 }}>New total for {showVariation.subcontractors?.company_name}:</div>
                 <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>
                   {formatCurrency((parseFloat(showVariation.contract_value)||0) + (parseFloat(showVariation.variation_amount)||0) + (parseFloat(variationForm.amount)||0))}
@@ -1570,7 +1570,7 @@ export default function ProjectDetail() {
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Add Order Value</h3>
-            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
+            <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 20 }}>
               {showOrderValue.subcontractors?.company_name}
             </div>
             <Field label="Order Value (£) *">
@@ -1625,7 +1625,7 @@ export default function ProjectDetail() {
             </Field>
           </div>
           {showEditAssign && showEditAssign.variation_amount > 0 && (
-            <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 12, color: 'var(--text2)' }}>
+            <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 13, color: 'var(--text2)' }}>
               <div style={{ fontWeight: 600, color: 'var(--amber)', marginBottom: 2 }}>Note: Variation of +{formatCurrency(showEditAssign.variation_amount)} is attached to this assignment.</div>
               <div>Use the +VAR button on the row to manage variations separately.</div>
             </div>
@@ -1674,7 +1674,7 @@ export default function ProjectDetail() {
           }}><option value="">Select EA…</option>{allEAs.filter(ea => !projectEAs.find(p => p.ea_id === ea.id)).map(ea => <option key={ea.id} value={ea.id}>{ea.company_name}</option>)}</select></Field></div>
           <div className="full"><Field label="Submission Email(s) for this project">
             <input type="text" value={eaAssignForm.submission_email} onChange={e => setEaAssignForm(f => ({ ...f, submission_email: e.target.value }))} placeholder="e.g. john@ea.co.uk, sarah@ea.co.uk" />
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
               Separate multiple emails with commas. Leave blank to use the EA's default submission email.
             </div>
           </Field></div>
@@ -1701,7 +1701,7 @@ export default function ProjectDetail() {
             <input type="text" value={editEAForm.submission_email}
               onChange={e => setEditEAForm(f => ({ ...f, submission_email: e.target.value }))}
               placeholder="e.g. john@ea.co.uk, sarah@ea.co.uk" autoFocus />
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
               Separate multiple emails with commas. Leave blank to use the EA's default submission email
               {showEditEA?.employer_agents?.payment_submission_email && (
                 <> (<span style={{ fontFamily: 'monospace' }}>{showEditEA.employer_agents.payment_submission_email}</span>)</>
@@ -1766,7 +1766,7 @@ function CaseStudyPanel({ projectId, canManage }) {
       <div className="section-header" style={{ marginBottom: 16 }}>
         <div>
           <div className="section-title">Case Study</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Upload the finished case study for this project.</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 2 }}>Upload the finished case study for this project.</div>
         </div>
       </div>
       <CaseStudyUploads projectId={projectId} canManage={canManage} />
@@ -1812,43 +1812,43 @@ function ProgrammeCard({ prog, onDownload, onDelete, canDelete }) {
             title={prog.file_name}
           />
         ) : isPdf && loadingThumb ? (
-          <div style={{ color: 'var(--text3)', fontSize: 12 }}>Loading preview...</div>
+          <div style={{ color: 'var(--text3)', fontSize: 13 }}>Loading preview...</div>
         ) : isMpp ? (
           <div style={{ textAlign: 'center', padding: 20 }}>
             <div style={{ width: 56, height: 56, background: '#1a73e8', borderRadius: 'var(--radius)', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" fill="white" fillOpacity=".2"/><path d="M7 8h10M7 12h6M7 16h8" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#1a73e8' }}>Microsoft Project</div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>.{prog.file_name.split('.').pop().toUpperCase()} file</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a73e8' }}>Microsoft Project</div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>.{prog.file_name.split('.').pop().toUpperCase()} file</div>
           </div>
         ) : (
           <div style={{ textAlign: 'center', padding: 20 }}>
             <div style={{ width: 56, height: 56, background: 'var(--surface3, var(--border))', borderRadius: 'var(--radius)', margin: '0 auto 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="var(--text3)" strokeWidth="1.5"/><polyline points="14 2 14 8 20 8" stroke="var(--text3)" strokeWidth="1.5"/></svg>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text3)' }}>{prog.file_name.split('.').pop().toUpperCase()} file</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)' }}>{prog.file_name.split('.').pop().toUpperCase()} file</div>
           </div>
         )}
         {/* Overlay download button */}
         <button onClick={onDownload} style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,0.55)', border: 'none', borderRadius: 'var(--radius)', padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span style={{ fontSize: 11, color: 'white', fontWeight: 600 }}>Download</span>
+          <span style={{ fontSize: 12, color: 'white', fontWeight: 600 }}>Download</span>
         </button>
       </div>
       {/* Footer */}
       <div style={{ padding: '10px 12px' }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{prog.file_name}</div>
-        {fileSize && <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>{fileSize}</div>}
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>{prog.file_name}</div>
+        {fileSize && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>{fileSize}</div>}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button className="btn btn-sm" style={{ flex: 1, fontSize: 11, padding: '5px 6px' }} onClick={openView}>
+          <button className="btn btn-sm" style={{ flex: 1, fontSize: 12, padding: '5px 6px' }} onClick={openView}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             {isMpp ? 'Download to View' : 'View'}
           </button>
-          <button className="btn btn-sm" style={{ fontSize: 11, padding: '5px 8px' }} onClick={onDownload} title="Download">
+          <button className="btn btn-sm" style={{ fontSize: 12, padding: '5px 8px' }} onClick={onDownload} title="Download">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
           {canDelete && (
-            <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '5px 8px' }} onClick={onDelete}>✕</button>
+            <button className="btn btn-sm btn-danger" style={{ fontSize: 12, padding: '5px 8px' }} onClick={onDelete}>✕</button>
           )}
         </div>
       </div>

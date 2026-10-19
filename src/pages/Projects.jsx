@@ -79,7 +79,7 @@ export default function Projects() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Projects</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{projects.length} projects total</p>
+          <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>{projects.length} projects total</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {nav.includes('calendar') && <button className="btn btn-sm" onClick={() => navigate('/projects/calendar')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -109,15 +109,15 @@ export default function Projects() {
                 </svg>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#448a40', display: 'inline-block' }} />
                 Live Projects
-                <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{liveProjects.length}</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{liveProjects.length}</span>
                 {!liveOpen && liveProjects.length > 0 && (
-                  <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
+                  <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
                 )}
               </div>
             </div>
             {liveOpen && (
               liveProjects.length === 0 ? (
-                <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No live projects yet.</div>
+                <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No live projects yet.</div>
               ) : (
                 <div className="table-wrap">
                   <table>
@@ -182,15 +182,15 @@ export default function Projects() {
                 </svg>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#9b87e0', display: 'inline-block' }} />
                 Tender Projects
-                <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{tenderProjects.length}</span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', marginLeft: 4 }}>{tenderProjects.length}</span>
                 {!tenderOpen && tenderProjects.length > 0 && (
-                  <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
+                  <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto', fontWeight: 400 }}>Click to expand</span>
                 )}
               </div>
             </div>
             {tenderOpen && (
               tenderProjects.length === 0 ? (
-                <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No projects at tender stage.</div>
+                <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No projects at tender stage.</div>
               ) : (
                 <div className="table-wrap">
                   <table>
@@ -322,7 +322,7 @@ function ProjectsDashboard({ counts, dashFin, canViewValue, onProjectClick }) {
           <StatusPill label={`${counts.completed} completed`} />
         </div>
         {isLoading && (
-          <div style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)', animation: 'pulse 1.5s infinite' }} />
             loading live data
           </div>
@@ -348,7 +348,7 @@ function TabButton({ active, onClick, children }) {
   return (
     <div onClick={onClick}
       style={{
-        fontSize: 12,
+        fontSize: 13,
         padding: '8px 14px',
         cursor: 'pointer',
         color: active ? 'var(--blue)' : 'var(--text3)',
@@ -393,14 +393,14 @@ function PortfolioTab({ projects, canViewValue, onProjectClick }) {
       </div>
 
       <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, padding: '0 4px' }}>Per job</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 6, padding: '0 4px' }}>Per job</div>
         <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1.6fr 1fr 1fr 1fr 60px',
             padding: '8px 12px',
             background: 'var(--surface2)',
-            fontSize: 10,
+            fontSize: 11,
             color: 'var(--text3)',
             letterSpacing: '0.04em',
           }}>
@@ -412,7 +412,7 @@ function PortfolioTab({ projects, canViewValue, onProjectClick }) {
           </div>
 
           {projects.length === 0 && (
-            <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
+            <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--text3)' }}>
               No active projects to show.
             </div>
           )}
@@ -429,13 +429,13 @@ function PortfolioTab({ projects, canViewValue, onProjectClick }) {
                   gridTemplateColumns: '1.6fr 1fr 1fr 1fr 60px',
                   padding: '8px 12px',
                   borderTop: '0.5px solid var(--border)',
-                  fontSize: 12,
+                  fontSize: 13,
                   alignItems: 'center',
                   cursor: 'pointer',
                 }}>
                 <span style={{ display: 'flex', flexDirection: 'column' }}>
                   <span style={{ fontWeight: 500 }}>{p.project_name}</span>
-                  <span style={{ fontSize: 10, color: 'var(--text3)' }}>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>
                     {p.project_ref}
                     {retInfo.label && ` · ret. ${retInfo.label}`}
                     {retInfo.needsAttention && (
@@ -459,10 +459,10 @@ function PortfolioTab({ projects, canViewValue, onProjectClick }) {
               padding: '8px 12px',
               borderTop: '0.5px solid var(--border2)',
               background: 'var(--surface2)',
-              fontSize: 12,
+              fontSize: 13,
               alignItems: 'center',
             }}>
-              <span style={{ fontWeight: 500, fontSize: 11, letterSpacing: '0.03em' }}>TOTAL</span>
+              <span style={{ fontWeight: 500, fontSize: 12, letterSpacing: '0.03em' }}>TOTAL</span>
               <span style={{ textAlign: 'right', fontWeight: 500 }}>{fmtMoney(totalContract)}</span>
               <span style={{ textAlign: 'right', fontWeight: 500, color: 'var(--green)' }}>{fmtMoney(totalClaimed)}</span>
               <span style={{ textAlign: 'right', fontWeight: 500, color: 'var(--blue)' }}>{fmtMoney(totalRemaining)}</span>
@@ -589,21 +589,21 @@ function MonthlyPaymentsTab({ projects }) {
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, flexWrap: 'wrap' }}>
         <span style={{ color: 'var(--text3)' }}>Year:</span>
         <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)}
-          style={{ fontSize: 11, padding: '3px 6px', background: 'var(--surface2)', color: 'var(--text)', border: '0.5px solid var(--border2)', borderRadius: 4 }}>
+          style={{ fontSize: 12, padding: '3px 6px', background: 'var(--surface2)', color: 'var(--text)', border: '0.5px solid var(--border2)', borderRadius: 4 }}>
           {years.length === 0 && <option value={selectedYear}>{selectedYear}</option>}
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
         <span style={{ color: 'var(--text3)', marginLeft: 8 }}>Job:</span>
         <select value={selectedProject} onChange={e => setSelectedProject(e.target.value)}
-          style={{ fontSize: 11, padding: '3px 6px', background: 'var(--surface2)', color: 'var(--text)', border: '0.5px solid var(--border2)', borderRadius: 4 }}>
+          style={{ fontSize: 12, padding: '3px 6px', background: 'var(--surface2)', color: 'var(--text)', border: '0.5px solid var(--border2)', borderRadius: 4 }}>
           <option value="all">All jobs</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.project_name}</option>)}
         </select>
         <button onClick={exportCsv} disabled={filtered.length === 0}
-          style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 9px', background: 'transparent', color: 'var(--text)', border: '0.5px solid var(--border2)', borderRadius: 4, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer', opacity: filtered.length === 0 ? 0.4 : 1 }}>
+          style={{ marginLeft: 'auto', fontSize: 12, padding: '3px 9px', background: 'transparent', color: 'var(--text)', border: '0.5px solid var(--border2)', borderRadius: 4, cursor: filtered.length === 0 ? 'not-allowed' : 'pointer', opacity: filtered.length === 0 ? 0.4 : 1 }}>
           Export CSV
         </button>
       </div>
@@ -621,7 +621,7 @@ function MonthlyPaymentsTab({ projects }) {
           gridTemplateColumns: '28px 100px 1fr 100px 90px 100px',
           padding: '8px 12px',
           background: 'var(--surface2)',
-          fontSize: 10,
+          fontSize: 11,
           color: 'var(--text3)',
           letterSpacing: '0.04em',
         }}>
@@ -634,7 +634,7 @@ function MonthlyPaymentsTab({ projects }) {
         </div>
 
         {monthRows.length === 0 && (
-          <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>
+          <div style={{ padding: 16, textAlign: 'center', fontSize: 13, color: 'var(--text3)' }}>
             No payment applications in {selectedYear}{selectedProject !== 'all' ? ' for the selected job' : ''}.
           </div>
         )}
@@ -649,7 +649,7 @@ function MonthlyPaymentsTab({ projects }) {
                   gridTemplateColumns: '28px 100px 1fr 100px 90px 100px',
                   padding: '8px 12px',
                   borderTop: '0.5px solid var(--border)',
-                  fontSize: 12,
+                  fontSize: 13,
                   alignItems: 'center',
                   cursor: 'pointer',
                   userSelect: 'none',
@@ -659,7 +659,7 @@ function MonthlyPaymentsTab({ projects }) {
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
                 <span style={{ fontWeight: 500 }}>{fmtMonthYM(m.ym)}</span>
-                <span style={{ color: 'var(--text3)', fontSize: 11 }}>
+                <span style={{ color: 'var(--text3)', fontSize: 12 }}>
                   {m.paCount} PA{m.paCount === 1 ? '' : 's'} · {m.projectCount} project{m.projectCount === 1 ? '' : 's'}
                 </span>
                 <span style={{ textAlign: 'right', fontWeight: 500 }}>{fmtMoney(m.applied)}</span>
@@ -674,7 +674,7 @@ function MonthlyPaymentsTab({ projects }) {
                         display: 'grid',
                         gridTemplateColumns: '28px 1fr 100px 90px 100px',
                         padding: '6px 0',
-                        fontSize: 11,
+                        fontSize: 12,
                         gap: 8,
                         alignItems: 'center',
                         borderTop: i === 0 ? 'none' : '0.5px solid var(--border)',
@@ -685,7 +685,7 @@ function MonthlyPaymentsTab({ projects }) {
                           {e.project_name} · {e.pa_label}
                           {e.subfolder_label && <span style={{ color: 'var(--text3)', fontWeight: 400 }}> · {e.subfolder_label}</span>}
                         </span>
-                        <span style={{ fontSize: 10, color: 'var(--text3)' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>
                           {e.project_ref}
                           {e.uploaded_at && ` · uploaded ${new Date(e.uploaded_at).toLocaleDateString('en-GB').replace(/\//g, '.')}`}
                           {e.effective_rate != null && ` · ret. ${(e.effective_rate * 100).toFixed(e.effective_rate * 100 % 1 === 0 ? 0 : 1)}%`}
@@ -717,11 +717,11 @@ function MonthlyPaymentsTab({ projects }) {
             padding: '8px 12px',
             borderTop: '0.5px solid var(--border2)',
             background: 'var(--surface2)',
-            fontSize: 12,
+            fontSize: 13,
             alignItems: 'center',
           }}>
             <span></span>
-            <span style={{ fontWeight: 500, fontSize: 11, letterSpacing: '0.03em' }}>YEAR TOTAL</span>
+            <span style={{ fontWeight: 500, fontSize: 12, letterSpacing: '0.03em' }}>YEAR TOTAL</span>
             <span></span>
             <span style={{ textAlign: 'right', fontWeight: 500 }}>{fmtMoney(yrApplied)}</span>
             <span style={{ textAlign: 'right', fontWeight: 500, color: 'var(--amber)' }}>{fmtMoney(yrRetention)}</span>
@@ -795,7 +795,7 @@ function StatusPill({ label, accent }) {
   const a = accentMap[accent] || {}
   return (
     <span style={{
-      fontSize: 11,
+      fontSize: 12,
       padding: '4px 10px',
       borderRadius: 999,
       background: a.bg || 'var(--surface2)',
@@ -819,9 +819,9 @@ function KpiCard({ label, value, accent, caption }) {
       borderRadius: 'var(--radius)',
       padding: '12px 14px',
     }}>
-      <div style={{ fontSize: 10, color: 'var(--text3)', letterSpacing: '0.04em' }}>{label.toUpperCase()}</div>
+      <div style={{ fontSize: 11, color: 'var(--text3)', letterSpacing: '0.04em' }}>{label.toUpperCase()}</div>
       <div style={{ fontSize: 22, fontWeight: 500, marginTop: 6, color: accentColor || 'var(--text)' }}>{value}</div>
-      {caption && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>{caption}</div>}
+      {caption && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{caption}</div>}
     </div>
   )
 }

@@ -80,7 +80,7 @@ function CollapsibleSection({
             {statusBadge}
           </div>
           {summary && (
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {summary}
             </div>
           )}
@@ -370,7 +370,7 @@ export default function Settings() {
     <div>
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600 }}>Settings</h2>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>Manage your account and team</p>
+        <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>Manage your account and team</p>
       </div>
 
       {/* My Profile — two cards side by side at desktop widths, stack on
@@ -392,11 +392,11 @@ export default function Settings() {
               <Avatar name={profile?.full_name} size="lg" />
               <div>
                 <div style={{ fontWeight: 600, fontSize: 15 }}>{profile?.full_name}</div>
-                <div style={{ color: 'var(--text2)', fontSize: 13 }}>{profile?.email}</div>
+                <div style={{ color: 'var(--text2)', fontSize: 14 }}>{profile?.email}</div>
                 <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <Pill cls={ROLES[profile?.role]?.cls || 'pill-gray'}>{ROLES[profile?.role]?.label || profile?.role}</Pill>
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{ROLES[profile?.role]?.desc}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>{ROLES[profile?.role]?.desc}</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 14, borderTop: '1px solid var(--border)' }}>
@@ -409,14 +409,14 @@ export default function Settings() {
           {/* Card 2 — Appearance (theme swatches). Heading lives inside the
               card now since it's no longer nested under Profile. */}
           <div className="card card-pad" data-no-remap>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Appearance</div>
-            <div style={{ fontSize: 12, color: division === 'fitout' ? '#0E7490' : '#448a40', fontWeight: 600, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Appearance</div>
+            <div style={{ fontSize: 13, color: division === 'fitout' ? '#0E7490' : '#448a40', fontWeight: 600, marginBottom: 10 }}>
               Appearance for the {division === 'fitout' ? 'Fit-Out' : 'Construction'} division
               <span style={{ color: 'var(--text3)', fontWeight: 400 }}> — style and colour are separate choices, each division keeps its own</span>
             </div>
 
             {/* ── STYLE — shape language, independent of colour ── */}
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>STYLE</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>STYLE</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 18 }}>
               {[
                 { value: 'refresh',   label: 'Refresh',   desc: 'New look (try-out)',      r: 10, demo: 'pill' },
@@ -439,14 +439,14 @@ export default function Settings() {
                       <span style={{ width: 14, height: 14, background: 'var(--surface2)',
                         borderRadius: st.demo === 'pill' ? 99 : st.demo === 'square' ? 1 : 5, border: '1px solid var(--border)' }} />
                     </div>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: on ? 'var(--accent)' : 'var(--text)' }}>{st.label}</div>
-                    <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>{st.desc}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: on ? 'var(--accent)' : 'var(--text)' }}>{st.label}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text3)' }}>{st.desc}</div>
                   </button>
                 )
               })}
             </div>
 
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>COLOUR</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>COLOUR</div>
             <div style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
@@ -478,7 +478,7 @@ export default function Settings() {
                         <div style={{
                           alignSelf: 'flex-start',
                           padding: '2px 6px',
-                          fontSize: 8,
+                          fontSize: 9,
                           background: t.preview.accentBg,
                           color: t.preview.accent,
                           borderRadius: 99,
@@ -489,7 +489,7 @@ export default function Settings() {
                     {/* Label */}
                     <div style={{
                       padding: '6px 8px',
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: 600,
                       color: 'var(--text)',
                       background: 'var(--surface)',
@@ -510,7 +510,7 @@ export default function Settings() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 11,
+                        fontSize: 12,
                         fontWeight: 700,
                       }}>✓</div>
                     )}
@@ -610,12 +610,12 @@ export default function Settings() {
               storageKey="external-users"
             >
               {loading ? <Spinner /> : externalUsers.length === 0 ? (
-                <div style={{ fontSize: 13, color: 'var(--text3)' }}>
+                <div style={{ fontSize: 14, color: 'var(--text3)' }}>
                   No external users yet. Add a user with a non-{INTERNAL_DOMAIN} email and grant project access to see them here.
                 </div>
               ) : (
                 <>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>
                     People outside CCG who've been granted access to specific projects (e.g. Employer's Agents, clients, consultants).
                   </div>
                   <div className="table-wrap">
@@ -660,8 +660,8 @@ export default function Settings() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <Pill cls={r.cls}>{r.label}</Pill>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.5 }}>{r.desc}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.5 }}>{r.desc}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
                       Nav: {ROLE_PERMISSIONS[key]?.nav?.join(', ')}
                     </div>
                   </div>
@@ -705,10 +705,10 @@ export default function Settings() {
           <button className="btn btn-primary" onClick={() => { setShowAddUser(false); setAddSuccess('') }}>Done</button>
         )}>
         {addSuccess ? (
-          <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '12px 14px', fontSize: 13, color: 'var(--green)', lineHeight: 1.6 }}>{addSuccess}</div>
+          <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '12px 14px', fontSize: 14, color: 'var(--green)', lineHeight: 1.6 }}>{addSuccess}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {addError && <div style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, color: 'var(--red)' }}>{addError}</div>}
+            {addError && <div style={{ background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, color: 'var(--red)' }}>{addError}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Field label="Full Name *"><input value={addForm.full_name} onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Jane Smith" autoFocus /></Field>
               <Field label="Email Address *"><input type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} placeholder="jane@cltd.co.uk" /></Field>
@@ -727,14 +727,14 @@ export default function Settings() {
               </Field>
             </div>
             {/* Role description */}
-            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 12, color: 'var(--text2)' }}>
+            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 13, color: 'var(--text2)' }}>
               <strong>{ROLES[addForm.role]?.label}:</strong> {ROLES[addForm.role]?.desc}
               <div style={{ marginTop: 4, color: 'var(--text3)' }}>
                 Can access: {ROLE_PERMISSIONS[addForm.role]?.nav?.join(', ')}
                 {addForm.role === 'site_manager' && ' — project access assigned after creation in Edit'}
               </div>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '8px 10px' }}>
+            <div style={{ fontSize: 13, color: 'var(--text3)', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '8px 10px' }}>
               User logs in at <strong>crm.cltd.co.uk</strong> with their email and this password.
             </div>
           </div>
@@ -763,22 +763,22 @@ export default function Settings() {
           </div>
 
           {/* Role description */}
-          <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 12, color: 'var(--text2)' }}>
+          <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 13, color: 'var(--text2)' }}>
             <strong>{ROLES[editForm.role]?.label}:</strong> {ROLES[editForm.role]?.desc}
           </div>
 
           {/* Project assignment for Site Managers */}
           {editForm.role === 'site_manager' && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.05em' }}>
                 Assign Projects ({editForm.projectIds.length} selected)
               </div>
-              <div style={{ fontSize: 12, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '8px 10px', borderRadius: 'var(--radius)', marginBottom: 10 }}>
+              <div style={{ fontSize: 13, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '8px 10px', borderRadius: 'var(--radius)', marginBottom: 10 }}>
                 Site Managers can only access projects assigned here. Select all relevant projects.
               </div>
               <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
                 {projects.length === 0 ? (
-                  <div style={{ padding: '12px 14px', fontSize: 13, color: 'var(--text3)' }}>No projects available</div>
+                  <div style={{ padding: '12px 14px', fontSize: 14, color: 'var(--text3)' }}>No projects available</div>
                 ) : projects.map(p => (
                   <div key={p.id} onClick={() => toggleProject(p.id)}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border)', background: editForm.projectIds.includes(p.id) ? 'var(--green-bg)' : 'var(--surface)', transition: 'background .1s' }}>
@@ -786,8 +786,8 @@ export default function Settings() {
                       {editForm.projectIds.includes(p.id) && <svg width="10" height="10" viewBox="0 0 12 12" fill="white"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
                     </div>
                     <div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{p.project_name}</div>
-                      {p.project_ref && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{p.project_ref}</div>}
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{p.project_name}</div>
+                      {p.project_ref && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{p.project_ref}</div>}
                     </div>
                   </div>
                 ))}
@@ -857,21 +857,21 @@ function TwoFAModal({ onClose, profile }) {
         <div style={{ textAlign: 'center', padding: '10px 0' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>🔐</div>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Set up two-factor authentication</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 16 }}>After entering your password, you will also need to enter a code from your authenticator app.</div>
+          <div style={{ fontSize: 14, color: 'var(--text2)', lineHeight: 1.7, marginBottom: 16 }}>After entering your password, you will also need to enter a code from your authenticator app.</div>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 12, color: 'var(--text2)', textAlign: 'center' }}>
+            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--text2)', textAlign: 'center' }}>
               <div style={{ fontSize: 24, marginBottom: 4 }}>📱</div><div style={{ fontWeight: 600 }}>Microsoft Authenticator</div><div>Free on iOS & Android</div>
             </div>
-            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 12, color: 'var(--text2)', textAlign: 'center' }}>
+            <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--text2)', textAlign: 'center' }}>
               <div style={{ fontSize: 24, marginBottom: 4 }}>📱</div><div style={{ fontWeight: 600 }}>Google Authenticator</div><div>Free on iOS & Android</div>
             </div>
           </div>
-          {error && <div style={{ marginTop: 12, color: 'var(--red)', fontSize: 13 }}>{error}</div>}
+          {error && <div style={{ marginTop: 12, color: 'var(--red)', fontSize: 14 }}>{error}</div>}
         </div>
       )}
       {step === 'setup' && (
         <div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.7 }}>
+          <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.7 }}>
             <strong>Step 1</strong> — Open your authenticator app on your phone<br />
             <strong>Step 2</strong> — Tap <strong>+</strong> and choose <strong>"Scan QR code"</strong><br />
             <strong>Step 3</strong> — Point your camera at this code:
@@ -879,40 +879,40 @@ function TwoFAModal({ onClose, profile }) {
           <div style={{ textAlign: 'center', margin: '16px 0' }}>
             {qrCode && <img src={qrCode} alt="2FA QR Code" style={{ width: 180, height: 180, border: '4px solid var(--border)', borderRadius: 'var(--radius)', display: 'inline-block' }} />}
           </div>
-          <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 12, color: 'var(--text2)' }}>
+          <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 13, color: 'var(--text2)' }}>
             <strong>Cannot scan?</strong> Enter this code manually:<br />
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text)' }}>{secret}</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text)' }}>{secret}</span>
           </div>
         </div>
       )}
       {step === 'verify' && (
         <div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.7 }}>Enter the 6-digit code from your authenticator app:</div>
+          <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.7 }}>Enter the 6-digit code from your authenticator app:</div>
           <Field label="6-Digit Code">
             <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
               style={{ fontSize: 24, letterSpacing: '0.3em', textAlign: 'center', fontFamily: 'var(--mono)' }} autoFocus maxLength={6} />
           </Field>
-          {error && <div style={{ color: 'var(--red)', fontSize: 13, marginTop: 8 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--red)', fontSize: 14, marginTop: 8 }}>{error}</div>}
         </div>
       )}
       {step === 'done' && (
         <div style={{ textAlign: 'center', padding: '10px 0' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Two-factor authentication is now active</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7 }}>From your next login, you will be asked for a code from your authenticator app.</div>
+          <div style={{ fontSize: 14, color: 'var(--text2)', lineHeight: 1.7 }}>From your next login, you will be asked for a code from your authenticator app.</div>
         </div>
       )}
       {step === 'manage' && (
         <div>
           <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '12px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 20 }}>✅</span>
-            <div style={{ fontSize: 13, color: 'var(--green)' }}><strong>Two-factor authentication is enabled</strong> on your account.</div>
+            <div style={{ fontSize: 14, color: 'var(--green)' }}><strong>Two-factor authentication is enabled</strong> on your account.</div>
           </div>
           {factors.map(f => (
-            <div key={f.id} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 }}>
+            <div key={f.id} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 14 }}>
               <div>
                 <div style={{ fontWeight: 600 }}>🔐 {f.friendly_name || 'Authenticator App'}</div>
-                <div style={{ color: 'var(--text3)', fontSize: 11, marginTop: 2 }}>Added {new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                <div style={{ color: 'var(--text3)', fontSize: 12, marginTop: 2 }}>Added {new Date(f.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
               </div>
               <button className="btn btn-danger btn-sm" onClick={() => removeFactor(f.id)} disabled={loading}>{loading ? '...' : 'Remove'}</button>
             </div>
@@ -972,12 +972,12 @@ function ChangePasswordModal({ onClose }) {
         <div style={{ textAlign: 'center', padding: '10px 0' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Password updated successfully</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)' }}>Your new password is now active.</div>
+          <div style={{ fontSize: 14, color: 'var(--text2)' }}>Your new password is now active.</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {error && (
-            <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13 }}>
+            <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14 }}>
               {error}
             </div>
           )}
@@ -998,13 +998,13 @@ function ChangePasswordModal({ onClose }) {
                 { label: 'Number', ok: /[0-9]/.test(newPass) },
                 { label: 'Passwords match', ok: newPass === confirm && confirm.length > 0 },
               ].map(r => (
-                <span key={r.label} style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius)', background: r.ok ? 'var(--green-bg)' : 'var(--surface2)', color: r.ok ? 'var(--green)' : 'var(--text3)', fontWeight: 500 }}>
+                <span key={r.label} style={{ fontSize: 12, padding: '2px 8px', borderRadius: 'var(--radius)', background: r.ok ? 'var(--green-bg)' : 'var(--surface2)', color: r.ok ? 'var(--green)' : 'var(--text3)', fontWeight: 500 }}>
                   {r.ok ? '✓' : '○'} {r.label}
                 </span>
               ))}
             </div>
           )}
-          <div style={{ fontSize: 12, color: 'var(--text3)', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '8px 10px' }}>
+          <div style={{ fontSize: 13, color: 'var(--text3)', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '8px 10px' }}>
             Use at least 8 characters with a mix of letters, numbers and symbols for a strong password.
           </div>
         </div>
@@ -1039,7 +1039,7 @@ function TeamRow({ u, mode, profile, projectMap, onNavigateProject, onNavigateCl
           <Avatar name={u.full_name} size="sm" />
           <div>
             <div style={{ fontWeight: 500 }}>{u.full_name}</div>
-            {u.id === profile?.id && <div style={{ fontSize: 11, color: 'var(--text3)' }}>You</div>}
+            {u.id === profile?.id && <div style={{ fontSize: 12, color: 'var(--text3)' }}>You</div>}
           </div>
         </div>
       </td>
@@ -1111,7 +1111,7 @@ function RolePill({ role }) {
 function InternalAccessCell({ user }) {
   if (user.role === 'site_manager') {
     return (
-      <span style={{ fontSize: 12, color: 'var(--text2)' }}>
+      <span style={{ fontSize: 13, color: 'var(--text2)' }}>
         {user.projectIds?.length > 0
           ? `${user.projectIds.length} project${user.projectIds.length > 1 ? 's' : ''}`
           : <span style={{ color: 'var(--amber)' }}>No projects assigned</span>}
@@ -1119,7 +1119,7 @@ function InternalAccessCell({ user }) {
     )
   }
   return (
-    <span style={{ fontSize: 12, color: 'var(--text3)' }}>
+    <span style={{ fontSize: 13, color: 'var(--text3)' }}>
       {ROLE_PERMISSIONS[user.role]?.nav?.length || 0} sections
     </span>
   )
@@ -1139,7 +1139,7 @@ function ExternalProjectsCell({ user, projectMap, onNavigateProject }) {
 
   if (projectIds.length === 0) {
     return (
-      <span style={{ fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>
+      <span style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>
         No projects assigned
       </span>
     )
@@ -1159,7 +1159,7 @@ function ExternalProjectsCell({ user, projectMap, onNavigateProject }) {
           <span key={p.id}
             onClick={(e) => { e.stopPropagation(); onNavigateProject(p.id) }}
             style={{
-              fontSize: 11,
+              fontSize: 12,
               padding: '2px 8px',
               background: p.orphan ? 'var(--red-bg)' : 'var(--blue-bg)',
               color: p.orphan ? 'var(--red)' : 'var(--blue)',
@@ -1176,7 +1176,7 @@ function ExternalProjectsCell({ user, projectMap, onNavigateProject }) {
         ))}
       </div>
       {portalClientNames.length > 0 && (
-        <span style={{ fontSize: 10, color: 'var(--text3)' }}>
+        <span style={{ fontSize: 11, color: 'var(--text3)' }}>
           via {portalClientNames.join(', ')} portal
         </span>
       )}
@@ -1296,7 +1296,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {isHard ? (
           <>
-            <div style={{ padding: 12, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--red)' }}>
+            <div style={{ padding: 12, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--red)' }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>This cannot be undone</div>
               <div>
                 Permanently deletes <strong>{user.email}</strong> and removes
@@ -1319,7 +1319,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           </>
         ) : (
           <>
-            <div style={{ padding: 12, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--amber)' }}>
+            <div style={{ padding: 12, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--amber)' }}>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>Revoke portal access</div>
               <div>
                 Removes <strong>{user.email}</strong> from the
@@ -1332,7 +1332,7 @@ function DeleteUserModal({ user, mode, onClose, onDeleted }) {
           </>
         )}
         {error && (
-          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--red)' }}>
+          <div style={{ padding: 10, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--red)' }}>
             {error}
           </div>
         )}
@@ -1439,17 +1439,17 @@ function EscalationRatesSection({ profile }) {
       icon={<IconTrend />}
     >
       <div style={{ padding: '4px 2px' }}>
-        <p style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 14 }}>
+        <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>
           Annual % applied to each priced line, compounded from the price's date to the
           job's build date. Categories map to CSA sections. Steel and timber both sit under
           Main works, so they share that rate — coarse but simple. Set a sensible default;
           override per job at pricing time.
         </p>
 
-        {error && <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 10 }}>{error}</div>}
+        {error && <div style={{ fontSize: 13, color: 'var(--red)', marginBottom: 10 }}>{error}</div>}
 
         {loading ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)', padding: 10 }}>Loading rates…</div>
+          <div style={{ fontSize: 14, color: 'var(--text3)', padding: 10 }}>Loading rates…</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rates.map(r => {
@@ -1457,7 +1457,7 @@ function EscalationRatesSection({ profile }) {
               return (
                 <div key={r.category} style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 13, fontWeight: 500, minWidth: 150 }}>
+                    <span style={{ fontSize: 14, fontWeight: 500, minWidth: 150 }}>
                       {r.category === 'DEFAULT' ? 'Default (uncategorised)' : titleCase(r.category)}
                     </span>
                     <input
@@ -1466,7 +1466,7 @@ function EscalationRatesSection({ profile }) {
                       onChange={e => setLocalPct(r.category, e.target.value)}
                       style={{ width: 80, textAlign: 'right' }}
                     />
-                    <span style={{ fontSize: 12, color: 'var(--text3)' }}>% / year</span>
+                    <span style={{ fontSize: 13, color: 'var(--text3)' }}>% / year</span>
                     <button
                       type="button"
                       className="btn btn-sm"
@@ -1479,7 +1479,7 @@ function EscalationRatesSection({ profile }) {
                   </div>
 
                   {s && !s.loading && (s.pct != null || s.error) && (
-                    <div style={{ marginTop: 8, fontSize: 12, padding: '8px 10px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
+                    <div style={{ marginTop: 8, fontSize: 13, padding: '8px 10px', background: 'var(--surface2)', borderRadius: 'var(--radius)' }}>
                       {s.error ? (
                         <span style={{ color: 'var(--red)' }}>{s.error}</span>
                       ) : (
@@ -1507,7 +1507,7 @@ function EscalationRatesSection({ profile }) {
           <button className="btn btn-primary" onClick={saveAll} disabled={saving || loading}>
             {saving ? 'Saving…' : 'Save rates'}
           </button>
-          {savedNote && <span style={{ fontSize: 12, color: 'var(--green)' }}>{savedNote}</span>}
+          {savedNote && <span style={{ fontSize: 13, color: 'var(--green)' }}>{savedNote}</span>}
         </div>
       </div>
     </CollapsibleSection>
