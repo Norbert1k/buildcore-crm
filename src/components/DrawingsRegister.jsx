@@ -105,7 +105,7 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
   async function openPreview(file) {
     setPreview({ file, loading: true })
     const { data } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'file_url', file_id: file.id } })
-    setPreview({ file, url: data?.url || null, kind: data?.kind || (/\.pdf$/i.test(file.file_name || '') ? 'pdf' : 'image'), loading: false })
+    setPreview({ file, url: data?.url || null, kind: data?.kind || (/\.pdf$/i.test(file.file_name || '') ? 'pdf' : /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.file_name || '') ? 'image' : 'other'), loading: false })
   }
 
   async function openDesign(intake) {
@@ -227,11 +227,13 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
               {preview.loading ? <div className="dr-muted">Loading…</div>
                 : !preview.url ? <div className="dr-muted">Preview not available.</div>
                 : preview.kind === 'pdf' ? <iframe title="Drawing preview" src={preview.url + '#toolbar=0&view=FitH'} />
-                : <img alt={preview.file.title || ''} src={preview.url} />}
+                : preview.kind === 'image' ? <img alt={preview.file.title || ''} src={preview.url} />
+                : <div className="dr-muted">No preview for this file type — <a href={preview.url} target="_blank" rel="noreferrer">download it</a> or open it in Design.</div>}
             </div>
             <div className="dr-preview-meta">
               <div><span>Folder</span>{pathOf(preview.file.folder_id)}</div>
               <div><span>Issued</span>{fmtDate(preview.file.issued_at)}</div>
+              {preview.url && <div><span>File</span><a href={preview.url} target="_blank" rel="noreferrer">Open / download ↗</a></div>}
               {(() => {
                 const key = preview.file.number
                 const hist = files.filter(x => x.number && x.number === key).sort((a, b) => natural(b.rev || '', a.rev || ''))
