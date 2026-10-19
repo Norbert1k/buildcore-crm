@@ -62,6 +62,7 @@ export default function QuoteRequests({ projectId = null }) {
   const [search, setSearch] = useState('')
   const [mine, setMine] = useState(false)
   const [showNew, setShowNew] = useState(false)
+  const [showOld, setShowOld] = useState(false)
 
   useEffect(() => { load() }, [projectId, division])
 
@@ -102,7 +103,10 @@ export default function QuoteRequests({ projectId = null }) {
       const owners = by(asg, t.id)
       const latest = qs.reduce((m, q) => { const d = q.received_date || q.created_at; return d && (!m || d > m) ? d : m }, null)
       return { task: t, project: pmap[t.project_id], quotes: qs, sup, lowest, spread, owners, latest,
-        accepted: qs.find(q => q.status === 'accepted') || null, stage: stageOf(t, qs) }
+        accepted: qs.find(q => q.status === 'accepted') || null, stage: stageOf(t, qs),
+        // Quote request = marked as one, or already has quotes / suppliers asked.
+        // Everything else is an old Task Tracker task (not shown in the stages).
+        isQuote: t.is_quote === true || qs.length > 0 || sup.rows.length > 0 }
     })
     setData(reqs)
     setStage(s => s || (reqs.some(r => r.stage === 'decide') ? 'decide' : 'pricing'))
@@ -113,6 +117,7 @@ export default function QuoteRequests({ projectId = null }) {
     if (!data) return []
     const q = search.trim().toLowerCase()
     return data
+      .filter(r => r.isQuote)
       .filter(r => job === 'all' || r.task.project_id === job)
       .filter(r => !mine || r.owners.some(o => o.user_id === profile?.id))
       .filter(r => !q || [r.task.title, r.project?.project_name, r.project?.project_ref, ...r.quotes.map(x => x.vendor_name_text), ...r.sup.rows.map(x => x.vendor_name_text)]
@@ -133,7 +138,14 @@ export default function QuoteRequests({ projectId = null }) {
     awarded: (() => { const sum = inStage('awarded').reduce((s, r) => s + (r.accepted?.amount ? Number(r.accepted.amount) : 0), 0); return sum ? `${formatCurrency(sum)} committed` : 'supplier chosen' })(),
     closed: 'cancelled or not needed',
   }
-  const jobs = projectId ? [] : sortBy(Object.values(data.reduce((m, r) => {
+  const oldTasks = data.filter(r => !r.isQuote && r.task.status !== 'closed' && (job === 'all' || r.task.project_id === job))
+  async function sortOld(r, asQuote) {
+    const patch = asQuote ? { is_quote: true } : { is_quote: false, status: 'closed', closed_at: new Date().toISOString(), closed_by: profile?.id }
+    const { error } = await supabase.from('tasks').update(patch).eq('id', r.task.id)
+    if (error) { alert(/is_quote|schema cache/.test(error.message) ? 'Run 037_quote_flag.sql in Supabase first.' : error.message); return }
+    setData(d => d.map(x => x.task.id === r.task.id ? { ...x, task: { ...x.task, ...patch }, isQuote: asQuote, stage: asQuote ? x.stage : 'closed' } : x))
+  }
+  const jobs = projectId ? [] : sortBy(Object.values(data.filter(r => r.isQuote).reduce((m, r) => {
     const p = r.project; if (!p) return m
     m[p.id] ||= { id: p.id, label: p.project_name, n: 0 }
     if (r.stage === 'pricing' || r.stage === 'decide') m[p.id].n++
@@ -173,6 +185,28 @@ export default function QuoteRequests({ projectId = null }) {
         <span style={{ flex: 1 }} />
         <button type="button" className={`qr-chip${mine ? ' on' : ''}`} onClick={() => setMine(v => !v)}>Mine only</button>
       </div>
+
+      {oldTasks.length > 0 && (
+        <div className="qr-old">
+          <button type="button" className="qr-old-h" onClick={() => setShowOld(v => !v)}>
+            <b>{oldTasks.length} old Task Tracker task{oldTasks.length === 1 ? '' : 's'}</b> not shown above — they aren't quote requests.
+            <span>{showOld ? 'Hide' : 'Review'}</span>
+          </button>
+          {showOld && (
+            <div className="qr-old-list">
+              {oldTasks.map(r => (
+                <div key={r.task.id} className="qr-old-row">
+                  <button type="button" className="qr-old-t" onClick={() => navigate(`/tasks/${r.task.id}`)}><b>{r.task.title}</b><small>{r.project?.project_name}</small></button>
+                  {can('manage_projects') && <>
+                    <button type="button" className="btn btn-sm" onClick={() => sortOld(r, true)}>It's a quote</button>
+                    <button type="button" className="btn btn-sm" onClick={() => sortOld(r, false)}>Close it</button>
+                  </>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {shown.length === 0
         ? <EmptyState icon="📑" title={`Nothing ${STAGES.find(s => s.key === stage)?.label.toLowerCase()}`} message={search || job !== 'all' || mine ? 'Try clearing the filters.' : stage === 'pricing' ? 'Start one with “New quote request”.' : 'Requests move here as they progress.'} />
@@ -232,11 +266,11 @@ function NewQuoteRequest({ open, onClose, projectId }) {
     if (!form.project_id || !form.title.trim()) return
     setSaving(true)
     try {
-      const row = { project_id: form.project_id, title: form.title.trim(), description: form.description.trim() || null, priority: form.priority, status: 'active', created_by: profile?.id }
+      const row = { project_id: form.project_id, title: form.title.trim(), description: form.description.trim() || null, priority: form.priority, status: 'active', created_by: profile?.id, is_quote: true }
       if (form.return_by) row.return_by = form.return_by
       if (form.budget) row.budget = Number(String(form.budget).replace(/[£,\s]/g, '')) || null
       let { data: task, error } = await supabase.from('tasks').insert(row).select().single()
-      if (error && /return_by|budget/.test(error.message)) { delete row.return_by; delete row.budget; ({ data: task, error } = await supabase.from('tasks').insert(row).select().single()) }
+      if (error && /return_by|budget|is_quote/.test(error.message)) { delete row.return_by; delete row.budget; delete row.is_quote; ({ data: task, error } = await supabase.from('tasks').insert(row).select().single()) }
       if (error) throw error
       if (profile?.id) await supabase.from('task_assignees').insert({ task_id: task.id, user_id: profile.id })
       await supabase.from('task_activity').insert({ task_id: task.id, actor_id: profile?.id, action: 'created', details: { title: row.title, priority: row.priority } })
