@@ -69,8 +69,11 @@ Deno.serve(async (req) => {
     if (!clean) return json({ status: "not_linked" });
 
     // Same job the CRM's link points at: Design project code = CRM ref / design code
-    const { data: projects } = await sb.from("projects").select("id, name, code").ilike("code", clean.replace(/[%_\\]/g, (c) => "\\" + c));
-    const project = (projects || [])[0];
+    // Codes may be typed with or without "#", spaces or capitals ("#2026-006" = "2026-006")
+    const norm = (v: string | null) => String(v || "").replace(/^#+/, "").replace(/\s+/g, "").toLowerCase();
+    const want = norm(clean);
+    const { data: projects } = await sb.from("projects").select("id, name, code").not("code", "is", null);
+    const project = (projects || []).find((p: any) => norm(p.code) === want);
     if (!project) return json({ status: "not_linked" });
 
     if (action === "list") {
@@ -111,7 +114,7 @@ Deno.serve(async (req) => {
         if (!vs.length) continue;
         const cur = vs.find((v: any) => !v.is_archived) || vs[0];
         const d = describe(f.name);
-        rows.push({ id: f.id, folder_id: f.folder_id, file_name: f.name, number: d.number, title: d.title, rev: d.rev, status: "current", issued_at: cur.uploaded_at || f.created_at, kind: kindOf(f.name) });
+        rows.push({ id: f.id, folder_id: f.folder_id, file_name: f.name, number: d.number, title: d.title, rev: d.rev, status: "current", issued_at: cur.uploaded_at || f.created_at, kind: kindOf(f.name), _path: cur.storage_path });
         for (const v of vs) {
           if (v.id === cur.id) continue;
           const n = nameFromPath(v.storage_path, f.name);
@@ -119,6 +122,22 @@ Deno.serve(async (req) => {
           rows.push({ id: `v:${v.id}`, folder_id: f.folder_id, file_name: n, number: dv.number || d.number, title: dv.title || d.title, rev: dv.rev || `v${v.version_no}`, status: "superseded", issued_at: v.uploaded_at, kind: kindOf(n) });
         }
       }
+      // Thumbnails for the grid view: images sign themselves; PDFs use the
+      // thumbnail Design already caches at <project>/thumbs/<file>/<version>.jpg
+      // (made the first time anyone views the drawing in Design). One batch call.
+      const want: { row: any; path: string }[] = [];
+      for (const r of rows) {
+        if (r.status !== "current" || !r._path) continue;
+        if (r.kind === "image") want.push({ row: r, path: r._path });
+        else if (r.kind === "pdf") want.push({ row: r, path: r._path.replace(/^([^/]+)\//, "$1/thumbs/").replace(/\.pdf$/i, ".jpg") });
+      }
+      if (want.length) {
+        try {
+          const { data: signed } = await sb.storage.from("project-files").createSignedUrls(want.map((w) => w.path), 3600);
+          (signed || []).forEach((sgn: any, i: number) => { if (sgn?.signedUrl && !sgn.error) want[i].row.thumb = sgn.signedUrl; });
+        } catch { /* no thumbnails — the grid shows file-type tiles */ }
+      }
+      for (const r of rows) delete r._path;
       return json({ status: "ok", project: { code: project.code, name: project.name }, folders: out, files: rows });
     }
 

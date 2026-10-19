@@ -9,6 +9,8 @@ import { Spinner, Pill, Modal, Field, IconChevron, IconEdit, IconTrash, ConfirmD
 import FileLightbox from '../components/FileLightbox'
 import { SupplierModal } from './Suppliers'
 import SubcontractorModal from '../components/SubcontractorModal'
+import GeneratePOModal from '../components/GeneratePOModal'
+import { stageOf, supplierStatus } from '../components/QuoteRequests'
 const PRIORITIES = {
   high:   { label: 'High',   color: '#c00' },
   medium: { label: 'Medium', color: '#b87a00' },
@@ -125,6 +127,12 @@ export default function TaskDetail() {
   // Activity log: collapsed by default, shows latest 3. User toggles
   // 'Show all' / 'Show less' to reveal everything when the log grows.
   const [showAllActivity, setShowAllActivity] = useState(false)
+  // Suppliers asked to price (036) and the PO for an awarded subcontractor
+  const [invites, setInvites] = useState([])
+  const [askForm, setAskForm] = useState(null)        // { kind, id, name } while adding
+  const [po, setPo] = useState(null)                  // { projectSubId, existing }
+  const [showPO, setShowPO] = useState(false)
+  const [awarding, setAwarding] = useState(null)
   useEffect(() => { load() }, [taskId])
   async function load() {
     setLoading(true)
@@ -178,6 +186,18 @@ export default function TaskDetail() {
         }
       }
       setVendors([...supplierList, ...subList])
+      // Who was asked to price — table from 036; empty if not set up yet
+      const { data: inv, error: invErr } = await supabase.from('task_quote_invites').select('*').eq('task_id', taskId).order('asked_at')
+      setInvites(invErr ? [] : (inv || []))
+      // Awarded to a subcontractor → find their place on the job and any PO
+      const won = (quotesRes.data || []).find(q => q.status === 'accepted')
+      if (won?.subcontractor_id && taskRes.data?.project_id) {
+        const { data: ps } = await supabase.from('project_subcontractors').select('id').eq('project_id', taskRes.data.project_id).eq('subcontractor_id', won.subcontractor_id).limit(1)
+        const psId = ps?.[0]?.id || null
+        let existing = null
+        if (psId) { const { data: pos } = await supabase.from('purchase_orders').select('*').eq('project_sub_id', psId).order('created_at', { ascending: false }).limit(1); existing = pos?.[0] || null }
+        setPo({ projectSubId: psId, existing })
+      } else setPo(null)
       if (taskRes.data?.project_id) {
         const { data: proj } = await supabase.from('projects').select('id, project_name, project_ref, status').eq('id', taskRes.data.project_id).single()
         setProject(proj)
@@ -197,11 +217,12 @@ export default function TaskDetail() {
   }
   const isAssignee = assignees.some(a => a.user_id === profile?.id)
   const isAdmin = profile?.role === 'admin'
-  // All task actions require being an assignee (or admin)
-  const canEditTask = isAssignee || isAdmin
-  const canChangeStatus = isAssignee || isAdmin
-  const canComment = isAssignee || isAdmin
-  const canUpload = isAssignee || isAdmin
+  // Owners and project leads can work on a request (no need to "claim" it first)
+  const isLead = ['admin', 'project_manager', 'operations_manager', 'project_director'].includes(profile?.role)
+  const canEditTask = isAssignee || isLead
+  const canChangeStatus = isAssignee || isLead
+  const canComment = isAssignee || isLead
+  const canUpload = isAssignee || isLead
   const canDeleteNote = (note) => note.author_id === profile?.id || isAdmin
   const canEditNote = (note) => note.author_id === profile?.id || isAdmin
   const canDeleteFile = (file) => file.uploaded_by === profile?.id || isAdmin
@@ -965,6 +986,51 @@ export default function TaskDetail() {
     await supabase.from('task_activity').insert({ task_id: taskId, actor_id: profile?.id, action: 'unassigned' })
     load()
   }
+  // Award: this quote wins, the other open ones are marked rejected, and a
+  // subcontractor is put on the job at that value (same rules as saving an
+  // accepted quote in the quote form).
+  async function awardQuote(q) {
+    if (!window.confirm(`Award to ${q.vendor_name_text}${q.amount != null ? ` at £${Number(q.amount).toLocaleString('en-GB')}` : ''}? The other open quotes will be marked rejected.`)) return
+    setAwarding(q.id)
+    try {
+      const { error } = await supabase.from('task_quotes').update({ status: 'accepted' }).eq('id', q.id)
+      if (error) throw error
+      await supabase.from('task_quotes').update({ status: 'rejected' }).eq('task_id', taskId).neq('id', q.id).in('status', ['pending', 'expired'])
+      if (q.subcontractor_id) {
+        const kind = vendors.some(v => v.id === q.subcontractor_id && v.kind === 'subcontractor') ? 'contractual_work' : 'design_team'
+        try {
+          const r = await recomputeProjectSubcontractor(q.subcontractor_id, kind)
+          if (r.changed) await supabase.from('task_activity').insert({ task_id: taskId, actor_id: profile?.id, action: 'quote_autolinked', details: { vendor: q.vendor_name_text, amount: r.total, mode: r.mode, project_id: task.project_id } })
+        } catch (e) { console.warn('[award] recompute', e) }
+      }
+      await supabase.from('task_activity').insert({ task_id: taskId, actor_id: profile?.id, action: 'quote_updated', details: { vendor: q.vendor_name_text, amount: q.amount, status: 'accepted' } })
+    } catch (e) { alert('Could not award: ' + (e?.message || e)) }
+    setAwarding(null)
+    load()
+  }
+  // Suppliers asked to price
+  async function addInvite() {
+    if (!askForm) return
+    const v = askForm.id ? vendors.find(x => x.id === askForm.id && x.kind === askForm.kind) : null
+    const name = (v?.name || askForm.name || '').trim()
+    if (!name) return
+    const row = { task_id: taskId, vendor_name_text: name, created_by: profile?.id,
+      supplier_id: v && v.kind === 'supplier' ? v.id : null, subcontractor_id: v && v.kind !== 'supplier' ? v.id : null }
+    const { error } = await supabase.from('task_quote_invites').insert(row)
+    if (error) { alert(/does not exist|schema cache/i.test(error.message) ? 'Run 036_quote_requests.sql in Supabase first.' : 'Could not add: ' + error.message); return }
+    setAskForm(null); load()
+  }
+  async function setInviteStatus(inv, status) {
+    await supabase.from('task_quote_invites').update({ status }).eq('id', inv.id); load()
+  }
+  async function removeInvite(inv) {
+    await supabase.from('task_quote_invites').delete().eq('id', inv.id); load()
+  }
+  async function saveField(field, value) {
+    const { error } = await supabase.from('tasks').update({ [field]: value === '' ? null : value }).eq('id', taskId)
+    if (error) { alert(/does not exist|schema cache/i.test(error.message) ? 'Run 036_quote_requests.sql in Supabase first.' : 'Save failed: ' + error.message); return }
+    setTask(t => ({ ...t, [field]: value === '' ? null : value }))
+  }
   async function saveEdit() {
     const { error } = await supabase.from('tasks').update({
       title: editForm.title?.trim(),
@@ -1023,144 +1089,46 @@ export default function TaskDetail() {
     </div>
   )
   const pri = PRIORITIES[task.priority] || PRIORITIES.medium
-  const st = STATUS_LABELS[task.status] || STATUS_LABELS.active
+  const stage = stageOf(task, quotes)
+  const sup = supplierStatus(invites, quotes)
+  const won = quotes.find(q => q.status === 'accepted')
+  const stepIdx = { pricing: sup.returned ? 1 : 0, decide: 2, awarded: 3, closed: -1 }[stage]
+  const steps = ['Requested', `Prices in${sup.asked ? ` (${sup.returned}/${sup.asked - sup.declined})` : ''}`, 'Decide', 'Awarded & PO']
+  const overdue = stage === 'pricing' && task.return_by && task.return_by < new Date().toISOString().slice(0, 10)
+  const money = n => n == null ? '—' : '£' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 0 })
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={goBack}><IconChevron size={13} dir="left" /> {location.key && location.key !== 'default' ? 'Back' : 'Back to Quotes'}</button>
-      {/* Header */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-          <div style={{ width: 14, height: 14, borderRadius: '50%', background: pri.color, flexShrink: 0, marginTop: 5 }} title={pri.label + ' priority'} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h2 style={{ fontSize: 20, fontWeight: 600, marginBottom: 6, lineHeight: 1.3 }}>{task.title}</h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 13, color: 'var(--text3)' }}>
-              <Pill cls={st.cls}>{st.label}</Pill>
-              <span>Priority: <strong style={{ color: pri.color }}>{pri.label}</strong></span>
-              <span>•</span>
-              <span>Created {formatDate(task.created_at)}</span>
-              <span>•</span>
-              <span>Updated {formatDate(task.updated_at)}</span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
-            {canChangeStatus && task.status === 'active' && <button className="btn btn-sm" onClick={() => changeStatus('working_on')}>Start</button>}
-            {canChangeStatus && task.status === 'working_on' && <button className="btn btn-sm" onClick={() => changeStatus('closed')}>Close</button>}
-            {canChangeStatus && task.status === 'closed' && <button className="btn btn-sm" onClick={() => changeStatus('active')}>Reopen</button>}
-            {canEditTask && (
-              <button className="btn btn-sm" onClick={() => { setEditForm({ title: task.title, description: task.description || '', priority: task.priority }); setShowEdit(true) }}>
-                <IconEdit size={13} /> Edit
-              </button>
-            )}
-            {canEditTask && (
-              <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(true)}><IconTrash size={13} /></button>
-            )}
-          </div>
+    <div className="qd">
+      <button className="btn btn-sm qd-back" onClick={goBack}><IconChevron size={13} dir="left" /> {location.key && location.key !== 'default' ? 'Back' : 'Back to Quotes'}</button>
+      <div className="qd-head">
+        <div className="qd-title">
+          {project && <Link className="qd-job" to={`/projects/${project.id}`}>{project.project_ref ? `${project.project_ref} · ` : ''}{project.project_name}</Link>}
+          <h1>{task.title}</h1>
+          {task.description && <p className="qd-desc">{task.description}</p>}
         </div>
-        {project && (
-          <div style={{ fontSize: 13, color: 'var(--text2)', paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
-            <strong style={{ color: 'var(--text3)' }}>Project:</strong>{' '}
-            <Link to={`/projects/${project.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>
-              {project.project_ref ? `${project.project_ref} — ` : ''}{project.project_name}
-            </Link>
-          </div>
-        )}
-        {task.description && (
-          <div style={{ marginTop: 12, padding: 12, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--text)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-            {task.description}
-          </div>
-        )}
-      </div>
-      {/* Assignees card */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Assigned to</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {!isAssignee && task.status !== 'closed' && (
-              <button className="btn btn-sm" onClick={claimTask}>Claim</button>
-            )}
-            {isAssignee && (
-              <button className="btn btn-sm" onClick={unassignSelf}>Unassign me</button>
-            )}
-            {canEditTask && (
-              <button className="btn btn-sm" onClick={openAssignModal}>Manage…</button>
-            )}
-          </div>
+        <div className="qd-actions">
+          {canEditTask && <button className="btn btn-sm" onClick={() => { setEditForm({ title: task.title, description: task.description || '', priority: task.priority }); setShowEdit(true) }}><IconEdit size={13} /> Edit</button>}
+          {canChangeStatus && task.status !== 'closed' && !won && <button className="btn btn-sm" onClick={() => changeStatus('closed')} title="Not needed any more">Close request</button>}
+          {canChangeStatus && task.status === 'closed' && <button className="btn btn-sm" onClick={() => changeStatus('active')}>Reopen</button>}
+          {canEditTask && <button className="btn btn-sm btn-danger" onClick={() => setConfirmDelete(true)} title="Delete request"><IconTrash size={13} /></button>}
         </div>
-        {assignees.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>Unassigned — anyone can claim this task.</div>
-        ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {assignees.map(a => <Pill key={a.user_id} cls="pill-blue">{a.profiles?.full_name || 'Unknown'}</Pill>)}
-          </div>
-        )}
       </div>
-      {/* Notes */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Progress Notes</div>
-        {canComment ? (
-          <div style={{ marginBottom: 12 }}>
-            <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
-              placeholder="Add a progress update, question, or status note…"
-              style={{ width: '100%', minHeight: 70, fontSize: 14, padding: 10, fontFamily: 'inherit' }}
-              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addNote() }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Ctrl/Cmd + Enter to post</div>
-              <button className="btn btn-sm btn-primary" onClick={addNote} disabled={savingNote || !noteText.trim()}>
-                {savingNote ? 'Posting…' : 'Post Note'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ marginBottom: 12, padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--text3)', textAlign: 'center', fontStyle: 'italic' }}>
-            Only assigned team members can post notes. Claim this task to contribute.
-          </div>
-        )}
-        {notes.length === 0 ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No notes yet. Be the first to post an update.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {notes.map(n => {
-              const isEditing = editingNoteId === n.id
-              return (
-                <div key={n.id} style={{ padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', borderLeft: '3px solid var(--accent)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(n.created_at).toLocaleString('en-GB')}</div>
-                      {/* Edit and delete buttons hidden while THIS note is in
-                          edit mode — they live next to the textarea instead. */}
-                      {!isEditing && canEditNote(n) && (
-                        <button onClick={() => startEditNote(n)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }} title="Edit note">✎</button>
-                      )}
-                      {!isEditing && canDeleteNote(n) && (
-                        <button onClick={() => deleteNote(n.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }} title="Delete note">✕</button>
-                      )}
-                    </div>
-                  </div>
-                  {isEditing ? (
-                    <div>
-                      <textarea
-                        value={editingNoteText}
-                        onChange={e => setEditingNoteText(e.target.value)}
-                        autoFocus
-                        style={{ width: '100%', minHeight: 80, padding: 8, fontSize: 14, lineHeight: 1.5, fontFamily: 'inherit', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
-                      />
-                      <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
-                        <button className="btn btn-sm" onClick={cancelEditNote} disabled={savingEdit}>Cancel</button>
-                        <button className="btn btn-sm btn-primary" onClick={saveEditNote} disabled={savingEdit || !editingNoteText.trim()}>
-                          {savingEdit ? 'Saving…' : 'Save'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 14, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.note}</div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+
+      {stage === 'closed'
+        ? <div className="qd-closed">Closed — not needed. Reopen it to carry on pricing.</div>
+        : <div className="qd-steps">{steps.map((label, i) => <span key={i} className={i < stepIdx ? 'done' : i === stepIdx ? 'now' : ''}>{i + 1} · {label}</span>)}</div>}
+
+      {won && (
+        <div className="qd-won">
+          <div><b>Awarded to {won.vendor_name_text}</b>{won.amount != null && <> at <b>{money(won.amount)}</b> + VAT</>}</div>
+          {won.subcontractor_id && po && (po.existing
+            ? <span className="qd-po-ok">✓ PO raised{po.existing.po_number ? ` · ${po.existing.po_number}` : ''}</span>
+            : po.projectSubId && can('manage_projects') && <button className="btn btn-sm btn-primary" onClick={() => setShowPO(true)}>Raise PO</button>)}
+          {!won.subcontractor_id && <span className="qd-muted">Supplier — order through Procurement as usual.</span>}
+        </div>
+      )}
+
+      <div className="qd-grid">
+        <div className="qd-main">
       {/* Quote comparison (Step 3) */}
       {(() => {
         const canManageQuotes = ['admin', 'project_manager', 'operations_manager', 'site_manager', 'document_controller'].includes(profile?.role)
@@ -1201,8 +1169,8 @@ export default function TaskDetail() {
         return (
           <div className="card card-pad" style={{ marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>
-                Quote comparison{quotes.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{quotes.length}</span>}
+              <div className="qd-card-t">
+                Comparison{quotes.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{quotes.length}</span>}
               </div>
               {canManageQuotes && (
                 <button className="btn btn-sm btn-primary" onClick={() => openQuoteModal()}>+ Add quote</button>
@@ -1224,7 +1192,7 @@ export default function TaskDetail() {
                         <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>Gross</th>
                         <th style={{ padding: '6px 8px', fontWeight: 500 }}>Status</th>
                         <th style={{ padding: '6px 8px', fontWeight: 500, textAlign: 'right' }}>vs Lowest</th>
-                        <th style={{ padding: '6px 8px', fontWeight: 500, width: 60 }}></th>
+                        <th style={{ padding: '6px 8px', fontWeight: 500, width: 150 }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1254,6 +1222,7 @@ export default function TaskDetail() {
                             style={{
                               borderBottom: '1px solid var(--border)',
                               cursor: canManageQuotes ? 'pointer' : 'default',
+                              background: q.status === 'accepted' ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : isLowest ? 'color-mix(in srgb, var(--accent) 5%, transparent)' : undefined,
                             }}>
                             <td style={{ padding: '8px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -1321,7 +1290,11 @@ export default function TaskDetail() {
                                 <span style={{ color: 'var(--text3)' }}>—</span>
                               )}
                             </td>
-                            <td style={{ padding: '8px', textAlign: 'right' }}>
+                            <td style={{ padding: '8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              {canEditTask && !quotes.some(x => x.status === 'accepted') && q.status === 'pending' && (
+                                <button className="btn btn-sm btn-primary" style={{ marginRight: 6 }} disabled={awarding === q.id}
+                                  onClick={(e) => { e.stopPropagation(); awardQuote(q) }} title="Choose this quote">{awarding === q.id ? 'Awarding…' : 'Award'}</button>
+                              )}
                               {canDeleteQuotes && (
                                 <button className="btn btn-sm btn-danger"
                                   onClick={(e) => { e.stopPropagation(); deleteQuote(q) }}
@@ -1350,10 +1323,77 @@ export default function TaskDetail() {
           </div>
         )
       })()}
+      {/* Notes */}
+      <div className="card card-pad" style={{ marginBottom: 16 }}>
+        <div className="qd-card-t" style={{ marginBottom: 10 }}>Notes</div>
+        {canComment ? (
+          <div style={{ marginBottom: 12 }}>
+            <textarea value={noteText} onChange={e => setNoteText(e.target.value)}
+              placeholder="Add a progress update, question, or status note…"
+              style={{ width: '100%', minHeight: 70, fontSize: 14, padding: 10, fontFamily: 'inherit' }}
+              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) addNote() }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Ctrl/Cmd + Enter to post</div>
+              <button className="btn btn-sm btn-primary" onClick={addNote} disabled={savingNote || !noteText.trim()}>
+                {savingNote ? 'Posting…' : 'Post Note'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 12, padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--text3)', textAlign: 'center', fontStyle: 'italic' }}>
+            Only this request's owners and project leads can post notes. Use Join to take part.
+          </div>
+        )}
+        {notes.length === 0 ? (
+          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center', padding: 16 }}>No notes yet. Be the first to post an update.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {notes.map(n => {
+              const isEditing = editingNoteId === n.id
+              return (
+                <div key={n.id} style={{ padding: 10, background: 'var(--surface2)', borderRadius: 'var(--radius)', borderLeft: '3px solid var(--accent)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{n.profiles?.full_name || 'Unknown'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{new Date(n.created_at).toLocaleString('en-GB')}</div>
+                      {/* Edit and delete buttons hidden while THIS note is in
+                          edit mode — they live next to the textarea instead. */}
+                      {!isEditing && canEditNote(n) && (
+                        <button onClick={() => startEditNote(n)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }} title="Edit note">✎</button>
+                      )}
+                      {!isEditing && canDeleteNote(n) && (
+                        <button onClick={() => deleteNote(n.id)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', fontSize: 12, padding: 0 }} title="Delete note">✕</button>
+                      )}
+                    </div>
+                  </div>
+                  {isEditing ? (
+                    <div>
+                      <textarea
+                        value={editingNoteText}
+                        onChange={e => setEditingNoteText(e.target.value)}
+                        autoFocus
+                        style={{ width: '100%', minHeight: 80, padding: 8, fontSize: 14, lineHeight: 1.5, fontFamily: 'inherit', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
+                      />
+                      <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end' }}>
+                        <button className="btn btn-sm" onClick={cancelEditNote} disabled={savingEdit}>Cancel</button>
+                        <button className="btn btn-sm btn-primary" onClick={saveEditNote} disabled={savingEdit || !editingNoteText.trim()}>
+                          {savingEdit ? 'Saving…' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 14, color: 'var(--text)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{n.note}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
       {/* Files */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Files & Emails</div>
+          <div className="qd-card-t">Files & emails</div>
           {canUpload && (
             <label className="btn btn-sm btn-primary" style={{ cursor: uploading ? 'not-allowed' : 'pointer', opacity: uploading ? 0.6 : 1 }}>
               {uploading ? 'Uploading…' : '+ Upload'}
@@ -1363,7 +1403,7 @@ export default function TaskDetail() {
         </div>
         {!canUpload && files.length === 0 && (
           <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', padding: 16, fontStyle: 'italic' }}>
-            Only assigned team members can upload files.
+            Only this request's owners and project leads can upload files.
           </div>
         )}
         {files.length === 0 ? (
@@ -1497,11 +1537,75 @@ export default function TaskDetail() {
           </div>
         )}
       </div>
+        </div>
+        <aside className="qd-side">
+          <div className="card card-pad qd-card">
+            <div className="qd-card-h">Suppliers asked <span>{sup.asked ? `${sup.returned} of ${sup.asked - sup.declined} returned` : ''}</span></div>
+            {sup.rows.length === 0 && <div className="qd-muted qd-small">Nobody logged yet. Add who you've asked so you can see who still owes a price.</div>}
+            {sup.rows.map(r => (
+              <div key={r.id} className="qd-inv">
+                <span className="qd-inv-name">{r.vendor_name_text}</span>
+                {r.quote ? <b className="qd-ok">✓ Quoted</b>
+                  : r.status === 'declined' ? <span className="qd-dec">Declined</span>
+                  : <span className="qd-wait">Waiting</span>}
+                {!r.implicit && canEditTask && !r.quote && (
+                  <span className="qd-inv-act">
+                    {r.status === 'declined'
+                      ? <button type="button" onClick={() => setInviteStatus(r, 'asked')} title="Mark as still asked">↺</button>
+                      : <button type="button" onClick={() => setInviteStatus(r, 'declined')} title="They declined">Declined</button>}
+                    <button type="button" onClick={() => removeInvite(r)} title="Remove">✕</button>
+                  </span>
+                )}
+              </div>
+            ))}
+            {canEditTask && (askForm ? (
+              <div className="qd-ask">
+                <select value={askForm.id ? `${askForm.kind}:${askForm.id}` : ''} onChange={e => { const [kind, id] = e.target.value.split(':'); setAskForm(f => ({ ...f, kind, id })) }}>
+                  <option value="">Pick a supplier or subcontractor…</option>
+                  <optgroup label="Suppliers">{vendors.filter(v => v.kind === 'supplier').map(v => <option key={'s' + v.id} value={`supplier:${v.id}`}>{v.name}</option>)}</optgroup>
+                  <optgroup label="Subcontractors">{vendors.filter(v => v.kind === 'subcontractor').map(v => <option key={'c' + v.id} value={`subcontractor:${v.id}`}>{v.name}</option>)}</optgroup>
+                  <optgroup label="Design team">{vendors.filter(v => v.kind === 'design_team').map(v => <option key={'d' + v.id} value={`design_team:${v.id}`}>{v.name}</option>)}</optgroup>
+                </select>
+                {!askForm.id && <input value={askForm.name || ''} onChange={e => setAskForm(f => ({ ...f, name: e.target.value }))} placeholder="…or type a company name" />}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="btn btn-sm btn-primary" onClick={addInvite} disabled={!askForm.id && !(askForm.name || '').trim()}>Add</button>
+                  <button type="button" className="btn btn-sm" onClick={() => setAskForm(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : <button type="button" className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => setAskForm({ kind: '', id: '', name: '' })}>+ Ask a supplier</button>)}
+          </div>
+
+          <div className="card card-pad qd-card">
+            <div className="qd-card-h">Details</div>
+            <div className="qd-kv">
+              <span>Prices back by</span>
+              {canEditTask
+                ? <input type="date" className={overdue ? 'qd-late' : ''} value={task.return_by || ''} onChange={e => saveField('return_by', e.target.value)} />
+                : <b className={overdue ? 'qd-late' : ''}>{task.return_by ? formatDate(task.return_by) : '—'}</b>}
+              <span>Budget</span>
+              {canEditTask
+                ? <input inputMode="decimal" defaultValue={task.budget ?? ''} placeholder="—" onBlur={e => { const v = e.target.value.replace(/[£,\s]/g, ''); if (String(task.budget ?? '') !== v) saveField('budget', v === '' ? '' : Number(v) || '') }} />
+                : <b>{money(task.budget)}</b>}
+              {task.budget && sup.rows.some(r => r.quote?.amount) && (() => { const low = Math.min(...quotes.filter(q => q.amount > 0 && q.status !== 'rejected').map(q => Number(q.amount))); const d = (low - task.budget) / task.budget; return isFinite(d) ? <><span>Lowest vs budget</span><b className={d > 0 ? 'qd-late' : 'qd-ok'}>{d > 0 ? '+' : ''}{Math.round(d * 100)}%</b></> : null })()}
+              <span>Priority</span><b style={{ color: pri.color }}>{pri.label}</b>
+              <span>Created</span><span className="qd-v">{formatDate(task.created_at)}</span>
+            </div>
+            <div className="qd-card-h" style={{ marginTop: 14 }}>Owners
+              <span>
+                {!isAssignee && task.status !== 'closed' && <button type="button" className="qd-linkbtn" onClick={claimTask}>Join</button>}
+                {isAssignee && <button type="button" className="qd-linkbtn" onClick={unassignSelf}>Leave</button>}
+                {canEditTask && <button type="button" className="qd-linkbtn" onClick={openAssignModal}>Manage</button>}
+              </span>
+            </div>
+            {assignees.length === 0 ? <div className="qd-muted qd-small">No owner yet.</div>
+              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{assignees.map(a => <Pill key={a.user_id} cls="pill-blue">{a.profiles?.full_name || 'Unknown'}</Pill>)}</div>}
+          </div>
+
       {/* Activity log */}
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
+          <div className="card card-pad qd-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>
-            Activity{activity.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{activity.length}</span>}
+          <div className="qd-card-t">
+            History{activity.length > 0 && <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 6 }}>{activity.length}</span>}
           </div>
         </div>
         {activity.length === 0 ? (
@@ -1539,8 +1643,10 @@ export default function TaskDetail() {
           </>
         )}
       </div>
+        </aside>
+      </div>
       {/* Edit modal */}
-      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Task" size="sm"
+      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit quote request" size="sm"
         footer={<>
           <button className="btn" onClick={() => setShowEdit(false)}>Cancel</button>
           <button className="btn btn-primary" onClick={saveEdit} disabled={!editForm.title?.trim()}>Save</button>
@@ -1891,7 +1997,11 @@ export default function TaskDetail() {
           </div>
         )}
       </Modal>
-      <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={deleteTask} title="Delete task" message="Permanently delete this task along with all its notes, files, and activity log?" danger />
+      <ConfirmDialog open={confirmDelete} onClose={() => setConfirmDelete(false)} onConfirm={deleteTask} title="Delete quote request" message="Permanently delete this quote request with all its quotes, notes, files and history?" danger />
+      {showPO && po?.projectSubId && (
+        <GeneratePOModal projectId={task.project_id} projectSubId={po.projectSubId} existingPO={null}
+          onClose={() => setShowPO(false)} onSaved={() => { setShowPO(false); load() }} />
+      )}
       {/* EML preview overlay */}
       {/* Drag-and-drop overlay */}
       {dragOver && (

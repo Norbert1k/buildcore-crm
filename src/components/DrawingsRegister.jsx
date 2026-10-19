@@ -78,6 +78,11 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
   const [showTransfer, setShowTransfer] = useState(false)
   const [workspace, setWorkspace] = useState(null)                  // full-screen Design intake
   const [checkedAt, setCheckedAt] = useState(null)
+  const [view, setView] = useState(() => { try { return localStorage.getItem('dr:view') || 'grid' } catch { return 'grid' } })
+  const [full, setFull] = useState(false)                          // full-screen viewer
+  const pickView = v => { setView(v); try { localStorage.setItem('dr:view', v) } catch { /* ignore */ } }
+  // Free the in-memory copy of a previewed drawing when it's closed or replaced
+  useEffect(() => () => { if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl) }, [preview?.blobUrl])
 
   useEffect(() => { load(); loadCrm() }, [projectId])
 
@@ -102,10 +107,24 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
     setCrm(files || [])
   }
 
+  // Preview without downloading: fetch the file and show it from memory with
+  // the right type, so the browser displays it even when the stored file is
+  // marked as a generic download.
   async function openPreview(file) {
     setPreview({ file, loading: true })
     const { data } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'file_url', file_id: file.id } })
-    setPreview({ file, url: data?.url || null, kind: data?.kind || (/\.pdf$/i.test(file.file_name || '') ? 'pdf' : /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.file_name || '') ? 'image' : 'other'), loading: false })
+    const url = data?.url || null
+    const kind = data?.kind || (/\.pdf$/i.test(file.file_name || '') ? 'pdf' : /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.file_name || '') ? 'image' : 'other')
+    if (!url || kind === 'other') { setPreview(p => p?.file?.id === file.id ? { file, url, kind, loading: false } : p); return }
+    try {
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(String(res.status))
+      const type = kind === 'pdf' ? 'application/pdf' : (/\.svg$/i.test(file.file_name || '') ? 'image/svg+xml' : (res.headers.get('content-type') || '').startsWith('image/') ? res.headers.get('content-type') : 'image/png')
+      const blobUrl = URL.createObjectURL(new Blob([await res.arrayBuffer()], { type }))
+      setPreview(p => p?.file?.id === file.id ? { file, url, kind, blobUrl, loading: false } : (URL.revokeObjectURL(blobUrl), p))
+    } catch {
+      setPreview(p => p?.file?.id === file.id ? { file, url, kind, loading: false, failed: true } : p)
+    }
   }
 
   async function openDesign(intake) {
@@ -193,11 +212,26 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
               <input id="dr-search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Number or title" />
             </div>
             <label className="dr-toggle"><input type="checkbox" checked={showSuperseded} onChange={e => setShowSuperseded(e.target.checked)} /> Superseded ({supersededCount})</label>
+            <div className="dr-view" role="group" aria-label="View">
+              <button type="button" className={view === 'grid' ? 'on' : ''} onClick={() => pickView('grid')} title="Grid with previews">▦ Grid</button>
+              <button type="button" className={view === 'list' ? 'on' : ''} onClick={() => pickView('list')} title="List">☰ List</button>
+            </div>
           </div>
 
           {shown.length === 0
             ? <div className="dr-empty">{files.length ? 'No drawings in this folder.' : 'The Design portal has no drawings for this project yet.'}</div>
-            : (
+            : view === 'grid' ? (
+              <div className="dr-grid">
+                {shown.map(f => (
+                  <button key={f.id} type="button" className={`dr-card${f.status === 'superseded' ? ' sup' : ''}${preview?.file?.id === f.id ? ' on' : ''}`} onClick={() => openPreview(f)}>
+                    <Thumb file={f} />
+                    <span className="dr-card-num">{f.number || parseDrawing(f.file_name).key || f.file_name}{f.rev && <span className={`dr-rev-chip${f.status === 'superseded' ? ' old' : ''}`}>{f.rev}</span>}</span>
+                    <span className="dr-card-title">{f.title || f.file_name}</span>
+                    <span className="dr-card-meta">{folderName(f.folder_id)} · {fmtDate(f.issued_at)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
               <div className="dr-table" role="table">
                 <div className="dr-row dr-row-h" role="row"><span>Number</span><span>Title</span><span>Rev</span><span>Folder</span><span>Issued</span><span /></div>
                 {shown.map(f => (
@@ -224,28 +258,39 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
               <button type="button" className="dr-x" aria-label="Close preview" onClick={() => setPreview(null)}>✕</button>
             </div>
             <div className="dr-preview-body">
-              {preview.loading ? <div className="dr-muted">Loading…</div>
-                : !preview.url ? <div className="dr-muted">Preview not available.</div>
-                : preview.kind === 'pdf' ? <iframe title="Drawing preview" src={preview.url + '#toolbar=0&view=FitH'} />
-                : preview.kind === 'image' ? <img alt={preview.file.title || ''} src={preview.url} />
-                : <div className="dr-muted">No preview for this file type — <a href={preview.url} target="_blank" rel="noreferrer">download it</a> or open it in Design.</div>}
+              <Viewer preview={preview} />
             </div>
             <div className="dr-preview-meta">
               <div><span>Folder</span>{pathOf(preview.file.folder_id)}</div>
               <div><span>Issued</span>{fmtDate(preview.file.issued_at)}</div>
-              {preview.url && <div><span>File</span><a href={preview.url} target="_blank" rel="noreferrer">Open / download ↗</a></div>}
+              <div className="dr-preview-actions">
+                {preview.blobUrl && <button type="button" className="btn btn-sm btn-primary" onClick={() => setFull(true)}>⤢ Full screen</button>}
+                {preview.url && <a className="btn btn-sm" href={preview.url} download={preview.file.file_name}>Download</a>}
+              </div>
               {(() => {
                 const key = preview.file.number
                 const hist = files.filter(x => x.number && x.number === key).sort((a, b) => natural(b.rev || '', a.rev || ''))
-                return hist.length > 1 ? <div><span>Revisions</span>{hist.map(h => h.rev).join(' · ')}</div> : null
+                return hist.length > 1 ? <div><span>Revisions</span>{hist.map(h => (
+                  <button key={h.id} type="button" className={`dr-rev-chip dr-rev-btn${h.status === 'superseded' ? ' old' : ''}${h.id === preview.file.id ? ' cur' : ''}`} onClick={() => openPreview(h)} title={`Preview Rev ${h.rev || '—'}`}>{h.rev || '—'}</button>
+                ))}</div> : null
               })()}
-            </div>
-            <div className="dr-preview-actions">
-              {preview.url && <a className="btn btn-sm" href={preview.url} target="_blank" rel="noopener noreferrer">Open full size</a>}
             </div>
           </aside>
         )}
       </div>
+
+      {full && preview?.blobUrl && (
+        <div className="dr-full" role="dialog" aria-label="Drawing viewer" onKeyDown={e => e.key === 'Escape' && setFull(false)}>
+          <div className="dr-full-bar">
+            <b>{preview.file.number || preview.file.file_name}{preview.file.rev ? ` · Rev ${preview.file.rev}` : ''}</b>
+            <span className="dr-muted">{preview.file.title}</span>
+            <span style={{ flex: 1 }} />
+            {preview.url && <a className="btn btn-sm" href={preview.url} download={preview.file.file_name}>Download</a>}
+            <button type="button" className="btn btn-sm" onClick={() => setFull(false)} autoFocus>✕ Close</button>
+          </div>
+          <div className="dr-full-body"><Viewer preview={preview} big /></div>
+        </div>
+      )}
 
       {workspace && (
         <div className="dr-workspace" role="dialog" aria-label="Design portal">
@@ -259,5 +304,27 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
         </div>
       )}
     </div>
+  )
+}
+
+// Shows a previewed drawing from memory (never triggers a download)
+function Viewer({ preview, big }) {
+  if (preview.loading) return <div className="dr-muted">Loading drawing…</div>
+  if (preview.kind === 'other') return <div className="dr-muted dr-center">No preview for this file type (e.g. DWG / IFC).<br />Use Download, or open it in Design.</div>
+  if (preview.failed || !preview.blobUrl) return <div className="dr-muted dr-center">Couldn’t load a preview.<br />Use Download, or open it in Design.</div>
+  if (preview.kind === 'pdf') return <iframe title="Drawing preview" src={preview.blobUrl + (big ? '#view=Fit' : '#toolbar=0&view=FitH')} />
+  return <img alt={preview.file.title || ''} src={preview.blobUrl} />
+}
+
+// Grid tile: Design's cached thumbnail when there is one, otherwise a file-type tile
+function Thumb({ file }) {
+  const [bad, setBad] = useState(false)
+  const ext = (String(file.file_name || '').split('.').pop() || '').toUpperCase()
+  return (
+    <span className="dr-thumb">
+      {file.thumb && !bad
+        ? <img src={file.thumb} alt="" loading="lazy" onError={() => setBad(true)} />
+        : <span className="dr-thumb-ext">{ext.length <= 4 ? ext : 'FILE'}</span>}
+    </span>
   )
 }
