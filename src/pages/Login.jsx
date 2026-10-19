@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { PasswordInput } from '../components/ui'
+import logoWhite from '../assets/brand/logo_white.png'
+import markWhite from '../assets/brand/mark_white.png'
 
 export default function Login() {
-  const { signIn, markMfaVerified, user } = useAuth()
+  const { signIn, signOut, markMfaVerified, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail] = useState('')
@@ -112,125 +113,139 @@ export default function Login() {
     navigate('/')
   }
 
-  const theme = document.documentElement.getAttribute('data-theme') || 'light'
-  const isDark = theme === 'dark' || theme === 'forest' || theme === 'slate' || theme === 'blueprint'
+  async function switchAccount() {
+    try { await signOut() } catch { /* already signed out */ }
+    setCode(''); setError(''); setFactorId(''); setStep('login')
+  }
+
+  const fitout = chosenDivision === 'fitout'
+  const errBox = msg => msg && <div className="lg-err">{msg}</div>
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg, #f5f4f0)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-      <div style={{ width: '100%', maxWidth: 400 }}>
+    <div className={`lg-page${fitout ? ' fitout' : ''}`}>
+      <img src={markWhite} alt="" aria-hidden="true" className="lg-mark" />
+      <img src={markWhite} alt="" aria-hidden="true" className="lg-mark lg-mark-2" />
 
-        <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <img src={isDark ? "/logo-dark.png" : "/logo.png"} alt="City Construction" style={{ height: 90, display: 'block', margin: '0 auto', objectFit: 'contain', filter: 'none' }} />
-        </div>
+      <div className="lg-wrap">
+        <img src={logoWhite} alt="City Construction" className="lg-logo" />
 
-        <div style={{ background: 'var(--surface, #fff)', border: '1px solid var(--border, #e2e0d8)', borderRadius: 'var(--radius)', padding: 28, borderTop: '3px solid #448a40' }}>
-
+        <div className="lg-card">
           {step === 'login' && (
             <>
-              <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, color: 'var(--text, #1c1b18)' }}>Sign in</h2>
-              <p style={{ color: 'var(--text2, #808080)', fontSize: 14, marginBottom: 14 }}>Access the City Construction CRM</p>
+              <h1 className="lg-h">Welcome back</h1>
+              <p className="lg-sub">Sign in to BuildCore to continue.</p>
 
               {/* Division chooser — Construction / Fit-Out */}
-              <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-                <button type="button" onClick={() => pickDivision('construction')}
-                  style={{ flex: 1, padding: '10px 8px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600,
-                    border: chosenDivision === 'construction' ? '2px solid #448a40' : '1px solid var(--border, #e2e0d8)',
-                    background: chosenDivision === 'construction' ? 'rgba(68,138,64,0.08)' : 'transparent',
-                    color: chosenDivision === 'construction' ? '#448a40' : 'var(--text2, #808080)' }}>
-                  Construction
-                </button>
-                <button type="button" onClick={() => pickDivision('fitout')}
-                  style={{ flex: 1, padding: '10px 8px', borderRadius: 'var(--radius)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600,
-                    border: chosenDivision === 'fitout' ? '2px solid #0E7490' : '1px solid var(--border, #e2e0d8)',
-                    background: chosenDivision === 'fitout' ? 'rgba(14,116,144,0.08)' : 'transparent',
-                    color: chosenDivision === 'fitout' ? '#0E7490' : 'var(--text2, #808080)' }}>
-                  Fit-Out
-                </button>
+              <div className="lg-seg" role="tablist" aria-label="Division">
+                <button type="button" role="tab" aria-selected={!fitout} className={!fitout ? 'on' : ''} onClick={() => pickDivision('construction')}><i />Construction</button>
+                <button type="button" role="tab" aria-selected={fitout} className={fitout ? 'on' : ''} onClick={() => pickDivision('fitout')}><i className="t" />Fit-Out</button>
               </div>
+
               <form onSubmit={handleLogin}>
-                <div style={{ marginBottom: 14 }}>
-                  <label>Email address</label>
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@cltd.co.uk" required autoFocus />
+                <label className="lg-lbl" htmlFor="lg-email">Email address</label>
+                <div className="lg-field">
+                  <IconMail />
+                  <input id="lg-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@cltd.co.uk" autoComplete="username" required autoFocus />
                 </div>
-                <div style={{ marginBottom: 20 }}>
-                  <label>Password</label>
-                  <PasswordInput value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
-                </div>
-                {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>{error}</div>}
-                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading}>
-                  {loading ? 'Signing in...' : 'Sign in'}
+                <label className="lg-lbl" htmlFor="lg-pass">Password</label>
+                <Secret id="lg-pass" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your password" autoComplete="current-password" />
+                {errBox(error)}
+                <button type="submit" className="lg-btn" disabled={loading}>
+                  {loading ? 'Signing in…' : <>Sign in <IconArrow /></>}
                 </button>
               </form>
+              <div className="lg-secure"><IconShield />Secure sign-in · two-factor protected</div>
             </>
           )}
 
           {step === '2fa' && (
             <>
-              <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>🔐</div>
-                <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, color: 'var(--text, #1c1b18)' }}>Two-factor authentication</h2>
-                <p style={{ color: 'var(--text2, #808080)', fontSize: 14 }}>Enter the 6-digit code from your authenticator app</p>
-              </div>
+              <div className="lg-badge"><IconPhone /></div>
+              <h1 className="lg-h center">Two-step verification</h1>
+              <p className="lg-sub center">Enter the 6-digit code from your authenticator app{user?.email ? <> for <b>{user.email}</b></> : ''}.</p>
               <form onSubmit={handle2FA}>
-                <div style={{ marginBottom: 20 }}>
-                  <label>6-Digit Code</label>
-                  <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000"
-                    style={{ fontSize: 24, letterSpacing: '0.4em', textAlign: 'center', fontFamily: 'monospace' }} autoFocus maxLength={6} />
-                </div>
-                {error && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>{error}</div>}
-                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: loading ? .7 : 1 }} disabled={loading || code.length !== 6}>
-                  {loading ? 'Verifying...' : 'Verify'}
-                </button>
-                <button type="button" onClick={() => { setStep('login'); setCode(''); setError('') }} style={{ width: '100%', marginTop: 8, padding: '8px 0', background: 'none', border: 'none', color: 'var(--text2, #808080)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' }}>
-                  ← Back to login
+                <Otp value={code} onChange={v => { setCode(v); setError('') }} />
+                {errBox(error)}
+                <button type="submit" className="lg-btn" disabled={loading || code.length !== 6}>
+                  {loading ? 'Verifying…' : <>Verify and continue <IconArrow /></>}
                 </button>
               </form>
+              <button type="button" className="lg-link" onClick={switchAccount}>Not you? <b>Sign in with a different account</b></button>
+              <div className="lg-secure"><IconShield />Codes refresh every 30 seconds</div>
             </>
           )}
 
           {step === 'change_password' && (
             <>
-              <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                <div style={{ fontSize: 36, marginBottom: 8 }}>🔑</div>
-                <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, color: 'var(--text, #1c1b18)' }}>Create your password</h2>
-                <p style={{ color: 'var(--text2, #808080)', fontSize: 14 }}>You are using a temporary password. Please create a new secure password to continue.</p>
-              </div>
+              <div className="lg-badge"><IconKey /></div>
+              <h1 className="lg-h center">Create your password</h1>
+              <p className="lg-sub center">You're using a temporary password. Choose a new one to continue.</p>
               <form onSubmit={handleChangePassword}>
-                <div style={{ marginBottom: 14 }}>
-                  <label>New Password</label>
-                  <PasswordInput value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 8 characters" autoFocus required />
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label>Confirm Password</label>
-                  <PasswordInput value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Repeat new password" required />
-                </div>
+                <label className="lg-lbl">New password</label>
+                <Secret value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="At least 8 characters" autoComplete="new-password" autoFocus />
+                <label className="lg-lbl">Confirm password</label>
+                <Secret value={confirmPass} onChange={e => setConfirmPass(e.target.value)} placeholder="Repeat new password" autoComplete="new-password" />
                 {newPass && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <div className="lg-rules">
                     {[
-                      { label: '8+ chars', ok: newPass.length >= 8 },
+                      { label: '8+ characters', ok: newPass.length >= 8 },
                       { label: 'Uppercase', ok: /[A-Z]/.test(newPass) },
                       { label: 'Number', ok: /[0-9]/.test(newPass) },
                       { label: 'Matches', ok: newPass === confirmPass && confirmPass.length > 0 },
-                    ].map(r => (
-                      <span key={r.label} style={{ fontSize: 12, padding: '2px 8px', borderRadius: 'var(--radius)', background: r.ok ? '#e8f5e7' : 'var(--surface2, #f5f4f0)', color: r.ok ? '#448a40' : '#9C9A94', fontWeight: 500 }}>
-                        {r.ok ? '✓' : '○'} {r.label}
-                      </span>
-                    ))}
+                    ].map(r => <span key={r.label} className={r.ok ? 'ok' : ''}>{r.ok ? '✓' : '○'} {r.label}</span>)}
                   </div>
                 )}
-                {passError && <div style={{ background: 'var(--red-bg, #FCEBEB)', color: 'var(--red, #A32D2D)', border: '1px solid var(--red-border, #F7C1C1)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>{passError}</div>}
-                <button type="submit" style={{ width: '100%', padding: '11px 0', background: '#448a40', color: '#fff', border: 'none', borderRadius: 'var(--radius)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', opacity: passLoading ? .7 : 1 }} disabled={passLoading || newPass.length < 8 || newPass !== confirmPass}>
-                  {passLoading ? 'Saving...' : 'Set New Password & Continue'}
+                {errBox(passError)}
+                <button type="submit" className="lg-btn" disabled={passLoading || newPass.length < 8 || newPass !== confirmPass}>
+                  {passLoading ? 'Saving…' : <>Set password and continue <IconArrow /></>}
                 </button>
               </form>
             </>
           )}
         </div>
 
-        {step !== 'change_password' && (
-          <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--text3, #9C9A94)', marginTop: 16 }}>Contact your administrator to create an account.</p>
-        )}
+        <p className="lg-foot">
+          {step === 'login' && <>Need an account? Contact your administrator.<br /></>}
+          City Construction Group Ltd · One Canada Square, Canary Wharf, London
+        </p>
       </div>
     </div>
   )
 }
+
+// Password field with lock icon and show / hide
+function Secret({ value, onChange, placeholder, autoComplete, autoFocus, id }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="lg-field">
+      <IconLock />
+      <input id={id} type={show ? 'text' : 'password'} value={value} onChange={onChange} placeholder={placeholder} autoComplete={autoComplete} autoFocus={autoFocus} required />
+      <button type="button" className="lg-eye" onClick={() => setShow(v => !v)} tabIndex={-1} aria-label={show ? 'Hide password' : 'Show password'}>{show ? <IconEyeOff /> : <IconEye />}</button>
+    </div>
+  )
+}
+
+// Six boxes over one real input, so typing, pasting and phone autofill all work
+function Otp({ value, onChange }) {
+  const [focus, setFocus] = useState(true)
+  return (
+    <div className="lg-otp">
+      <input value={value} onChange={e => onChange(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus aria-label="6-digit code"
+        onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} />
+      {[0, 1, 2, 3, 4, 5].map(i => (
+        <span key={i} className={`${i === 3 ? 'gap ' : ''}${focus && i === Math.min(value.length, 5) ? 'on' : ''}`}>{value[i] || ''}</span>
+      ))}
+    </div>
+  )
+}
+
+const I = ({ children }) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>
+const IconMail = () => <I><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></I>
+const IconLock = () => <I><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></I>
+const IconEye = () => <I><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></I>
+const IconEyeOff = () => <I><path d="M3 3l18 18" /><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6C3.8 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></I>
+const IconShield = () => <I><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" /><path d="m9 12 2 2 4-4" /></I>
+const IconArrow = () => <I><path d="M5 12h14M13 6l6 6-6 6" /></I>
+const IconPhone = () => <I><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M10.5 18.5h3" /><path d="m9.5 11 2 2 3.5-3.5" /></I>
+const IconKey = () => <I><circle cx="8" cy="15" r="4" /><path d="m10.8 12.2 8.2-8.2M16 7l3 3M14 9l2 2" /></I>

@@ -7,6 +7,7 @@ import { useAuth } from '../lib/auth'
 import { useNav } from '../lib/access'
 import ProjectModal from '../components/ProjectModal'
 import EAModal from '../components/EAModal'
+import { ContactPicker, loadEAContacts, peopleFor } from '../components/EAContacts'
 // Tabs load when first opened, not with the page (the project page used to
 // download every tab and editor up front).
 const ProjectDocumentation = lazy(() => import('../components/ProjectDocumentation'))
@@ -255,13 +256,14 @@ export default function ProjectDetail() {
   const [allEAs, setAllEAs] = useState([])
   const [showAssignEA, setShowAssignEA] = useState(false)
   const [showEAProfile, setShowEAProfile] = useState(null)
-  const [eaAssignForm, setEaAssignForm] = useState({ ea_id: '', submission_email: '' })
+  const [eaAssignForm, setEaAssignForm] = useState({ ea_id: '', submission_email: '', contact_ids: [] })
+  const [eaContacts, setEaContacts] = useState({})   // { ea_id: [people at the firm] }
   const [confirmRemoveEA, setConfirmRemoveEA] = useState(null)
   // Edit-EA-assignment state — lets user change the per-project submission
   // email list after the EA was first assigned. The EA company itself is
   // not editable here (use remove + re-assign for that).
   const [showEditEA, setShowEditEA] = useState(null)
-  const [editEAForm, setEditEAForm] = useState({ submission_email: '' })
+  const [editEAForm, setEditEAForm] = useState({ submission_email: '', contact_ids: [] })
   const [savingEditEA, setSavingEditEA] = useState(false)
   // Inline sub docs state
   const [expandedSubId, setExpandedSubId] = useState(null)
@@ -325,7 +327,10 @@ export default function ProjectDetail() {
     // Assign-EA dropdown offers only THIS project's division's firms —
     // filtered here because projRes only exists after the batch resolves.
     const projDivision = projRes.data?.division || 'construction'
-    setAllEAs((allEARes.data || []).filter(ea => (ea.division || 'construction') === projDivision))
+    const divEAs = (allEARes.data || []).filter(ea => (ea.division || 'construction') === projDivision)
+    setAllEAs(divEAs)
+    // People at each firm — separate query so the page still loads if the table isn't there yet
+    loadEAContacts([...divEAs.map(e => e.id), ...(eaRes.data || []).map(p => p.ea_id)]).then(setEaContacts)
     setTeam(teamRes.data || [])
     // Load subcontractor files
     const { data: sfData } = await supabase.from('project_sub_files').select('*').eq('project_id', id).order('created_at', { ascending: false })
@@ -799,13 +804,14 @@ export default function ProjectDetail() {
     const list = parseSubmissionEmails(eaAssignForm.submission_email)
     const canonical = list.length > 0 ? list.join(', ') : null
 
-    await supabase.from('project_employer_agents').insert({
-      project_id: id,
-      ea_id: eaAssignForm.ea_id,
-      submission_email: canonical,
-    })
+    const row = { project_id: id, ea_id: eaAssignForm.ea_id, submission_email: canonical }
+    if (eaAssignForm.contact_ids.length) row.contact_ids = eaAssignForm.contact_ids
+    let { error } = await supabase.from('project_employer_agents').insert(row)
+    // Before 035_ea_contacts.sql has run there's no contact_ids column — assign the firm anyway
+    if (error && row.contact_ids && /contact_ids/.test(error.message)) { delete row.contact_ids; ({ error } = await supabase.from('project_employer_agents').insert(row)) }
+    if (error) { alert('Could not assign: ' + error.message); return }
     setShowAssignEA(false)
-    setEaAssignForm({ ea_id: '', submission_email: '' })
+    setEaAssignForm({ ea_id: '', submission_email: '', contact_ids: [] })
     load()
   }
 
@@ -820,7 +826,7 @@ export default function ProjectDetail() {
   // the user can see what's currently active and edit from there).
   function openEditEAModal(pea) {
     const current = pea.submission_email || pea.employer_agents?.payment_submission_email || ''
-    setEditEAForm({ submission_email: current })
+    setEditEAForm({ submission_email: current, contact_ids: pea.contact_ids || [] })
     setShowEditEA(pea)
   }
 
@@ -837,12 +843,14 @@ export default function ProjectDetail() {
     const canonical = list.length > 0 ? list.join(', ') : null
     setSavingEditEA(true)
     try {
-      const { error } = await supabase.from('project_employer_agents')
-        .update({ submission_email: canonical })
+      let { error } = await supabase.from('project_employer_agents')
+        .update({ submission_email: canonical, contact_ids: editEAForm.contact_ids })
         .eq('id', showEditEA.id)
+      // Before 035_ea_contacts.sql has run there's no contact_ids column
+      if (error && /contact_ids/.test(error.message)) ({ error } = await supabase.from('project_employer_agents').update({ submission_email: canonical }).eq('id', showEditEA.id))
       if (error) throw error
       setShowEditEA(null)
-      setEditEAForm({ submission_email: '' })
+      setEditEAForm({ submission_email: '', contact_ids: [] })
       load()
     } catch (e) {
       alert('Could not save: ' + (e?.message || e))
@@ -1142,7 +1150,7 @@ export default function ProjectDetail() {
         {projectEAs.length > 0 && (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Payment Application Email (This Project)</th><th></th></tr></thead>
+              <thead><tr><th>Company</th><th>Contact(s) on this job</th><th>Email</th><th>Payment Application Email (This Project)</th><th></th></tr></thead>
               <tbody>
                 {projectEAs.map(pea => (
                   <tr key={pea.id}>
@@ -1166,10 +1174,20 @@ export default function ProjectDetail() {
                       </div>
                     </td>
                     <td>
-                      <div>{pea.employer_agents?.contact_name || '—'}</div>
-                      <div className="td-muted">{pea.employer_agents?.phone || ''}</div>
+                      {(() => {
+                        const ppl = peopleFor(pea, eaContacts)
+                        if (!ppl.length) return <span className="td-muted">—</span>
+                        return <div className="eac-cell">{ppl.map(c => (
+                          <div key={c.id}><b>{c.name}</b>{c.job_title && <span className="td-muted"> · {c.job_title}</span>}{c.phone && <div className="td-muted">{c.phone}</div>}</div>
+                        ))}</div>
+                      })()}
                     </td>
-                    <td className="td-muted">{pea.employer_agents?.email || '—'}</td>
+                    <td className="td-muted">
+                      {(() => {
+                        const em = peopleFor(pea, eaContacts).map(c => c.email).filter(Boolean)
+                        return em.length ? <div className="eac-cell">{em.map(e => <a key={e} href={`mailto:${e}`} style={{ color: 'inherit', textDecoration: 'none' }}>{e}</a>)}</div> : '—'
+                      })()}
+                    </td>
                     <td>
                       {(() => {
                         // Resolve effective email: per-project override → EA's default → none.
@@ -1197,7 +1215,7 @@ export default function ProjectDetail() {
                     <td>
                       {can('manage_projects') && (
                         <div style={{ display: 'flex', gap: 4 }}>
-                          <button className="btn btn-sm" onClick={() => openEditEAModal(pea)} title="Edit submission emails for this project">
+                          <button className="btn btn-sm" onClick={() => openEditEAModal(pea)} title="Change who looks after this job, or the submission emails">
                             <IconEdit size={12}/>
                           </button>
                           <button className="btn btn-sm btn-danger" onClick={() => setConfirmRemoveEA(pea.id)} title="Remove EA from this project">
@@ -1665,13 +1683,19 @@ export default function ProjectDetail() {
       <ConfirmDialog open={!!confirmRemove} onClose={() => setConfirmRemove(null)} onConfirm={() => removeSub(confirmRemove)} title="Remove subcontractor" message="Remove this subcontractor from the project? Their profile and documents are not affected." danger />
 
       {/* Assign EA Modal */}
-      <Modal open={showAssignEA} onClose={() => setShowAssignEA(false)} title="Assign Employers Agent" size="sm"
+      <Modal open={showAssignEA} onClose={() => setShowAssignEA(false)} title="Assign Employers Agent" size="md"
         footer={<><button className="btn" onClick={() => setShowAssignEA(false)}>Cancel</button><button className="btn btn-primary" onClick={assignEA} disabled={!eaAssignForm.ea_id}>Assign</button></>}>
         <div className="form-grid">
           <div className="full"><Field label="Employers Agent *"><select value={eaAssignForm.ea_id} onChange={e => {
             const sel = allEAs.find(ea => ea.id === e.target.value)
-            setEaAssignForm(f => ({ ...f, ea_id: e.target.value, submission_email: sel?.payment_submission_email || '' }))
+            const main = (eaContacts[e.target.value] || []).find(c => c.is_primary)
+            setEaAssignForm(f => ({ ...f, ea_id: e.target.value, submission_email: sel?.payment_submission_email || '', contact_ids: main ? [main.id] : [] }))
           }}><option value="">Select EA…</option>{allEAs.filter(ea => !projectEAs.find(p => p.ea_id === ea.id)).map(ea => <option key={ea.id} value={ea.id}>{ea.company_name}</option>)}</select></Field></div>
+          {eaAssignForm.ea_id && <div className="full"><Field label="Who looks after this job?">
+            <ContactPicker eaId={eaAssignForm.ea_id} contacts={eaContacts[eaAssignForm.ea_id] || []} value={eaAssignForm.contact_ids}
+              onChange={ids => setEaAssignForm(f => ({ ...f, contact_ids: ids }))}
+              onAdded={c => setEaContacts(m => ({ ...m, [c.ea_id]: [...(m[c.ea_id] || []), c] }))} />
+          </Field></div>}
           <div className="full"><Field label="Submission Email(s) for this project">
             <input type="text" value={eaAssignForm.submission_email} onChange={e => setEaAssignForm(f => ({ ...f, submission_email: e.target.value }))} placeholder="e.g. john@ea.co.uk, sarah@ea.co.uk" />
             <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
@@ -1686,17 +1710,22 @@ export default function ProjectDetail() {
       {/* Edit EA assignment — change the per-project submission email list.
           The EA company itself is not editable here (use remove + re-assign
           for that). Modal shows the EA name in the title for context. */}
-      <Modal open={!!showEditEA} onClose={() => { setShowEditEA(null); setEditEAForm({ submission_email: '' }) }}
-        title={showEditEA ? `Edit: ${showEditEA.employer_agents?.company_name || 'EA'}` : 'Edit EA'} size="sm"
+      <Modal open={!!showEditEA} onClose={() => { setShowEditEA(null); setEditEAForm({ submission_email: '', contact_ids: [] }) }}
+        title={showEditEA ? `Edit: ${showEditEA.employer_agents?.company_name || 'EA'}` : 'Edit EA'} size="md"
         footer={
           <>
-            <button className="btn" onClick={() => { setShowEditEA(null); setEditEAForm({ submission_email: '' }) }}>Cancel</button>
+            <button className="btn" onClick={() => { setShowEditEA(null); setEditEAForm({ submission_email: '', contact_ids: [] }) }}>Cancel</button>
             <button className="btn btn-primary" onClick={saveEditEA} disabled={savingEditEA}>
               {savingEditEA ? 'Saving…' : 'Save'}
             </button>
           </>
         }>
         <div className="form-grid">
+          {showEditEA && <div className="full"><Field label="Who looks after this job?">
+            <ContactPicker eaId={showEditEA.ea_id} contacts={eaContacts[showEditEA.ea_id] || []} value={editEAForm.contact_ids}
+              onChange={ids => setEditEAForm(f => ({ ...f, contact_ids: ids }))}
+              onAdded={c => setEaContacts(m => ({ ...m, [c.ea_id]: [...(m[c.ea_id] || []), c] }))} />
+          </Field></div>}
           <div className="full"><Field label="Submission Email(s) for this project">
             <input type="text" value={editEAForm.submission_email}
               onChange={e => setEditEAForm(f => ({ ...f, submission_email: e.target.value }))}

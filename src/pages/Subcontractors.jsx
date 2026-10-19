@@ -8,6 +8,7 @@ import { useAuth } from '../lib/auth'
 import { useNav, useAllowedSubIds } from '../lib/access'
 import SubcontractorModal from '../components/SubcontractorModal'
 import EAModal from '../components/EAModal'
+import { loadEAContacts } from '../components/EAContacts'
 import Documents from './Documents'
 
 // ── Employers Agent List ─────────────────────────────────────
@@ -19,6 +20,7 @@ function EmployersAgentTab() {
   const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const { can, division } = useAuth()
+  const [people, setPeople] = useState({})   // { ea_id: [people at the firm] }
 
   // Reload when the division switches — the EA firms list is divisional,
   // so flipping Construction ⇄ Fit-Out must refetch, not show stale rows.
@@ -28,6 +30,7 @@ function EmployersAgentTab() {
     setLoading(true)
     const { data } = await supabase.from('employer_agents').select('*').eq('division', division).order('company_name')
     setEas(sortBy(data || [], 'company_name'))
+    loadEAContacts((data || []).map(e => e.id)).then(setPeople)
     setLoading(false)
   }
 
@@ -38,7 +41,7 @@ function EmployersAgentTab() {
   }
 
   const list = search
-    ? eas.filter(e => e.company_name?.toLowerCase().includes(search.toLowerCase()) || e.contact_name?.toLowerCase().includes(search.toLowerCase()))
+    ? eas.filter(e => e.company_name?.toLowerCase().includes(search.toLowerCase()) || e.contact_name?.toLowerCase().includes(search.toLowerCase()) || (people[e.id] || []).some(c => c.name?.toLowerCase().includes(search.toLowerCase())))
     : eas
 
   return (
@@ -93,6 +96,7 @@ function EmployersAgentTab() {
                   <td>
                     <div>{ea.contact_name || '—'}</div>
                     <div className="td-muted">{ea.phone || ''}</div>
+                    {(people[ea.id]?.length || 0) > 1 && <div className="td-muted" title={people[ea.id].map(c => c.name).join(', ')}>+{people[ea.id].length - 1} more {people[ea.id].length === 2 ? 'person' : 'people'}</div>}
                   </td>
                   <td className="td-muted">{ea.email || '—'}</td>
                   <td className="td-muted">
