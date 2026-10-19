@@ -47,7 +47,7 @@ const STATUS_COLORS = {
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile } = useAuth()
+  const { profile, can } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isPMOrAdmin = ['admin', 'project_manager'].includes(profile?.role)
 
@@ -87,7 +87,7 @@ export default function ClientDetail() {
   const doneProjects = projects.filter(p => !['active', 'tender'].includes(p.status))
 
   function fmt(n) {
-    if (!n) return '—'
+    if (!n || !can('view_project_value')) return '—'
     if (n >= 1000000) return `£${(n / 1000000).toFixed(2)}m`
     if (n >= 1000) return `£${(n / 1000).toFixed(0)}k`
     return `£${n.toLocaleString()}`
@@ -106,12 +106,12 @@ export default function ClientDetail() {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 18 }}>{client.name}</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+            <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 2 }}>
               {client.website && <><a href={client.website} target="_blank" rel="noreferrer" style={{ color: 'var(--green)' }}>{client.website.replace(/https?:\/\/(www\.)?/, '')}</a> · </>}
               {client.phone && <>{client.phone} · </>}
               {client.email && <>{client.email}</>}
             </div>
-            {client.address && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{client.address}</div>}
+            {client.address && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{client.address}</div>}
           </div>
           {isPMOrAdmin && (
             <button className="btn btn-sm" onClick={() => setShowEditClient(true)}>Edit</button>
@@ -127,7 +127,7 @@ export default function ClientDetail() {
           { label: 'Active', value: activeProjects.length, green: activeProjects.length > 0 },
         ].map(s => (
           <div key={s.label} className="card card-pad" style={{ padding: '12px 14px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>{s.label}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: s.green ? 'var(--green)' : 'var(--text)' }}>{s.value}</div>
           </div>
         ))}
@@ -156,18 +156,18 @@ export default function ClientDetail() {
       {activeTab === 'projects' && (
         <div>
           {projects.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No projects linked to this client yet.</div>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No projects linked to this client yet.</div>
           ) : (
             <>
               {activeProjects.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Active</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Active</div>
                   <ProjectList projects={activeProjects} fmt={fmt} navigate={navigate} />
                 </div>
               )}
               {doneProjects.length > 0 && (
                 <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Completed / Other</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Completed / Other</div>
                   <ProjectList projects={doneProjects} fmt={fmt} navigate={navigate} faded />
                 </div>
               )}
@@ -181,9 +181,9 @@ export default function ClientDetail() {
         <div>
           {/* EA section */}
           {/* Client contacts */}
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Client Contacts</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Client Contacts</div>
           {contacts.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 8 }}>No client contacts yet.</div>
+            <div style={{ fontSize: 14, color: 'var(--text3)', marginBottom: 8 }}>No client contacts yet.</div>
           ) : (
             contacts.map(c => (
               <ContactCard key={c.id} contact={c}
@@ -224,14 +224,14 @@ function ProjectList({ projects, fmt, navigate, faded }) {
             onMouseLeave={e => e.currentTarget.style.background = 'var(--surface)'}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: sc.color, flexShrink: 0 }} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.project_name}</div>
-              <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+              <div style={{ fontWeight: 600, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.project_name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                 {p.project_ref}{p.project_ref && p.start_date ? ' · ' : ''}{p.start_date ? formatDate(p.start_date) : ''}
               </div>
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{fmt(p.value)}</div>
-              <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: sc.bg, color: sc.color }}>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{fmt(p.value)}</div>
+              <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: sc.bg, color: sc.color }}>
                 {p.status.charAt(0).toUpperCase() + p.status.slice(1).replace('_', ' ')}
               </span>
             </div>
@@ -250,22 +250,22 @@ function ContactCard({ contact, badge, badgeColor, badgeBg, accentColor, accentB
   const bg = accentBg || '#378ADD25'
   return (
     <div style={{ background: 'var(--surface2)', border: `0.5px solid ${accentColor ? accentColor + '30' : 'var(--border)'}`, borderRadius: 'var(--radius)', padding: '10px 12px', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 34, height: 34, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: col, flexShrink: 0 }}>
+      <div style={{ width: 34, height: 34, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: col, flexShrink: 0 }}>
         {initials(contact.name)}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, fontSize: 13 }}>{contact.name}</span>
-          {badge && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 600 }}>{badge}</span>}
+          <span style={{ fontWeight: 600, fontSize: 14 }}>{contact.name}</span>
+          {badge && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: badgeBg, color: badgeColor, fontWeight: 600 }}>{badge}</span>}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
           {contact.job_title}{contact.job_title && (contact.email || contact.phone) ? ' · ' : ''}
           {contact.email}{contact.email && contact.phone ? ' · ' : ''}
           {contact.phone}
         </div>
       </div>
       {canDelete && (
-        <button onClick={onDelete} style={{ fontSize: 10, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)', flexShrink: 0 }}>✕</button>
+        <button onClick={onDelete} style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)', flexShrink: 0 }}>✕</button>
       )}
     </div>
   )
@@ -331,7 +331,7 @@ function AddContactModal({ clientId, onClose, onSaved }) {
       ))}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
         <input type="checkbox" id="is_pm" checked={form.is_pm} onChange={e => set('is_pm', e.target.checked)} />
-        <label htmlFor="is_pm" style={{ fontSize: 13 }}>Mark as Client PM (valuation contact)</label>
+        <label htmlFor="is_pm" style={{ fontSize: 14 }}>Mark as Client PM (valuation contact)</label>
       </div>
     </ModalWrap>
   )
@@ -357,7 +357,7 @@ function ModalWrap({ title, onClose, onSave, saving, children }) {
 function ModalField({ label, children }) {
   return (
     <div>
-      <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>{label}</div>
       {children}
     </div>
   )

@@ -33,10 +33,10 @@ export default function PricedJobsHistory() {
     load()
   }
 
-  if (loading) return <div style={{ fontSize: 13, color: 'var(--text3)', padding: 20 }}>Loading history…</div>
-  if (error) return <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>
+  if (loading) return <div style={{ fontSize: 14, color: 'var(--text3)', padding: 20 }}>Loading history…</div>
+  if (error) return <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 13 }}>{error}</div>
   if (jobs.length === 0) return (
-    <div style={{ fontSize: 13, color: 'var(--text3)', padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)' }}>
+    <div style={{ fontSize: 14, color: 'var(--text3)', padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)' }}>
       No priced jobs saved yet. Price a job and click "Save to history".
     </div>
   )
@@ -50,25 +50,25 @@ export default function PricedJobsHistory() {
             <div onClick={() => setOpen(isOpen ? null : j.id)}
               style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', cursor: 'pointer' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{j.job_name}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                <div style={{ fontSize: 14, fontWeight: 500 }}>{j.job_name}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                   {[j.client_name, j.build_date ? `build ${j.build_date.slice(0, 7)}` : null,
                     new Date(j.created_at).toLocaleDateString('en-GB')].filter(Boolean).join(' · ')}
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#185FA5' }}>{fmtMoney(j.total_escalated)}</div>
-                <div style={{ fontSize: 10, color: 'var(--text3)' }}>base {fmtMoney(j.total_base)}</div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#185FA5' }}>{fmtMoney(j.total_escalated)}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)' }}>base {fmtMoney(j.total_base)}</div>
               </div>
             </div>
             {isOpen && (
               <div style={{ borderTop: '0.5px solid var(--border)', padding: '10px 12px', background: 'var(--surface2)' }}>
                 {(j.lines || []).length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>No line detail stored.</div>
+                  <div style={{ fontSize: 13, color: 'var(--text3)' }}>No line detail stored.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {(j.lines || []).map((l, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11 }}>
+                      <div key={i} style={{ display: 'flex', gap: 8, fontSize: 12 }}>
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.description || '(no description)'}</span>
                         <span style={{ color: 'var(--text3)' }}>{l.category}</span>
                         <span style={{ width: 80, textAlign: 'right' }}>{fmtMoney(l.escalated)}</span>

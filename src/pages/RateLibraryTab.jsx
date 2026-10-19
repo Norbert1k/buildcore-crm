@@ -66,30 +66,30 @@ export default function RateLibraryTab() {
     })
   }, [rows, q, unitFilter])
 
-  if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13 }}>Loading rate library…</div>
+  if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 14 }}>Loading rate library…</div>
 
   return (
     <div>
-      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search description, section, project…" style={{ flex: 1, minWidth: 180, fontSize: 13 }} />
-        <select value={unitFilter} onChange={e => setUnitFilter(e.target.value)} style={{ width: 120, fontSize: 13 }}>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search description, section, project…" style={{ flex: 1, minWidth: 180, fontSize: 14 }} />
+        <select value={unitFilter} onChange={e => setUnitFilter(e.target.value)} style={{ width: 120, fontSize: 14 }}>
           {units.map(u => <option key={u} value={u}>{u === 'all' ? 'All units' : u}</option>)}
         </select>
-        <span style={{ fontSize: 11, color: 'var(--text3)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: 'var(--text3)', whiteSpace: 'nowrap' }}>
           {filtered.length} of {rows.length}
         </span>
       </div>
 
       {rows.length === 0 ? (
-        <div style={{ padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', color: 'var(--text3)', fontSize: 13 }}>
+        <div style={{ padding: 30, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', color: 'var(--text3)', fontSize: 14 }}>
           No rates harvested yet. The nightly harvest collects rates from every CSA in the system —
           or trigger it manually (see deploy notes). Once it runs, your historical rates appear here.
         </div>
       ) : (
         <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: RGRID, gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 10, color: 'var(--text3)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: RGRID, gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 11, color: 'var(--text3)' }}>
             <span>DESCRIPTION</span><span>SECTION</span><span style={{ textAlign: 'right' }}>UNIT</span>
             <span style={{ textAlign: 'right' }}>RATE</span><span style={{ textAlign: 'right' }}>MATERIAL</span>
             <span style={{ textAlign: 'right' }}>LABOUR</span><span>SOURCE</span>
@@ -101,7 +101,7 @@ export default function RateLibraryTab() {
       )}
 
       {lastRun && (
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 10 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 10 }}>
           Last harvest: {new Date(lastRun.run_at).toLocaleString('en-GB')} · {lastRun.files_seen} files · {lastRun.rows_upserted} rates.
         </div>
       )}
@@ -115,18 +115,18 @@ function RateRow({ r, onSave, saving }) {
   const dirty = String(mat) !== String(r.material_rate ?? '') || String(lab) !== String(r.labour_rate ?? '')
   const unit = r.unit_norm || r.unit || ''
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: RGRID, gap: 6, padding: '6px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center', fontSize: 12 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: RGRID, gap: 6, padding: '6px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center', fontSize: 13 }}>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.description}>{r.description}</span>
-      <span style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.section}>{r.section}</span>
+      <span style={{ fontSize: 11, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.section}>{r.section}</span>
       <span style={{ textAlign: 'right', color: 'var(--text3)' }}>{unit}</span>
       <span style={{ textAlign: 'right', fontWeight: 500 }}>{r.rate != null ? fmtMoney(r.rate) : '—'}</span>
-      <input type="number" value={mat} onChange={e => setMat(e.target.value)} placeholder="—" style={{ fontSize: 11, textAlign: 'right', padding: '4px 6px' }} />
-      <input type="number" value={lab} onChange={e => setLab(e.target.value)} placeholder="—" style={{ fontSize: 11, textAlign: 'right', padding: '4px 6px' }} />
+      <input type="number" value={mat} onChange={e => setMat(e.target.value)} placeholder="—" style={{ fontSize: 12, textAlign: 'right', padding: '4px 6px' }} />
+      <input type="number" value={lab} onChange={e => setLab(e.target.value)} placeholder="—" style={{ fontSize: 12, textAlign: 'right', padding: '4px 6px' }} />
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <span style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${r.project_name || r.source_file || ''} ${r.csa_date || ''}`}>
+        <span style={{ fontSize: 11, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${r.project_name || r.source_file || ''} ${r.csa_date || ''}`}>
           {r.project_name || r.source_file || '—'}
         </span>
-        {dirty && <button className="btn btn-sm" disabled={saving} onClick={() => onSave(r.id, mat, lab)} style={{ flexShrink: 0, fontSize: 10, padding: '2px 8px' }}>{saving ? '…' : 'Save'}</button>}
+        {dirty && <button className="btn btn-sm" disabled={saving} onClick={() => onSave(r.id, mat, lab)} style={{ flexShrink: 0, fontSize: 11, padding: '2px 8px' }}>{saving ? '…' : 'Save'}</button>}
       </span>
     </div>
   )

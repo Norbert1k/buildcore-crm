@@ -18,21 +18,25 @@ function themeFor(profileData, div) {
   return profileData?.theme || remembered
 }
 
+// Themes with a dark background. data-mode lets shared CSS (e.g. the dark
+// colour remap) treat every dark theme the same way.
+const DARK_THEMES = new Set(['dark', 'forest', 'slate', 'blueprint'])
 function applyTheme(theme) {
   const t = theme || 'light'
   document.documentElement.setAttribute('data-theme', t)
+  document.documentElement.setAttribute('data-mode', DARK_THEMES.has(t) ? 'dark' : 'light')
   localStorage.setItem('theme', t)
 }
 
 // Style = shape language (standard/studio/blueprint/gallery), independent of
 // colour. Saved per division like colour: style / style_fitout.
 function applyStyle(style) {
-  const v = style || 'standard'
+  const v = style || 'refresh'
   document.documentElement.setAttribute('data-style', v)
   localStorage.setItem('ui_style', v)
 }
 function styleFor(profileData, div) {
-  const remembered = localStorage.getItem('ui_style') || 'standard'
+  const remembered = localStorage.getItem('ui_style') || 'refresh'
   // Fit-out's signature default is the Blueprint shape language.
   if (div === 'fitout') return profileData?.style_fitout || 'blueprint'
   return profileData?.style || remembered
@@ -190,14 +194,14 @@ export function AuthProvider({ children }) {
       // Site managers: view + download of general company documents
       // (Templates, Other). VAT & Bank stay restricted, and manage_documents
       // (upload/rename/delete) deliberately still excludes them.
-      view_company_other:    ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'site_manager'],
-      view_company_templates:['project_manager', 'accountant', 'director_viewer', 'document_controller', 'site_manager'],
+      view_company_other:    ['project_manager', 'accountant', 'director_viewer', 'document_controller'],
+      view_company_templates:['project_manager', 'accountant', 'director_viewer', 'document_controller'],
       manage_settings:       ['project_manager', 'accountant'],
       // Company Information panel: all staff can view the general block; only
       // admins can edit (empty list → admin short-circuit only). Sensitive
       // sub-blocks (banking, director personal details) reuse view_company_bank.
       manage_company_info:   [],
-      view_company_info:     ['project_manager', 'accountant', 'director_viewer', 'site_manager', 'document_controller', 'viewer'],
+      view_company_info:     ['project_manager', 'accountant', 'director_viewer', 'document_controller', 'viewer'],
       view_tracker:          ['project_manager', 'accountant', 'director_viewer', 'viewer'],
       blacklist_manage:      [], // admin-only, handled by `role === 'admin'` short-circuit above
       create_tasks:          ['project_manager', 'operations_manager'],

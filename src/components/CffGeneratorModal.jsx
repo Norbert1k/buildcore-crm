@@ -906,7 +906,7 @@ export default function CffGeneratorModal({
           color: '#dc2626',
           borderRadius: 'var(--radius)',
           padding: 10,
-          fontSize: 13,
+          fontSize: 14,
           marginBottom: 14,
         }}>
           {error}
@@ -1040,7 +1040,7 @@ function Step1SourceAndProgramme({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Source mode toggle — pick CSA + curves OR a client CFF file */}
       <div>
-        <label style={{ display: 'block', fontSize: 12, fontWeight: 500, marginBottom: 6, color: 'var(--text2)' }}>
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 6, color: 'var(--text2)' }}>
           Generate from
         </label>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -1048,7 +1048,7 @@ function Step1SourceAndProgramme({
             type="button"
             onClick={() => setSourceMode('csa')}
             style={{
-              padding: '6px 12px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+              padding: '6px 12px', fontSize: 13, borderRadius: 4, cursor: 'pointer',
               border: '0.5px solid var(--border)',
               background: sourceMode === 'csa' ? 'var(--accent-soft)' : 'var(--surface2)',
               color: sourceMode === 'csa' ? 'var(--accent)' : 'var(--text2)',
@@ -1061,7 +1061,7 @@ function Step1SourceAndProgramme({
             type="button"
             onClick={() => setSourceMode('client')}
             style={{
-              padding: '6px 12px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
+              padding: '6px 12px', fontSize: 13, borderRadius: 4, cursor: 'pointer',
               border: '0.5px solid var(--border)',
               background: sourceMode === 'client' ? 'var(--accent-soft)' : 'var(--surface2)',
               color: sourceMode === 'client' ? 'var(--accent)' : 'var(--text2)',
@@ -1071,7 +1071,7 @@ function Step1SourceAndProgramme({
             Client CFF file
           </button>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
           {sourceMode === 'csa'
             ? 'Build forecast from the project CSA using a distribution curve. PA-aware regenerate replaces past months with PA actuals per row.'
             : 'Use a client-supplied CFF spreadsheet as the forecast. PA actuals (if present) overlay at the totals level — past month totals match the PAs, future months use the client distribution.'}
@@ -1083,11 +1083,11 @@ function Step1SourceAndProgramme({
       <div>
         <Field label="Source CSA file">
           {loadingCsaList ? (
-            <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
+            <div style={{ fontSize: 14, color: 'var(--text3)', padding: '8px 0' }}>
               Loading available CSA files…
             </div>
           ) : csaFiles.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>
+            <div style={{ fontSize: 14, color: 'var(--text3)', padding: '8px 0' }}>
               No CSA files found in <code>{PRIMARY_FOLDER} / {CSA_SUBFOLDER}</code>{buildings.length > 0 ? ' or any per-building subfolder' : ''}.
               Upload one below to continue.
             </div>
@@ -1145,7 +1145,7 @@ function Step1SourceAndProgramme({
             background: 'rgba(80, 102, 188, 0.08)',
             border: '0.5px solid rgba(80, 102, 188, 0.3)',
             borderRadius: 4,
-            fontSize: 12,
+            fontSize: 13,
             color: 'var(--text2)',
             lineHeight: 1.5,
           }}>
@@ -1153,13 +1153,13 @@ function Step1SourceAndProgramme({
           </div>
         )}
 
-        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4 }}>
           Or upload a CSA xlsx directly:&nbsp;
-          <input type="file" accept=".xlsx" onChange={handleFileChange} style={{ fontSize: 12 }} />
+          <input type="file" accept=".xlsx" onChange={handleFileChange} style={{ fontSize: 13 }} />
         </div>
 
         {csaParseError && (
-          <div style={{ marginTop: 8, fontSize: 13, color: '#dc2626' }}>
+          <div style={{ marginTop: 8, fontSize: 14, color: '#dc2626' }}>
             CSA parse error: {csaParseError}
           </div>
         )}
@@ -1176,7 +1176,7 @@ function Step1SourceAndProgramme({
               type="button"
               onClick={() => setClientCffSourceMode('upload')}
               style={{
-                padding: '4px 10px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+                padding: '4px 10px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
                 border: '0.5px solid var(--border)',
                 background: clientCffSourceMode === 'upload' ? 'var(--accent-soft)' : 'var(--surface2)',
                 color: clientCffSourceMode === 'upload' ? 'var(--accent)' : 'var(--text2)',
@@ -1189,7 +1189,7 @@ function Step1SourceAndProgramme({
               type="button"
               onClick={() => setClientCffSourceMode('pick')}
               style={{
-                padding: '4px 10px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+                padding: '4px 10px', fontSize: 12, borderRadius: 4, cursor: 'pointer',
                 border: '0.5px solid var(--border)',
                 background: clientCffSourceMode === 'pick' ? 'var(--accent-soft)' : 'var(--surface2)',
                 color: clientCffSourceMode === 'pick' ? 'var(--accent)' : 'var(--text2)',
@@ -1206,17 +1206,17 @@ function Step1SourceAndProgramme({
                 type="file"
                 accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 onChange={handleClientFileChange}
-                style={{ fontSize: 13 }}
+                style={{ fontSize: 14 }}
               />
               {clientCffFile && (
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
                   Selected: {clientCffFile.name} ({Math.round(clientCffFile.size / 1024)} KB)
                 </div>
               )}
             </>
           ) : (
             clientCffExistingFiles.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--text3)', padding: 8, border: '0.5px solid var(--border)', borderRadius: 4 }}>
+              <div style={{ fontSize: 13, color: 'var(--text3)', padding: 8, border: '0.5px solid var(--border)', borderRadius: 4 }}>
                 No xlsx files found in this project's cff subfolders. Upload one instead.
               </div>
             ) : (
@@ -1258,7 +1258,7 @@ function Step1SourceAndProgramme({
             background: 'rgba(80, 102, 188, 0.08)',
             border: '0.5px solid rgba(80, 102, 188, 0.3)',
             borderRadius: 4,
-            fontSize: 12,
+            fontSize: 13,
             color: 'var(--text2)',
             lineHeight: 1.5,
           }}>
@@ -1267,7 +1267,7 @@ function Step1SourceAndProgramme({
         )}
 
         {csaParseError && (
-          <div style={{ marginTop: 8, fontSize: 13, color: '#dc2626' }}>
+          <div style={{ marginTop: 8, fontSize: 14, color: '#dc2626' }}>
             Parse error: {csaParseError}
           </div>
         )}
@@ -1287,7 +1287,7 @@ function Step1SourceAndProgramme({
               onChange={e => setRetentionPctInput(e.target.value)}
               style={{ width: '100%' }}
             />
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
               Deducted from each PA. Default 8% (Merton); use 3% for Bishops-style projects.
             </div>
           </Field>
@@ -1303,7 +1303,7 @@ function Step1SourceAndProgramme({
               onChange={e => setReleasePctInput(e.target.value)}
               style={{ width: '100%' }}
             />
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
               Released at Practical Completion. Default 6.5% (Merton); use 1.5% for Bishops-style.
             </div>
           </Field>
@@ -1340,7 +1340,7 @@ function Step1SourceAndProgramme({
           onChange={e => setNumMonthsOverride(e.target.value)}
           style={{ width: 200 }}
         />
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
           Leave blank to derive from start &amp; end dates. Override if you want a specific count.
         </div>
       </Field>
@@ -1349,7 +1349,7 @@ function Step1SourceAndProgramme({
           Inline radio rows: radio + label + (optional right-aligned metadata).
           Simple list pattern, no flex tricks needed for layout. */}
       <Field label="Past-month actuals (optional)">
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
           Override past-month forecasts with real claimed amounts. Future months redistribute remaining contract via the curve below.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1391,7 +1391,7 @@ function Step1SourceAndProgramme({
         )}
       </Field>
       {paLoadError && (
-        <div style={{ fontSize: 12, color: '#dc2626' }}>
+        <div style={{ fontSize: 13, color: '#dc2626' }}>
           Could not load payment applications: {paLoadError}
         </div>
       )}
@@ -1408,7 +1408,7 @@ function Step1SourceAndProgramme({
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius)',
                 background: defaultCurve === c ? 'var(--surface2)' : 'transparent',
-                fontSize: 12,
+                fontSize: 13,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 4,
@@ -1432,13 +1432,13 @@ function Step1SourceAndProgramme({
                 }}
               />
               <strong>{CURVE_LABELS[c]}</strong>
-              <span style={{ color: 'var(--text3)', fontSize: 11 }}>
+              <span style={{ color: 'var(--text3)', fontSize: 12 }}>
                 {CURVE_DESCRIPTIONS[c]}
               </span>
             </label>
           ))}
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
           Applied to every row by default. You can override per-row in the next step.
         </div>
       </Field>
@@ -1516,12 +1516,12 @@ function Step2CurvesAndPreview({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ fontSize: 13, color: 'var(--text2)' }}>
+      <div style={{ fontSize: 14, color: 'var(--text2)' }}>
         <strong>{csaExtract.project_name || 'Project'}</strong>{' '}
         — Contract sum {fmtMoney(csaExtract.contract_sum)} —{' '}
         {csaExtract.groups.length} CFF row{csaExtract.groups.length === 1 ? '' : 's'} × {numMonths} month{numMonths === 1 ? '' : 's'}
         {totalManual > 0 && (
-          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text3)' }}>
+          <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text3)' }}>
             · {totalManual} row{totalManual === 1 ? '' : 's'} manually edited
           </span>
         )}
@@ -1534,7 +1534,7 @@ function Step2CurvesAndPreview({
           background: 'rgba(80, 102, 188, 0.08)',
           border: '0.5px solid rgba(80, 102, 188, 0.3)',
           borderRadius: 'var(--radius)',
-          fontSize: 12,
+          fontSize: 13,
         }}>
           <strong>Months 1{paMonthCount > 1 ? `–${paMonthCount}` : ''}</strong> use cumulative figures from{' '}
           {paList.slice(0, paMonthCount).map(p => p.pa_label).join(', ')}.
@@ -1547,7 +1547,7 @@ function Step2CurvesAndPreview({
           background: 'rgba(80, 102, 188, 0.08)',
           border: '0.5px solid rgba(80, 102, 188, 0.3)',
           borderRadius: 'var(--radius)',
-          fontSize: 12,
+          fontSize: 13,
         }}>
           <strong>Months 1{paMonthCount > 1 ? `–${paMonthCount}` : ''}</strong> use manually-entered amounts:{' '}
           {manualActuals.slice(0, paMonthCount).map((e, i) =>
@@ -1558,7 +1558,7 @@ function Step2CurvesAndPreview({
         </div>
       )}
 
-      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text3)' }}>
         Tip: click any monthly cell to edit. The row's curve switches to manual mode.
         Use <strong>Reset</strong> to restore the curve-based distribution.
       </div>
@@ -1576,7 +1576,7 @@ function Step2CurvesAndPreview({
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius)',
       }}>
-        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
+        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
           <thead>
             <tr style={{ background: 'var(--surface2)' }}>
               <th style={th('left', 60)}>Section</th>
@@ -1592,7 +1592,7 @@ function Step2CurvesAndPreview({
                   ...(i < paMonthCount ? { background: 'linear-gradient(rgba(80,102,188,0.2), rgba(80,102,188,0.2)), var(--surface2)' } : {}),
                 }}>
                   {lbl}
-                  {i < paMonthCount && <div style={{ fontSize: 9, fontWeight: 400, color: 'var(--text3)' }}>{labelForPastMonth(i)}</div>}
+                  {i < paMonthCount && <div style={{ fontSize: 10, fontWeight: 400, color: 'var(--text3)' }}>{labelForPastMonth(i)}</div>}
                 </th>
               ))}
               <th style={th('right', 90)}>Row Σ</th>
@@ -1613,7 +1613,7 @@ function Step2CurvesAndPreview({
                 }}>
                   <td style={td('left')}>
                     <span style={{
-                      fontSize: 10,
+                      fontSize: 11,
                       padding: '2px 6px',
                       background: 'var(--surface2)',
                       borderRadius: 3,
@@ -1629,7 +1629,7 @@ function Step2CurvesAndPreview({
                       <button
                         onClick={() => resetRowToCurve(g.id)}
                         style={{
-                          fontSize: 10, padding: '2px 8px',
+                          fontSize: 11, padding: '2px 8px',
                           background: 'var(--surface2)',
                           border: '0.5px solid var(--border)',
                           borderRadius: 3,
@@ -1644,7 +1644,7 @@ function Step2CurvesAndPreview({
                       <select
                         value={rowCurves[g.id] || defaultCurve}
                         onChange={e => setRowCurve(g.id, e.target.value)}
-                        style={{ fontSize: 11, padding: '2px 4px', width: '100%' }}
+                        style={{ fontSize: 12, padding: '2px 4px', width: '100%' }}
                       >
                         {CURVE_TYPES.map(c => (
                           <option key={c} value={c}>{CURVE_LABELS[c]}</option>
@@ -1668,7 +1668,7 @@ function Step2CurvesAndPreview({
                           style={{
                             width: '100%',
                             padding: '4px 6px',
-                            fontSize: 12,
+                            fontSize: 13,
                             textAlign: 'right',
                             background: 'transparent',
                             border: '0.5px solid transparent',
@@ -1683,10 +1683,10 @@ function Step2CurvesAndPreview({
                       </td>
                     )
                   })}
-                  <td style={{ ...td('right'), color: hasDrift ? '#dc2626' : 'var(--text3)', fontSize: 11 }}>
+                  <td style={{ ...td('right'), color: hasDrift ? '#dc2626' : 'var(--text3)', fontSize: 12 }}>
                     {fmtMoney(rowSum)}
                     {hasDrift && (
-                      <div style={{ fontSize: 10 }}>
+                      <div style={{ fontSize: 11 }}>
                         {drift > 0 ? '+' : ''}{fmtMoney(drift)}
                       </div>
                     )}
@@ -1738,7 +1738,7 @@ function Step2CurvesAndPreview({
         const explainedByVariations = variationsSum > 0 && Math.abs(gap - expectedGap) <= 1
         const hasUnexplainedGap = Math.abs(gap) > 1 && !explainedByVariations
         return (
-          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
+          <div style={{ fontSize: 13, color: 'var(--text3)' }}>
             Total forecast: <strong>{fmtMoney(cumulativeAtFinal)}</strong>{' '}
             of contract {fmtMoney(csaExtract.contract_sum)}
             {explainedByVariations && (
@@ -1798,9 +1798,9 @@ function ActualsRadioRow({ mode, currentMode, setMode, label, metadata, disabled
           flexShrink: 0,
         }}
       />
-      <span style={{ fontSize: 13 }}>{label}</span>
+      <span style={{ fontSize: 14 }}>{label}</span>
       {metadata && (
-        <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 12, color: 'var(--text3)', marginLeft: 'auto' }}>
           {metadata}
         </span>
       )}
@@ -1841,14 +1841,14 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
       background: 'var(--surface2)',
     }}>
       {entries.length === 0 ? (
-        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>
+        <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 8 }}>
           No entries yet. Each entry will fill one past month in order.
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
           {entries.map((entry, idx) => (
             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: 'var(--text3)', width: 28, textAlign: 'right' }}>
+              <span style={{ fontSize: 12, color: 'var(--text3)', width: 28, textAlign: 'right' }}>
                 M{idx + 1}
               </span>
               <input
@@ -1859,13 +1859,13 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
                 style={{
                   width: 80,
                   padding: '4px 8px',
-                  fontSize: 12,
+                  fontSize: 13,
                   border: '0.5px solid var(--border)',
                   borderRadius: 4,
                   background: 'var(--surface)',
                 }}
               />
-              <span style={{ fontSize: 12, color: 'var(--text3)' }}>£</span>
+              <span style={{ fontSize: 13, color: 'var(--text3)' }}>£</span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -1875,7 +1875,7 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
                 style={{
                   flex: 1,
                   padding: '4px 8px',
-                  fontSize: 12,
+                  fontSize: 13,
                   textAlign: 'right',
                   fontVariantNumeric: 'tabular-nums',
                   border: '0.5px solid var(--border)',
@@ -1887,7 +1887,7 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
                 onClick={() => removeEntry(idx)}
                 style={{
                   padding: '4px 8px',
-                  fontSize: 11,
+                  fontSize: 12,
                   border: '0.5px solid var(--border)',
                   borderRadius: 4,
                   background: 'transparent',
@@ -1907,7 +1907,7 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
         disabled={entries.length >= maxMonths}
         style={{
           padding: '6px 10px',
-          fontSize: 12,
+          fontSize: 13,
           border: '0.5px solid var(--border)',
           borderRadius: 4,
           background: 'transparent',
@@ -1918,7 +1918,7 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
         + Add applied amount
       </button>
       {entries.length > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
           Total applied: £{entries.reduce((s, e) => s + (Number.isFinite(e.amount) ? e.amount : 0), 0).toLocaleString()}
         </div>
       )}
@@ -1930,7 +1930,7 @@ function ManualActualsEditor({ entries, setEntries, maxMonths }) {
 const th = (align, width) => ({
   textAlign: align,
   padding: '6px 8px',
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 600,
   borderBottom: '1px solid var(--border)',
   whiteSpace: 'nowrap',

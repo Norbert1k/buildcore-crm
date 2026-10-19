@@ -93,8 +93,8 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>Portal branding</div>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Logo and color shown to this client when they sign in</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>Portal branding</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Logo and color shown to this client when they sign in</div>
           </div>
           {isAdmin && (
             <button className="btn btn-sm" onClick={() => setShowBranding(true)}>Edit</button>
@@ -104,13 +104,13 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
           {client.logo_url ? (
             <img src={client.logo_url} alt="" style={{ width: 40, height: 40, borderRadius: 'var(--radius)', objectFit: 'cover' }} />
           ) : (
-            <div style={{ width: 40, height: 40, borderRadius: 'var(--radius)', background: client.brand_color || '#448a40', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 'var(--radius)', background: client.brand_color || '#448a40', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 600, fontSize: 13 }}>
               {(client.name || 'C').split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase()).join('')}
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 16, height: 16, borderRadius: 4, background: client.brand_color || '#448a40', border: '1px solid var(--border)' }} />
-            <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text2)' }}>{client.brand_color || '#448a40'}</span>
+            <span style={{ fontSize: 13, fontFamily: 'monospace', color: 'var(--text2)' }}>{client.brand_color || '#448a40'}</span>
           </div>
         </div>
       </div>
@@ -119,8 +119,8 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
       <div className="card card-pad" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>People with access · {users.length}</div>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Can sign in at {PORTAL_URL}</div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>People with access · {users.length}</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Can sign in at {PORTAL_URL}</div>
           </div>
           {isAdmin && (
             <button className="btn btn-primary btn-sm" onClick={() => setShowInvite(true)}>+ Give access</button>
@@ -128,21 +128,21 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
         </div>
 
         {loading ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', padding: 12 }}>Loading...</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: 12 }}>Loading...</div>
         ) : users.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', padding: 12, textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: 12, textAlign: 'center' }}>
             No-one yet. Click &quot;Give access&quot; to add someone.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 4 }}>
             {users.map(cu => (
               <div key={cu.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderTop: '0.5px solid var(--border)' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--text2)' }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: 'var(--text2)' }}>
                   {(cu.full_name || cu.email).split(' ').map(s => s[0]?.toUpperCase()).slice(0, 2).join('')}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{cu.full_name || cu.email}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>{cu.email} · {cu.role}{cu.last_login_at ? ` · last login ${new Date(cu.last_login_at).toLocaleDateString('en-GB')}` : ' · never logged in'}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{cu.full_name || cu.email}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{cu.email} · {cu.role}{cu.last_login_at ? ` · last login ${new Date(cu.last_login_at).toLocaleDateString('en-GB')}` : ' · never logged in'}</div>
                   {(() => {
                     const names = accessMap[cu.id] || []
                     const restricted = names.length > 0
@@ -150,7 +150,7 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
                       <div style={{ marginTop: 3 }}>
                         <span style={{
                           display: 'inline-block',
-                          fontSize: 10,
+                          fontSize: 11,
                           padding: '1px 7px',
                           borderRadius: 999,
                           background: restricted ? 'rgba(91,155,213,0.12)' : 'rgba(92,184,92,0.12)',
@@ -161,7 +161,7 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
                             : 'All projects'}
                         </span>
                         {restricted && names.length > 1 && (
-                          <span style={{ fontSize: 10, color: 'var(--text3)', marginLeft: 6 }}>
+                          <span style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 6 }}>
                             {names.join(', ')}
                           </span>
                         )}
@@ -171,8 +171,8 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
                 </div>
                 {isAdmin && (
                   <>
-                    <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setShowAccess(cu)}>Access</button>
-                    <button className="btn btn-sm" style={{ fontSize: 11, color: 'var(--red)' }} onClick={() => setConfirmRevoke(cu)}>Revoke</button>
+                    <button className="btn btn-sm" style={{ fontSize: 12 }} onClick={() => setShowAccess(cu)}>Access</button>
+                    <button className="btn btn-sm" style={{ fontSize: 12, color: 'var(--red)' }} onClick={() => setConfirmRevoke(cu)}>Revoke</button>
                   </>
                 )}
               </div>
@@ -184,17 +184,17 @@ export default function PortalAccessTab({ client, onClientUpdate }) {
       {/* Pending invitations */}
       {invitations.length > 0 && (
         <div className="card card-pad">
-          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Pending access · {invitations.length}</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 8 }}>These people have been given access but haven&apos;t signed in yet.</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Pending access · {invitations.length}</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 8 }}>These people have been given access but haven&apos;t signed in yet.</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {invitations.map(inv => (
               <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderTop: '0.5px solid var(--border)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{inv.full_name || inv.email}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>{inv.email} · invited {new Date(inv.created_at).toLocaleDateString('en-GB')} · expires {new Date(inv.expires_at).toLocaleDateString('en-GB')}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{inv.full_name || inv.email}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{inv.email} · invited {new Date(inv.created_at).toLocaleDateString('en-GB')} · expires {new Date(inv.expires_at).toLocaleDateString('en-GB')}</div>
                 </div>
                 {isAdmin && (
-                  <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => deleteInvite(inv)}>Cancel</button>
+                  <button className="btn btn-sm" style={{ fontSize: 12 }} onClick={() => deleteInvite(inv)}>Cancel</button>
                 )}
               </div>
             ))}
@@ -340,21 +340,21 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
               {emailSent ? 'Access granted · email sent' : 'Access granted'}
             </div>
             {emailSent ? (
-              <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
+              <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
                 We&apos;ve emailed <strong>{email}</strong> a secure sign-in link from
-                <code style={{ fontSize: 12, background: 'var(--surface2)', padding: '2px 6px', borderRadius: 3, marginLeft: 4 }}>noreply@cltd.co.uk</code>.
+                <code style={{ fontSize: 13, background: 'var(--surface2)', padding: '2px 6px', borderRadius: 3, marginLeft: 4 }}>noreply@cltd.co.uk</code>.
                 <br /><br />
                 Their account will be linked to {client.name} automatically when they sign in.
               </p>
             ) : (
               <>
                 {emailWarning && (
-                  <div style={{ fontSize: 12, color: '#854F0B', background: '#FAEEDA', border: '1px solid #FAC775', borderRadius: 'var(--radius)', padding: '8px 12px', marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, color: '#854F0B', background: '#FAEEDA', border: '1px solid #FAC775', borderRadius: 'var(--radius)', padding: '8px 12px', marginBottom: 12 }}>
                     Access granted, but the email didn&apos;t go out: {emailWarning}
                   </div>
                 )}
-                <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
-                  Send <strong>{email}</strong> the portal URL: <code style={{ fontSize: 12, background: 'var(--surface2)', padding: '2px 6px', borderRadius: 3 }}>{PORTAL_URL}</code>
+                <p style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.5 }}>
+                  Send <strong>{email}</strong> the portal URL: <code style={{ fontSize: 13, background: 'var(--surface2)', padding: '2px 6px', borderRadius: 3 }}>{PORTAL_URL}</code>
                   <br /><br />
                   On their first visit, they enter their email and click the magic link. Their account will be linked to {client.name} automatically.
                 </p>
@@ -367,27 +367,27 @@ function InviteModal({ client, invitedBy, inviterName, onClose }) {
         ) : (
           <form onSubmit={submit}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Give access to portal</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>To {client.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>To {client.name}</div>
 
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Email *</label>
+              <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Email *</label>
               <input type="email" required autoFocus value={email} onChange={e => setEmail(e.target.value)} placeholder="contact@client.com" style={inputStyle} />
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Full name (optional)</label>
+              <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Full name (optional)</label>
               <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Jane Smith" style={inputStyle} />
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Role</label>
+              <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Role</label>
               <select value={role} onChange={e => setRole(e.target.value)} style={inputStyle}>
                 <option value="viewer">Viewer (read-only)</option>
                 <option value="admin">Admin (can invite other users from their org)</option>
               </select>
             </div>
 
-            {error && <div style={{ fontSize: 12, color: 'var(--red)', background: '#fee', padding: 8, borderRadius: 4, marginBottom: 12 }}>{error}</div>}
+            {error && <div style={{ fontSize: 13, color: 'var(--red)', background: '#fee', padding: 8, borderRadius: 4, marginBottom: 12 }}>{error}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <button type="button" className="btn btn-sm" onClick={onClose}>Cancel</button>
@@ -430,20 +430,20 @@ function BrandingModal({ client, onClose, onSaved }) {
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 16 }}>Edit portal branding</div>
 
         <div style={{ marginBottom: 12 }}>
-          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Logo URL (optional)</label>
+          <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Logo URL (optional)</label>
           <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://..." style={inputStyle} />
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>Square image (e.g. 200x200). Leave blank to use initials on a colored tile.</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Square image (e.g. 200x200). Leave blank to use initials on a colored tile.</div>
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Brand color (hex)</label>
+          <label style={{ fontSize: 12, color: 'var(--text3)', display: 'block', marginBottom: 4 }}>Brand color (hex)</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="color" value={brandColor} onChange={e => setBrandColor(e.target.value)} style={{ width: 40, height: 32, padding: 0, border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer' }} />
             <input value={brandColor} onChange={e => setBrandColor(e.target.value)} placeholder="#448a40" style={{ ...inputStyle, fontFamily: 'monospace' }} />
           </div>
         </div>
 
-        {error && <div style={{ fontSize: 12, color: 'var(--red)', background: '#fee', padding: 8, borderRadius: 4, marginBottom: 12 }}>{error}</div>}
+        {error && <div style={{ fontSize: 13, color: 'var(--red)', background: '#fee', padding: 8, borderRadius: 4, marginBottom: 12 }}>{error}</div>}
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-sm" onClick={onClose}>Cancel</button>
@@ -529,12 +529,12 @@ function AccessModal({ clientUser, client, onClose }) {
     <Modal onClose={onClose}>
       <div style={{ width: 440, padding: 18 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Project access</div>
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 14 }}>
           {clientUser.full_name || clientUser.email}
         </div>
 
         {loading ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', padding: 12 }}>Loading projects...</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: 12 }}>Loading projects...</div>
         ) : (
           <>
             <div style={{
@@ -542,7 +542,7 @@ function AccessModal({ clientUser, client, onClose }) {
               background: isUnrestricted ? 'var(--green-bg, rgba(92,184,92,0.1))' : 'var(--surface2)',
               border: `0.5px solid ${isUnrestricted ? 'var(--green-border, rgba(92,184,92,0.3))' : 'var(--border)'}`,
               borderRadius: 'var(--radius)',
-              fontSize: 11,
+              fontSize: 12,
               marginBottom: 12,
               color: isUnrestricted ? 'var(--green)' : 'var(--text2)',
             }}>
@@ -559,7 +559,7 @@ function AccessModal({ clientUser, client, onClose }) {
               borderRadius: 'var(--radius)',
             }}>
               {projects.length === 0 ? (
-                <div style={{ padding: 14, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>
+                <div style={{ padding: 14, fontSize: 13, color: 'var(--text3)', textAlign: 'center' }}>
                   No projects to show for this client yet.
                 </div>
               ) : projects.map((p, i) => {
@@ -579,8 +579,8 @@ function AccessModal({ clientUser, client, onClose }) {
                     <input type="checkbox" checked={isOn} readOnly
                       style={{ width: 16, height: 16, flexShrink: 0, appearance: 'auto', WebkitAppearance: 'auto', accentColor: 'var(--blue, #5b9bd5)', pointerEvents: 'none' }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.project_name}</div>
-                      <div style={{ fontSize: 10, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.project_name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {p.project_ref || '—'} · {p.status}
                       </div>
                     </div>
@@ -589,7 +589,7 @@ function AccessModal({ clientUser, client, onClose }) {
               })}
             </div>
 
-            <div style={{ marginTop: 16, fontSize: 10, color: 'var(--text3)', lineHeight: 1.5 }}>
+            <div style={{ marginTop: 16, fontSize: 11, color: 'var(--text3)', lineHeight: 1.5 }}>
               Empty list = full access (default). Tick boxes to restrict this user to specific
               projects only. Restrictions apply at the database level — hidden projects can't
               be accessed even by direct URL.
@@ -623,7 +623,7 @@ function ConfirmModal({ message, onCancel, onConfirm }) {
   return (
     <Modal onClose={onCancel}>
       <div style={{ padding: 24, maxWidth: 360 }}>
-        <div style={{ fontSize: 13, marginBottom: 16, color: 'var(--text)' }}>{message}</div>
+        <div style={{ fontSize: 14, marginBottom: 16, color: 'var(--text)' }}>{message}</div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn btn-sm" onClick={onCancel}>Cancel</button>
           <button className="btn btn-sm" style={{ background: 'var(--red)', color: 'white' }} onClick={onConfirm}>Revoke</button>
@@ -636,7 +636,7 @@ function ConfirmModal({ message, onCancel, onConfirm }) {
 const inputStyle = {
   width: '100%',
   padding: '8px 10px',
-  fontSize: 13,
+  fontSize: 14,
   border: '0.5px solid var(--border)',
   borderRadius: 'var(--radius)',
   background: 'var(--surface2)',

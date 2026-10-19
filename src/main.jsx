@@ -5,6 +5,7 @@ import './index.css'
 // Apply saved theme immediately before React renders — prevents white flash
 const savedTheme = localStorage.getItem('theme') || 'light'
 document.documentElement.setAttribute('data-theme', savedTheme)
+document.documentElement.setAttribute('data-mode', ['dark','forest','slate','blueprint'].includes(savedTheme) ? 'dark' : 'light')
 
 // Prevent Backspace from navigating browser-back when NOT inside a text input.
 document.addEventListener('keydown', (e) => {

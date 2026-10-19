@@ -74,7 +74,7 @@ export default function Documents() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Compliance</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>Track all subcontractor paperwork and expiry dates</p>
+          <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>Track all subcontractor paperwork and expiry dates</p>
         </div>
         <button className="btn btn-sm" onClick={doExport}>↓ Export CSV</button>
       </div>
@@ -147,7 +147,7 @@ export default function Documents() {
                     <td>
                       <div style={{ fontWeight: doc.status !== 'valid' ? 500 : 400 }}>{formatDate(doc.expiry_date)}</div>
                       {days !== null && doc.status !== 'valid' && doc.status !== 'no_expiry' && (
-                        <div style={{ fontSize: 11, color: days < 0 ? 'var(--red)' : 'var(--amber)' }}>
+                        <div style={{ fontSize: 12, color: days < 0 ? 'var(--red)' : 'var(--amber)' }}>
                           {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d remaining`}
                         </div>
                       )}

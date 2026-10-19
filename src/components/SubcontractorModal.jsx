@@ -76,7 +76,7 @@ export default function SubcontractorModal({ sub, onClose, onSaved, defaultCateg
       }
     >
       {errors._global && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
+        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>
           {errors._global}
         </div>
       )}
@@ -157,8 +157,8 @@ export default function SubcontractorModal({ sub, onClose, onSaved, defaultCateg
               {form.cis_verified && <svg width="11" height="11" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
             </div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: form.cis_verified ? 'var(--green)' : 'var(--text)' }}>✓ CIS verified with HMRC</div>
-              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Tick when HMRC verification has been completed</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: form.cis_verified ? 'var(--green)' : 'var(--text)' }}>✓ CIS verified with HMRC</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Tick when HMRC verification has been completed</div>
             </div>
           </div>
         </div>

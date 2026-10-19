@@ -113,7 +113,7 @@ export default function Clients() {
   const activeClients = clients.filter(c => c.activeCount > 0).length
 
   function fmt(n) {
-    if (!n) return '—'
+    if (!n || !can('view_project_value')) return '—'
     if (n >= 1000000) return `£${(n / 1000000).toFixed(1)}m`
     if (n >= 1000) return `£${(n / 1000).toFixed(0)}k`
     return `£${n.toLocaleString()}`
@@ -124,7 +124,7 @@ export default function Clients() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Clients</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>
+          <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>
             {clients.length} client{clients.length !== 1 ? 's' : ''} · {activeClients} active
           </p>
         </div>
@@ -140,7 +140,7 @@ export default function Clients() {
           { label: 'Active now', value: activeClients, green: true },
         ].map(s => (
           <div key={s.label} className="card card-pad" style={{ padding: '12px 14px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{s.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>{s.label}</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: s.green ? 'var(--green)' : 'var(--text)' }}>{s.value}</div>
           </div>
         ))}
@@ -148,12 +148,12 @@ export default function Clients() {
 
       <input value={search} onChange={e => setSearch(e.target.value)}
         placeholder="Search clients..."
-        style={{ width: '100%', marginBottom: 14, padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 13 }} />
+        style={{ width: '100%', marginBottom: 14, padding: '8px 12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 14 }} />
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}>Loading...</div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 13 }}>No clients found</div>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 14 }}>No clients found</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {filtered.map(c => {
@@ -167,28 +167,28 @@ export default function Clients() {
                 <ClientAvatar name={c.name} website={c.website} color={col} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
                     {c.projects.length} project{c.projects.length !== 1 ? 's' : ''}
                     {c.website ? ` · ${c.website.replace(/https?:\/\/(www\.)?/, '')}` : ''}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>{fmt(c.totalValue)}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text3)' }}>total value</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)' }}>{fmt(c.totalValue)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>total value</div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end', flexShrink: 0 }}>
                   {c.activeCount > 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--green-bg)', color: 'var(--green)' }}>
+                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--green-bg)', color: 'var(--green)' }}>
                       {c.activeCount} active
                     </span>
                   )}
                   {c.projects.length - c.activeCount > 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
+                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
                       {c.projects.length - c.activeCount} complete
                     </span>
                   )}
                   {c.projects.length === 0 && (
-                    <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
+                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 'var(--radius)', fontWeight: 600, background: 'var(--surface2)', color: 'var(--text3)' }}>
                       no projects
                     </span>
                   )}
@@ -196,7 +196,7 @@ export default function Clients() {
                 {isAdmin && (
                   <button title={c.projects.length ? 'Has projects — cannot be deleted' : 'Delete client'}
                     onClick={e => { e.stopPropagation(); setToDelete(c) }}
-                    style={{ flexShrink: 0, padding: '4px 8px', fontSize: 11, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', color: 'var(--red)', cursor: 'pointer', opacity: c.projects.length ? 0.35 : 1 }}>
+                    style={{ flexShrink: 0, padding: '4px 8px', fontSize: 12, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', color: 'var(--red)', cursor: 'pointer', opacity: c.projects.length ? 0.35 : 1 }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px' }}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                   </button>
                 )}
@@ -262,26 +262,26 @@ function DeleteClientModal({ client, onClose, onDeleted }) {
       <div className="card" style={{ width: '100%', maxWidth: 440, padding: 20 }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Delete client</div>
         {!info ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)' }}>Checking…</div>
+          <div style={{ fontSize: 14, color: 'var(--text3)' }}>Checking…</div>
         ) : blocked ? (
           <>
-            <p style={{ fontSize: 13, color: 'var(--text2)', margin: '0 0 8px' }}><b>{client.name}</b> can't be deleted — it still has {info.projects.length} project{info.projects.length === 1 ? '' : 's'}:</p>
-            <ul style={{ fontSize: 12, color: 'var(--text2)', margin: '0 0 12px 18px' }}>
+            <p style={{ fontSize: 14, color: 'var(--text2)', margin: '0 0 8px' }}><b>{client.name}</b> can't be deleted — it still has {info.projects.length} project{info.projects.length === 1 ? '' : 's'}:</p>
+            <ul style={{ fontSize: 13, color: 'var(--text2)', margin: '0 0 12px 18px' }}>
               {info.projects.slice(0, 8).map(p => <li key={p.id}>{p.project_ref ? `${p.project_ref} · ` : ''}{p.project_name}</li>)}
               {info.projects.length > 8 && <li>…and {info.projects.length - 8} more</li>}
             </ul>
-            <p style={{ fontSize: 12, color: 'var(--text3)', margin: 0 }}>Reassign those projects to another client (or delete them) first.</p>
+            <p style={{ fontSize: 13, color: 'var(--text3)', margin: 0 }}>Reassign those projects to another client (or delete them) first.</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}><button className="btn" onClick={onClose}>Close</button></div>
           </>
         ) : (
           <>
-            <p style={{ fontSize: 13, color: 'var(--text2)', margin: '0 0 10px' }}>
+            <p style={{ fontSize: 14, color: 'var(--text2)', margin: '0 0 10px' }}>
               This permanently removes <b>{client.name}</b>{info.contacts || info.portal ? <>, along with {[info.contacts && `${info.contacts} contact${info.contacts === 1 ? '' : 's'}`, info.portal && `${info.portal} client-portal login${info.portal === 1 ? '' : 's'}`].filter(Boolean).join(' and ')}</> : ''}. It can't be undone.
             </p>
-            <label style={{ fontSize: 12, color: 'var(--text3)' }}>Type the client name to confirm</label>
+            <label style={{ fontSize: 13, color: 'var(--text3)' }}>Type the client name to confirm</label>
             <input value={typed} onChange={e => setTyped(e.target.value)} placeholder={client.name} autoFocus
-              style={{ width: '100%', marginTop: 4, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 13 }} />
-            {error && <div style={{ fontSize: 12, color: 'var(--red)', marginTop: 8 }}>{error}</div>}
+              style={{ width: '100%', marginTop: 4, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 14 }} />
+            {error && <div style={{ fontSize: 13, color: 'var(--red)', marginTop: 8 }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
               <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
               <button className="btn btn-danger" onClick={doDelete} disabled={!ok || busy}>{busy ? 'Deleting…' : 'Delete client'}</button>
@@ -316,7 +316,7 @@ function AddClientModal({ onClose, onSaved }) {
       <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', width: '100%', maxWidth: 480, padding: 24 }}
         onClick={e => e.stopPropagation()}>
         <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 18 }}>Add New Client</div>
-        {error && <div style={{ color: 'var(--red)', fontSize: 12, marginBottom: 12 }}>{error}</div>}
+        {error && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12 }}>{error}</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {[
             { k: 'name', label: 'Company Name *', placeholder: 'e.g. DFL Developers' },
@@ -326,17 +326,17 @@ function AddClientModal({ onClose, onSaved }) {
             { k: 'address', label: 'Address', placeholder: '123 High Street, London' },
           ].map(f => (
             <div key={f.k}>
-              <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>{f.label}</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>{f.label}</div>
               <input value={form[f.k]} onChange={e => set(f.k, e.target.value)}
                 placeholder={f.placeholder}
-                style={{ width: '100%', padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 13 }} />
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 14 }} />
             </div>
           ))}
           <div>
-            <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 4 }}>Notes</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>Notes</div>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
               placeholder="Any additional notes..."
-              style={{ width: '100%', padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 13, minHeight: 70, resize: 'vertical' }} />
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', color: 'var(--text)', fontSize: 14, minHeight: 70, resize: 'vertical' }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>

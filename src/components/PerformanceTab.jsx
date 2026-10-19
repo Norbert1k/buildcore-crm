@@ -73,10 +73,10 @@ export default function PerformanceTab({ subcontractorId, subName, subEmail, rat
       {r && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Overall Rating</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Overall Rating</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ background: r.bg, color: r.color, fontWeight: 700, fontSize: 15, padding: '6px 14px', borderRadius: 20 }}>{r.label}</div>
-              <div style={{ fontSize: 13, color: 'var(--text2)' }}>{r.total} rating{r.total !== 1 ? 's' : ''} total</div>
+              <div style={{ fontSize: 14, color: 'var(--text2)' }}>{r.total} rating{r.total !== 1 ? 's' : ''} total</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 16 }}>
@@ -103,7 +103,7 @@ export default function PerformanceTab({ subcontractorId, subName, subEmail, rat
       </div>
 
       {filtered.length === 0 ? (
-        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+        <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
           No performance ratings issued yet.
         </div>
       ) : (
@@ -115,15 +115,15 @@ export default function PerformanceTab({ subcontractorId, subName, subEmail, rat
                 <div style={{ fontSize: 22, flexShrink: 0, lineHeight: 1 }}>{rt.icon}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13, color: rt.color }}>{rt.label}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text3)', background: 'var(--surface2)', padding: '1px 7px', borderRadius: 'var(--radius)' }}>{CATEGORIES[rating.category] || rating.category}</span>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: rt.color }}>{rt.label}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text3)', background: 'var(--surface2)', padding: '1px 7px', borderRadius: 'var(--radius)' }}>{CATEGORIES[rating.category] || rating.category}</span>
                     {rating.projects?.project_name && (
-                      <span style={{ fontSize: 11, color: 'var(--blue)' }}>📋 {rating.projects.project_name}</span>
+                      <span style={{ fontSize: 12, color: 'var(--blue)' }}>📋 {rating.projects.project_name}</span>
                     )}
-                    {rating.email_sent && <span style={{ fontSize: 11, color: 'var(--green)' }}>✓ Email sent</span>}
+                    {rating.email_sent && <span style={{ fontSize: 12, color: 'var(--green)' }}>✓ Email sent</span>}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, marginBottom: 4, whiteSpace: 'pre-wrap' }}>{rating.description}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                  <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, marginBottom: 4, whiteSpace: 'pre-wrap' }}>{rating.description}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                     {formatDateTime(rating.created_at)}
                     {rating.profiles?.full_name && ` · Issued by ${rating.profiles.full_name}`}
                   </div>
@@ -168,7 +168,7 @@ function RatingStat({ icon, label, value, color }) {
     <div style={{ textAlign: 'center' }}>
       <div style={{ fontSize: 20 }}>{icon}</div>
       <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.2 }}>{value}</div>
-      <div style={{ fontSize: 10, color: 'var(--text3)' }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{label}</div>
     </div>
   )
 }
@@ -226,7 +226,7 @@ function IssueRatingModal({ subcontractorId, subName, subEmail, projects, issued
   return (
     <Modal open onClose={onClose} title={`Issue Rating: ${subName}`} size="md"
       footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving} style={{ background: rt.color, borderColor: rt.color }}>{saving ? 'Saving...' : `Issue ${rt.label}`}</button></>}>
-      {error && <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
+      {error && <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>{error}</div>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {/* Rating type selector */}
@@ -240,7 +240,7 @@ function IssueRatingModal({ subcontractorId, subName, subEmail, projects, issued
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all .15s'
               }}>
                 <span style={{ fontSize: 22 }}>{v.icon}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: form.rating_type === k ? v.color : 'var(--text2)' }}>{v.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: form.rating_type === k ? v.color : 'var(--text2)' }}>{v.label}</span>
               </button>
             ))}
           </div>
@@ -274,18 +274,18 @@ function IssueRatingModal({ subcontractorId, subName, subEmail, projects, issued
         {subEmail && (
           <div
             onClick={() => set('send_email', !form.send_email)}
-            style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', fontSize: 13, background: form.send_email ? 'var(--green-bg)' : 'var(--surface2)', padding: '12px 14px', borderRadius: 'var(--radius)', border: form.send_email ? '1px solid var(--green-border)' : '1px solid var(--border)', userSelect: 'none' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', fontSize: 14, background: form.send_email ? 'var(--green-bg)' : 'var(--surface2)', padding: '12px 14px', borderRadius: 'var(--radius)', border: form.send_email ? '1px solid var(--green-border)' : '1px solid var(--border)', userSelect: 'none' }}>
             <div style={{ width: 20, height: 20, borderRadius: 4, border: `2px solid ${form.send_email ? 'var(--green)' : 'var(--border2)'}`, background: form.send_email ? 'var(--green)' : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all .15s' }}>
               {form.send_email && <svg width="12" height="12" viewBox="0 0 12 12" fill="white"><path d="M10 3L5 8.5 2 5.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
             </div>
             <div>
               <div style={{ fontWeight: 600, color: form.send_email ? 'var(--green)' : 'var(--text)' }}>Send email notification to subcontractor</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 1 }}>{subEmail}</div>
+              <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 1 }}>{subEmail}</div>
             </div>
           </div>
         )}
         {!subEmail && (
-          <div style={{ fontSize: 12, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '8px 12px', borderRadius: 'var(--radius)' }}>
+          <div style={{ fontSize: 13, color: 'var(--amber)', background: 'var(--amber-bg)', padding: '8px 12px', borderRadius: 'var(--radius)' }}>
             No email address on file — notification cannot be sent. Add an email to this subcontractor to enable notifications.
           </div>
         )}

@@ -194,21 +194,21 @@ export default function FitOutHandover({ projectId, projectName }) {
   const enabledChecks = checks.filter(c => enabledKeys.has(c.section_key))
   const doneChecks = enabledChecks.filter(c => c.done).length
 
-  if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 13 }}>Loading handover pack…</div>
+  if (loading) return <div style={{ padding: 24, color: 'var(--text3)', fontSize: 14 }}>Loading handover pack…</div>
 
   return (
     <div>
       {/* ── Header rollup ── */}
       <div className="card card-pad" style={{ marginBottom: 14, display: 'flex', gap: 22, alignItems: 'center', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Fit-Out Handover Pack</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em' }}>Fit-Out Handover Pack</div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>{signedCount}/{enabledSecs.length} sections signed off</div>
         </div>
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ width: `${enabledChecks.length ? Math.round((doneChecks / enabledChecks.length) * 100) : 0}%`, height: '100%', background: 'var(--accent)' }} />
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>{doneChecks}/{enabledChecks.length} checklist items complete · {releasedCount} section{releasedCount === 1 ? '' : 's'} released to client</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>{doneChecks}/{enabledChecks.length} checklist items complete · {releasedCount} section{releasedCount === 1 ? '' : 's'} released to client</div>
         </div>
       </div>
 
@@ -226,17 +226,17 @@ export default function FitOutHandover({ projectId, projectName }) {
             {/* Section header row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: 'pointer' }}
               onClick={() => setOpenKeys(prev => { const n = new Set(prev); n.has(def.key) ? n.delete(def.key) : n.add(def.key); return n })}>
-              <div style={{ flex: 1, fontWeight: 600, fontSize: 13 }}>{def.label}</div>
+              <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{def.label}</div>
               {s.enabled && items.length > 0 && (
-                <span style={{ fontSize: 11, color: done === items.length ? 'var(--green)' : 'var(--text3)' }}>{done}/{items.length}</span>
+                <span style={{ fontSize: 12, color: done === items.length ? 'var(--green)' : 'var(--text3)' }}>{done}/{items.length}</span>
               )}
-              {s.enabled && sfiles.length > 0 && <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sfiles.length} file{sfiles.length === 1 ? '' : 's'}</span>}
-              {status === 'released' && <span className="pill pill-green" style={{ fontSize: 10 }}>Visible to client</span>}
-              {status === 'signed' && <span className="pill pill-teal" style={{ fontSize: 10 }}>Signed off</span>}
-              {status === 'awaiting-lead' && <span className="pill pill-amber" style={{ fontSize: 10 }}>Awaiting lead</span>}
-              {status === 'off' && <span className="pill pill-gray" style={{ fontSize: 10 }}>Not on this job</span>}
+              {s.enabled && sfiles.length > 0 && <span style={{ fontSize: 12, color: 'var(--text3)' }}>{sfiles.length} file{sfiles.length === 1 ? '' : 's'}</span>}
+              {status === 'released' && <span className="pill pill-green" style={{ fontSize: 11 }}>Visible to client</span>}
+              {status === 'signed' && <span className="pill pill-teal" style={{ fontSize: 11 }}>Signed off</span>}
+              {status === 'awaiting-lead' && <span className="pill pill-amber" style={{ fontSize: 11 }}>Awaiting lead</span>}
+              {status === 'off' && <span className="pill pill-gray" style={{ fontSize: 11 }}>Not on this job</span>}
               {isLead && (
-                <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text3)', cursor: 'pointer' }}>
+                <label onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text3)', cursor: 'pointer' }}>
                   <input type="checkbox" style={{ width: 15, height: 15, flex: '0 0 auto', margin: 0, accentColor: 'var(--accent)' }} checked={s.enabled} onChange={e => toggleSection(def.key, e.target.checked)} /> on this job
                 </label>
               )}
@@ -246,17 +246,17 @@ export default function FitOutHandover({ projectId, projectName }) {
               <div style={{ borderTop: '1px solid var(--border)', padding: '12px 14px' }}>
                 {/* Checklist */}
                 {items.map(item => (
-                  <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12.5, cursor: canEdit ? 'pointer' : 'default' }}>
+                  <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 13.5, cursor: canEdit ? 'pointer' : 'default' }}>
                     <input type="checkbox" style={{ width: 15, height: 15, flex: '0 0 auto', margin: 0, accentColor: 'var(--accent)' }} checked={item.done} disabled={!canEdit} onChange={() => toggleCheck(item)} />
                     <span style={{ flex: 1, textDecoration: item.done ? 'none' : 'none', color: item.done ? 'var(--text)' : 'var(--text2)' }}>{item.label}</span>
-                    {item.done && item.done_at && <span style={{ fontSize: 10.5, color: 'var(--text3)' }}>{names[item.done_by] || ''} · {fmtDate(item.done_at)}</span>}
+                    {item.done && item.done_at && <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>{names[item.done_by] || ''} · {fmtDate(item.done_at)}</span>}
                   </label>
                 ))}
 
                 {/* Files */}
                 <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                   {sfiles.map(f => (
-                    <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '3px 8px', fontSize: 11.5 }}>
+                    <span key={f.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '3px 8px', fontSize: 12.5 }}>
                       <a onClick={() => openFile(f)} style={{ cursor: 'pointer', color: 'var(--accent)' }}>{f.file_name}</a>
                       {canEdit && <a onClick={() => deleteFile(f)} style={{ cursor: 'pointer', color: 'var(--red)' }} title="Delete">×</a>}
                     </span>
@@ -276,17 +276,17 @@ export default function FitOutHandover({ projectId, projectName }) {
                   {!s.sm_checked_at ? (
                     canEdit && <button className="btn btn-sm" onClick={() => smCheck(def.key)}>✓ SM check complete</button>
                   ) : (
-                    <span style={{ fontSize: 11.5, color: 'var(--green)' }}>✓ SM checked — {names[s.sm_checked_by] || ''} · {fmtDate(s.sm_checked_at)}</span>
+                    <span style={{ fontSize: 12.5, color: 'var(--green)' }}>✓ SM checked — {names[s.sm_checked_by] || ''} · {fmtDate(s.sm_checked_at)}</span>
                   )}
                   {s.sm_checked_at && !s.lead_signed_at && (
                     isLead ? <button className="btn btn-sm btn-primary" onClick={() => leadSign(def.key)}>Sign off section</button>
-                           : <span style={{ fontSize: 11.5, color: 'var(--amber)' }}>Awaiting lead sign-off</span>
+                           : <span style={{ fontSize: 12.5, color: 'var(--amber)' }}>Awaiting lead sign-off</span>
                   )}
                   {s.lead_signed_at && (
-                    <span style={{ fontSize: 11.5, color: 'var(--green)' }}>✓ Signed off — {names[s.lead_signed_by] || ''} · {fmtDate(s.lead_signed_at)}</span>
+                    <span style={{ fontSize: 12.5, color: 'var(--green)' }}>✓ Signed off — {names[s.lead_signed_by] || ''} · {fmtDate(s.lead_signed_at)}</span>
                   )}
                   {s.lead_signed_at && isLead && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, cursor: 'pointer' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
                       <input type="checkbox" style={{ width: 15, height: 15, flex: '0 0 auto', margin: 0, accentColor: 'var(--accent)' }} checked={s.released} onChange={e => setReleased(def.key, e.target.checked)} />
                       Release to client portal
                     </label>
@@ -300,7 +300,7 @@ export default function FitOutHandover({ projectId, projectName }) {
           </div>
         )
       })}
-      <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
+      <p style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
         Released sections become visible in the client portal (portal-side rendering ships in the next portal update; releases recorded now are honoured then).
       </p>
     </div>

@@ -77,16 +77,21 @@ export const ROLES = {
   viewer:               { label: 'Viewer',              cls: 'pill-gray',   desc: 'Read-only access to all areas' },
 }
  
+// Menu / page access per role. Keys: dashboard, subcontractors, ea (Employers
+// Agents), design_team, documents (compliance), projects, tracker, calendar,
+// clients, suppliers, quotes, company, settings.
+// Site managers: only their own projects and the subcontractors on them —
+// no calendar, quotes, design team, suppliers, Employers Agents or clients.
 export const ROLE_PERMISSIONS = {
-  admin:               { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','websearch','settings'], financials: true, performance: true },
-  project_manager:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','websearch','settings'], financials: true, performance: true },
-  operations_manager:  { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','websearch','settings'], financials: true, performance: true },
-  project_director:    { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','websearch','settings'], financials: true, performance: true },
-  director_viewer:     { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','websearch','settings'], financials: true, performance: true },
-  accountant:          { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','suppliers','quotes','company','websearch','settings'], financials: true, performance: true },
-  site_manager:        { nav: ['dashboard','subcontractors','projects','tasks','suppliers','quotes','company','websearch','settings'], financials: false, performance: true },
-  document_controller: { nav: ['dashboard','subcontractors','documents','projects','tasks','clients','quotes','company','websearch'], financials: false, performance: false },
-  viewer:              { nav: ['dashboard','subcontractors','documents','projects','tracker','tasks','clients','quotes','company','websearch'], financials: false, performance: false },
+  admin:               { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','tracker','calendar','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
+  project_manager:     { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','tracker','calendar','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
+  operations_manager:  { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','tracker','calendar','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
+  project_director:    { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','tracker','calendar','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
+  director_viewer:     { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','tracker','calendar','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
+  accountant:          { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','tracker','calendar','clients','suppliers','quotes','company','settings'], financials: true, performance: true },
+  site_manager:        { nav: ['dashboard','subcontractors','projects','company','settings'], financials: false, performance: true },
+  document_controller: { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','calendar','clients','quotes','company'], financials: false, performance: false },
+  viewer:              { nav: ['dashboard','subcontractors','ea','design_team','documents','projects','tracker','calendar','clients','quotes','company'], financials: false, performance: false },
 }
  
 export const NOTE_TYPES = {

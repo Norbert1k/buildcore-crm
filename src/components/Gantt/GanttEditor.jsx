@@ -571,7 +571,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                 badge so single-building projects look unchanged. */}
             {buildingOrdinal != null && (
               <span style={{
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: 600,
                 padding: '2px 8px',
                 borderRadius: 4,
@@ -587,7 +587,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
               </span>
             )}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
             {activeVersion ? `Version ${activeVersion.version_number} · ${fmtDateUK(activeVersion.created_at)}` : 'No saved versions yet'}
             {isDirty && <span style={{ color: '#b87a00', marginLeft: 8, fontWeight: 600 }}>• unsaved changes</span>}
           </div>
@@ -595,7 +595,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
         <div style={{ display: 'flex', gap: 0, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
           {Object.entries(ZOOM_LEVELS).map(([k, v]) => (
-            <button key={k} onClick={() => setZoom(k)} style={{ fontSize: 11, padding: '4px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: zoom === k ? '#448a40' : 'var(--surface)', color: zoom === k ? 'white' : 'var(--text2)' }}>{v.name}</button>
+            <button key={k} onClick={() => setZoom(k)} style={{ fontSize: 12, padding: '4px 10px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: zoom === k ? '#448a40' : 'var(--surface)', color: zoom === k ? 'white' : 'var(--text2)' }}>{v.name}</button>
           ))}
         </div>
 
@@ -611,14 +611,14 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           {showVersionsMenu && (
             <div onMouseLeave={() => setShowVersionsMenu(false)}
               style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 280, maxHeight: 320, overflow: 'auto', zIndex: 10, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
-              {versions.length === 0 && <div style={{ padding: 12, fontSize: 12, color: 'var(--text3)', textAlign: 'center' }}>No versions saved yet.</div>}
+              {versions.length === 0 && <div style={{ padding: 12, fontSize: 13, color: 'var(--text3)', textAlign: 'center' }}>No versions saved yet.</div>}
               {versions.map(v => (
                 <div key={v.id} onClick={() => loadVersion(v.id)}
                   style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid var(--border)', background: activeVersion?.id === v.id ? 'var(--surface2)' : undefined, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>Version {v.version_number}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text3)' }}>{fmtDateUK(v.created_at)} · {v.profiles?.full_name || 'Unknown'}</div>
-                    {v.notes && <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2, fontStyle: 'italic' }}>"{v.notes}"</div>}
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Version {v.version_number}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{fmtDateUK(v.created_at)} · {v.profiles?.full_name || 'Unknown'}</div>
+                    {v.notes && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2, fontStyle: 'italic' }}>"{v.notes}"</div>}
                   </div>
                   {canEdit && (
                     <button
@@ -650,13 +650,13 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
         <div style={{ width: TASK_LIST_W, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
           {/* List header */}
           <div style={{ height: HEADER_H, display: 'flex', alignItems: 'center', padding: '0 10px', borderBottom: '1px solid var(--border)', background: 'var(--surface2)', flexShrink: 0 }}>
-            <div style={{ flex: 1, fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Task</div>
-            <div style={{ width: 80, fontSize: 11, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Days</div>
+            <div style={{ flex: 1, fontSize: 12, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Task</div>
+            <div style={{ width: 80, fontSize: 12, fontWeight: 600, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Days</div>
           </div>
           {/* Task rows */}
           <div style={{ flex: 1, overflow: 'auto' }}>
             {flat.length === 0 ? (
-              <div style={{ padding: 20, textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>
+              <div style={{ padding: 20, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
                 No tasks yet. {canEdit ? 'Click "Add Task" below to start.' : ''}
               </div>
             ) : flat.map(t => {
@@ -668,16 +668,16 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                     paddingLeft: 10 + t._depth * 14,
                     background: selectedTaskId === t.id ? 'var(--surface2)' : undefined,
                     cursor: 'pointer', borderBottom: '0.5px solid var(--border)',
-                    fontSize: 12,
+                    fontSize: 13,
                   }}>
                   {t._hasChildren && (
                     <span onClick={(e) => { e.stopPropagation(); updateTask(t.id, { collapsed: !t.collapsed }) }}
-                      style={{ marginRight: 6, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none', fontSize: 9 }}>
+                      style={{ marginRight: 6, color: 'var(--text3)', cursor: 'pointer', userSelect: 'none', fontSize: 10 }}>
                       {t.collapsed ? '▶' : '▼'}
                     </span>
                   )}
                   <span style={{ flex: 1, fontWeight: t._hasChildren ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name || '(untitled)'}</span>
-                  <span style={{ width: 80, textAlign: 'right', color: 'var(--text3)', fontSize: 11 }}>{dur}d</span>
+                  <span style={{ width: 80, textAlign: 'right', color: 'var(--text3)', fontSize: 12 }}>{dur}d</span>
                 </div>
               )
             })}
@@ -757,7 +757,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                       borderLeft: isGroup ? `4px solid ${t.color || '#000'}` : 'none',
                       borderRight: isGroup ? `4px solid ${t.color || '#000'}` : 'none',
                       display: 'flex', alignItems: 'center', paddingLeft: 6,
-                      fontSize: 10, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden',
+                      fontSize: 11, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden',
                       boxShadow: isSelected ? '0 0 0 2px var(--accent)' : 'none',
                       cursor: isGroup ? 'pointer' : (isDragging ? 'grabbing' : (canEdit ? 'grab' : 'pointer')),
                       opacity: isDragging ? 0.85 : 1,
@@ -777,7 +777,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
 
             {/* Empty state in timeline */}
             {flat.length === 0 && (
-              <div style={{ position: 'absolute', top: HEADER_H + 40, left: 0, width: '100%', textAlign: 'center', color: 'var(--text3)', fontSize: 12 }}>
+              <div style={{ position: 'absolute', top: HEADER_H + 40, left: 0, width: '100%', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
                 Add tasks on the left and they'll appear here as bars.
               </div>
             )}
@@ -824,13 +824,13 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
                 <Field label="Revision no"><input value={exportForm.revision} onChange={set('revision')} /></Field>
                 <Field label="Possession (week 1)"><input type="date" value={exportForm.possession} onChange={set('possession')} /></Field>
               </div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text2)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text2)' }}>
                 <input type="checkbox" checked={exportForm.shutdown} onChange={set('shutdown')} /> Christmas shutdown (shaded, excluded from working days)
               </label>
               <Field label="Notes under the key (one per line)">
                 <textarea value={exportForm.notes} onChange={set('notes')} style={{ minHeight: 70 }} placeholder="e.g. Programme assumes contract award by Jan 2027…" />
               </Field>
-              <div style={{ fontSize: 11, color: 'var(--text3)' }}>Practical completion and contract period are calculated from the programme. A copy is filed in 06. Project Programme.</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Practical completion and contract period are calculated from the programme. A copy is filed in 06. Project Programme.</div>
             </div>
           )
         })()}
@@ -841,7 +841,7 @@ export default function GanttEditor({ projectId, projectName, onClose, canEdit, 
           <button className="btn" onClick={() => setShowSaveDialog(false)} disabled={saving}>Cancel</button>
           <button className="btn btn-primary" onClick={saveAsNewVersion} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
         </>}>
-        <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
           A new immutable version snapshot will be created. Previous versions stay accessible from the Versions menu.
         </div>
         <Field label="Change note (optional)">
@@ -873,13 +873,13 @@ function AxisRender({ markers, pxPerDay, bounds, zoom }) {
     <div style={{ position: 'relative', height: HEADER_H }}>
       {/* Major labels (top) */}
       {markers.majorLabels.map((m, i) => (
-        <div key={'majL' + i} style={{ position: 'absolute', left: m.x + 4, top: 4, fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+        <div key={'majL' + i} style={{ position: 'absolute', left: m.x + 4, top: 4, fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>
           {m.label}
         </div>
       ))}
       {/* Minor labels (bottom) */}
       {markers.minor.map((m, i) => (
-        <div key={'minL' + i} style={{ position: 'absolute', left: m.x, top: 28, fontSize: 9, color: 'var(--text3)', width: pxPerDay * (zoom === 'day' ? 1 : zoom === 'week' ? 7 : 30), textAlign: 'center' }}>
+        <div key={'minL' + i} style={{ position: 'absolute', left: m.x, top: 28, fontSize: 10, color: 'var(--text3)', width: pxPerDay * (zoom === 'day' ? 1 : zoom === 'week' ? 7 : 30), textAlign: 'center' }}>
           {m.label}
         </div>
       ))}
@@ -937,7 +937,7 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
   return (
     <div style={{ width: 320, flexShrink: 0, borderLeft: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', overflowY: 'auto', overflowX: 'hidden' }}>
       <div style={{ padding: 12, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>Task Details</div>
+        <div style={{ fontSize: 14, fontWeight: 600, flex: 1 }}>Task Details</div>
         <button className="btn btn-sm" onClick={onClose}>✕</button>
       </div>
       <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -959,7 +959,7 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
               style={{ width: '100%', minWidth: 0, boxSizing: 'border-box' }}
               onChange={e => isGroup ? onGroupEnd(e.target.value) : onChange({ end_date: e.target.value })} />
             {isGroup && (
-              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
                 Extends the task(s) finishing last in this group
               </div>
             )}
@@ -982,7 +982,7 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
           <input type="range" min="0" max="100" value={task.progress || 0}
             onChange={e => onChange({ progress: parseInt(e.target.value, 10) })}
             style={{ appearance: 'auto', WebkitAppearance: 'auto', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', accentColor: '#448a40' }} />
-          <div style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'center', marginTop: 4 }}>{task.progress || 0}%</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'center', marginTop: 4 }}>{task.progress || 0}%</div>
         </Field>
         {!isGroup && (
           <Field label="Stage">
@@ -996,7 +996,7 @@ function TaskEditPanel({ task, allTasks, onChange, onGroupEnd, onDelete, onInden
               <option value="">— Auto{effectiveStage(task) ? ` (${effectiveStage(task)})` : ''} —</option>
               {STAGES.map(st => <option key={st.key} value={st.key}>{st.key}</option>)}
             </select>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 3 }}>Sets the bar colour and the STAGE column on exported programmes</div>
+            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>Sets the bar colour and the STAGE column on exported programmes</div>
           </Field>
         )}
         <Field label="Color">

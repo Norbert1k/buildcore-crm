@@ -23,12 +23,12 @@ function ensure() {
   el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;'
   el.innerHTML = `
     <div style="background:var(--surface,#fff);border:0.5px solid var(--border,#ddd);border-radius:10px;padding:24px 28px;min-width:320px;max-width:440px;font-family:inherit">
-      <div data-zp="label" style="font-size:13px;font-weight:600;color:var(--text,#111);margin-bottom:12px">Preparing zip</div>
-      <div data-zp="count" style="font-size:11px;color:var(--text3,#888);margin-bottom:4px"></div>
+      <div data-zp="label" style="font-size:14px;font-weight:600;color:var(--text,#111);margin-bottom:12px">Preparing zip</div>
+      <div data-zp="count" style="font-size:12px;color:var(--text3,#888);margin-bottom:4px"></div>
       <div style="height:6px;background:var(--surface2,#eee);border-radius:3px;overflow:hidden">
         <div data-zp="bar" style="width:0%;height:100%;background:#448a40;transition:width .2s"></div>
       </div>
-      <div data-zp="file" style="font-size:10px;color:var(--text3,#888);margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+      <div data-zp="file" style="font-size:11px;color:var(--text3,#888);margin-top:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
     </div>`
   return el
 }

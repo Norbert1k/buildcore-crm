@@ -195,12 +195,12 @@ export default function FileLightbox({
             {effectiveFileName}
           </div>
           {kind === 'office' && (
-            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10, marginTop: 2 }}>
+            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 2 }}>
               Preview powered by Microsoft Office Online
             </div>
           )}
           {isListMode && previewableCount > 1 && (
-            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, marginTop: 2 }}>
+            <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 2 }}>
               {previewablePosition} of {previewableCount}
             </div>
           )}
@@ -210,7 +210,7 @@ export default function FileLightbox({
             onClick={handleDownload}
             style={{
               color: 'white',
-              fontSize: 12, padding: '6px 12px',
+              fontSize: 13, padding: '6px 12px',
               border: '0.5px solid rgba(255,255,255,0.25)',
               borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.06)',
               cursor: 'pointer',
@@ -227,7 +227,7 @@ export default function FileLightbox({
             onClick={e => e.stopPropagation()}
             style={{
               color: 'white',
-              fontSize: 12, padding: '6px 12px',
+              fontSize: 13, padding: '6px 12px',
               border: '0.5px solid rgba(255,255,255,0.25)',
               borderRadius: 'var(--radius)', textDecoration: 'none',
               background: 'rgba(255,255,255,0.06)',
@@ -299,7 +299,7 @@ export default function FileLightbox({
           }}
         >
           {loadingUrl && (
-            <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+            <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontSize: 14 }}>
               Loading preview…
             </div>
           )}
@@ -332,7 +332,7 @@ export default function FileLightbox({
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>
                 Cannot preview this file type
               </div>
-              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
                 Use the Download button or open the file in a new tab to view it.
               </div>
               <a
@@ -341,7 +341,7 @@ export default function FileLightbox({
                 rel="noopener noreferrer"
                 style={{
                   display: 'inline-block',
-                  fontSize: 12, padding: '8px 16px',
+                  fontSize: 13, padding: '8px 16px',
                   background: '#534AB7', color: 'white',
                   borderRadius: 'var(--radius)', textDecoration: 'none',
                 }}
@@ -382,7 +382,7 @@ export default function FileLightbox({
         onClick={e => e.stopPropagation()}
         style={{
           textAlign: 'center', color: 'rgba(255,255,255,0.5)',
-          fontSize: 11,
+          fontSize: 12,
         }}
       >
         {isListMode && previewableCount > 1

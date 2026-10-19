@@ -391,8 +391,8 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
       {/* Top bar */}
       <div style={{ position: 'sticky', top: 0, background: 'var(--surface)', borderBottom: '0.5px solid var(--border)', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 10 }}>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Case Study</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{projectName}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Case Study</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{projectName}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {doc.id && (
@@ -471,15 +471,15 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
               <div key={p.id} style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)' }}>
                 {photoUrls[p.id]
                   ? <img src={photoUrls[p.id]} alt="" style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }} />
-                  : <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--text3)' }}>Loading…</div>}
+                  : <div style={{ width: '100%', aspectRatio: '4/3', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text3)' }}>Loading…</div>}
                 <div style={{ padding: 8 }}>
                   <input
                     value={p.caption || ''}
                     placeholder="Caption (optional)"
                     onChange={e => setPhotoCaption(p.id, e.target.value)}
-                    style={{ ...input, fontSize: 11, padding: '5px 7px' }}
+                    style={{ ...input, fontSize: 12, padding: '5px 7px' }}
                   />
-                  <button onClick={() => deletePhoto(p.id)} style={{ ...btnGhost, marginTop: 6, color: 'var(--red)', fontSize: 11, padding: '4px 8px' }}>Delete</button>
+                  <button onClick={() => deletePhoto(p.id)} style={{ ...btnGhost, marginTop: 6, color: 'var(--red)', fontSize: 12, padding: '4px 8px' }}>Delete</button>
                 </div>
               </div>
             ))}
@@ -487,7 +487,7 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              style={{ aspectRatio: '4/3', border: '1.5px dashed var(--border)', borderRadius: 'var(--radius)', background: 'transparent', color: 'var(--text2)', fontSize: 12, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              style={{ aspectRatio: '4/3', border: '1.5px dashed var(--border)', borderRadius: 'var(--radius)', background: 'transparent', color: 'var(--text2)', fontSize: 13, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
               {uploading ? 'Uploading…' : 'Upload photos'}
             </button>
@@ -495,7 +495,7 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
               onChange={e => { uploadPhotos(e.target.files); e.target.value = '' }} />
           </div>
           {!doc.id && (
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>Photos auto-save when uploaded — case study saves first if needed.</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>Photos auto-save when uploaded — case study saves first if needed.</div>
           )}
         </Section>
 
@@ -518,7 +518,7 @@ export default function CaseStudyEditor({ projectId, projectName, onClose }) {
         <div onClick={() => setConfirmDelete(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={e => e.stopPropagation()} style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: 24, maxWidth: 400, width: '90%' }}>
             <div style={{ fontSize: 14, marginBottom: 6, fontWeight: 600 }}>Delete case study?</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 18 }}>This permanently removes the case study and all its photos. The underlying project is not affected.</div>
+            <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 18 }}>This permanently removes the case study and all its photos. The underlying project is not affected.</div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => setConfirmDelete(false)} style={btnSecondary}>Cancel</button>
               <button onClick={deleteCaseStudy} style={btnRed}>Delete</button>
@@ -560,7 +560,7 @@ function Overlay({ children, onClose }) {
 function Section({ title, children }) {
   return (
     <div style={{ background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', padding: '18px 20px', marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginBottom: 14, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</div>
       {children}
     </div>
   )
@@ -569,7 +569,7 @@ function Section({ title, children }) {
 function Field2({ label, children }) {
   return (
     <label style={{ display: 'block', marginBottom: 12 }}>
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>{label}</div>
       {children}
     </label>
   )
@@ -578,7 +578,7 @@ function Field2({ label, children }) {
 const input = {
   width: '100%',
   padding: '8px 10px',
-  fontSize: 13,
+  fontSize: 14,
   border: '0.5px solid var(--border)',
   borderRadius: 'var(--radius)',
   background: 'var(--surface2)',
@@ -588,14 +588,14 @@ const input = {
 }
 
 const btnPrimary = {
-  fontSize: 12, padding: '7px 14px', borderRadius: 'var(--radius)', background: '#448a40', color: 'white', border: 'none', cursor: 'pointer',
+  fontSize: 13, padding: '7px 14px', borderRadius: 'var(--radius)', background: '#448a40', color: 'white', border: 'none', cursor: 'pointer',
 }
 const btnSecondary = {
-  fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)',
+  fontSize: 13, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)',
 }
 const btnRed = {
-  fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',
+  fontSize: 13, padding: '7px 14px', border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',
 }
 const btnGhost = {
-  fontSize: 12, padding: '6px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text2)',
+  fontSize: 13, padding: '6px 10px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text2)',
 }

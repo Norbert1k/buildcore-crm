@@ -1,0 +1,128 @@
+/* CCG standard O&M house style — shared by every generated handover document */
+@font-face { font-family: 'CCG'; src: local('Carlito'), local('Calibri'); font-weight: 400; }
+@font-face { font-family: 'CCG'; src: local('Carlito Bold'), local('Calibri Bold'); font-weight: 700; }
+
+:root {
+  --green: #428B40; --green-dk: #2C6A2B; --tint: #EAF3E9; --ink: #0A0A0A; --text: #1d1f1c;
+  --muted: #5f645c; --line: #d9ddd5; --zebra: #f6f7f4; --charcoal: #1f2120;
+  --amber: #b86e00; --amber-bg: #fff4df; --gold: #a8780a; --gold-bg: #fbf3dc; --red: #a32d2d; --red-bg: #fcebeb;
+}
+@page { size: A4; margin: 31mm 17mm 19mm 17mm; }
+@page cover { margin: 0; }
+@page divider { margin: 0; }
+* { box-sizing: border-box; }
+html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: Carlito, Calibri, sans-serif; font-size: 10.5pt; line-height: 1.42; color: var(--text); }
+b, strong { font-weight: 700; color: var(--ink); }
+p { margin: 0 0 7pt; }
+ul { margin: 2pt 0 8pt; padding-left: 13pt; }
+li { margin: 0 0 3pt; padding-left: 2pt; }
+li::marker { color: var(--green); }
+
+/* ── Cover ───────────────────────────────────────── */
+.cover { page: cover; height: 297mm; position: relative; break-after: page; }
+.cover-band { background: var(--charcoal); color: #fff; height: 128mm; padding: 20mm 18mm 0; position: relative; }
+.cover-brand { display: flex; align-items: center; gap: 7mm; }
+.cover-brand img { height: 24mm; }
+.cover-brand .rule { width: 0.6mm; height: 15mm; background: var(--green); }
+.cover-brand .co { font-weight: 700; letter-spacing: .06em; font-size: 11pt; }
+.cover-brand .doc { color: #b9bdb6; font-size: 9.5pt; margin-top: 1mm; }
+.cover-title { position: absolute; left: 18mm; right: 18mm; bottom: 15mm; }
+.cover-kicker { color: #8fcf8c; font-weight: 700; font-size: 9.5pt; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 3mm; }
+.cover-title h1 { font-size: 34pt; line-height: 1.02; margin: 0 0 3mm; color: #fff; font-weight: 700; }
+.cover-title .sub { font-size: 15pt; color: #e4e7e1; }
+.cover-title .addr { font-size: 10.5pt; color: #b9bdb6; margin-top: 2.5mm; }
+.cover-strip { height: 2.2mm; background: var(--green); }
+.cover-body { padding: 11mm 18mm 0; }
+.badges { display: flex; gap: 2.5mm; flex-wrap: wrap; margin-bottom: 6mm; }
+.badge { font-size: 8.5pt; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1.3mm 3mm; border-radius: 1mm; border: 0.3mm solid var(--line); color: var(--muted); }
+.badge.gt { background: var(--gold-bg); border-color: #e5cf8f; color: var(--gold); }
+.badge.green { background: var(--tint); border-color: #b9dab6; color: var(--green-dk); }
+.badge.draft { background: var(--amber-bg); border-color: #f0cf91; color: var(--amber); }
+.cover-foot { position: absolute; left: 18mm; right: 18mm; bottom: 12mm; font-size: 8pt; color: var(--muted); border-top: 0.3mm solid var(--line); padding-top: 3mm; display: flex; justify-content: space-between; gap: 6mm; }
+
+/* ── Divider (appendix title pages) ──────────────── */
+.divider { page: divider; height: 297mm; position: relative; break-after: page; }
+.divider .band { position: absolute; left: 0; top: 0; bottom: 0; width: 11mm; background: var(--charcoal); }
+.divider .band::after { content: ''; position: absolute; right: -2mm; top: 0; bottom: 0; width: 2mm; background: var(--green); }
+.divider .inner { position: absolute; left: 32mm; right: 22mm; top: 100mm; }
+.divider .kick { font-size: 10pt; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.divider .letter { font-size: 64pt; line-height: 1; font-weight: 700; color: var(--green); margin: 2mm 0 5mm; }
+.divider h2 { font-size: 19pt; line-height: 1.2; margin: 0 0 6mm; color: var(--ink); }
+.divider .meta { border-top: 0.3mm solid var(--line); padding-top: 4mm; font-size: 9.5pt; color: var(--muted); display: grid; grid-template-columns: 34mm 1fr; row-gap: 1.5mm; }
+.divider .meta b { color: var(--text); font-weight: 400; }
+
+/* ── Body ────────────────────────────────────────── */
+.sec { break-before: page; }
+.sec.flow { break-before: auto; margin-top: 9mm; }
+h2.sec-h { font-size: 17pt; color: var(--green); margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 0.4mm solid var(--green); display: flex; gap: 3.2mm; align-items: baseline; break-after: avoid; }
+h2.sec-h .n { color: var(--green-dk); min-width: 6mm; }
+h3 { font-size: 12pt; color: var(--ink); margin: 5mm 0 2mm; break-after: avoid; }
+.lead { font-size: 11pt; color: var(--muted); }
+.small { font-size: 8.5pt; color: var(--muted); }
+.cite { font-size: 8pt; color: var(--muted); margin: -1mm 0 4mm; }
+
+table { width: 100%; border-collapse: collapse; margin: 1mm 0 5mm; font-size: 9.5pt; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th { background: var(--ink); color: #fff; font-weight: 700; text-align: left; padding: 1.7mm 2.4mm; vertical-align: bottom; }
+td { padding: 1.6mm 2.4mm; border-bottom: 0.25mm solid var(--line); vertical-align: top; }
+tbody tr:nth-child(even) td { background: var(--zebra); }
+table.kv td:first-child { width: 42mm; font-weight: 700; color: var(--ink); background: #f0f2ee; }
+table.kv tbody tr:nth-child(even) td { background: transparent; }
+table.kv tbody tr:nth-child(even) td:first-child { background: #f0f2ee; }
+td.c, th.c { text-align: center; }
+td.nowrap { white-space: nowrap; }
+.tick { color: var(--green); font-weight: 700; }
+.cross { color: #b5b9b1; }
+
+.callout { border-left: 1.2mm solid var(--green); background: var(--tint); padding: 3mm 4mm; margin: 2mm 0 5mm; break-inside: avoid; font-size: 10pt; }
+.callout.warn { border-color: var(--amber); background: var(--amber-bg); }
+.callout.gt { border-color: var(--gold); background: var(--gold-bg); }
+.callout .t { font-weight: 700; color: var(--ink); }
+
+/* Contents */
+.toc { margin-top: 2mm; }
+.toc-row { display: flex; align-items: baseline; gap: 2mm; padding: 0.95mm 0; border-bottom: 0.25mm solid var(--line); font-size: 10.2pt; }
+.toc-row .n { width: 9mm; color: var(--green-dk); font-weight: 700; }
+.toc-row .t { flex: 1; }
+.toc-row .pg { width: 12mm; text-align: right; font-variant-numeric: tabular-nums; }
+.toc-row.app .n { width: 23mm; }
+.toc-row.gt .n { color: var(--gold); }
+.toc-head { margin: 5mm 0 1mm; font-size: 8.5pt; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+
+/* Quick reference */
+.qr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-bottom: 4mm; }
+.qr-card { border: 0.3mm solid var(--line); border-radius: 1.5mm; padding: 3.2mm 3.8mm; break-inside: avoid; }
+.qr-card .k { font-size: 8pt; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; margin-bottom: 1.2mm; }
+.qr-card .v { font-size: 10.5pt; }
+.qr-card.alert { border-color: #e6b8b8; background: var(--red-bg); }
+.qr-card.alert .k { color: var(--red); }
+
+/* Maintenance calendar */
+table.cal { font-size: 8.5pt; }
+table.cal th { padding: 1.4mm 1mm; text-align: center; }
+table.cal th:first-child { text-align: left; padding-left: 2.4mm; }
+table.cal td { text-align: center; padding: 1.3mm 0.5mm; }
+table.cal td:first-child { text-align: left; padding-left: 2.4mm; }
+.dot { display: inline-block; width: 2.6mm; height: 2.6mm; border-radius: 50%; background: var(--green); }
+.dot.o { background: transparent; border: 0.4mm solid var(--green); }
+
+/* Forms */
+table.form td { height: 8.5mm; }
+table.check td.box { width: 13mm; }
+.sign { display: grid; grid-template-columns: 1fr 1fr; border: 0.3mm solid var(--line); margin-top: 5mm; break-inside: avoid; }
+.sign > div { padding: 2.5mm 4mm; min-height: 22mm; }
+.sign > div + div { border-left: 0.3mm solid var(--line); }
+.sign .h { font-weight: 700; color: var(--ink); margin-bottom: 2mm; }
+.sign .line { border-bottom: 0.3mm dotted #9aa095; height: 6mm; margin-bottom: 0.5mm; }
+
+/* Sample / auto-filled field (shown on layout samples so it's clear what comes from job data) */
+.fld { background: #eef6ed; border-bottom: 0.35mm dashed var(--green); padding: 0 0.6mm; border-radius: 0.5mm; }
+.gt-h { color: var(--gold) !important; border-color: var(--gold) !important; }
+.gt-h .n { color: var(--gold) !important; }
+table.gt th { background: #3a2f0b; }
+.status { display: inline-block; font-size: 8pt; font-weight: 700; padding: 0.4mm 1.8mm; border-radius: 0.8mm; }
+.status.ok { background: var(--tint); color: var(--green-dk); }
+.status.due { background: var(--amber-bg); color: var(--amber); }
+.status.na { background: #eef0ec; color: var(--muted); }

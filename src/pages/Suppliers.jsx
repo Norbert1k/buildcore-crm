@@ -84,7 +84,7 @@ export default function Suppliers() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Suppliers</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{suppliers.length} suppliers — account details & credit limits</p>
+          <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>{suppliers.length} suppliers — account details & credit limits</p>
         </div>
         {can('manage_subcontractors') && (
           <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
@@ -105,7 +105,7 @@ export default function Suppliers() {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', fontSize: 13 }}>🔍</span>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', fontSize: 14 }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search suppliers..." style={{ paddingLeft: 30, width: 240 }} />
         </div>
         <div className="filter-tabs" style={{ marginBottom: 0 }}>
@@ -146,7 +146,7 @@ export default function Suppliers() {
                     style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                     title={`Sort by ${label}`}>
                     {label}
-                    <span style={{ marginLeft: 4, fontSize: 9, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
+                    <span style={{ marginLeft: 4, fontSize: 10, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
                       {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : '▲'}
                     </span>
                   </th>
@@ -162,7 +162,7 @@ export default function Suppliers() {
                       <Avatar name={s.company_name} />
                       <div>
                         <div style={{ fontWeight: 500 }}>{s.company_name}</div>
-                        {s.website && <div style={{ fontSize: 11, color: 'var(--blue)' }}>{s.website.replace('https://','').replace('http://','')}</div>}
+                        {s.website && <div style={{ fontSize: 12, color: 'var(--blue)' }}>{s.website.replace('https://','').replace('http://','')}</div>}
                       </div>
                     </div>
                   </td>
@@ -172,7 +172,7 @@ export default function Suppliers() {
                     <div className="td-muted">{s.phone || ''}</div>
                   </td>
                   <td>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 12, background: 'var(--surface2)', padding: '2px 8px', borderRadius: 4, display: 'inline-block' }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 13, background: 'var(--surface2)', padding: '2px 8px', borderRadius: 4, display: 'inline-block' }}>
                       {s.account_number || '—'}
                     </div>
                   </td>
@@ -208,7 +208,7 @@ export default function Suppliers() {
               <Avatar name={viewing.company_name} size="lg" />
               <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 600, fontSize: 16 }}>{viewing.company_name}</div>
-                <div style={{ color: 'var(--text2)', fontSize: 13 }}>{viewing.category}</div>
+                <div style={{ color: 'var(--text2)', fontSize: 14 }}>{viewing.category}</div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 {can('manage_subcontractors') && (
@@ -219,8 +219,8 @@ export default function Suppliers() {
             </div>
             <div style={{ padding: '20px 24px' }}>
               {/* Contact */}
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Contact Details</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 13, marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Contact Details</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 14, marginBottom: 20 }}>
                 {[['Contact', viewing.contact_name], ['Phone', viewing.phone], ['Email', viewing.email], ['Website', viewing.website], ['Address', [viewing.address, viewing.city, viewing.postcode].filter(Boolean).join(', ')]].filter(([,v]) => v).map(([k,v]) => (
                   <div key={k}><span style={{ color: 'var(--text3)', marginRight: 6 }}>{k}:</span><span style={{ color: k === 'Email' || k === 'Website' ? 'var(--blue)' : 'inherit' }}>{v}</span></div>
                 ))}
@@ -228,8 +228,8 @@ export default function Suppliers() {
 
               {/* Account Details */}
               <div style={{ height: 1, background: 'var(--border)', margin: '0 0 16px' }} />
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Account Details</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 13, marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Account Details</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 20px', fontSize: 14, marginBottom: 20 }}>
                 {[
                   ['Account No.', viewing.account_number],
                   // Credit Limit only shown to roles with view_supplier_credit
@@ -248,17 +248,17 @@ export default function Suppliers() {
               {can('view_supplier_login') && (viewing.portal_url || viewing.portal_username || (viewing.portal_password && can('view_supplier_passwords'))) && (
                 <>
                   <div style={{ height: 1, background: 'var(--border)', margin: '0 0 16px' }} />
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Portal / Login</div>
-                  <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px', fontSize: 13 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10 }}>Portal / Login</div>
+                  <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px', fontSize: 14 }}>
                     {viewing.portal_url && <div style={{ marginBottom: 6 }}><span style={{ color: 'var(--text3)', marginRight: 6 }}>URL:</span><span style={{ color: 'var(--blue)' }}>{viewing.portal_url}</span></div>}
-                    {viewing.portal_username && <div style={{ marginBottom: 6 }}><span style={{ color: 'var(--text3)', marginRight: 6 }}>Username:</span><span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{viewing.portal_username}</span></div>}
+                    {viewing.portal_username && <div style={{ marginBottom: 6 }}><span style={{ color: 'var(--text3)', marginRight: 6 }}>Username:</span><span style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{viewing.portal_username}</span></div>}
                     {viewing.portal_password && can('view_supplier_passwords') && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ color: 'var(--text3)', marginRight: 6 }}>Password:</span>
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
+                        <span style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>
                           {showPasswords[viewing.id] ? viewing.portal_password : '••••••••••'}
                         </span>
-                        <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setShowPasswords(p => ({ ...p, [viewing.id]: !p[viewing.id] }))}>
+                        <button className="btn btn-sm" style={{ padding: '2px 8px', fontSize: 12 }} onClick={() => setShowPasswords(p => ({ ...p, [viewing.id]: !p[viewing.id] }))}>
                           {showPasswords[viewing.id] ? 'Hide' : 'Show'}
                         </button>
                       </div>
@@ -271,8 +271,8 @@ export default function Suppliers() {
               {viewing.notes && (
                 <>
                   <div style={{ height: 1, background: 'var(--border)', margin: '16px 0' }} />
-                  <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Notes</div>
-                  <div style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.6 }}>{viewing.notes}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8 }}>Notes</div>
+                  <div style={{ fontSize: 14, color: 'var(--text2)', lineHeight: 1.6 }}>{viewing.notes}</div>
                 </>
               )}
             </div>
@@ -347,7 +347,7 @@ export function SupplierModal({ supplier, onClose, onSaved, prefillName }) {
   return (
     <Modal open onClose={onClose} title={editing ? `Edit: ${supplier.company_name}` : 'Add New Supplier'} size="lg"
       footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Supplier'}</button></>}>
-      {error && <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>{error}</div>}
+      {error && <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>{error}</div>}
       <div className="form-grid">
         <div className="form-section">Company Details</div>
         <div className="full"><Field label="Company Name *"><input value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="e.g. Travis Perkins" autoFocus /></Field></div>
@@ -374,7 +374,7 @@ export function SupplierModal({ supplier, onClose, onSaved, prefillName }) {
         <Field label="Password">
           <div style={{ position: 'relative' }}>
             <input type={showPass ? 'text' : 'password'} value={form.portal_password} onChange={e => set('portal_password', e.target.value)} placeholder="Portal password" style={{ paddingRight: 60 }} />
-            <button type="button" onClick={() => setShowPass(p => !p)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', fontSize: 11, color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit' }}>{showPass ? 'Hide' : 'Show'}</button>
+            <button type="button" onClick={() => setShowPass(p => !p)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', fontSize: 12, color: 'var(--text3)', cursor: 'pointer', fontFamily: 'inherit' }}>{showPass ? 'Hide' : 'Show'}</button>
           </div>
         </Field>
 

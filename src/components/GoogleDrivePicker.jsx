@@ -299,10 +299,10 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 32, textAlign: 'center' }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>📁</div>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>Connect Google Drive</div>
-        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
           {linkedFolderId ? 'Your project folder is linked — sign in to view files.' : 'Sign in to browse, upload and manage your Google Drive files.'}
         </div>
-        {authError && <div style={{ color: 'var(--red)', fontSize: 13, marginBottom: 12, background: 'var(--red-bg)', padding: '8px 12px', borderRadius: 'var(--radius)' }}>{authError}</div>}
+        {authError && <div style={{ color: 'var(--red)', fontSize: 14, marginBottom: 12, background: 'var(--red-bg)', padding: '8px 12px', borderRadius: 'var(--radius)' }}>{authError}</div>}
         <button className="btn btn-primary" onClick={signIn} disabled={authLoading}>
           {authLoading ? 'Connecting...' : '🔗 Connect Google Drive'}
         </button>
@@ -331,7 +331,7 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
             📌 Link Folder
           </button>
         )}
-        <button className="btn btn-sm" onClick={signOut} style={{ color: 'var(--text3)', fontSize: 12, flexShrink: 0 }}>Disconnect</button>
+        <button className="btn btn-sm" onClick={signOut} style={{ color: 'var(--text3)', fontSize: 13, flexShrink: 0 }}>Disconnect</button>
       </div>
 
       {/* New folder input */}
@@ -349,11 +349,11 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
       )}
 
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 10, fontSize: 13, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 10, fontSize: 14, flexWrap: 'wrap' }}>
         {breadcrumb.map((crumb, i) => (
           <span key={`${crumb.id}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {i > 0 && <span style={{ color: 'var(--text3)' }}>›</span>}
-            <button onClick={() => navBreadcrumb(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, color: i === breadcrumb.length - 1 ? 'var(--text)' : 'var(--blue)', fontWeight: i === breadcrumb.length - 1 ? 600 : 400, padding: '2px 4px', borderRadius: 4 }}>
+            <button onClick={() => navBreadcrumb(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: i === breadcrumb.length - 1 ? 'var(--text)' : 'var(--blue)', fontWeight: i === breadcrumb.length - 1 ? 600 : 400, padding: '2px 4px', borderRadius: 4 }}>
               {crumb.name}
             </button>
           </span>
@@ -361,36 +361,36 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
         {searchResults && <span style={{ color: 'var(--text3)' }}>— search results</span>}
       </div>
 
-      {error && <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 10 }}>{error}<button onClick={() => setError('')} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)' }}>✕</button></div>}
+      {error && <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 10 }}>{error}<button onClick={() => setError('')} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)' }}>✕</button></div>}
 
       {/* File browser */}
       <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop}
         style={{ border: `2px dashed ${dragOver ? 'var(--green)' : 'var(--border)'}`, borderRadius: 'var(--radius-lg)', background: dragOver ? 'var(--green-bg)' : 'var(--surface)', transition: 'all .15s', minHeight: 300 }}>
 
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading...</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>Loading...</div>
         ) : showingRoot && sharedDrives.length > 0 ? (
           <div>
-            <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>Shared Drives</div>
+            <div style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>Shared Drives</div>
             {sharedDrives.map(drive => (
               <div key={drive.id} onDoubleClick={() => openFolder(drive, true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                 <span style={{ fontSize: 20 }}>🏢</span>
-                <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{drive.name}</span>
-                <span style={{ fontSize: 11, color: 'var(--blue)' }}>Double-click to open ›</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{drive.name}</span>
+                <span style={{ fontSize: 12, color: 'var(--blue)' }}>Double-click to open ›</span>
               </div>
             ))}
             {files.length > 0 && <>
-              <div style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>My Drive</div>
+              <div style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>My Drive</div>
               {files.filter(f => f.mimeType === FOLDER_MIME).map(f => (
                 <FileRow key={f.id} file={f} onOpen={() => openFolder(f)} onRename={() => { setRenamingId(f.id); setRenamingName(f.name) }} onDownload={() => handleDownload(f)} renamingId={renamingId} renamingName={renamingName} setRenamingName={setRenamingName} onRenameSubmit={() => handleRename(f.id)} onRenameCancel={() => setRenamingId(null)} renameRef={renameRef} downloadingId={downloadingId} onDelete={() => setConfirmDeleteFile(f)} />
               ))}
             </>}
           </div>
         ) : displayFiles.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
             {dragOver ? 'Drop files here to upload' : 'This folder is empty — drag files here or click Upload'}
           </div>
         ) : (
@@ -405,7 +405,7 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
         )}
       </div>
 
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6, textAlign: 'center' }}>
+      <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6, textAlign: 'center' }}>
         Double-click folders to open · Drag files to upload · ✏️ rename · 🗑 delete
       </div>
 
@@ -414,7 +414,7 @@ export default function GoogleDriveBrowser({ linkedFolderId, onLinkFolder, proje
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 24, maxWidth: 380, width: '100%', border: '1px solid var(--border)' }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>Delete from Google Drive?</div>
-            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
               "<strong>{confirmDeleteFile.name}</strong>" will be moved to Google Drive trash. This cannot be undone from the CRM.
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -446,43 +446,43 @@ function FileRow({ file, onOpen, onRename, onDownload, onDelete, renamingId, ren
       <div style={{ flex: 1, minWidth: 0 }}>
         {isRenaming ? (
           <input ref={renameRef} value={renamingName} onChange={e => setRenamingName(e.target.value)}
-            style={{ width: '100%', fontSize: 13 }}
+            style={{ width: '100%', fontSize: 14 }}
             onKeyDown={e => { if (e.key === 'Enter') onRenameSubmit(); if (e.key === 'Escape') onRenameCancel() }}
             onClick={e => e.stopPropagation()} />
         ) : (
-          <div style={{ fontSize: 13, fontWeight: isFolder ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 14, fontWeight: isFolder ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {!isFolder ? <a href={file.webViewLink} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text)', textDecoration: 'none' }} onMouseEnter={e => e.target.style.color = 'var(--blue)'} onMouseLeave={e => e.target.style.color = 'var(--text)'}>{file.name}</a> : file.name}
           </div>
         )}
       </div>
 
-      <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0, minWidth: 50, textAlign: 'right' }}>{formatSize(file.size)}</span>
-      <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0, minWidth: 90, textAlign: 'right' }}>{formatDate(file.modifiedTime)}</span>
+      <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0, minWidth: 50, textAlign: 'right' }}>{formatSize(file.size)}</span>
+      <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0, minWidth: 90, textAlign: 'right' }}>{formatDate(file.modifiedTime)}</span>
 
       {/* Action buttons — show on hover */}
       <div style={{ display: 'flex', gap: 4, flexShrink: 0, opacity: hovered || isRenaming ? 1 : 0, transition: 'opacity .15s' }}>
         {isRenaming ? (
           <>
-            <button className="btn btn-sm btn-primary" onClick={e => { e.stopPropagation(); onRenameSubmit() }} style={{ fontSize: 11, padding: '2px 8px' }}>Save</button>
-            <button className="btn btn-sm" onClick={e => { e.stopPropagation(); onRenameCancel() }} style={{ fontSize: 11, padding: '2px 8px' }}>Cancel</button>
+            <button className="btn btn-sm btn-primary" onClick={e => { e.stopPropagation(); onRenameSubmit() }} style={{ fontSize: 12, padding: '2px 8px' }}>Save</button>
+            <button className="btn btn-sm" onClick={e => { e.stopPropagation(); onRenameCancel() }} style={{ fontSize: 12, padding: '2px 8px' }}>Cancel</button>
           </>
         ) : (
           <>
-            {isFolder && <button className="btn btn-sm" onClick={e => { e.stopPropagation(); onOpen() }} style={{ fontSize: 11 }}>Open</button>}
-            <button className="btn btn-sm" onClick={e => { e.stopPropagation(); onRename() }} title="Rename" style={{ fontSize: 11, padding: '2px 8px' }}>✏️</button>
+            {isFolder && <button className="btn btn-sm" onClick={e => { e.stopPropagation(); onOpen() }} style={{ fontSize: 12 }}>Open</button>}
+            <button className="btn btn-sm" onClick={e => { e.stopPropagation(); onRename() }} title="Rename" style={{ fontSize: 12, padding: '2px 8px' }}>✏️</button>
             {!isFolder && (
-              <button className="btn btn-sm btn-primary" onClick={e => { e.stopPropagation(); onDownload() }} disabled={isDownloading} style={{ fontSize: 11, padding: '2px 8px' }}>
+              <button className="btn btn-sm btn-primary" onClick={e => { e.stopPropagation(); onDownload() }} disabled={isDownloading} style={{ fontSize: 12, padding: '2px 8px' }}>
                 {isDownloading ? '...' : '↓'}
               </button>
             )}
-            <button className="btn btn-sm btn-danger" onClick={e => { e.stopPropagation(); onDelete() }} style={{ fontSize: 11, padding: '2px 8px' }} title="Delete">
+            <button className="btn btn-sm btn-danger" onClick={e => { e.stopPropagation(); onDelete() }} style={{ fontSize: 12, padding: '2px 8px' }} title="Delete">
               🗑
             </button>
           </>
         )}
       </div>
 
-      {isFolder && !isRenaming && <span style={{ fontSize: 11, color: 'var(--blue)', flexShrink: 0 }}>›</span>}
+      {isFolder && !isRenaming && <span style={{ fontSize: 12, color: 'var(--blue)', flexShrink: 0 }}>›</span>}
     </div>
   )
 }

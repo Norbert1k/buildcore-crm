@@ -1,7 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Modal, Field } from './ui'
 import { useAuth } from '../lib/auth'
+import { ContactsEditor, loadEAContacts, saveContacts, validateContacts } from './EAContacts'
+
+const missingTable = e => /does not exist|schema cache|employer_agent_contacts/i.test(e?.message || '')
 
 export default function EAModal({ ea, onClose, onSaved }) {
   const { profile, division } = useAuth()
@@ -22,13 +25,21 @@ export default function EAModal({ ea, onClose, onSaved }) {
   })
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
+  // People at the firm — several per firm, chosen per job when assigning
+  const firmPerson = ea?.contact_name || ea?.email ? [{ _new: true, name: ea.contact_name || ea.email || '', job_title: '', email: ea.email || '', phone: ea.phone || '', is_primary: true }] : []
+  const [people, setPeople] = useState(editing ? firmPerson : [])
+  const [original, setOriginal] = useState([])
+  useEffect(() => {
+    if (!editing) return
+    loadEAContacts([ea.id]).then(m => { const list = m[ea.id] || []; if (list.length) { setPeople(list); setOriginal(list) } })
+  }, [ea?.id])
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); setErrors(e => ({ ...e, [k]: '' })) }
 
   function validate() {
     const e = {}
     if (!form.company_name.trim()) e.company_name = 'Company name is required'
-    if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Invalid email address'
+    const pe = validateContacts(people); if (pe) e.people = pe
     if (form.payment_submission_email && !/^\S+@\S+\.\S+$/.test(form.payment_submission_email)) e.payment_submission_email = 'Invalid email address'
     setErrors(e)
     return Object.keys(e).length === 0
@@ -37,17 +48,22 @@ export default function EAModal({ ea, onClose, onSaved }) {
   async function save() {
     if (!validate()) return
     setSaving(true)
-    const payload = { ...form }
-    let result
+    // The firm's own contact fields follow the main person
+    const main = people.filter(c => c.name?.trim()).find(c => c.is_primary) || people.find(c => c.name?.trim())
+    const payload = { ...form, contact_name: main?.name?.trim() || '', email: main?.email?.trim() || '', phone: main?.phone?.trim() || '' }
+    let result, eaId = ea?.id
     if (editing) {
       result = await supabase.from('employer_agents').update(payload).eq('id', ea.id)
     } else {
       payload.created_by = profile?.id
       payload.division = division   // EA firms are divisional
-      result = await supabase.from('employer_agents').insert(payload)
+      result = await supabase.from('employer_agents').insert(payload).select('id').single()
+      eaId = result.data?.id
     }
+    if (result.error) { setSaving(false); setErrors({ _global: result.error.message }); return }
+    try { if (eaId) await saveContacts(eaId, people, original, profile?.id) }
+    catch (e) { if (!missingTable(e)) { setSaving(false); setErrors({ _global: 'Firm saved, but the people list could not be saved: ' + e.message }); return } }
     setSaving(false)
-    if (result.error) { setErrors({ _global: result.error.message }); return }
     onSaved()
   }
 
@@ -67,7 +83,7 @@ export default function EAModal({ ea, onClose, onSaved }) {
       }
     >
       {errors._global && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
+        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>
           {errors._global}
         </div>
       )}
@@ -78,27 +94,21 @@ export default function EAModal({ ea, onClose, onSaved }) {
             <input value={form.company_name} onChange={e => set('company_name', e.target.value)} placeholder="e.g. Arcadis LLP" autoFocus />
           </Field>
         </div>
-        <Field label="Contact Name">
-          <input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} placeholder="Primary contact" />
-        </Field>
-        <Field label="Phone">
-          <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+44 7700 900000" />
-        </Field>
-        <Field label="Email Address" error={errors.email}>
-          <input type="email" value={form.email} onChange={e => set('email', e.target.value)} placeholder="contact@company.com" />
-        </Field>
         <Field label="Status">
           <select value={form.status} onChange={e => set('status', e.target.value)}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
         </Field>
+        <div className="form-section">People at this firm</div>
+        <div className="full" style={{ fontSize: 13, color: 'var(--text3)', marginTop: -4 }}>Add everyone you deal with. When you assign this firm to a job you pick which of them look after it.</div>
+        <ContactsEditor rows={people} setRows={setPeople} error={errors.people} />
         <div className="form-section">Payment Application</div>
         <div className="full">
           <Field label="Payment Application Submission Email" error={errors.payment_submission_email}>
             <input type="email" value={form.payment_submission_email} onChange={e => set('payment_submission_email', e.target.value)} placeholder="valuations@company.com" />
           </Field>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
             Default email for submitting payment applications. Can be overridden per-project when assigning.
           </div>
         </div>

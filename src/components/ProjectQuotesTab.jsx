@@ -156,9 +156,9 @@ export default function ProjectQuotesTab({ projectId }) {
 
       {/* Task-grouped table */}
       <div className="table-wrap">
-        <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+            <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', fontSize: 12, textTransform: 'uppercase', letterSpacing: '.04em' }}>
               <th style={{ padding: '10px 12px', fontWeight: 600 }}>Task</th>
               <th style={{ padding: '10px 12px', fontWeight: 600 }}>Quotes</th>
               <th style={{ padding: '10px 12px', fontWeight: 600 }}>Status</th>
@@ -187,13 +187,13 @@ export default function ProjectQuotesTab({ projectId }) {
                         {accepted.amount != null
                           ? `£${Number(accepted.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : '—'}
-                        <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}>{accepted.vendor_name || accepted.vendor_name_text}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>{accepted.vendor_name || accepted.vendor_name_text}</div>
                       </span>
                     ) : (
                       <span style={{ color: 'var(--text3)' }}>{status === 'pending' ? 'awaiting' : '—'}</span>
                     )}
                   </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 12 }}>
+                  <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 13 }}>
                     {g.latest_received
                       ? new Date(g.latest_received).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                       : <span style={{ color: 'var(--text3)' }}>—</span>}

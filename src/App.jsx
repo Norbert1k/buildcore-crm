@@ -1,6 +1,7 @@
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
+import { ROLE_PERMISSIONS } from './lib/utils'
 import { supabase } from './lib/supabase'
 import Sidebar from './components/Sidebar'
 import Login from './pages/Login'
@@ -34,7 +35,6 @@ const Settings          = lazy(() => import('./pages/Settings'))
 const CompanyDocuments  = lazy(() => import('./pages/CompanyDocuments'))
 const Clients           = lazy(() => import('./pages/Clients'))
 const ClientDetail      = lazy(() => import('./pages/ClientDetail'))
-const TaskTracker       = lazy(() => import('./pages/TaskTracker'))
 const TaskDetail        = lazy(() => import('./pages/TaskDetail'))
 const Quotes            = lazy(() => import('./pages/Quotes'))
 
@@ -48,7 +48,34 @@ function HamburgerIcon() {
   )
 }
 
+// ── Page guards ──────────────────────────────────────────────────────────
+// The menu hides pages a role can't use; these stop the same pages opening
+// from a typed or shared link. (Database rules remain the real lock.)
+function NavGuard({ k, children }) {
+  const { profile } = useAuth()
+  const nav = (ROLE_PERMISSIONS[profile?.role] || ROLE_PERMISSIONS.viewer).nav
+  if (!profile) return null
+  return nav.includes(k) ? children : <NoAccess />
+}
+function ProjectGuard({ children }) {
+  const { profile, canAccessProject } = useAuth()
+  const id = useLocation().pathname.split('/')[2]
+  if (!profile) return null
+  return canAccessProject(id) ? children : <NoAccess what="this project" />
+}
+function NoAccess({ what = 'this page' }) {
+  const go = useNavigate()
+  return (
+    <div className="empty-state" style={{ paddingTop: 80 }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>You don't have access to {what}</div>
+      <div style={{ marginBottom: 16 }}>Ask an admin if you think you should.</div>
+      <button className="btn" onClick={() => go('/')}>Go to Home</button>
+    </div>
+  )
+}
+
 function NotificationBell() {
+  const navigateTo = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
@@ -57,9 +84,12 @@ function NotificationBell() {
   useEffect(() => {
     if (!user) return
     loadNotifications()
-    // Poll every 60 seconds
-    const interval = setInterval(loadNotifications, 60000)
-    return () => clearInterval(interval)
+    // Poll every 60 seconds while the CRM is the visible tab; refresh as
+    // soon as it becomes visible again.
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') loadNotifications() }, 60000)
+    const onVis = () => { if (document.visibilityState === 'visible') loadNotifications() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
   }, [user])
 
   async function loadNotifications() {
@@ -105,7 +135,7 @@ function NotificationBell() {
           <span style={{
             position: 'absolute', top: 2, right: 2,
             background: 'var(--red, #a32d2d)', color: 'white',
-            fontSize: 10, fontWeight: 700, borderRadius: '50%',
+            fontSize: 11, fontWeight: 700, borderRadius: '50%',
             width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
             lineHeight: 1
           }}>{unreadCount > 9 ? '9+' : unreadCount}</span>
@@ -125,12 +155,12 @@ function NotificationBell() {
             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ fontWeight: 700, fontSize: 14 }}>Notifications</div>
               {unreadCount > 0 && (
-                <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 10px' }} onClick={markAllRead}>Mark all read</button>
+                <button className="btn btn-sm" style={{ fontSize: 12, padding: '2px 10px' }} onClick={markAllRead}>Mark all read</button>
               )}
             </div>
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {notifications.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+                <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
                   No notifications yet
                 </div>
               ) : notifications.map(n => {
@@ -146,18 +176,22 @@ function NotificationBell() {
                     }}
                     onClick={() => {
                       if (!n.read) markOneRead(n.id)
-                      if (n.link) { setOpen(false); window.location.href = n.link }
+                      if (n.link) {
+                        setOpen(false)
+                        // In-app links open without reloading the whole CRM.
+                        if (/^\//.test(n.link)) navigateTo(n.link); else window.location.href = n.link
+                      }
                     }}
                   >
                     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                       <div style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{tc.icon}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <div style={{ fontSize: 13, fontWeight: n.read ? 500 : 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{n.title}</div>
+                          <div style={{ fontSize: 14, fontWeight: n.read ? 500 : 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{n.title}</div>
                           {!n.read && <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--green, #448a40)', flexShrink: 0 }} />}
                         </div>
-                        {n.message && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 3, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{n.message}</div>}
-                        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                        {n.message && <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 3, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{n.message}</div>}
+                        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
                           {new Date(n.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
@@ -206,19 +240,20 @@ function ProtectedLayout() {
     return () => { cancelled = true }
   }, [user, mfaVerified])
 
-  useEffect(() => {
-    if (user) fetchExpCount()
-    if (user) fetchReminderCount()
-    setSidebarOpen(false)
-  }, [user, location.pathname])
-
-  // Poll reminder count every 60s so the sidebar dot stays current without
-  // requiring navigation. Cleaned up on unmount / user change.
+  // Badge counts load once, then refresh every 60s while the CRM is the
+  // visible tab (previously re-queried on every page change, and kept
+  // polling in background tabs).
   useEffect(() => {
     if (!user) return
-    const id = setInterval(fetchReminderCount, 60_000)
-    return () => clearInterval(id)
+    fetchExpCount(); fetchReminderCount()
+    const tick = () => { if (document.visibilityState === 'visible') { fetchReminderCount() } }
+    const id = setInterval(tick, 60_000)
+    const onVis = () => { if (document.visibilityState === 'visible') { fetchExpCount(); fetchReminderCount() } }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
   }, [user])
+
+  useEffect(() => { setSidebarOpen(false) }, [location.pathname])
 
   // Wheel-event forwarder. Some staff have wide screens where the
   // .page-content scroll area (max-width 1400px, centered) leaves
@@ -315,11 +350,13 @@ function ProtectedLayout() {
   if (mfaCheck.needed) return <Navigate to="/login" replace state={{ mfaFactorId: mfaCheck.factorId }} />
 
   const pageTitles = {
-    '/': 'Dashboard',
+    '/': 'Home',
     '/subcontractors': 'Subcontractors',
-    '/subcontractors/ea': 'Subcontractors',
-    '/subcontractors/design-team': 'Subcontractors',
-    '/subcontractors/compliance': 'Subcontractors',
+    '/subcontractors/ea': 'Employers Agents',
+    '/subcontractors/design-team': 'Design Team',
+    '/subcontractors/compliance': 'Compliance',
+    '/projects/calendar': 'Calendar',
+    '/company-documents': 'Company Docs',
     '/clients': 'Clients',
     '/projects': 'Projects',
     '/projects/tracker': 'Project Tracker',
@@ -327,7 +364,13 @@ function ProtectedLayout() {
     '/quotes': 'Quotes',
     '/settings': 'Settings',
   }
-  const title = pageTitles[location.pathname] || 'BuildCore CRM'
+  const p = location.pathname
+  const title = pageTitles[p]
+    || (p.startsWith('/projects/') ? 'Project'
+      : p.startsWith('/subcontractors/') ? 'Subcontractor'
+      : p.startsWith('/clients/') ? 'Client'
+      : p.startsWith('/tasks/') ? 'Quote'
+      : 'BuildCore CRM')
 
   return (
     <div className="app-layout">
@@ -340,7 +383,7 @@ function ProtectedLayout() {
           <div style={{ fontWeight: 600, fontSize: 15, flexShrink: 0 }}>{title}</div>
           <GlobalSearch />
           <NotificationBell />
-          <div style={{ fontSize: 12, color: 'var(--text3)', display: 'none' }} className="topbar-date">
+          <div style={{ fontSize: 13, color: 'var(--text3)', display: 'none' }} className="topbar-date">
             {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
           </div>
         </div>
@@ -353,22 +396,23 @@ function ProtectedLayout() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/subcontractors" element={<Subcontractors />} />
-              <Route path="/subcontractors/ea" element={<Subcontractors />} />
-              <Route path="/subcontractors/design-team" element={<Subcontractors />} />
-              <Route path="/subcontractors/compliance" element={<Subcontractors />} />
+              <Route path="/subcontractors/ea" element={<NavGuard k="ea"><Subcontractors /></NavGuard>} />
+              <Route path="/subcontractors/design-team" element={<NavGuard k="design_team"><Subcontractors /></NavGuard>} />
+              <Route path="/subcontractors/compliance" element={<NavGuard k="documents"><Subcontractors /></NavGuard>} />
               <Route path="/subcontractors/:id" element={<SubcontractorDetail />} />
               <Route path="/projects" element={<Projects />} />
-              <Route path="/projects/tracker" element={<ProjectTracker />} />
-              <Route path="/projects/calendar" element={<ProjectCalendar />} />
-              <Route path="/projects/:id" element={<ProjectDetail />} />
-              <Route path="/suppliers" element={<Suppliers />} />
-              <Route path="/quotes" element={<Quotes />} />
+              <Route path="/projects/tracker" element={<NavGuard k="tracker"><ProjectTracker /></NavGuard>} />
+              <Route path="/projects/calendar" element={<NavGuard k="calendar"><ProjectCalendar /></NavGuard>} />
+              <Route path="/projects/:id" element={<ProjectGuard><ProjectDetail /></ProjectGuard>} />
+              <Route path="/suppliers" element={<NavGuard k="suppliers"><Suppliers /></NavGuard>} />
+              <Route path="/quotes" element={<NavGuard k="quotes"><Quotes /></NavGuard>} />
               <Route path="/settings" element={<Settings />} />
-              <Route path="/company-documents" element={<CompanyDocuments />} />
-              <Route path="/clients" element={<Clients />} />
-              <Route path="/clients/:id" element={<ClientDetail />} />
-              <Route path="/tasks" element={<TaskTracker />} />
-              <Route path="/tasks/:taskId" element={<TaskDetail />} />
+              <Route path="/company-documents" element={<NavGuard k="company"><CompanyDocuments /></NavGuard>} />
+              <Route path="/clients" element={<NavGuard k="clients"><Clients /></NavGuard>} />
+              <Route path="/clients/:id" element={<NavGuard k="clients"><ClientDetail /></NavGuard>} />
+              {/* Task Tracker list removed; quote tasks still open at /tasks/:id */}
+              <Route path="/tasks" element={<Navigate to="/quotes" replace />} />
+              <Route path="/tasks/:taskId" element={<TaskDetail />} />   {/* open as before: reminders link here for anyone assigned */}
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
@@ -462,9 +506,9 @@ function LiveReminderPopup({ reminder, onClose, onAfterAction }) {
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Task reminder</span>
         </div>
         <div style={{ padding: '16px 18px' }}>
-          {projectLabel && <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{projectLabel}</div>}
+          {projectLabel && <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 4 }}>{projectLabel}</div>}
           <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--text)', marginBottom: 10 }}>{task?.title || 'Task'}</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>You set this reminder {createdAgo}.</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>You set this reminder {createdAgo}.</div>
         </div>
         <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
           <button className="btn btn-sm" onClick={snoozeHour}>Snooze 1h</button>

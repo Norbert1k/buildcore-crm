@@ -1,12 +1,56 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, createContext, useContext } from 'react'
 import { supabase } from '../lib/supabase'
+import { RowMenu } from './ui'
 import { useAuth } from '../lib/auth'
 import { drawCover, drawLetterhead, drawFooter, addInternalLink, loadLogo, BRAND, bc, fmtDateLong } from '../lib/pdfTemplate'
 import UploadProgress from './UploadProgress'
 import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
+import { readDocument } from '../lib/omApi'
+
+// Optional extras supplied by the H&S File & O&M view (HandoverFile.jsx):
+//   showEmpty     — false hides template folders that have no files yet
+//   toggleEmpty   — flips showEmpty (button in the header)
+//   sectionChips  — (sectionKey) => element shown on a section row
+//   sectionPanel  — (sectionKey) => element shown when a section is opened
+// Without a provider the tree behaves exactly as before.
+export const HandoverUiCtx = createContext({ showEmpty: true })
+const deepCount = (counts, key) => Object.entries(counts || {}).reduce((sum, [k, n]) =>
+  k === key || k.startsWith(key + '-') || k.includes('-' + key + '-') ? sum + n : sum, 0)
+
+// New handover PDFs are read by Claude in the background so the H&S File &
+// O&M view already knows about them. One at a time (a dropped folder can hold
+// dozens of files); a failed read never blocks the upload.
+const readQueue = []
+let reading = false
+function readInBackground(row) {
+  if (!row?.id || !/\.(pdf|png|jpe?g)$/i.test(row.file_name || '')) return
+  readQueue.push(row)
+  if (reading) return
+  reading = true
+  ;(async () => {
+    while (readQueue.length) {
+      const next = readQueue.shift()
+      try { await readDocument(next, 'hs_files') } catch {}
+      window.dispatchEvent(new CustomEvent('hs-files-read'))
+    }
+    reading = false
+  })()
+}
+
+// Browsers return at most 100 entries per readEntries() call — keep reading
+// until the folder is drained so large dropped folders upload completely.
+async function readAllEntries(reader) {
+  const all = []
+  for (;;) {
+    const batch = await new Promise(res => reader.readEntries(res, () => res([])))
+    if (!batch.length) return all
+    all.push(...batch)
+  }
+}
+
 
 // ── Full H&S folder template ─────────────────────────────────
-const HS_STRUCTURE = [
+export const HS_STRUCTURE = [
   { key: 's1', label: 'Section 1 | H&S File', color: '#448a40', bg: '#e8f5e7', children: [] },
   { key: 's2', label: 'Section 2 | Project Directory', color: '#448a40', bg: '#e8f5e7', children: [] },
   { key: 's3', label: 'Section 3 | Record Drawings', color: '#378ADD', bg: '#E6F1FB', children: [
@@ -382,7 +426,7 @@ async function readDropEntries(e) {
       const dirPath = path ? path + '/' + entry.name : entry.name
       result.folders.add(dirPath)
       const reader = entry.createReader()
-      const children = await new Promise(r => reader.readEntries(r))
+      const children = await readAllEntries(reader)
       for (const child of children) await walk(child, dirPath)
     }
   }
@@ -392,9 +436,9 @@ async function readDropEntries(e) {
 function naturalSort(arr) {
   return [...arr].sort((a, b) => (a.file_name || '').localeCompare(b.file_name || '', undefined, { numeric: true, sensitivity: 'base' }))
 }
-const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)',     borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const Btn  = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)',     borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnG = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40',           borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40',        display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnR = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)',    display: 'inline-block', alignSelf: 'center', whiteSpace: 'nowrap', flexShrink: 0 }
 
 function ExcelPreview({ url, fileName, onClose, onDownload }) {
   const [html, setHtml] = useState(null)
@@ -437,22 +481,22 @@ function ExcelPreview({ url, fileName, onClose, onDownload }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 20 }} onClick={onClose}>
       <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8, zIndex: 1 }}>
-        {onDownload && <button onClick={e => { e.stopPropagation(); onDownload() }} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
-        <button onClick={onClose} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
+        {onDownload && <button onClick={e => { e.stopPropagation(); onDownload() }} style={{ fontSize: 13, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
+        <button onClick={onClose} style={{ fontSize: 13, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
       </div>
-      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 8, marginTop: 8 }}>{fileName}</div>
+      <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginBottom: 8, marginTop: 8 }}>{fileName}</div>
       {sheets.length > 1 && (
         <div style={{ display: 'flex', gap: 4, marginBottom: 8 }} onClick={e => e.stopPropagation()}>
           {sheets.map((s, i) => (
             <button key={i} onClick={() => switchSheet(i)}
-              style={{ fontSize: 11, padding: '4px 10px', borderRadius: 4, border: '0.5px solid rgba(255,255,255,0.3)', background: i === activeSheet ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>{s.name}</button>
+              style={{ fontSize: 12, padding: '4px 10px', borderRadius: 4, border: '0.5px solid rgba(255,255,255,0.3)', background: i === activeSheet ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>{s.name}</button>
           ))}
         </div>
       )}
       <div onClick={e => e.stopPropagation()} style={{ flex: 1, width: '95vw', maxHeight: '85vh', overflow: 'auto', background: '#fff', borderRadius: 'var(--radius)', padding: 0 }}>
         {loading ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading spreadsheet...</div>
           : error ? <div style={{ padding: 40, textAlign: 'center', color: '#e24b4a' }}>Failed to load: {error}</div>
-          : <div style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>table{border-collapse:collapse;width:100%}td,th{border:1px solid #d0d0d0;padding:6px 10px;font-size:13px;color:#1a1a1a;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}th{background:#e8e8e8;font-weight:600;color:#111;position:sticky;top:0}tr:nth-child(even){background:#f5f5f5}tr:hover{background:#e6f1fb}</style>${html}` }} />
+          : <div className="xlsx-prev" data-no-remap style={{ fontSize: 13, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>.xlsx-prev table{border-collapse:collapse;width:100%}.xlsx-prev td,.xlsx-prev th{border:1px solid #d0d0d0;padding:6px 10px;font-size:14px;color:#1a1a1a;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}.xlsx-prev th{background:#e8e8e8;font-weight:600;color:#111;position:sticky;top:0}.xlsx-prev tr:nth-child(even){background:#f5f5f5}.xlsx-prev tr:hover{background:#e6f1fb}</style>${html}` }} />
         }
       </div>
     </div>
@@ -487,19 +531,19 @@ function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
   return (
     <>
       <div style={{ position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', zIndex: 500, background: 'var(--accent)', color: '#fff', borderRadius: 'var(--radius)', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 4px 24px rgba(0,0,0,0.3)', whiteSpace: 'nowrap' }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>{selected.size} selected</span>
-        <button onClick={onZip} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
-        {onMove && <button onClick={openMove} style={{ fontSize: 12, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
-        <button onClick={onClear} style={{ fontSize: 12, lineHeight: '26px', padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{selected.size} selected</span>
+        <button onClick={onZip} style={{ fontSize: 13, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>↓ Download ZIP</button>
+        {onMove && <button onClick={openMove} style={{ fontSize: 13, lineHeight: '26px', padding: '0 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: showMove ? 'rgba(255,255,255,0.2)' : 'transparent', color: '#fff', cursor: 'pointer' }}>Move to ▾</button>}
+        <button onClick={onClear} style={{ fontSize: 13, lineHeight: '26px', padding: '0 10px', borderRadius: 'var(--radius)', border: '1px solid rgba(255,255,255,0.4)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>✕ Clear</button>
       </div>
       {showMove && moveTargets && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 600 }} onClick={() => setShowMove(false)} />
           <div style={{ position: 'fixed', bottom: movePos.bottom, left: movePos.left, zIndex: 601, background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', minWidth: 240, maxHeight: 320, overflowY: 'auto', boxShadow: '0 -4px 24px rgba(0,0,0,0.25)' }}>
-            <div style={{ padding: '8px 12px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
+            <div style={{ padding: '8px 12px', fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', borderBottom: '0.5px solid var(--border)' }}>Move to folder</div>
             {moveTargets.map(t => (
               <div key={t.key} onClick={() => { onMove(t.key); setShowMove(false) }}
-                style={{ padding: '8px 14px 8px 20px', fontSize: 13, cursor: 'pointer', color: 'var(--text)' }}
+                style={{ padding: '8px 14px 8px 20px', fontSize: 14, cursor: 'pointer', color: 'var(--text)' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
                 onMouseLeave={e => e.currentTarget.style.background = ''}>
                 📁 {t.label}
@@ -684,7 +728,7 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview, 
 
   return (
     <>
-      <div draggable={!renaming && !!onDragStart} onDragStart={e => onDragStart?.(e, file)} style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)', fontSize: 12, position: 'relative', transition: 'border .1s', cursor: onDragStart ? 'grab' : undefined }}>
+      <div draggable={!renaming && !!onDragStart} onDragStart={e => onDragStart?.(e, file)} style={{ border: selected ? '2px solid var(--accent)' : '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface)', fontSize: 13, position: 'relative', transition: 'border .1s', cursor: onDragStart ? 'grab' : undefined }}>
         <div onClick={e => { e.stopPropagation(); onSelect && onSelect(file.id) }}
           style={{ position: 'absolute', top: 6, left: 6, zIndex: 1, width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (selected ? 'var(--accent)' : 'rgba(255,255,255,0.4)'), background: selected ? 'var(--accent)' : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           {selected && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
@@ -696,7 +740,7 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview, 
             ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
             : <TypeBadge />
           }
-          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{ext}</div>
+          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{ext}</div>
         </div>
         <div style={{ padding: '7px 9px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
@@ -704,7 +748,7 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview, 
               ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
                   onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
-                  style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
+                  style={{ flex: 1, fontSize: 12, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
               : <>
                   <div style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)', flex: 1 }} title={file.file_name}>{file.file_name}</div>
                   {canDelete && (
@@ -716,11 +760,11 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview, 
                 </>
             }
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
           <div style={{ display: 'flex', gap: 4 }}>
-            {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-            <button onClick={e => { e.stopPropagation(); download() }} style={{ flex: 1, fontSize: 10, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
-            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+            {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ flex: 1, fontSize: 11, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+            <button onClick={e => { e.stopPropagation(); download() }} style={{ flex: 1, fontSize: 11, padding: '3px 0', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>
+            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 11, padding: '3px 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
           </div>
         </div>
       </div>
@@ -729,8 +773,8 @@ function HSFileCard({ file, onDelete, canDelete, selected, onSelect, onPreview, 
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>Delete "{file.file_name}"?</div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDel(false)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Cancel</button>
-              <button onClick={() => { setConfirmDel(false); onDelete(file) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>Delete</button>
+              <button onClick={() => setConfirmDel(false)} style={{ fontSize: 12, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Cancel</button>
+              <button onClick={() => { setConfirmDel(false); onDelete(file) }} style={{ fontSize: 12, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>Delete</button>
             </div>
           </div>
         </div>
@@ -779,7 +823,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
         <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {iconLetter ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span>
+          {iconLetter ? <span style={{ fontSize: 11, fontWeight: 700, color: iconColor }}>{iconLetter}</span>
             : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -787,11 +831,11 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
             ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
                 onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
-                style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+                style={{ width: '100%', fontSize: 13, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
             : (
               <div onClick={() => onPreview ? onPreview(file, url) : null} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
                   {canDelete && (
                     <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename"
                       style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
@@ -799,15 +843,15 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
                     </button>
                   )}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
               </div>
             )
           }
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-          {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-          {url && <button onClick={e => { e.stopPropagation(); download() }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+          {url && <button onClick={e => { e.stopPropagation(); onPreview ? onPreview(file, url) : window.open(url, '_blank') }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          {url && <button onClick={e => { e.stopPropagation(); download() }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
+          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
         </div>
       </div>
       {confirmDel && (
@@ -815,8 +859,8 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 14, marginBottom: 20, color: 'var(--text)' }}>Delete "{file.file_name}"?</div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmDel(false)} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Cancel</button>
-              <button onClick={() => { setConfirmDel(false); onDelete(file) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>Delete</button>
+              <button onClick={() => setConfirmDel(false)} style={{ fontSize: 12, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>Cancel</button>
+              <button onClick={() => { setConfirmDel(false); onDelete(file) }} style={{ fontSize: 12, lineHeight: '24px', padding: '0 9px', border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>Delete</button>
             </div>
           </div>
         </div>
@@ -828,6 +872,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
 
 function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor, viewMode = 'grid', setViewMode, onPreview, onDeleteNode, onRenameNode }) {
   const { profile } = useAuth()
+  const ui = useContext(HandoverUiCtx)
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -978,7 +1023,8 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       const path = `projects/${projectId}/hs/${node.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('hs-handover').upload(path, file)
       if (!error) {
-        await supabase.from('hs_files').insert({ project_id: projectId, folder_key: node.key, storage_path: path, file_name: file.name, file_size: file.size })
+        const { data: row } = await supabase.from('hs_files').insert({ project_id: projectId, folder_key: node.key, storage_path: path, file_name: file.name, file_size: file.size }).select('id, file_name').single()
+        readInBackground(row)
       } else { errors.push(file.name) }
     }
     setUploading(false)
@@ -1015,7 +1061,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         const fKey = path ? keyMap[path] : node.key
         const storagePath = `projects/${projectId}/hs/${fKey}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('hs-handover').upload(storagePath, file)
-        if (!error) await supabase.from('hs_files').insert({ project_id: projectId, folder_key: fKey, storage_path: storagePath, file_name: file.name, file_size: file.size })
+        if (!error) { const { data: row } = await supabase.from('hs_files').insert({ project_id: projectId, folder_key: fKey, storage_path: storagePath, file_name: file.name, file_size: file.size }).select('id, file_name').single(); readInBackground(row) }
       }
       onCustomFolderAdded?.(); loadFiles()
     } else {
@@ -1124,13 +1170,15 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
     const hasChildren = (node.children?.length > 0) || myCustomFolders.length > 0
-  const totalCount = fileCount + (node.children || []).reduce((s, c) => s + (fileCounts?.[c.key] || 0), 0)
+  // Everything inside this folder, however deep (template keys share the
+  // parent's prefix; custom folder keys embed their parent's key)
+  const totalCount = deepCount(fileCounts, node.key)
 
   return (
     <div style={{ marginLeft: indent > 0 ? 0 : 0 }}>
       <UploadProgress uploadState={uploadProgress} />
       {/* Folder row */}
-      <div
+      <div className="folder-head"
         draggable={isMovableFolder && !renamingNode && !showAddFolder}
         onDragStart={startFolderDrag}
         onDragEnd={() => setDragOver(false)}
@@ -1163,7 +1211,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
               {IconSvg
                 ? <IconSvg color={color} size={sz} />
                 : isCustom
-                ? <span style={{ fontSize: 13 }}>📁</span>
+                ? <span style={{ fontSize: 14 }}>📁</span>
                 : <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.5">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                   </svg>
@@ -1184,53 +1232,40 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
                   if (e.key === 'Escape') setRenamingNode(false)
                 }}
                 onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
-                style={{ fontSize: isSection ? 13 : 12, fontWeight: isSection ? 600 : 500, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
-            : <div style={{ fontSize: isSection ? 13 : 12, fontWeight: isSection ? 600 : 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.label}</div>
+                style={{ fontSize: isSection ? 14 : 13, fontWeight: isSection ? 600 : 500, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', width: '100%' }} />
+            : <div style={{ fontSize: isSection ? 14 : 13, fontWeight: isSection ? 600 : 500, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{node.label}</div>
           }
           {moving
-            ? <div style={{ fontSize: 10, color: 'var(--accent)', marginTop: 1 }}>{moving}</div>
-            : totalCount > 0 && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{totalCount} file{totalCount !== 1 ? 's' : ''}</div>}
+            ? <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 1 }}>{moving}</div>
+            : totalCount > 0 && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{totalCount} file{totalCount !== 1 ? 's' : ''}</div>}
         </div>
 
+        {isSection && ui.sectionChips?.(node.key)}
+
         {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        <div className="folder-actions" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           {showAddFolder ? (
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
                 onKeyDown={e => { if (e.key === 'Enter') addCustomFolder(); if (e.key === 'Escape') { setShowAddFolder(false); setNewFolderName('') } }}
-                style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
+                style={{ fontSize: 12, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 130 }} />
               <button onClick={addCustomFolder} disabled={!newFolderName.trim()} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
               <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
             </>
           ) : (
             <>
-              {node.key.startsWith('custom-') && canManage && (
-                <>
-                  <button onClick={e => { e.stopPropagation(); setRenameNodeVal(node.label); setRenamingNode(true) }} title="Rename folder"
-                    style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    Rename
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); setConfirmDelNode(true) }} title="Delete folder"
-                    style={{ ...BtnR, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                    Delete
-                  </button>
-                </>
-              )}
-              <button onClick={zipFolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-                Zip all
-              </button>
-              {canAddFolders && (
-                <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>
-              )}
               {canManage && (
-                <label style={BtnG}>
-                  {uploading ? '...' : '+ Upload'}
+                <label className="row-upload">
+                  {uploading ? 'Uploading…' : 'Upload'}
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
                 </label>
               )}
+              <RowMenu items={[
+                { label: 'Zip this folder', onClick: zipFolder },
+                { label: 'Add subfolder', onClick: () => setShowAddFolder(true), hidden: !canAddFolders },
+                { label: 'Rename folder', onClick: () => { setRenameNodeVal(node.label); setRenamingNode(true) }, hidden: !(node.key.startsWith('custom-') && canManage) },
+                { label: 'Delete folder', onClick: () => setConfirmDelNode(true), danger: true, hidden: !(node.key.startsWith('custom-') && canManage) },
+              ]} />
               {open && depth === 0 && setViewMode && <ViewToggle viewMode={viewMode} setView={setViewMode} />}
             </>
           )}
@@ -1244,8 +1279,9 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       {open && (
         <div onDragOver={onDragOverFolder} onDragLeave={onDragLeaveFolder} onDrop={onDrop}
           style={{ outline: dragOver ? '2px dashed var(--accent)' : 'none', outlineOffset: 2, borderRadius: 4, marginLeft: isSection ? 16 : 12, paddingLeft: 10, borderLeft: `1.5px solid ${color}30`, marginBottom: isSection ? 8 : 4, paddingTop: 4, paddingBottom: 4 }}>
-          {/* Sub-folders */}
-          {node.children?.map(child => (
+          {isSection && ui.sectionPanel?.(node.key)}
+          {/* Sub-folders (empty template folders hidden unless "Show empty folders") */}
+          {node.children?.filter(child => ui.showEmpty || deepCount(fileCounts, child.key) > 0).map(child => (
             <FolderNode key={child.key} node={child} projectId={projectId} depth={depth + 1}
               fileCounts={fileCounts} canManage={canManage} canAddFolders={canAddFolders}
               customFolders={customFolders} onCustomFolderAdded={onCustomFolderAdded}
@@ -1286,7 +1322,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 
           {/* Upload area if no files */}
           {files.length === 0 && !hasChildren && canManage && (
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11, margin: '4px 0' }}>
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 12, margin: '4px 0' }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Drop files here or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} />
@@ -1294,7 +1330,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
           )}
 
           {files.length === 0 && !hasChildren && !canManage && (
-            <div style={{ fontSize: 11, color: 'var(--text3)', padding: '8px 0', fontStyle: 'italic' }}>Empty folder</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', padding: '8px 0', fontStyle: 'italic' }}>Empty folder</div>
           )}
 
 
@@ -1313,7 +1349,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setConfirmDelete(null)}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius)', padding: 24, maxWidth: 360, width: '90%' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontWeight: 600, marginBottom: 8 }}>Delete file?</div>
-            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>"{confirmDelete.file_name}" will be permanently deleted.</div>
+            <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 20 }}>"{confirmDelete.file_name}" will be permanently deleted.</div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className="btn" onClick={() => setConfirmDelete(null)}>Cancel</button>
               <button className="btn btn-danger" onClick={() => deleteFile(confirmDelete)}>Delete</button>
@@ -1328,6 +1364,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 // ── Main HSHandover component ─────────────────────────────────
 export default function HSHandover({ projectId, projectName }) {
   const { can, profile } = useAuth()
+  const ui = useContext(HandoverUiCtx)
   const [fileCounts, setFileCounts] = useState({})
   const [customFolders, setCustomFolders] = useState([])
   const [compilingFull, setCompilingFull] = useState(false)
@@ -1357,6 +1394,13 @@ export default function HSHandover({ projectId, projectName }) {
     loadCustomFolders()
   }, [projectId])
 
+  // Files filed from the drop zone above (or moved anywhere) → refresh counts
+  useEffect(() => {
+    const on = () => loadFileCounts()
+    window.addEventListener('hs-moved', on)
+    return () => window.removeEventListener('hs-moved', on)
+  }, [projectId])
+
   async function loadFileCounts() {
     const { data } = await supabase.from('hs_files').select('folder_key').eq('project_id', projectId)
     if (data) {
@@ -1378,7 +1422,7 @@ export default function HSHandover({ projectId, projectName }) {
     ;(function wk(ns){ ns.forEach(n => { templateKeys.add(n.key); wk(n.children) }) })(HS_STRUCTURE)
     const customKeys = new Set((data || []).map(f => f.folder_key))
     const orphanKeys = [...new Set((fileKeysRows || []).map(r => r.folder_key))]
-      .filter(k => k && !templateKeys.has(k) && !customKeys.has(k))
+      .filter(k => k && !k.startsWith('_') && !templateKeys.has(k) && !customKeys.has(k))   // '_inbox' = O&M builder's to-file list
     const nearestKeptAncestor = (key) => {
       const parts = key.split('-')
       for (let i = parts.length - 1; i >= 1; i--) {
@@ -1655,7 +1699,7 @@ export default function HSHandover({ projectId, projectName }) {
 
       // Add real uploaded files into their correct folders
       for (const f of (allFiles || [])) {
-        const folderPath = keyToPath[f.folder_key] || f.folder_key
+        const folderPath = f.folder_key === '_inbox' ? '00 To file' : (keyToPath[f.folder_key] || f.folder_key)
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
         if (data?.signedUrl) {
           try {
@@ -1679,24 +1723,21 @@ export default function HSHandover({ projectId, projectName }) {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+      <div className="hs-bar">
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>H&S Handover File</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{totalFiles} file{totalFiles !== 1 ? 's' : ''} · Sections 1–11</div>
+          <div className="hs-bar-t">{ui.toggleEmpty ? 'Handover file' : 'H&S Handover File'}</div>
+          <div className="hs-bar-s">{totalFiles} file{totalFiles !== 1 ? 's' : ''} · 11 sections{ui.toggleEmpty && !ui.showEmpty ? ' · empty folders hidden' : ''}</div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={zipAll} disabled={zippingAll} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-            {zippingAll ? 'Zipping...' : 'Zip all files'}
+        <div className="hs-bar-a">
+          {ui.toggleEmpty && <button className="btn btn-sm" onClick={ui.toggleEmpty}>{ui.showEmpty ? 'Hide empty folders' : 'Show all folders'}</button>}
+          <button className="btn btn-sm" onClick={zipAll} disabled={zippingAll}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {zippingAll ? 'Zipping…' : 'Download as folders (.zip)'}
           </button>
-          <button onClick={compileOmManuals} disabled={compilingOm} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid #534AB7', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#534AB7', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            {compilingOm ? 'Compiling...' : 'Export Section 8 O&M PDF'}
-          </button>
-          <button onClick={compileFullHandover} disabled={compilingFull} style={{ fontSize: 12, padding: '7px 14px', borderRadius: 'var(--radius)', background: '#448a40', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            {compilingFull ? 'Compiling...' : 'Compile Full H&S Handover PDF'}
-          </button>
+          <RowMenu title="More downloads" items={[
+            { label: compilingFull ? 'Compiling…' : 'Compile full H&S File as one PDF', onClick: compileFullHandover },
+            { label: compilingOm ? 'Compiling…' : 'Compile Section 8 (O&M manuals) as one PDF', onClick: compileOmManuals },
+          ]} />
         </div>
       </div>
 
@@ -1730,9 +1771,9 @@ export default function HSHandover({ projectId, projectName }) {
       </div>
 
       {/* Note */}
-      <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 11, color: 'var(--text3)' }}>
+      {!ui.toggleEmpty && <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 12, color: 'var(--text3)' }}>
         Template structure fixed — add sub-folders within sections as needed per project. Drag files onto any folder to move them; drag your own sub-folders to re-file them (selected files move together). Only PDFs are embedded in compiled exports; other file types appear in the appendix index.
-      </div>
+      </div>}
 
       {/* Preview modal */}
       {previewFile && (
@@ -1742,10 +1783,10 @@ export default function HSHandover({ projectId, projectName }) {
               onDownload={previewUrl ? () => triggerDownload(previewUrl, previewFile.file_name) : null} />
           : <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => setPreviewFile(null)}>
           <div style={{ position: 'absolute', top: 16, right: 16, display: 'flex', gap: 8 }}>
-            {previewUrl && <button onClick={e => { e.stopPropagation(); triggerDownload(previewUrl, previewFile.file_name) }} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
-            <button onClick={() => setPreviewFile(null)} style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
+            {previewUrl && <button onClick={e => { e.stopPropagation(); triggerDownload(previewUrl, previewFile.file_name) }} style={{ fontSize: 13, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>↓ Download</button>}
+            <button onClick={() => setPreviewFile(null)} style={{ fontSize: 13, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>✕ Close</button>
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 12 }}>{previewFile.file_name}</div>
+          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginBottom: 12 }}>{previewFile.file_name}</div>
           {previewUrl ? (
             /\.(jpg|jpeg|png|gif|webp)$/i.test(previewFile.file_name)
               ? <img src={previewUrl} alt={previewFile.file_name} style={{ maxWidth: '90vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 'var(--radius)' }} onClick={e => e.stopPropagation()} />
@@ -1753,7 +1794,7 @@ export default function HSHandover({ projectId, projectName }) {
               ? <iframe src={previewUrl} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 'var(--radius)' }} title={previewFile.file_name} onClick={e => e.stopPropagation()} />
               : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 'var(--radius)', background: '#fff' }} title={previewFile.file_name} onClick={e => e.stopPropagation()} />
           ) : (
-            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13 }}>Loading preview...</div>
+            <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>Loading preview...</div>
           )}
         </div>
       )}

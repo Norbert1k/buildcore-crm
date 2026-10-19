@@ -48,7 +48,7 @@ const REV_PATTERNS = [
   /[\s([_-]((?:P|T|C)\d{1,3})[\])]?\s*$/i,
   /[\s([_-]((?:P|T|C)\d{2})(?=[\s._-])/i,
 ]
-function parseRevision(name) {
+export function parseRevision(name) {
   const base = stripExt(name)
   for (const re of REV_PATTERNS) {
     const m = base.match(re)
@@ -56,7 +56,7 @@ function parseRevision(name) {
   }
   return { rev: null, base }
 }
-function parseDrawing(name) {
+export function parseDrawing(name) {
   const { rev, base } = parseRevision(name)
   const tokens = (base.match(/[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)+/g) || [])
     .filter(t => /\d/.test(t) && t.replace(/[^A-Za-z0-9]/g, '').length >= 5)
@@ -70,7 +70,7 @@ function revParts(r) {
   m = s.match(/^(\d+)$/); if (m) return { kind: 'number', rank: 0, n: Number(m[1]) }
   return null
 }
-function compareRev(a, b) {
+export function compareRev(a, b) {
   if (!a || !b) return null
   if (a.toUpperCase() === b.toUpperCase()) return 0
   const pa = revParts(a), pb = revParts(b)
@@ -78,7 +78,7 @@ function compareRev(a, b) {
   if (pa.rank !== pb.rank) return pa.rank > pb.rank ? 1 : -1
   return pa.n === pb.n ? 0 : pa.n > pb.n ? 1 : -1
 }
-function buildInventory(names) {
+export function buildInventory(names) {
   const byKey = new Map()   // drawing number → newest revision in Design
   for (const n of names) {
     const p = parseDrawing(n)
@@ -88,7 +88,7 @@ function buildInventory(names) {
   }
   return { stems: new Set(names.map(stem)), loose: new Set(names.map(loose)), byKey }
 }
-function designStatus(inv, name) {
+export function designStatus(inv, name) {
   if (!inv) return null
   const p = parseDrawing(name)
   if (p.byNumber && inv.byKey.has(p.key)) {
@@ -276,10 +276,10 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', cursor: linked && isDesignSource ? 'pointer' : 'default' }}
         onClick={() => linked && isDesignSource && setArchiveOpen(o => !o)}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 600, fontSize: 13 }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>
             {!linked ? 'Drawings & surveys (CRM)' : isDesignSource ? 'Archive — CRM drawings' : 'CRM drawings — not yet moved to the Design portal'}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
             {crmLoading ? 'Loading…' : inventory
               ? `${notInDesign.length} still to move · ${doneCount} already in Design${hideDone ? ' (hidden)' : ''}`
               : `${fileCount} file${fileCount === 1 ? '' : 's'} in Project Information › Drawings / Surveys & Reports`}
@@ -304,11 +304,11 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
         <button className="btn btn-sm" onClick={e => { e.stopPropagation(); onOpenDocuments?.() }}>Open in Documents</button>
         {linked && isDesignSource && <span style={{ color: 'var(--text3)' }}>{archiveOpen ? '▴' : '▾'}</span>}
       </div>
-      {sendMsg && <div style={{ padding: '0 14px 8px', fontSize: 12, color: 'var(--text2)' }}>{sendMsg}</div>}
+      {sendMsg && <div style={{ padding: '0 14px 8px', fontSize: 13, color: 'var(--text2)' }}>{sendMsg}</div>}
       {(!linked || !isDesignSource || archiveOpen) && !crmLoading && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '6px 14px 12px' }}>
-          {groups.length === 0 && <div style={{ fontSize: 12, color: 'var(--text3)', padding: '8px 0' }}>No drawings or surveys stored in the CRM for this project.</div>}
-          {groups.length > 0 && shownGroups.length === 0 && <div style={{ fontSize: 12, color: 'var(--green)', padding: '8px 0' }}>Everything here is already in the Design portal.</div>}
+          {groups.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>No drawings or surveys stored in the CRM for this project.</div>}
+          {groups.length > 0 && shownGroups.length === 0 && <div style={{ fontSize: 13, color: 'var(--green)', padding: '8px 0' }}>Everything here is already in the Design portal.</div>}
           {shownGroups.map(g => (
             <div key={g.path} style={{ marginTop: 6 }}>
               {(() => {
@@ -318,11 +318,11 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
                 return (
                   <div onClick={() => setOpenGroups(prev => { const n = new Set(prev); n.has(g.path) ? n.delete(g.path) : n.add(g.path); return n })}
                     style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
-                    <span style={{ width: 12, color: 'var(--text3)', fontSize: 11 }}>{isOpen ? '▾' : '▸'}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.path}>{g.path} · {g.shown.length}</span>
+                    <span style={{ width: 12, color: 'var(--text3)', fontSize: 12 }}>{isOpen ? '▾' : '▸'}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.04em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={g.path}>{g.path} · {g.shown.length}</span>
                     {inventory && (missing.length
-                      ? <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }}>{missing.length} not in Design</span>
-                      : <span className="pill pill-green" style={{ fontSize: 10, flexShrink: 0 }}>All in Design</span>)}
+                      ? <span className="pill pill-amber" style={{ fontSize: 11, flexShrink: 0 }}>{missing.length} not in Design</span>
+                      : <span className="pill pill-green" style={{ fontSize: 11, flexShrink: 0 }}>All in Design</span>)}
                     {canSend && missing.length > 0 && (
                       <button className="btn btn-sm" style={{ flexShrink: 0 }} onClick={e => { e.stopPropagation(); setPicked(prev => { const n = new Set(prev); missing.forEach(f => allPicked ? n.delete(f.id) : n.add(f.id)); return n }) }}>{allPicked ? 'Unselect' : 'Select'} {missing.length}</button>
                     )}
@@ -330,19 +330,19 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
                 )
               })()}
               {openGroups.has(g.path) && g.shown.map(f => (
-                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: '1px solid var(--border)', fontSize: 12.5 }}>
+                <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: '1px solid var(--border)', fontSize: 13.5 }}>
                   {canSend && <input type="checkbox" checked={picked.has(f.id)} onChange={() => togglePick(f.id)} />}
                   <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</span>
                   {inventory && (() => {
                     const st = designStatus(inventory, f.file_name)
-                    if (st.status === 'in') return <span className="pill pill-green" style={{ fontSize: 10, flexShrink: 0 }}>In Design</span>
-                    if (st.status === 'newer') return <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }} title="This CRM copy is a later revision than the Design portal's">Newer than Design (Rev {st.designRev})</span>
-                    if (st.status === 'check') return <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }} title="Same drawing number, revisions can't be compared">Check revision · Design Rev {st.designRev}</span>
-                    return <span className="pill pill-amber" style={{ fontSize: 10, flexShrink: 0 }}>Not in Design</span>
+                    if (st.status === 'in') return <span className="pill pill-green" style={{ fontSize: 11, flexShrink: 0 }}>In Design</span>
+                    if (st.status === 'newer') return <span className="pill pill-amber" style={{ fontSize: 11, flexShrink: 0 }} title="This CRM copy is a later revision than the Design portal's">Newer than Design (Rev {st.designRev})</span>
+                    if (st.status === 'check') return <span className="pill pill-amber" style={{ fontSize: 11, flexShrink: 0 }} title="Same drawing number, revisions can't be compared">Check revision · Design Rev {st.designRev}</span>
+                    return <span className="pill pill-amber" style={{ fontSize: 11, flexShrink: 0 }}>Not in Design</span>
                   })()}
-                  <span style={{ fontSize: 11, color: 'var(--text3)', flexShrink: 0 }}>{fmtSize(f.file_size)}</span>
-                  <a onClick={() => openCrmFile(f, false)} style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: 12, flexShrink: 0 }}>View</a>
-                  <a onClick={() => openCrmFile(f, true)} style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: 12, flexShrink: 0 }}>Download</a>
+                  <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>{fmtSize(f.file_size)}</span>
+                  <a onClick={() => openCrmFile(f, false)} style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: 13, flexShrink: 0 }}>View</a>
+                  <a onClick={() => openCrmFile(f, true)} style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: 13, flexShrink: 0 }}>Download</a>
                 </div>
               ))}
             </div>
@@ -356,15 +356,15 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
     <div>
       {/* ── Link header ── */}
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', flexWrap: 'wrap' }}>
-        <span style={{ width: 26, height: 26, borderRadius: 'var(--radius)', background: '#428B40', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13 }}>D</span>
+        <span style={{ width: 26, height: 26, borderRadius: 'var(--radius)', background: '#428B40', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>D</span>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ fontWeight: 600, fontSize: 13 }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>
             {link === null ? 'Checking the Design portal…'
               : linked ? <>Linked to Design · {link.project?.name} <span style={{ color: 'var(--text3)', fontWeight: 400 }}>({link.project?.code})</span></>
               : link.error ? 'Design portal unavailable right now'
               : 'No Design portal project found'}
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)' }}>
             {linked ? 'Live from design.cltd.co.uk · uploads here go straight into the Design portal'
               : link && !link.error ? `Looked for code “${proj?.design_code || proj?.project_ref || '—'}” — showing CRM drawings only`
               : ''}
@@ -372,7 +372,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
         </div>
         {linked && canManage && (
           <select value={proj?.drawings_source || 'migrating'} disabled={saving} onChange={e => setSource(e.target.value)}
-            style={{ width: 'auto', padding: '5px 8px', fontSize: 12 }} title="Where this job's drawings live">
+            style={{ width: 'auto', padding: '5px 8px', fontSize: 13 }} title="Where this job's drawings live">
             <option value="migrating">Drawings source: migrating (both)</option>
             <option value="design">Drawings source: Design portal</option>
           </select>
@@ -383,11 +383,11 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
 
       {showLinkSettings && canManage && (
         <div className="card" style={{ marginTop: 8, padding: '10px 14px', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: 'var(--text2)' }}>Design portal code</span>
+          <span style={{ fontSize: 13, color: 'var(--text2)' }}>Design portal code</span>
           <input value={codeDraft} onChange={e => setCodeDraft(e.target.value)} placeholder={proj?.project_ref || 'e.g. 2026-002'}
-            style={{ width: 180, padding: '6px 10px', fontSize: 12 }} />
+            style={{ width: 180, padding: '6px 10px', fontSize: 13 }} />
           <button className="btn btn-sm btn-primary" disabled={saving} onClick={saveCode}>Save</button>
-          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Leave blank to match by project reference ({proj?.project_ref || '—'}).</span>
+          <span style={{ fontSize: 12, color: 'var(--text3)' }}>Leave blank to match by project reference ({proj?.project_ref || '—'}).</span>
         </div>
       )}
 
@@ -398,7 +398,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
             <iframe ref={iframeRef} title="Design portal drawings" src={embed.url}
               style={{ width: '100%', height: 'calc(100vh - 230px)', minHeight: 640, border: 'none', display: 'block' }} />
           ) : (
-            <div style={{ padding: 24, fontSize: 13, color: 'var(--text2)', textAlign: 'center' }}>
+            <div style={{ padding: 24, fontSize: 14, color: 'var(--text2)', textAlign: 'center' }}>
               {embed.state === 'loading' && 'Opening the Design portal…'}
               {embed.state === 'no_account' && 'You don’t have a Design portal account yet. Ask a CCG admin to invite you in the Design portal — the CRM drawings below are still available.'}
               {embed.state === 'no_access' && 'Your Design portal account isn’t a member of this project. Ask a CCG admin to add you there.'}

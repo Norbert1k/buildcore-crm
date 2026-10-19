@@ -113,7 +113,7 @@ export default function ProjectCalendar() {
           </button>
           <div>
             <h2 style={{ fontSize: 18, fontWeight: 600 }}>Project Calendar</h2>
-            <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{projects.length} projects · showing {visible.length}</p>
+            <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>{projects.length} projects · showing {visible.length}</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -121,7 +121,7 @@ export default function ProjectCalendar() {
           {['all', 'active', 'tender', 'on_hold', 'completed'].map(s => (
             <button key={s} onClick={() => setFilterStatus(s)}
               className={`btn btn-sm ${filterStatus === s ? 'btn-primary' : ''}`}
-              style={{ fontSize: 11 }}>
+              style={{ fontSize: 12 }}>
               {s === 'all' ? 'All' : STATUS_COLORS[s]?.label}
             </button>
           ))}
@@ -131,12 +131,12 @@ export default function ProjectCalendar() {
       {/* Legend */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         {Object.entries(STATUS_COLORS).map(([k, v]) => (
-          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text2)' }}>
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'var(--text2)' }}>
             <div style={{ width: 12, height: 12, borderRadius: 3, background: v.bar }} />
             {v.label}
           </div>
         ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: 'var(--text2)' }}>
           <div style={{ width: 2, height: 14, background: '#E24B4A', borderRadius: 1 }} />
           Today
         </div>
@@ -146,14 +146,14 @@ export default function ProjectCalendar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <button className="btn btn-sm" onClick={() => setViewStart(v => addMonths(v, -6))}>← 6 months</button>
         <button className="btn btn-sm" onClick={() => setViewStart(startOfMonth(addMonths(new Date(), -2)))}>Today</button>
-        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', minWidth: 180, textAlign: 'center' }}>{rangeLabel}</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', minWidth: 180, textAlign: 'center' }}>{rangeLabel}</span>
         <button className="btn btn-sm" onClick={() => setViewStart(v => addMonths(v, 6))}>6 months →</button>
       </div>
 
       {/* Gantt chart */}
       <div className="card" style={{ overflow: 'hidden', marginBottom: 16 }}>
         {visible.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
             No projects with dates found in this period
           </div>
         ) : (
@@ -177,7 +177,7 @@ export default function ProjectCalendar() {
 
       {/* Workload chart */}
       <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
           Monthly workload — active &amp; tender projects
         </div>
         <WorkloadChart monthlyLoad={monthlyLoad} maxCount={maxCount} monthsShown={monthsShown} canViewValue={can('view_project_value')} />
@@ -188,7 +188,7 @@ export default function ProjectCalendar() {
         <div style={{
           position: 'fixed', left: tooltip.x + 12, top: tooltip.y - 10,
           background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 12,
+          borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13,
           zIndex: 1000, pointerEvents: 'none', maxWidth: 260,
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
         }}>
@@ -200,7 +200,7 @@ export default function ProjectCalendar() {
             {new Date(tooltip.end).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
           </div>
           {tooltip.value && can('view_project_value') && <div style={{ color: 'var(--green)', fontWeight: 600 }}>{formatCurrency(tooltip.value)}</div>}
-          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text3)' }}>Click to open project →</div>
+          <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text3)' }}>Click to open project →</div>
         </div>
       )}
     </div>
@@ -246,7 +246,7 @@ function GanttChart({ projects, viewStart, viewEnd, totalDays, monthsShown, toda
       {/* Label column */}
       <div style={{ width: labelWidth, flexShrink: 0, borderRight: '1px solid var(--border)' }}>
         <div style={{ height: 36, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 14px' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)' }}>PROJECT</span>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text3)' }}>PROJECT</span>
         </div>
         {projects.map(p => (
           <div key={p.id}
@@ -260,8 +260,8 @@ function GanttChart({ projects, viewStart, viewEnd, totalDays, monthsShown, toda
             onMouseEnter={() => setHoveredId(p.id)}
             onMouseLeave={() => setHoveredId(null)}>
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>{p.project_name}</div>
-              <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{p.client_name || p.project_ref || ''}</div>
+              <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text)' }}>{p.project_name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{p.client_name || p.project_ref || ''}</div>
             </div>
           </div>
         ))}
@@ -275,7 +275,7 @@ function GanttChart({ projects, viewStart, viewEnd, totalDays, monthsShown, toda
             <div key={i} style={{
               position: 'absolute', left: m.left, width: m.width,
               height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 500, color: 'var(--text3)',
+              fontSize: 12, fontWeight: 500, color: 'var(--text3)',
               borderRight: '1px solid var(--border)'
             }}>
               {m.width > 30 ? m.date.toLocaleDateString('en-GB', { month: 'short', year: m.date.getMonth() === 0 ? 'numeric' : undefined }) : ''}
@@ -322,7 +322,7 @@ function GanttChart({ projects, viewStart, viewEnd, totalDays, monthsShown, toda
                   position: 'absolute', left, top: 8, width: barW, height: 28,
                   background: color, borderRadius: truncated ? '0 4px 4px 0' : truncatedEnd ? '4px 0 0 4px' : 4,
                   display: 'flex', alignItems: 'center', padding: '0 8px',
-                  fontSize: 11, fontWeight: 500, color: '#fff',
+                  fontSize: 12, fontWeight: 500, color: '#fff',
                   cursor: 'pointer', zIndex: 2,
                   opacity: hoveredId === p.id ? 1 : 0.85,
                   transition: 'opacity 0.1s',
@@ -371,7 +371,7 @@ function WorkloadChart({ monthlyLoad, maxCount, monthsShown, canViewValue }) {
             <div key={i} style={{ width: colW, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: 60 }}
               title={`${m.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}: ${m.count} project${m.count !== 1 ? 's' : ''}${m.value && canViewValue ? ' · ' + formatCurrency(m.value) : ''}`}>
               {m.count > 0 && (
-                <div style={{ fontSize: 9, fontWeight: 700, color: barColor, marginBottom: 2 }}>{m.count}</div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: barColor, marginBottom: 2 }}>{m.count}</div>
               )}
               <div style={{
                 width: Math.max(colW - 4, 4), height: h,
@@ -389,19 +389,19 @@ function WorkloadChart({ monthlyLoad, maxCount, monthsShown, canViewValue }) {
           const isCurrentMonth = today.getMonth() === m.date.getMonth() && today.getFullYear() === m.date.getFullYear()
           return (
             <div key={i} style={{
-              width: colW, flexShrink: 0, fontSize: 9, textAlign: 'center',
+              width: colW, flexShrink: 0, fontSize: 10, textAlign: 'center',
               color: isCurrentMonth ? 'var(--green)' : 'var(--text3)',
               fontWeight: isCurrentMonth ? 700 : 400
             }}>
               {m.date.toLocaleDateString('en-GB', { month: 'short' })}
               {m.date.getMonth() === 0 && (
-                <div style={{ fontSize: 8, color: 'var(--text3)' }}>{m.date.getFullYear()}</div>
+                <div style={{ fontSize: 9, color: 'var(--text3)' }}>{m.date.getFullYear()}</div>
               )}
             </div>
           )
         })}
       </div>
-      <div style={{ display: 'flex', gap: 12, marginTop: 10, fontSize: 11, color: 'var(--text3)' }}>
+      <div style={{ display: 'flex', gap: 12, marginTop: 10, fontSize: 12, color: 'var(--text3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, borderRadius: 2, background: '#448a40' }} /> 1–2 projects</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, borderRadius: 2, background: '#BA7517' }} /> 3–4 projects</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{ width: 10, height: 10, borderRadius: 2, background: '#E24B4A' }} /> 5+ projects</div>

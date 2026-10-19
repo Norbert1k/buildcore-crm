@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatCurrency } from '../lib/utils'
-import { Pill, Spinner, EmptyState } from '../components/ui'
+import { formatCurrency, sortBy } from '../lib/utils'
+import { Pill, Spinner, EmptyState, Modal, Field, IconPlus } from '../components/ui'
+import { useAuth } from '../lib/auth'
 import QuoteDetailDrawer from '../components/QuoteDetailDrawer'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,13 +37,76 @@ function deriveTaskStatus(quotes) {
   return 'closed'
 }
 
+// With the Task Tracker gone, quote requests start here. Same records as
+// before (tasks + task_assignees + task_activity); quotes are then added on
+// the request's page exactly as they were.
+function NewQuoteRequest({ open, onClose }) {
+  const { profile, division, canAccessProject } = useAuth()
+  const navigate = useNavigate()
+  const [projects, setProjects] = useState([])
+  const [form, setForm] = useState({ project_id: '', title: '', description: '', priority: 'medium' })
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    supabase.from('projects').select('id, project_name, project_ref').eq('division', division)
+      .then(({ data }) => setProjects(sortBy((data || []).filter(p => canAccessProject(p.id)), 'project_ref').reverse()))
+  }, [open, division])
+  async function create() {
+    if (!form.project_id || !form.title.trim()) return
+    setSaving(true)
+    try {
+      const { data: task, error } = await supabase.from('tasks').insert({
+        project_id: form.project_id, title: form.title.trim(), description: form.description.trim() || null,
+        priority: form.priority, status: 'active', created_by: profile?.id,
+      }).select().single()
+      if (error) throw error
+      if (profile?.id) await supabase.from('task_assignees').insert({ task_id: task.id, user_id: profile.id })
+      await supabase.from('task_activity').insert({ task_id: task.id, actor_id: profile?.id, action: 'created', details: { title: form.title.trim(), priority: form.priority } })
+      onClose()
+      navigate(`/tasks/${task.id}`)
+    } catch (e) { alert('Could not create: ' + e.message) }
+    setSaving(false)
+  }
+  return (
+    <Modal open={open} onClose={() => !saving && onClose()} title="New quote request" size="sm"
+      footer={<>
+        <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary" onClick={create} disabled={saving || !form.title.trim() || !form.project_id}>{saving ? 'Creating…' : 'Create and add quotes'}</button>
+      </>}>
+      <div className="form-grid">
+        <div className="full"><Field label="Project *">
+          <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
+            <option value="">Select a project…</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.project_ref ? `${p.project_ref} · ` : ''}{p.project_name}</option>)}
+          </select>
+        </Field></div>
+        <div className="full"><Field label="What is being quoted *">
+          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Roofing package — Block B" autoFocus />
+        </Field></div>
+        <div className="full"><Field label="Notes">
+          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Scope, drawings, deadline…" style={{ minHeight: 70 }} />
+        </Field></div>
+        <Field label="Priority">
+          <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
+            <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+          </select>
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
 export default function Quotes() {
+  const [showNew, setShowNew] = useState(false)
+  const { can } = useAuth()
   const [rows, setRows] = useState([])           // raw quote rows from view
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [drawerTaskId, setDrawerTaskId] = useState(null)
+  const [awaiting, setAwaiting] = useState([])   // open requests with no quotes yet
+  const navigate = useNavigate()
 
   useEffect(() => { load() }, [])
 
@@ -58,6 +123,13 @@ export default function Quotes() {
       return
     }
     setRows(data || [])
+    const withQuotes = new Set((data || []).map(r => r.task_id))
+    const [{ data: open }, { data: projs }] = await Promise.all([
+      supabase.from('tasks').select('id, title, project_id, created_at').eq('status', 'active').order('created_at', { ascending: false }).limit(200),
+      supabase.from('projects').select('id, project_name, project_ref'),
+    ])
+    const pmap = Object.fromEntries((projs || []).map(p => [p.id, p]))
+    setAwaiting((open || []).filter(t => !withQuotes.has(t.id)).map(t => ({ ...t, projects: pmap[t.project_id] })))
     setLoading(false)
   }
 
@@ -170,11 +242,24 @@ export default function Quotes() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 600 }}>Quotes</h2>
-          <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>
+          <p style={{ color: 'var(--text2)', fontSize: 14, marginTop: 2 }}>
             {taskGroups.length} task{taskGroups.length === 1 ? '' : 's'} with quotes · {rows.length} quote{rows.length === 1 ? '' : 's'} total
           </p>
         </div>
+        {can('manage_projects') && <button className="btn btn-primary" onClick={() => setShowNew(true)}><IconPlus size={13} /> New quote request</button>}
       </div>
+      <NewQuoteRequest open={showNew} onClose={() => setShowNew(false)} />
+      {awaiting.length > 0 && (
+        <div className="card" style={{ padding: '10px 14px', marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text2)', marginBottom: 6 }}>Awaiting quotes · {awaiting.length}</div>
+          {awaiting.slice(0, 8).map(t => (
+            <div key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ display: 'flex', gap: 10, padding: '6px 0', borderTop: '1px solid var(--border)', cursor: 'pointer', fontSize: 14 }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+              <span style={{ color: 'var(--text3)', fontSize: 13 }}>{t.projects?.project_ref ? `${t.projects.project_ref} · ` : ''}{t.projects?.project_name || ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Projects breakdown — replaces the 4 summary cards.
           Click a project row to filter the task list below.
@@ -187,9 +272,9 @@ export default function Quotes() {
           marginBottom: 20,
           overflow: 'hidden',
         }}>
-          <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ color: 'var(--text3)', textAlign: 'left', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              <tr style={{ color: 'var(--text3)', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                 <th style={{ padding: '10px 16px', fontWeight: 600 }}>Project</th>
                 <th style={{ padding: '10px', fontWeight: 600, textAlign: 'right' }}>Pending</th>
                 <th style={{ padding: '10px', fontWeight: 600, textAlign: 'right' }}>Decided</th>
@@ -211,7 +296,7 @@ export default function Quotes() {
                     <td style={{ padding: '10px 16px' }}>
                       <span style={{ display: 'inline-block', width: 3, height: 16, background: r.color, verticalAlign: 'middle', marginRight: 8 }} />
                       <span style={{ fontWeight: isActive ? 600 : 400 }}>{r.project_name}</span>
-                      {r.project_ref && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text3)' }}>{r.project_ref}</span>}
+                      {r.project_ref && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text3)' }}>{r.project_ref}</span>}
                     </td>
                     <td style={{ padding: '10px', textAlign: 'right', color: r.pending > 0 ? '#BA7517' : 'var(--text3)', fontWeight: r.pending > 0 ? 600 : 400, fontVariantNumeric: 'tabular-nums' }}>
                       {r.pending}
@@ -236,7 +321,7 @@ export default function Quotes() {
                     background: 'rgba(0,0,0,0.02)',
                     cursor: 'pointer',
                   }}>
-                  <td style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--text2)', fontSize: 11 }}>Total</td>
+                  <td style={{ padding: '10px 16px', fontWeight: 600, color: 'var(--text2)', fontSize: 12 }}>Total</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{projectStats.totals.pending}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{projectStats.totals.decided}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(projectStats.totals.committedSum)}</td>
@@ -251,7 +336,7 @@ export default function Quotes() {
       {/* Filters */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', fontSize: 13 }}>🔍</span>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)', fontSize: 14 }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search task, project, vendor..." style={{ paddingLeft: 30, width: 280 }} />
         </div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ width: 'auto', minWidth: 130 }}>
@@ -261,13 +346,13 @@ export default function Quotes() {
           <option value="closed">Closed</option>
         </select>
         {projectFilter !== 'all' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text2)' }}>
             <span>Filtered to {projectStats.rows.find(r => r.project_id === projectFilter)?.project_name || 'project'}</span>
             <button
               type="button"
               onClick={() => setProjectFilter('all')}
               className="btn btn-sm"
-              style={{ padding: '2px 8px', fontSize: 11 }}>
+              style={{ padding: '2px 8px', fontSize: 12 }}>
               Clear
             </button>
           </div>
@@ -285,9 +370,9 @@ export default function Quotes() {
         />
       ) : (
         <div className="table-wrap">
-          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', fontSize: 14, borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              <tr style={{ background: 'var(--surface2)', color: 'var(--text2)', textAlign: 'left', fontSize: 12, textTransform: 'uppercase', letterSpacing: '.04em' }}>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Project / Task</th>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Quotes</th>
                 <th style={{ padding: '10px 12px', fontWeight: 600 }}>Status</th>
@@ -304,7 +389,7 @@ export default function Quotes() {
                     onClick={() => setDrawerTaskId(g.task_id)}
                     style={{ cursor: 'pointer', borderTop: '1px solid var(--border)' }}>
                     <td style={{ padding: '10px 12px' }}>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>
                         {g.project_ref ? `${g.project_ref} · ` : ''}{g.project_name || '—'}
                       </div>
                       <div style={{ fontWeight: 500 }}>{g.task_title || '(no title)'}</div>
@@ -321,13 +406,13 @@ export default function Quotes() {
                           {accepted.amount != null
                             ? `£${Number(accepted.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : '—'}
-                          <div style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 400 }}>{accepted.vendor_name || accepted.vendor_name_text}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 400 }}>{accepted.vendor_name || accepted.vendor_name_text}</div>
                         </span>
                       ) : (
                         <span style={{ color: 'var(--text3)' }}>{status === 'pending' ? 'awaiting' : '—'}</span>
                       )}
                     </td>
-                    <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 12 }}>
+                    <td style={{ padding: '10px 12px', color: 'var(--text2)', fontSize: 13 }}>
                       {g.latest_received
                         ? new Date(g.latest_received).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                         : <span style={{ color: 'var(--text3)' }}>—</span>}

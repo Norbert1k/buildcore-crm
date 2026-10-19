@@ -27,7 +27,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     project_manager_id: project?.project_manager_id || '',
     value: project?.value || '',
     description: project?.description || '',
-    // Admin-only retention fallback. Stored as decimal in DB (0.03 = 3%),
+    // Retention fallback — admins and project managers. Stored as decimal in DB (0.03 = 3%),
     // edited here as percent string (3 / 5 / 5.5) for usability.
     retention_pct_override: project?.retention_pct_override != null
       ? String(project.retention_pct_override * 100)
@@ -168,7 +168,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
       }
     >
       {errors._global && (
-        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 13, marginBottom: 14 }}>
+        <div style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '8px 12px', fontSize: 14, marginBottom: 14 }}>
           {errors._global}
         </div>
       )}
@@ -185,7 +185,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, color: form.project_ref ? 'var(--text)' : 'var(--text3)', cursor: 'default' }}>
               <span style={{ flex: 1, fontWeight: 600 }}>{form.project_ref || 'Will be assigned on save'}</span>
-              <span style={{ fontSize: 13, opacity: .5 }}>🔒</span>
+              <span style={{ fontSize: 14, opacity: .5 }}>🔒</span>
             </div>
           )}
         </Field>
@@ -221,13 +221,13 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <Field label="Contract Value (£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
-        {profile?.role === 'admin' && (
-          <Field label="Retention fallback (%) — admin only">
+        {['admin', 'project_manager', 'operations_manager', 'project_director'].includes(profile?.role) && (
+          <Field label="Retention (%)">
             <input type="number" value={form.retention_pct_override}
               onChange={e => set('retention_pct_override', e.target.value)}
               placeholder="leave blank if PAs are readable"
               min="0" max="100" step="0.1" />
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
               Used only when a PA file's LESS RETENTION row can't be parsed.
               When the PA file is readable, its rate is used regardless of this value.
             </div>

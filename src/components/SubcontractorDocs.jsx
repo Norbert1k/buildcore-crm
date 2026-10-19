@@ -6,6 +6,18 @@ import UploadProgress from './UploadProgress'
 import GeneratePOModal from './GeneratePOModal'
 import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
+// Browsers return at most 100 entries per readEntries() call — keep reading
+// until the folder is drained so large dropped folders upload completely.
+async function readAllEntries(reader) {
+  const all = []
+  for (;;) {
+    const batch = await new Promise(res => reader.readEntries(res, () => res([])))
+    if (!batch.length) return all
+    all.push(...batch)
+  }
+}
+
+
 const SUB_DOC_FOLDERS = [
   { key: 'purchase-order',       label: '01. Purchase Order',             color: '#185FA5', bg: '#E6F1FB' },
   { key: 'payment-applications', label: '02. Payment Applications',      color: '#854F0B', bg: '#FAEEDA' },
@@ -42,15 +54,15 @@ async function readDropEntries(e) {
   const result = { files: [], folders: new Set() }
   async function walk(entry, path) {
     if (entry.isFile) { const file = await new Promise(r => entry.file(r)); result.files.push({ file, path }); if (path) result.folders.add(path) }
-    else if (entry.isDirectory) { const dirPath = path ? path + '/' + entry.name : entry.name; result.folders.add(dirPath); const reader = entry.createReader(); const children = await new Promise(r => reader.readEntries(r)); for (const child of children) await walk(child, dirPath) }
+    else if (entry.isDirectory) { const dirPath = path ? path + '/' + entry.name : entry.name; result.folders.add(dirPath); const reader = entry.createReader(); const children = await readAllEntries(reader); for (const child of children) await walk(child, dirPath) }
   }
   for (const entry of entries) await walk(entry, '')
   return { files: result.files, folders: [...result.folders] }
 }
 
-const Btn  = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnG = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
-const BtnR = { fontSize: 11, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
+const Btn  = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnG = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid #448a40', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#448a40', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
+const BtnR = { fontSize: 12, lineHeight: '24px', padding: '0 9px', margin: 0, border: '0.5px solid var(--red-border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red)', display: 'inline-block', whiteSpace: 'nowrap', flexShrink: 0 }
 const PENCIL = <svg width="11" height="11" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="2" width="4" height="16" rx="1" fill="#e53935"/><rect x="10" y="7" width="4" height="4" fill="#FDD835"/><polygon points="10,18 14,18 12,23" fill="#fff"/><rect x="10" y="2" width="4" height="2.5" rx="0.5" fill="#555"/></svg>
 const BIN = <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#e53935" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
 
@@ -67,7 +79,7 @@ function ConfirmDlg({ message, onOk, onCancel }) {
     </div>
   )
 }
-function CountBadge({ count }) { if (!count) return null; return <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: 'var(--radius)', fontWeight: 500, background: 'var(--accent)', color: '#fff', minWidth: 18, textAlign: 'center', display: 'inline-block' }}>{count}</span> }
+function CountBadge({ count }) { if (!count) return null; return <span style={{ fontSize: 11, padding: '1px 7px', borderRadius: 'var(--radius)', fontWeight: 500, background: 'var(--accent)', color: '#fff', minWidth: 18, textAlign: 'center', display: 'inline-block' }}>{count}</span> }
 function ViewToggle({ viewMode, setView }) {
   const modes = [
     { mode: 'grid', icon: <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg> },
@@ -78,7 +90,7 @@ function ViewToggle({ viewMode, setView }) {
 }
 function BulkBar({ selected, onZip, onClear }) {
   if (selected.size === 0) return null
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', marginBottom: 8, background: 'var(--accent-light, var(--surface2))', borderRadius: 'var(--radius)', fontSize: 11, border: '0.5px solid var(--accent)' }}>
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', marginBottom: 8, background: 'var(--accent-light, var(--surface2))', borderRadius: 'var(--radius)', fontSize: 12, border: '0.5px solid var(--accent)' }}>
     <span style={{ fontWeight: 600, color: 'var(--accent)' }}>{selected.size} selected</span>
     <button onClick={onZip} style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 3 }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>Zip selected</button>
     <button onClick={onClear} style={Btn}>Clear</button>
@@ -118,7 +130,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
           {isImage && url ? <img src={url} alt={file.file_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             : isPdf && url ? <iframe src={url + '#page=1&toolbar=0&navpanes=0&scrollbar=0'} style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} title={file.file_name} />
             : <FileTypeBadge fileName={file.file_name} size={34} />}
-          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 9, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(file.file_name)}</div>
+          <div style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.55)', color: 'white', fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 3 }}>{fileExt(file.file_name)}</div>
         </div>
         {/* Info + buttons */}
         <div style={{ padding: '6px 8px' }}>
@@ -127,20 +139,20 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect }) 
               ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }}
                   onClick={e => e.stopPropagation()}
-                  style={{ flex: 1, fontSize: 11, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
+                  style={{ flex: 1, fontSize: 12, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
               : <>
-                  <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
+                  <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
                   {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename"
                     style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}>
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                   </button>}
                 </>}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 5 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
           <div style={{ display: 'flex', gap: 4 }}>
-            {url && <button onClick={e => { e.stopPropagation(); onPreview(file, url) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-            {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 10, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+            {url && <button onClick={e => { e.stopPropagation(); onPreview(file, url) }} style={{ flex: 1, fontSize: 11, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+            {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ flex: 1, fontSize: 11, lineHeight: '22px', padding: 0, border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
+            {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 6px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
           </div>
         </div>
       </div>
@@ -170,22 +182,22 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
           {selected && <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
         </div>
         <div style={{ width: 32, height: 32, borderRadius: 'var(--radius)', background: iconColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {iconLetter ? <span style={{ fontSize: 10, fontWeight: 700, color: iconColor }}>{iconLetter}</span> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
+          {iconLetter ? <span style={{ fontSize: 11, fontWeight: 700, color: iconColor }}>{iconLetter}</span> : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {renaming ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }} onClick={e => e.stopPropagation()} style={{ width: '100%', fontSize: 12, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+          {renaming ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') renameFile(); if (e.key === 'Escape') setRenaming(false) }} onClick={e => e.stopPropagation()} style={{ width: '100%', fontSize: 13, padding: '2px 6px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
             : <div onClick={() => onPreview?.(file, url)} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', wordBreak: 'break-word', lineHeight: '1.3', flex: 1 }}>{file.file_name}</div>
                   {canDelete && <button onClick={e => { e.stopPropagation(); setRenameVal(file.file_name); setRenaming(true) }} title="Rename" style={{ flexShrink: 0, cursor: 'pointer', background: 'var(--surface2)', border: '0.5px solid var(--border)', borderRadius: 4, padding: '2px 4px', display: 'inline-flex', alignItems: 'center' }}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>}
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ` · Uploaded ${new Date(file.created_at).toLocaleDateString('en-GB').replace(/\//g, '.')}` : ''}</div>
               </div>}
         </div>
         <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-          {url && <button onClick={e => { e.stopPropagation(); onPreview?.(file, url) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
-          {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
-          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 10, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
+          {url && <button onClick={e => { e.stopPropagation(); onPreview?.(file, url) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>View</button>}
+          {url && <button onClick={e => { e.stopPropagation(); triggerDownload(url, file.file_name) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>↓</button>}
+          {canDelete && <button onClick={e => { e.stopPropagation(); setConfirmDel(true) }} style={{ fontSize: 11, lineHeight: '22px', padding: '0 7px', border: '0.5px solid var(--red-border)', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'var(--red)' }}>✕</button>}
         </div>
       </div>
       {confirmDel && <ConfirmDlg message={'Delete "' + file.file_name + '"?'} onOk={() => { setConfirmDel(false); onDelete(file) }} onCancel={() => setConfirmDel(false)} />}
@@ -199,7 +211,7 @@ function FilesGrid({ files, viewMode, onPreview, canManage, onDelete, selected, 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: viewMode === 'compact' ? 'repeat(auto-fill, minmax(110px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))', gap: viewMode === 'compact' ? 6 : 8 }}>
       {files.map(f => <FileCard key={f.id} file={f} onPreview={onPreview} canDelete={canManage} onDelete={onDelete} selected={selected.has(f.id)} onSelect={onSelect} />)}
-      {canManage && <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', minHeight: viewMode === 'compact' ? 80 : 120, cursor: 'pointer', fontSize: 11, color: 'var(--text3)' }}>
+      {canManage && <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', minHeight: viewMode === 'compact' ? 80 : 120, cursor: 'pointer', fontSize: 12, color: 'var(--text3)' }}>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         + Add files
         <input type="file" multiple style={{ display: 'none' }} onChange={e => onUpload(Array.from(e.target.files))} />
@@ -397,12 +409,12 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={folder.color} strokeWidth="1.6"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
-          <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{subfolders.length > 0 ? `${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}{fileCount > 0 ? `${subfolders.length > 0 ? ' · ' : ''}${fileCount} file${fileCount !== 1 ? 's' : ''}` : ''}{subfolders.length === 0 && fileCount === 0 ? 'Empty' : ''}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{folder.label}</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{subfolders.length > 0 ? `${subfolders.length} sub-folder${subfolders.length !== 1 ? 's' : ''}` : ''}{fileCount > 0 ? `${subfolders.length > 0 ? ' · ' : ''}${fileCount} file${fileCount !== 1 ? 's' : ''}` : ''}{subfolders.length === 0 && fileCount === 0 ? 'Empty' : ''}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           {showAddFolder ? <>
-            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+            <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addCustomSubfolder(); if (e.key === 'Escape') setShowAddFolder(false) }} style={{ fontSize: 12, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
             <button onClick={addCustomSubfolder} disabled={savingFolder} style={BtnG}>{savingFolder ? '...' : 'Add'}</button>
             <button onClick={() => { setShowAddFolder(false); setNewFolderName('') }} style={Btn}>✕</button>
           </> : <>
@@ -425,7 +437,7 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
           <BulkBar selected={selected} onZip={bulkZip} onClear={() => setSelected(new Set())} />
           {subfolders.map(sf => <SubFolder key={sf.key} sf={sf} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadCustomSubfolders(); loadRootFiles() }} />)}
           {files.length === 0 && subfolders.length === 0 ? (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 80, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+            <label onDragOver={e => e.preventDefault()} onDrop={onDropFolder} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 80, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 12 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadToFolder(Array.from(e.target.files))} />
             </label>
@@ -442,9 +454,9 @@ function PrimeFolder({ folder, projectId, projectSubId, canManage, viewMode, set
             {poGroups().map(group => (
               <POGroupRow key={group.orderNumber} group={group} onAmend={amendPO} onDeleteVersion={deleteVersion} />
             ))}
-            {poGroups().length === 0 && <div style={{ padding: 18, textAlign: 'center', fontSize: 12, color: 'var(--text3)' }}>No saved purchase orders left.</div>}
+            {poGroups().length === 0 && <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--text3)' }}>No saved purchase orders left.</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
-              <button onClick={newPOFromPicker} style={{ fontSize: 12.5, padding: '7px 14px', border: 'none', borderRadius: 'var(--radius)', background: '#448a40', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+              <button onClick={newPOFromPicker} style={{ fontSize: 13.5, padding: '7px 14px', border: 'none', borderRadius: 'var(--radius)', background: '#448a40', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
                 + New PO
               </button>
             </div>
@@ -472,9 +484,9 @@ function POGroupRow({ group, onAmend, onDeleteVersion }) {
   const fmtD = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   return (
     <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden', marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', fontSize: 12.5, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', fontSize: 13.5, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 600, flexShrink: 0 }}>{cur.order_number}{cur.revision ? ` Rev ${cur.revision}` : ''}</span>
-        <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 'var(--radius)', background: cur.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: cur.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{cur.status}</span>
+        <span style={{ flexShrink: 0, fontSize: 11, padding: '1px 8px', borderRadius: 'var(--radius)', background: cur.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: cur.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{cur.status}</span>
         <span style={{ color: 'var(--text3)', flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtD(cur.order_date)}</span>
         {cur.contract_value != null && <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>£{Number(cur.contract_value).toLocaleString()}</span>}
         <span style={{ display: 'inline-flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
@@ -494,16 +506,16 @@ function POGroupRow({ group, onAmend, onDeleteVersion }) {
       {showVersions && (
         <div style={{ borderTop: '0.5px solid var(--border)', background: 'var(--surface2)' }}>
           {group.versions.map(v => (
-            <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px 7px 24px', borderTop: '0.5px solid var(--border)', fontSize: 12 }}>
+            <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px 7px 24px', borderTop: '0.5px solid var(--border)', fontSize: 13 }}>
               <span style={{ flexShrink: 0 }}>{v.revision ? `Rev ${v.revision}` : 'Original'}</span>
-              <span style={{ flexShrink: 0, fontSize: 10, padding: '1px 8px', borderRadius: 'var(--radius)', background: v.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface)', color: v.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{v.status}</span>
+              <span style={{ flexShrink: 0, fontSize: 11, padding: '1px 8px', borderRadius: 'var(--radius)', background: v.status === 'issued' ? 'rgba(68,138,64,0.15)' : 'var(--surface)', color: v.status === 'issued' ? '#448a40' : 'var(--text3)' }}>{v.status}</span>
               <span style={{ color: 'var(--text3)', flex: 1 }}>{fmtD(v.created_at)}</span>
-              <button onClick={() => onDeleteVersion(v, group)} style={{ fontSize: 10.5, padding: '2px 9px', border: '0.5px solid var(--red, #E24B4A)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red, #E24B4A)', flexShrink: 0 }}>
+              <button onClick={() => onDeleteVersion(v, group)} style={{ fontSize: 11.5, padding: '2px 9px', border: '0.5px solid var(--red, #E24B4A)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--red, #E24B4A)', flexShrink: 0 }}>
                 Delete
               </button>
             </div>
           ))}
-          <div style={{ padding: '6px 12px 8px 24px', fontSize: 10.5, color: 'var(--text3)' }}>
+          <div style={{ padding: '6px 12px 8px 24px', fontSize: 11.5, color: 'var(--text3)' }}>
             Deleting the superseded original leaves the latest Rev as the clean, only version. PDFs in the folder are separate — remove old PDFs there.
           </div>
         </div>
@@ -511,7 +523,7 @@ function POGroupRow({ group, onAmend, onDeleteVersion }) {
     </div>
   )
 }
-const pkBtn = { fontSize: 11, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text)', flexShrink: 0 }
+const pkBtn = { fontSize: 12, padding: '3px 10px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text)', flexShrink: 0 }
 
 // ── SubFolder (recursive child folders) ──────────────────────
 function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, onPreview, onReload }) {
@@ -554,16 +566,16 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
       <div onClick={() => setOpen(o => !o)} onDragOver={e => e.preventDefault()} onDrop={onDrop}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 'var(--radius)', cursor: 'pointer', background: open ? 'var(--surface2)' : 'transparent', transition: 'background .1s' }}
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'var(--surface2)' }} onMouseLeave={e => { if (!open) e.currentTarget.style.background = open ? 'var(--surface2)' : 'transparent' }}>
-        <div style={{ width: 24, height: 24, borderRadius: 'var(--radius)', background: '#F1EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ fontSize: 13 }}>📁</span></div>
-        {renaming ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setRenaming(false) }} onClick={e => e.stopPropagation()} style={{ flex: 1, fontSize: 12, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
-          : <span style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)' }}>{label}</span>}
+        <div style={{ width: 24, height: 24, borderRadius: 'var(--radius)', background: '#F1EFE8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ fontSize: 14 }}>📁</span></div>
+        {renaming ? <input value={renameVal} autoFocus onChange={e => setRenameVal(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') rename(); if (e.key === 'Escape') setRenaming(false) }} onClick={e => e.stopPropagation()} style={{ flex: 1, fontSize: 13, padding: '2px 8px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)' }} />
+          : <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{label}</span>}
         {!open && <CountBadge count={fileCount} />}
         {canManage && <div style={{ display: 'flex', alignItems: 'center', gap: 4 }} onClick={e => e.stopPropagation()}>
           {!renaming && <>
             <button onClick={() => { setRenameVal(label); setRenaming(true) }} style={Btn} title="Rename">{PENCIL}</button>
             {confirmDel ? <><button onClick={deleteFolder} style={BtnR}>Confirm</button><button onClick={() => setConfirmDel(false)} style={Btn}>✕</button></> : <button onClick={() => setConfirmDel(true)} style={BtnR} title="Delete">{BIN}</button>}
             {showAddSub ? <>
-              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addChild(); if (e.key === 'Escape') setShowAddSub(false) }} style={{ fontSize: 11, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
+              <input value={newSubName} onChange={e => setNewSubName(e.target.value)} placeholder="Name" autoFocus onKeyDown={e => { if (e.key === 'Enter') addChild(); if (e.key === 'Escape') setShowAddSub(false) }} style={{ fontSize: 12, lineHeight: '24px', padding: '0 8px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface2)', color: 'var(--text)', width: 260 }} />
               <button onClick={addChild} style={BtnG}>Add</button><button onClick={() => setShowAddSub(false)} style={Btn}>✕</button>
             </> : <button onClick={() => setShowAddSub(true)} style={Btn}>+ Sub</button>}
           </>}
@@ -575,7 +587,7 @@ function SubFolder({ sf, folder, projectId, projectSubId, canManage, viewMode, o
         <div onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ marginLeft: 14, paddingLeft: 10, borderLeft: '1.5px solid ' + folder.color + '30', paddingTop: 6, paddingBottom: 6 }}>
           {children.map(ch => <SubFolder key={ch.folder_key} sf={{ key: ch.folder_key, label: ch.label, custom: true }} folder={folder} projectId={projectId} projectSubId={projectSubId} canManage={canManage} viewMode={viewMode} onPreview={onPreview} onReload={() => { loadFiles(); loadChildren() }} />)}
           {files.length === 0 && children.length === 0 ? (
-            <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 11 }}>
+            <label onDragOver={e => e.preventDefault()} onDrop={onDrop} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 60, border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)', cursor: 'pointer', color: 'var(--text3)', fontSize: 12 }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Drop files or click to upload
               <input type="file" multiple style={{ display: 'none' }} onChange={e => uploadFiles(Array.from(e.target.files))} />
             </label>
@@ -601,14 +613,14 @@ export default function SubcontractorDocs({ projectId, projectSubId, subFiles, o
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }} onClick={() => { setPreviewFile(null); setPreviewUrl(null) }}>
           <div style={{ width: '100%', maxWidth: 900, maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--surface)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: '10px 14px', borderBottom: '0.5px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ flex: 1, fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewFile.file_name}</div>
-              <button onClick={() => triggerDownload(previewUrl, previewFile.file_name)} style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)', fontFamily: 'inherit' }}>Download</button>
+              <div style={{ flex: 1, fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{previewFile.file_name}</div>
+              <button onClick={() => triggerDownload(previewUrl, previewFile.file_name)} style={{ fontSize: 12, padding: '3px 8px', border: '0.5px solid var(--border)', borderRadius: 4, background: 'var(--surface2)', cursor: 'pointer', color: 'var(--text2)', fontFamily: 'inherit' }}>Download</button>
               <button onClick={() => { setPreviewFile(null); setPreviewUrl(null) }} style={{ fontSize: 14, border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text2)', fontFamily: 'inherit', padding: '2px 6px' }}>✕</button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
               {previewFile.file_name.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? <img src={previewUrl} alt={previewFile.file_name} style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }} />
                 : previewFile.file_name.match(/\.pdf$/i) ? <iframe src={previewUrl} style={{ width: '100%', height: '80vh', border: 'none' }} title={previewFile.file_name} />
-                : <div style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 13 }}><div style={{ fontSize: 40, marginBottom: 10 }}>📄</div>Preview not available — click Download to view</div>}
+                : <div style={{ textAlign: 'center', padding: 40, color: 'var(--text3)', fontSize: 14 }}><div style={{ fontSize: 40, marginBottom: 10 }}>📄</div>Preview not available — click Download to view</div>}
             </div>
           </div>
         </div>

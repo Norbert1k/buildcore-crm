@@ -160,7 +160,7 @@ export default function PriceJobTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 12 }}>{error}</div>}
+      {error && <div style={{ padding: '9px 12px', borderRadius: 'var(--radius)', background: '#FAECE7', color: '#993C1D', fontSize: 13 }}>{error}</div>}
 
       {/* Job meta */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -193,7 +193,7 @@ export default function PriceJobTab() {
           onRemove={i => setPriceFiles(prev => prev.filter((_, x) => x !== i))}
         />
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+      <div style={{ fontSize: 12, color: 'var(--text3)' }}>
         Tender parsing (auto line extraction) and price-file ingestion arrive in the next stage.
         For now you can upload files and price lines manually below.
       </div>
@@ -201,15 +201,15 @@ export default function PriceJobTab() {
       {/* Escalation controls */}
       <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Price escalation</span>
-          <span style={{ fontSize: 12, color: 'var(--text3)' }}>ages each price to the build date</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Price escalation</span>
+          <span style={{ fontSize: 13, color: 'var(--text3)' }}>ages each price to the build date</span>
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: 'var(--text2)' }}>Build date</span>
+            <span style={{ fontSize: 13, color: 'var(--text2)' }}>Build date</span>
             <input type="month" value={buildDate} onChange={e => setBuildDate(e.target.value)} style={{ width: 180 }} />
           </span>
         </div>
         {ratesLoading ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)' }}>Loading rates…</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)' }}>Loading rates…</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
             {CATEGORIES.map(cat => {
@@ -220,7 +220,7 @@ export default function PriceJobTab() {
                   border: `0.5px solid ${isOverridden ? 'rgba(230,162,60,0.45)' : 'var(--border)'}`,
                   borderRadius: 'var(--radius)', padding: '7px 10px',
                 }}>
-                  <div style={{ fontSize: 11, color: isOverridden ? 'var(--amber)' : 'var(--text2)', marginBottom: 5 }}>
+                  <div style={{ fontSize: 12, color: isOverridden ? 'var(--amber)' : 'var(--text2)', marginBottom: 5 }}>
                     {cat === 'DEFAULT' ? 'Default' : titleCase(cat)}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -228,15 +228,15 @@ export default function PriceJobTab() {
                       value={overrides[cat] ?? ''}
                       placeholder={String(rates[cat] ?? rates.DEFAULT ?? 0)}
                       onChange={e => setOverrides(prev => ({ ...prev, [cat]: e.target.value }))}
-                      style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 13, padding: '6px 8px' }} />
-                    <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>%</span>
+                      style={{ flex: 1, minWidth: 0, textAlign: 'right', fontSize: 14, padding: '6px 8px' }} />
+                    <span style={{ fontSize: 13, color: 'var(--text3)', flexShrink: 0 }}>%</span>
                   </div>
                 </div>
               )
             })}
           </div>
         )}
-        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>
           Blank = use the saved default (shown as placeholder). Set a value to override for this job only.
         </div>
       </div>
@@ -244,38 +244,38 @@ export default function PriceJobTab() {
       {/* Priced lines */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>Priced lines</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>Priced lines</span>
           <button className="btn btn-sm" onClick={addManualLine}>+ Add line</button>
         </div>
         {pricedLines.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'var(--text3)', padding: 16, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)' }}>
+          <div style={{ fontSize: 13, color: 'var(--text3)', padding: 16, textAlign: 'center', border: '0.5px dashed var(--border)', borderRadius: 'var(--radius)' }}>
             No lines yet. Add manually, or drop a tender doc once parsing is enabled.
           </div>
         ) : (
           <div style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 10, color: 'var(--text3)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '8px 10px', background: 'var(--surface2)', fontSize: 11, color: 'var(--text3)' }}>
               <span>DESCRIPTION</span><span>CATEGORY</span><span style={{ textAlign: 'right' }}>QTY</span><span>UNIT</span><span>PRICE DATE</span><span style={{ textAlign: 'right' }}>BASE £</span><span style={{ textAlign: 'right' }}>AGE</span><span style={{ textAlign: 'right' }}>ESCALATED £</span><span></span><span></span>
             </div>
             {pricedLines.map((l, i) => (
               <div key={i}>
                 <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '6px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center' }}>
-                  <input value={l.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="item" style={{ fontSize: 12 }} />
-                  <select value={l.category} onChange={e => updateLine(i, 'category', e.target.value)} style={{ fontSize: 12 }}>
+                  <input value={l.description} onChange={e => updateLine(i, 'description', e.target.value)} placeholder="item" style={{ fontSize: 13 }} />
+                  <select value={l.category} onChange={e => updateLine(i, 'category', e.target.value)} style={{ fontSize: 13 }}>
                     {CATEGORIES.map(c => <option key={c} value={c}>{c === 'DEFAULT' ? 'Default' : titleCase(c)}</option>)}
                   </select>
-                  <input type="number" value={l.qty || ''} onChange={e => updateLine(i, 'qty', e.target.value)} placeholder="1" style={{ fontSize: 12, textAlign: 'right' }} />
-                  <select value={l.unit || 'm2'} onChange={e => updateLine(i, 'unit', e.target.value)} style={{ fontSize: 12 }}>
+                  <input type="number" value={l.qty || ''} onChange={e => updateLine(i, 'qty', e.target.value)} placeholder="1" style={{ fontSize: 13, textAlign: 'right' }} />
+                  <select value={l.unit || 'm2'} onChange={e => updateLine(i, 'unit', e.target.value)} style={{ fontSize: 13 }}>
                     {['m2', 'nr', 'lm', 'item'].map(u => <option key={u} value={u}>{u}</option>)}
                   </select>
-                  <input type="date" value={l.price_date} onChange={e => updateLine(i, 'price_date', e.target.value)} style={{ fontSize: 11 }} />
-                  <input type="number" value={l.base} onChange={e => updateLine(i, 'base', e.target.value)} placeholder="0" style={{ fontSize: 12, textAlign: 'right' }} />
-                  <span style={{ fontSize: 11, color: 'var(--text3)', textAlign: 'right' }}>{fmtYears(l.years)}</span>
-                  <span style={{ fontSize: 12, fontWeight: 500, textAlign: 'right' }}>{fmtMoney(l.escalated)}</span>
-                  <button onClick={() => suggestRate(i)} title="Suggest a rate from past jobs" style={{ background: 'none', border: 'none', color: '#185FA5', cursor: 'pointer', fontSize: 13 }}>✨</button>
+                  <input type="date" value={l.price_date} onChange={e => updateLine(i, 'price_date', e.target.value)} style={{ fontSize: 12 }} />
+                  <input type="number" value={l.base} onChange={e => updateLine(i, 'base', e.target.value)} placeholder="0" style={{ fontSize: 13, textAlign: 'right' }} />
+                  <span style={{ fontSize: 12, color: 'var(--text3)', textAlign: 'right' }}>{fmtYears(l.years)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, textAlign: 'right' }}>{fmtMoney(l.escalated)}</span>
+                  <button onClick={() => suggestRate(i)} title="Suggest a rate from past jobs" style={{ background: 'none', border: 'none', color: '#185FA5', cursor: 'pointer', fontSize: 14 }}>✨</button>
                   <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', fontSize: 14 }}>✕</button>
                 </div>
                 {l.suggestion && (
-                  <div style={{ padding: '4px 10px 8px 10px', fontSize: 11 }}>
+                  <div style={{ padding: '4px 10px 8px 10px', fontSize: 12 }}>
                     {l.suggestion.none ? (
                       <span style={{ color: 'var(--text3)' }}>No close match in past jobs — enter the rate manually.</span>
                     ) : (
@@ -301,10 +301,10 @@ export default function PriceJobTab() {
               </div>
             ))}
             <div style={{ display: 'grid', gridTemplateColumns: LGRID, gap: 6, padding: '8px 10px', borderTop: '0.5px solid var(--border2, var(--border))', background: 'var(--surface2)', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, fontWeight: 600 }}>TOTAL</span><span></span><span></span><span></span><span></span>
-              <span style={{ fontSize: 12, fontWeight: 600, textAlign: 'right' }}>{fmtMoney(totalBase)}</span>
+              <span style={{ fontSize: 12, fontWeight: 600 }}>TOTAL</span><span></span><span></span><span></span><span></span>
+              <span style={{ fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{fmtMoney(totalBase)}</span>
               <span></span>
-              <span style={{ fontSize: 12, fontWeight: 600, textAlign: 'right', color: '#185FA5' }}>{fmtMoney(totalEsc)}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, textAlign: 'right', color: '#185FA5' }}>{fmtMoney(totalEsc)}</span>
               <span></span><span></span>
             </div>
           </div>
@@ -313,7 +313,7 @@ export default function PriceJobTab() {
 
       {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end' }}>
-        {savedNote && <span style={{ fontSize: 12, color: 'var(--green)' }}>{savedNote}</span>}
+        {savedNote && <span style={{ fontSize: 13, color: 'var(--green)' }}>{savedNote}</span>}
         <button className="btn" onClick={saveJob} disabled={saving}>{saving ? 'Saving…' : 'Save to history'}</button>
       </div>
     </div>
@@ -336,15 +336,15 @@ function DropZone({ title, subtitle, accent, files, onFiles, onRemove }) {
           borderRadius: 'var(--radius)', padding: 18, textAlign: 'center', cursor: 'pointer',
         }}>
         <div style={{ fontSize: 22, color: accent }}>⬆</div>
-        <div style={{ fontSize: 13, fontWeight: 500, marginTop: 4 }}>{title}</div>
-        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{subtitle}</div>
+        <div style={{ fontSize: 14, fontWeight: 500, marginTop: 4 }}>{title}</div>
+        <div style={{ fontSize: 12, color: 'var(--text3)' }}>{subtitle}</div>
         <input ref={inputRef} type="file" multiple style={{ display: 'none' }}
           onChange={e => { if (e.target.files?.length) onFiles(e.target.files); e.target.value = '' }} />
       </div>
       {files.length > 0 && (
         <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {files.map((f, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text2)' }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text2)' }}>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
               <button onClick={() => onRemove(i)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer' }}>✕</button>
             </div>
@@ -355,6 +355,6 @@ function DropZone({ title, subtitle, accent, files, onFiles, onRemove }) {
   )
 }
 
-const lbl = { display: 'block', fontSize: 11, color: 'var(--text3)', marginBottom: 4 }
+const lbl = { display: 'block', fontSize: 12, color: 'var(--text3)', marginBottom: 4 }
 const LGRID = '1.8fr 1.1fr 0.6fr 0.6fr 0.9fr 0.9fr 0.7fr 0.9fr 24px 24px'
 function titleCase(s) { return String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) }

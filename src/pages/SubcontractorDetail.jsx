@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo, daysUntilExpiry, formatCurrency, complianceScore, NOTE_TYPES, exportToCSV } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { useAllowedSubIds } from '../lib/access'
 import SubcontractorModal from '../components/SubcontractorModal'
 import DocumentModal from '../components/DocumentModal'
 import ContactsTab from '../components/ContactsTab'
@@ -14,7 +15,8 @@ export default function SubcontractorDetail() {
   const navigate = useNavigate()
   const location = useLocation()
   const backPath = location.state?.from || '/subcontractors'
-  const { can, profile, division } = useAuth()
+  const { can, profile, division, canAccessProject } = useAuth()
+  const allowedSubs = useAllowedSubIds()
   const [sub, setSub] = useState(null)
   const [docs, setDocs] = useState([])
   const [projects, setProjects] = useState([])
@@ -26,7 +28,6 @@ export default function SubcontractorDetail() {
   const _tabKey = 'tab:' + window.location.pathname
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(_tabKey) || 'documents')
   const [showEditSub, setShowEditSub] = useState(false)
-  const [approvingPayment, setApprovingPayment] = useState(false)
   const [showDocModal, setShowDocModal] = useState(false)
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -56,8 +57,9 @@ export default function SubcontractorDetail() {
     ])
     setSub(subRes.data)
     setDocs(docsRes.data || [])
-    setProjects(projRes.data || [])
-    setAvailableProjects(allProjRes?.data || [])
+    // Site managers only see this subcontractor's work on their own jobs.
+    setProjects((projRes.data || []).filter(r => canAccessProject(r.project_id || r.projects?.id)))
+    setAvailableProjects((allProjRes?.data || []).filter(p => canAccessProject(p.id)))
     setNotes(notesRes.data || [])
     setContacts(contactsRes.data || [])
     setRatings(ratingsRes.data || [])
@@ -103,17 +105,6 @@ export default function SubcontractorDetail() {
   }
 
 
-  async function togglePaymentApproval() {
-    setApprovingPayment(true)
-    const newVal = !sub.approved
-    await supabase.from('subcontractors').update({
-      approved: newVal,
-      approved_by: newVal ? profile?.id : null,
-      approved_at: newVal ? new Date().toISOString() : null,
-    }).eq('id', id)
-    setSub(s => ({ ...s, approved: newVal, approved_by: newVal ? profile?.id : null, approved_at: newVal ? new Date().toISOString() : null }))
-    setApprovingPayment(false)
-  }
 
   async function blacklistSub() {
     if (!blacklistForm.reason.trim()) { alert('A reason is required.'); return }
@@ -193,7 +184,9 @@ export default function SubcontractorDetail() {
     exportToCSV(rows, `${sub.company_name}-documents.csv`)
   }
 
-  if (loading) return <Spinner />
+  if (loading || allowedSubs === undefined) return <Spinner />
+  // Site managers can only open subcontractors working on their projects.
+  if (allowedSubs && !allowedSubs.has(String(id))) return <div style={{ padding: 40, color: 'var(--text2)' }}>You don't have access to this subcontractor — they're not on any of your projects.</div>
   if (!sub) return <div style={{ padding: 40, color: 'var(--text2)' }}>Subcontractor not found.</div>
 
   const expired = docs.filter(d => d.status === 'expired')
@@ -221,10 +214,10 @@ export default function SubcontractorDetail() {
             <div style={{ fontSize: 14, fontWeight: 700, color: '#c00', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               BLACKLISTED — DO NOT USE
             </div>
-            <div style={{ fontSize: 12, color: '#8a0000', marginBottom: 4 }}>
+            <div style={{ fontSize: 13, color: '#8a0000', marginBottom: 4 }}>
               <strong>Reason:</strong> {sub.blacklist_reason || '—'}
             </div>
-            <div style={{ fontSize: 11, color: '#8a0000', opacity: 0.8 }}>
+            <div style={{ fontSize: 12, color: '#8a0000', opacity: 0.8 }}>
               Cannot be assigned to any project. Blacklisted{sub.blacklisted_at ? ' on ' + formatDate(sub.blacklisted_at) : ''}.
             </div>
           </div>
@@ -245,30 +238,11 @@ export default function SubcontractorDetail() {
               <h2 style={{ fontSize: 18, fontWeight: 600 }}>{sub.company_name}</h2>
               <Pill cls={SUB_STATUSES[sub.status]?.cls || 'pill-gray'}>{SUB_STATUSES[sub.status]?.label || sub.status}</Pill>
               <Pill cls="pill-blue">{sub.trade}</Pill>
-              {sub.approved ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>
-                  ✓ Approved for Payment
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>
-                  ⏳ Pending Approval
-                </div>
-              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {score && <div style={{ background: score.score >= 80 ? 'var(--green-bg)' : score.score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)', color: score.score >= 80 ? 'var(--green)' : score.score >= 50 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>Docs {score.score}%</div>}
+            {score && <div style={{ background: score.score >= 80 ? 'var(--green-bg)' : score.score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)', color: score.score >= 80 ? 'var(--green)' : score.score >= 50 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 13, padding: '3px 10px', borderRadius: 20 }}>Docs {score.score}%</div>}
             {rating && <RatingBadge ratings={ratings} />}
-            {(can('manage_users') || profile?.role === 'accountant') && (
-              <button
-                className={`btn btn-sm ${sub.approved ? 'btn-danger' : 'btn-primary'}`}
-                onClick={togglePaymentApproval}
-                disabled={approvingPayment}
-                title={sub.approved ? 'Click to revoke payment approval' : 'Click to approve for payment'}
-              >
-                {approvingPayment ? '...' : sub.approved ? '✕ Revoke Approval' : '✓ Approve for Payment'}
-              </button>
-            )}
             {can('manage_subcontractors') && (
               <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
             )}
@@ -283,12 +257,6 @@ export default function SubcontractorDetail() {
           </div>
         </div>
 
-        {/* Payment approval info */}
-        {sub.approved && sub.approved_at && (
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, marginTop: -6 }}>
-            Approved for payment by accounts on {new Date(sub.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </div>
-        )}
         {/* Contact details grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 24px', marginBottom: sub.vat_number || sub.cis_number ? 12 : 0 }}>
           {[
@@ -298,8 +266,8 @@ export default function SubcontractorDetail() {
             ['Location', locationDisplay],
             ['Address', fullAddress],
           ].filter(([, v]) => v).map(([k, v]) => (
-            <div key={k} style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</span>
+            <div key={k} style={{ fontSize: 14, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>{k}</span>
               {k === 'Email' ? (
                 <a href={`mailto:${v}`} style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>{v}</a>
               ) : k === 'Website' ? (
@@ -312,8 +280,8 @@ export default function SubcontractorDetail() {
 
           {/* Website — clickable */}
           {sub.website && (
-            <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Website</span>
+            <div style={{ fontSize: 14, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Website</span>
               <a href={sub.website.startsWith('http') ? sub.website : `https://${sub.website}`} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', textDecoration: 'none', wordBreak: 'break-all' }}>
                 {sub.website}
               </a>
@@ -323,18 +291,18 @@ export default function SubcontractorDetail() {
 
         {/* VAT & UTR */}
         {(sub.vat_number || sub.cis_number) && (
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 4 }}>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 14, marginBottom: 4 }}>
             {sub.vat_number && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>VAT No.</span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.vat_number}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>VAT No.</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600 }}>{sub.vat_number}</span>
               </div>
             )}
             {sub.cis_number && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>UTR</span>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600 }}>{sub.cis_number}</span>
-                {sub.cis_verified && <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>✓ Verified</span>}
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>UTR</span>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600 }}>{sub.cis_number}</span>
+                {sub.cis_verified && <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ Verified</span>}
               </div>
             )}
           </div>
@@ -342,7 +310,7 @@ export default function SubcontractorDetail() {
 
         {/* Notes */}
         {sub.notes && (
-          <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+          <div style={{ marginTop: 10, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 14, color: 'var(--text2)', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
             {sub.notes}
           </div>
         )}
@@ -351,8 +319,8 @@ export default function SubcontractorDetail() {
       {/* Compliance alerts */}
       {(expired.length > 0 || expiring.length > 0) && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-          {expired.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--red)', fontWeight: 500 }}>⚠ {expired.length} expired document{expired.length > 1 ? 's' : ''}</div>}
-          {expiring.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--amber)', fontWeight: 500 }}>! {expiring.length} expiring within 30 days</div>}
+          {expired.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--red-bg)', border: '1px solid var(--red-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 14, color: 'var(--red)', fontWeight: 500 }}>⚠ {expired.length} expired document{expired.length > 1 ? 's' : ''}</div>}
+          {expiring.length > 0 && <div style={{ flex: 1, minWidth: 200, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 14, color: 'var(--amber)', fontWeight: 500 }}>! {expiring.length} expiring within 30 days</div>}
         </div>
       )}
 
@@ -395,7 +363,7 @@ export default function SubcontractorDetail() {
             </div>
           </div>
           {docs.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No documents uploaded yet.</div>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No documents uploaded yet.</div>
           ) : (
             <div className="table-wrap">
               <table>
@@ -413,7 +381,7 @@ export default function SubcontractorDetail() {
                           <div style={{ fontWeight: 500 }}>{DOCUMENT_TYPES[doc.document_type] || doc.document_name}</div>
                           {doc.document_name !== DOCUMENT_TYPES[doc.document_type] && <div className="td-muted">{doc.document_name}</div>}
                           {doc.cover_amount > 0 && (
-                            <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500, marginTop: 2 }}>
+                            <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500, marginTop: 2 }}>
                               £{Number(doc.cover_amount).toLocaleString('en-GB')} cover
                             </div>
                           )}
@@ -424,7 +392,7 @@ export default function SubcontractorDetail() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <button
                                 className="btn btn-sm"
-                                style={{ fontSize: 11, padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
+                                style={{ fontSize: 12, padding: '3px 8px', display: 'flex', alignItems: 'center', gap: 4 }}
                                 onClick={() => openDocPreview(doc)}
                                 title={doc.file_name || 'View file'}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -432,17 +400,17 @@ export default function SubcontractorDetail() {
                               </button>
                               {linkedCount > 1 && (
                                 <span title={`Same file shared by ${linkedCount} document types`}
-                                  style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', fontWeight: 600 }}>
+                                  style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', fontWeight: 600 }}>
                                   🔗 {linkedCount}
                                 </span>
                               )}
                             </div>
-                          ) : <span style={{ color: 'var(--text3)', fontSize: 11 }}>No file</span>}
+                          ) : <span style={{ color: 'var(--text3)', fontSize: 12 }}>No file</span>}
                         </td>
                         <td className="td-muted">{formatDate(doc.issue_date)}</td>
                         <td>
                           <div style={{ fontWeight: 500 }}>{formatDate(doc.expiry_date)}</div>
-                          {days !== null && <div style={{ fontSize: 11, color: days < 0 ? 'var(--red)' : days <= 30 ? 'var(--amber)' : 'var(--text3)' }}>
+                          {days !== null && <div style={{ fontSize: 12, color: days < 0 ? 'var(--red)' : days <= 30 ? 'var(--amber)' : 'var(--text3)' }}>
                             {days < 0 ? `${Math.abs(days)}d ago` : days === 0 ? 'Today' : `${days}d left`}
                           </div>}
                         </td>
@@ -492,7 +460,7 @@ export default function SubcontractorDetail() {
             </button>
           </div>
           {notes.length === 0 ? (
-            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>No activity recorded yet.</div>
+            <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No activity recorded yet.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {notes.map(n => {
@@ -502,11 +470,11 @@ export default function SubcontractorDetail() {
                     <div style={{ fontSize: 20, flexShrink: 0, marginTop: 1 }}>{nt.icon}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: nt.color, background: 'var(--surface2)', padding: '1px 7px', borderRadius: 'var(--radius)' }}>{nt.label}</span>
-                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{formatDateTime(n.created_at)}</span>
-                        {n.profiles?.full_name && <span style={{ fontSize: 11, color: 'var(--text3)' }}>by {n.profiles.full_name}</span>}
+                        <span style={{ fontSize: 12, fontWeight: 600, color: nt.color, background: 'var(--surface2)', padding: '1px 7px', borderRadius: 'var(--radius)' }}>{nt.label}</span>
+                        <span style={{ fontSize: 12, color: 'var(--text3)' }}>{formatDateTime(n.created_at)}</span>
+                        {n.profiles?.full_name && <span style={{ fontSize: 12, color: 'var(--text3)' }}>by {n.profiles.full_name}</span>}
                       </div>
-                      <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{n.note}</div>
+                      <div style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{n.note}</div>
                     </div>
                     {can('manage_subcontractors') && (
                       <button className="btn btn-sm btn-danger" style={{ flexShrink: 0, alignSelf: 'flex-start' }} onClick={() => deleteNote(n.id)}><IconTrash size={12} /></button>
@@ -520,7 +488,7 @@ export default function SubcontractorDetail() {
       )}
 
       {/* Projects */}
-      {activeTab === 'projects' && <ProjectsTab projects={projects} navigate={navigate} />}
+      {activeTab === 'projects' && <ProjectsTab projects={projects} navigate={navigate} showMoney={can('view_project_value')} />}
 
 
       {/* Add Note Modal */}
@@ -558,7 +526,7 @@ export default function SubcontractorDetail() {
             {savingBlacklist ? 'Blacklisting...' : '⛔ Confirm Blacklist'}
           </button>
         </>}>
-        <div style={{ padding: '10px 14px', background: '#fee', border: '1px solid #fcc', borderRadius: 'var(--radius)', marginBottom: 14, fontSize: 12, color: '#8a0000' }}>
+        <div style={{ padding: '10px 14px', background: '#fee', border: '1px solid #fcc', borderRadius: 'var(--radius)', marginBottom: 14, fontSize: 13, color: '#8a0000' }}>
           This will prevent <strong>{sub.company_name}</strong> from being assigned to any project. The block is enforced at the database level and cannot be bypassed. Only an administrator can remove the blacklist.
         </div>
         <Field label="Reason (required)">
@@ -588,16 +556,16 @@ export default function SubcontractorDetail() {
           <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 8, zIndex: 1001 }}>
             {previewUrl && (
               <button onClick={e => { e.stopPropagation(); triggerDocDownload() }}
-                style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+                style={{ fontSize: 13, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
                 ↓ Download
               </button>
             )}
             <button onClick={() => { setPreviewDoc(null); setPreviewUrl(null) }}
-              style={{ fontSize: 12, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+              style={{ fontSize: 13, padding: '6px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff', borderRadius: 'var(--radius)', border: '0.5px solid rgba(255,255,255,0.3)', cursor: 'pointer' }}>
               ✕ Close
             </button>
           </div>
-          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 12 }}>
+          <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginBottom: 12 }}>
             {previewDoc.file_name || previewDoc.document_name}
           </div>
           {previewUrl ? (
@@ -607,7 +575,7 @@ export default function SubcontractorDetail() {
               ? <iframe src={previewUrl} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 'var(--radius)' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
               : <iframe src={'https://docs.google.com/gview?url=' + encodeURIComponent(previewUrl) + '&embedded=true'} style={{ width: '95vw', height: '92vh', border: 'none', borderRadius: 'var(--radius)', background: '#fff' }} title={previewDoc.file_name} onClick={e => e.stopPropagation()} />
           ) : (
-            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>Loading…</div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>Loading…</div>
           )}
         </div>
       )}
@@ -615,7 +583,7 @@ export default function SubcontractorDetail() {
   )
 }
 
-function ProjectsTab({ projects, navigate }) {
+function ProjectsTab({ projects, navigate, showMoney }) {
   const running = projects.filter(ps => ps.projects?.status === 'active' || ps.projects?.status === 'tender' || ps.projects?.status === 'on_hold')
   const completed = projects.filter(ps => ps.projects?.status === 'completed' || ps.projects?.status === 'cancelled')
   const totalOrderValue = projects.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
@@ -626,17 +594,18 @@ function ProjectsTab({ projects, navigate }) {
       <tr style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${ps.project_id}`)}>
         <td>
           <div style={{ fontWeight: 500, color: 'var(--text)' }}>{ps.projects?.project_name}</div>
-          {ps.projects?.client_name && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{ps.projects?.client_name}</div>}
+          {ps.projects?.client_name && <div style={{ fontSize: 12, color: 'var(--text3)' }}>{ps.projects?.client_name}</div>}
         </td>
         <td className="td-muted">{ps.projects?.project_ref || '—'}</td>
         <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>{formatDate(ps.start_date)} – {formatDate(ps.end_date)}</td>
+        {showMoney && <>
         <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
         <td>
           {ps.variation_amount > 0 ? (
             <div>
               <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
               {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
-                <div key={i} style={{ fontSize: 10, color: 'var(--text2)' }}>{line}</div>
+                <div key={i} style={{ fontSize: 11, color: 'var(--text2)' }}>{line}</div>
               ))}
             </div>
           ) : <span style={{ color: 'var(--text3)' }}>—</span>}
@@ -646,6 +615,7 @@ function ProjectsTab({ projects, navigate }) {
             ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
             : '—'}
         </td>
+        </>}
         <td>
           <Pill cls={ps.projects?.status === 'active' ? 'pill-green' : ps.projects?.status === 'tender' ? 'pill-blue' : ps.projects?.status === 'completed' ? 'pill-gray' : 'pill-amber'}>
             {ps.projects?.status?.charAt(0).toUpperCase() + ps.projects?.status?.slice(1) || ps.status}
@@ -656,7 +626,7 @@ function ProjectsTab({ projects, navigate }) {
   }
 
   if (projects.length === 0) return (
-    <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 13, padding: 40 }}>Not assigned to any projects yet.</div>
+    <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14, padding: 40 }}>Not assigned to any projects yet.</div>
   )
 
   return (
@@ -664,19 +634,19 @@ function ProjectsTab({ projects, navigate }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
         <div className="stat-card"><div className="stat-label">Running</div><div className="stat-value green">{running.length}</div></div>
         <div className="stat-card"><div className="stat-label">Completed</div><div className="stat-value">{completed.length}</div></div>
-        <div className="stat-card"><div className="stat-label">Total Order Value</div><div className="stat-value" style={{ fontSize: 16 }}>{totalOrderValue > 0 ? formatCurrency(totalOrderValue) : '—'}</div></div>
-        {totalVariation > 0 && <div className="stat-card"><div className="stat-label">Total Variations</div><div className="stat-value amber" style={{ fontSize: 16 }}>+{formatCurrency(totalVariation)}</div></div>}
-        {totalOrderValue > 0 && <div className="stat-card" style={{ borderTop: '3px solid var(--green)' }}><div className="stat-label">Grand Total</div><div className="stat-value green" style={{ fontSize: 16 }}>{formatCurrency(totalOrderValue + totalVariation)}</div></div>}
+        {showMoney && <div className="stat-card"><div className="stat-label">Total Order Value</div><div className="stat-value" style={{ fontSize: 16 }}>{totalOrderValue > 0 ? formatCurrency(totalOrderValue) : '—'}</div></div>}
+        {showMoney && totalVariation > 0 && <div className="stat-card"><div className="stat-label">Total Variations</div><div className="stat-value amber" style={{ fontSize: 16 }}>+{formatCurrency(totalVariation)}</div></div>}
+        {showMoney && totalOrderValue > 0 && <div className="stat-card" style={{ borderTop: '3px solid var(--green)' }}><div className="stat-label">Grand Total</div><div className="stat-value green" style={{ fontSize: 16 }}>{formatCurrency(totalOrderValue + totalVariation)}</div></div>}
       </div>
 
       {running.length > 0 && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }} /> Running Projects ({running.length})
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th></tr></thead>
+              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th>{showMoney && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th></tr></thead>
               <tbody>{running.map(ps => <ProjectRow key={ps.id} ps={ps} />)}</tbody>
             </table>
           </div>
@@ -685,12 +655,12 @@ function ProjectsTab({ projects, navigate }) {
 
       {completed.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text3)' }} /> Completed Projects ({completed.length})
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th></tr></thead>
+              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th>{showMoney && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th></tr></thead>
               <tbody>{completed.map(ps => <ProjectRow key={ps.id} ps={ps} />)}</tbody>
             </table>
           </div>

@@ -5,8 +5,10 @@ import { SUB_STATUSES, TRADES, DESIGN_TEAM_TRADES, subDocSummary, initials, avat
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { RatingBadge } from '../components/PerformanceTab'
 import { useAuth } from '../lib/auth'
+import { useNav, useAllowedSubIds } from '../lib/access'
 import SubcontractorModal from '../components/SubcontractorModal'
 import EAModal from '../components/EAModal'
+import { loadEAContacts } from '../components/EAContacts'
 import Documents from './Documents'
 
 // ── Employers Agent List ─────────────────────────────────────
@@ -18,6 +20,7 @@ function EmployersAgentTab() {
   const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const { can, division } = useAuth()
+  const [people, setPeople] = useState({})   // { ea_id: [people at the firm] }
 
   // Reload when the division switches — the EA firms list is divisional,
   // so flipping Construction ⇄ Fit-Out must refetch, not show stale rows.
@@ -27,6 +30,7 @@ function EmployersAgentTab() {
     setLoading(true)
     const { data } = await supabase.from('employer_agents').select('*').eq('division', division).order('company_name')
     setEas(sortBy(data || [], 'company_name'))
+    loadEAContacts((data || []).map(e => e.id)).then(setPeople)
     setLoading(false)
   }
 
@@ -37,13 +41,13 @@ function EmployersAgentTab() {
   }
 
   const list = search
-    ? eas.filter(e => e.company_name?.toLowerCase().includes(search.toLowerCase()) || e.contact_name?.toLowerCase().includes(search.toLowerCase()))
+    ? eas.filter(e => e.company_name?.toLowerCase().includes(search.toLowerCase()) || e.contact_name?.toLowerCase().includes(search.toLowerCase()) || (people[e.id] || []).some(c => c.name?.toLowerCase().includes(search.toLowerCase())))
     : eas
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>{eas.length} registered employer{eas.length !== 1 ? 's' : ''} agent{eas.length !== 1 ? 's' : ''}</p>
+        <p style={{ color: 'var(--text2)', fontSize: 14 }}>{eas.length} registered employer{eas.length !== 1 ? 's' : ''} agent{eas.length !== 1 ? 's' : ''}</p>
         {can('manage_subcontractors') && (
           <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
             <IconPlus size={14} /> Add EA
@@ -80,18 +84,19 @@ function EmployersAgentTab() {
                 <tr key={ea.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#E6F1FB', color: '#185FA5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
                         {initials(ea.company_name)}
                       </div>
                       <div>
                         <div style={{ fontWeight: 500 }}>{ea.company_name}</div>
-                        {ea.website && <div className="td-muted" style={{ fontSize: 11 }}>{ea.website.replace('https://','').replace('http://','')}</div>}
+                        {ea.website && <div className="td-muted" style={{ fontSize: 12 }}>{ea.website.replace('https://','').replace('http://','')}</div>}
                       </div>
                     </div>
                   </td>
                   <td>
                     <div>{ea.contact_name || '—'}</div>
                     <div className="td-muted">{ea.phone || ''}</div>
+                    {(people[ea.id]?.length || 0) > 1 && <div className="td-muted" title={people[ea.id].map(c => c.name).join(', ')}>+{people[ea.id].length - 1} more {people[ea.id].length === 2 ? 'person' : 'people'}</div>}
                   </td>
                   <td className="td-muted">{ea.email || '—'}</td>
                   <td className="td-muted">
@@ -103,7 +108,7 @@ function EmployersAgentTab() {
                   </td>
                   <td>
                     {ea.payment_submission_email ? (
-                      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--blue)' }}>{ea.payment_submission_email}</span>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--blue)' }}>{ea.payment_submission_email}</span>
                     ) : <span style={{ color: 'var(--text3)' }}>—</span>}
                   </td>
                   <td>
@@ -161,8 +166,9 @@ function AllSubcontractorsTab({ designTeam }) {
   const [sortDir, setSortDir] = useState('asc')
   const navigate = useNavigate()
   const { can } = useAuth()
+  const allowed = useAllowedSubIds()   // null = everyone; Set = site manager's project subs
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { if (allowed !== undefined) load() }, [allowed])
 
   async function deleteSub(id) {
     await supabase.from('subcontractors').delete().eq('id', id)
@@ -183,7 +189,8 @@ function AllSubcontractorsTab({ designTeam }) {
     }
     const { data, error } = await query
     if (error) console.error('[Subcontractors] load error:', error)
-    setSubs(sortBy(data || [], 'company_name'))
+    const rows = allowed ? (data || []).filter(s => allowed.has(String(s.id))) : (data || [])
+    setSubs(sortBy(rows, 'company_name'))
     setLoading(false)
   }
 
@@ -235,7 +242,7 @@ function AllSubcontractorsTab({ designTeam }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <p style={{ color: 'var(--text2)', fontSize: 13 }}>{subs.length} registered {designTeam ? 'design team members' : 'contractors'}</p>
+        <p style={{ color: 'var(--text2)', fontSize: 14 }}>{subs.length} registered {designTeam ? 'design team members' : 'contractors'}</p>
         {can('manage_subcontractors') && (
           <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
             <IconPlus size={14} /> {designTeam ? 'Add Design Team' : 'Add Subcontractor'}
@@ -249,9 +256,9 @@ function AllSubcontractorsTab({ designTeam }) {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, trade, city…" style={{ paddingLeft: 32, width: 260 }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 500 }}>Trade:</span>
+          <span style={{ fontSize: 13, color: 'var(--text3)', fontWeight: 500 }}>Trade:</span>
           <select value={tradeFilter} onChange={e => setTradeFilter(e.target.value)}
-            style={{ padding: '6px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13, cursor: 'pointer', minWidth: 160 }}>
+            style={{ padding: '6px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, cursor: 'pointer', minWidth: 160 }}>
             <option value="all">All trades ({subs.length})</option>
             {availableTrades.map(t => (
               <option key={t} value={t}>
@@ -261,7 +268,7 @@ function AllSubcontractorsTab({ designTeam }) {
           </select>
           {tradeFilter !== 'all' && (
             <button onClick={() => setTradeFilter('all')} title="Clear trade filter"
-              style={{ fontSize: 11, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
+              style={{ fontSize: 12, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)' }}>
               ✕ Clear
             </button>
           )}
@@ -280,10 +287,10 @@ function AllSubcontractorsTab({ designTeam }) {
       </div>
 
       {tradeFilter !== 'all' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', borderRadius: 'var(--radius)', fontSize: 13, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--blue-bg, #e6f1fb)', color: 'var(--blue, #185FA5)', borderRadius: 'var(--radius)', fontSize: 14, marginBottom: 12 }}>
           <span style={{ fontWeight: 500 }}>Showing {list.length} {tradeFilter}</span>
           <span style={{ opacity: 0.6 }}>— alphabetical by company</span>
-          <button onClick={() => setTradeFilter('all')} style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 8px', border: '1px solid currentColor', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
+          <button onClick={() => setTradeFilter('all')} style={{ marginLeft: 'auto', fontSize: 12, padding: '3px 8px', border: '1px solid currentColor', borderRadius: 4, background: 'transparent', cursor: 'pointer', color: 'inherit' }}>
             Show all trades
           </button>
         </div>
@@ -308,7 +315,7 @@ function AllSubcontractorsTab({ designTeam }) {
                     style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                     title={`Sort by ${label}`}>
                     {label}
-                    <span style={{ marginLeft: 4, fontSize: 9, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
+                    <span style={{ marginLeft: 4, fontSize: 10, color: sortKey === key ? 'var(--text2)' : 'var(--text3)', opacity: sortKey === key ? 1 : 0.35 }}>
                       {sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : '▲'}
                     </span>
                   </th>
@@ -339,7 +346,7 @@ function AllSubcontractorsTab({ designTeam }) {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <div style={{ fontWeight: 500 }}>{s.company_name}</div>
                             {s.blacklisted && (
-                              <span style={{ fontSize: 9, fontWeight: 700, background: '#c00', color: 'white', borderRadius: 3, padding: '2px 6px', letterSpacing: '0.05em' }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, background: '#c00', color: 'white', borderRadius: 3, padding: '2px 6px', letterSpacing: '0.05em' }}>
                                 ⛔ BLACKLISTED
                               </span>
                             )}
@@ -358,13 +365,6 @@ function AllSubcontractorsTab({ designTeam }) {
                     <td>{s.city || '—'}</td>
                     <td>
                       <Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill>
-                      <div style={{ marginTop: 4 }}>
-                        {s.approved ? (
-                          <span style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Approved for Payment</span>
-                        ) : (
-                          <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>⏳ Pending Approval</span>
-                        )}
-                      </div>
                     </td>
                     <td>{docPill}</td>
                     <td><RatingBadge ratings={s.performance_ratings} /></td>
@@ -410,6 +410,9 @@ function AllSubcontractorsTab({ designTeam }) {
 export default function Subcontractors() {
   const navigate = useNavigate()
   const location = useLocation()
+  const nav = useNav()
+  const seeEA = nav.includes('ea'), seeDT = nav.includes('design_team'), seeComp = nav.includes('documents')
+  const showTabs = seeEA || seeDT || seeComp
 
   // Derive active tab from URL
   const activeTab = location.pathname === '/subcontractors/ea' ? 'ea'
@@ -424,14 +427,14 @@ export default function Subcontractors() {
       </div>
 
       {/* Sub-navigation */}
-      <div className="filter-tabs" style={{ marginBottom: 20 }}>
-        <div className={`filter-tab ${activeTab === 'ea' ? 'active' : ''}`}
+      {showTabs && <div className="filter-tabs" style={{ marginBottom: 20 }}>
+        {seeEA && <div className={`filter-tab ${activeTab === 'ea' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors/ea')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
           </svg>
           01. Employers Agent
-        </div>
+        </div>}
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>
@@ -439,21 +442,21 @@ export default function Subcontractors() {
           </svg>
           02. Subcontractors
         </div>
-        <div className={`filter-tab ${activeTab === 'design-team' ? 'active' : ''}`}
+        {seeDT && <div className={`filter-tab ${activeTab === 'design-team' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors/design-team')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
           </svg>
           03. Design Team
-        </div>
-        <div className={`filter-tab ${activeTab === 'compliance' ? 'active' : ''}`}
+        </div>}
+        {seeComp && <div className={`filter-tab ${activeTab === 'compliance' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors/compliance')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
           </svg>
           04. Compliance
-        </div>
-      </div>
+        </div>}
+      </div>}
 
       {/* Tab content */}
       {activeTab === 'ea' && <EmployersAgentTab />}
