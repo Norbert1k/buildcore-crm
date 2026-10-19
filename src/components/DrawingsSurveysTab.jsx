@@ -48,7 +48,7 @@ const REV_PATTERNS = [
   /[\s([_-]((?:P|T|C)\d{1,3})[\])]?\s*$/i,
   /[\s([_-]((?:P|T|C)\d{2})(?=[\s._-])/i,
 ]
-function parseRevision(name) {
+export function parseRevision(name) {
   const base = stripExt(name)
   for (const re of REV_PATTERNS) {
     const m = base.match(re)
@@ -56,7 +56,7 @@ function parseRevision(name) {
   }
   return { rev: null, base }
 }
-function parseDrawing(name) {
+export function parseDrawing(name) {
   const { rev, base } = parseRevision(name)
   const tokens = (base.match(/[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)+/g) || [])
     .filter(t => /\d/.test(t) && t.replace(/[^A-Za-z0-9]/g, '').length >= 5)
@@ -70,7 +70,7 @@ function revParts(r) {
   m = s.match(/^(\d+)$/); if (m) return { kind: 'number', rank: 0, n: Number(m[1]) }
   return null
 }
-function compareRev(a, b) {
+export function compareRev(a, b) {
   if (!a || !b) return null
   if (a.toUpperCase() === b.toUpperCase()) return 0
   const pa = revParts(a), pb = revParts(b)
@@ -78,7 +78,7 @@ function compareRev(a, b) {
   if (pa.rank !== pb.rank) return pa.rank > pb.rank ? 1 : -1
   return pa.n === pb.n ? 0 : pa.n > pb.n ? 1 : -1
 }
-function buildInventory(names) {
+export function buildInventory(names) {
   const byKey = new Map()   // drawing number → newest revision in Design
   for (const n of names) {
     const p = parseDrawing(n)
@@ -88,7 +88,7 @@ function buildInventory(names) {
   }
   return { stems: new Set(names.map(stem)), loose: new Set(names.map(loose)), byKey }
 }
-function designStatus(inv, name) {
+export function designStatus(inv, name) {
   if (!inv) return null
   const p = parseDrawing(name)
   if (p.byNumber && inv.byKey.has(p.key)) {

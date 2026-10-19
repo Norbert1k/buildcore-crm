@@ -47,7 +47,7 @@ const STATUS_COLORS = {
 export default function ClientDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile } = useAuth()
+  const { profile, can } = useAuth()
   const isAdmin = profile?.role === 'admin'
   const isPMOrAdmin = ['admin', 'project_manager'].includes(profile?.role)
 
@@ -87,7 +87,7 @@ export default function ClientDetail() {
   const doneProjects = projects.filter(p => !['active', 'tender'].includes(p.status))
 
   function fmt(n) {
-    if (!n) return '—'
+    if (!n || !can('view_project_value')) return '—'
     if (n >= 1000000) return `£${(n / 1000000).toFixed(2)}m`
     if (n >= 1000) return `£${(n / 1000).toFixed(0)}k`
     return `£${n.toLocaleString()}`

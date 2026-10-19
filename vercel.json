@@ -1,5 +1,14 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/om-render.js": {
+      "maxDuration": 60,
+      "includeFiles": "{src/lib/omStyle.css,src/lib/omTenant.css,src/lib/omRenderCore.js,src/assets/om/**,server/**}"
+    }
+  }
 }

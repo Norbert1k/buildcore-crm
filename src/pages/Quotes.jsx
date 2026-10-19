@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatCurrency } from '../lib/utils'
-import { Pill, Spinner, EmptyState } from '../components/ui'
+import { formatCurrency, sortBy } from '../lib/utils'
+import { Pill, Spinner, EmptyState, Modal, Field, IconPlus } from '../components/ui'
+import { useAuth } from '../lib/auth'
 import QuoteDetailDrawer from '../components/QuoteDetailDrawer'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,13 +37,76 @@ function deriveTaskStatus(quotes) {
   return 'closed'
 }
 
+// With the Task Tracker gone, quote requests start here. Same records as
+// before (tasks + task_assignees + task_activity); quotes are then added on
+// the request's page exactly as they were.
+function NewQuoteRequest({ open, onClose }) {
+  const { profile, division, canAccessProject } = useAuth()
+  const navigate = useNavigate()
+  const [projects, setProjects] = useState([])
+  const [form, setForm] = useState({ project_id: '', title: '', description: '', priority: 'medium' })
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    supabase.from('projects').select('id, project_name, project_ref').eq('division', division)
+      .then(({ data }) => setProjects(sortBy((data || []).filter(p => canAccessProject(p.id)), 'project_ref').reverse()))
+  }, [open, division])
+  async function create() {
+    if (!form.project_id || !form.title.trim()) return
+    setSaving(true)
+    try {
+      const { data: task, error } = await supabase.from('tasks').insert({
+        project_id: form.project_id, title: form.title.trim(), description: form.description.trim() || null,
+        priority: form.priority, status: 'active', created_by: profile?.id,
+      }).select().single()
+      if (error) throw error
+      if (profile?.id) await supabase.from('task_assignees').insert({ task_id: task.id, user_id: profile.id })
+      await supabase.from('task_activity').insert({ task_id: task.id, actor_id: profile?.id, action: 'created', details: { title: form.title.trim(), priority: form.priority } })
+      onClose()
+      navigate(`/tasks/${task.id}`)
+    } catch (e) { alert('Could not create: ' + e.message) }
+    setSaving(false)
+  }
+  return (
+    <Modal open={open} onClose={() => !saving && onClose()} title="New quote request" size="sm"
+      footer={<>
+        <button className="btn" onClick={onClose} disabled={saving}>Cancel</button>
+        <button className="btn btn-primary" onClick={create} disabled={saving || !form.title.trim() || !form.project_id}>{saving ? 'Creating…' : 'Create and add quotes'}</button>
+      </>}>
+      <div className="form-grid">
+        <div className="full"><Field label="Project *">
+          <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))}>
+            <option value="">Select a project…</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.project_ref ? `${p.project_ref} · ` : ''}{p.project_name}</option>)}
+          </select>
+        </Field></div>
+        <div className="full"><Field label="What is being quoted *">
+          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Roofing package — Block B" autoFocus />
+        </Field></div>
+        <div className="full"><Field label="Notes">
+          <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Scope, drawings, deadline…" style={{ minHeight: 70 }} />
+        </Field></div>
+        <Field label="Priority">
+          <select value={form.priority} onChange={e => setForm(f => ({ ...f, priority: e.target.value }))}>
+            <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+          </select>
+        </Field>
+      </div>
+    </Modal>
+  )
+}
+
 export default function Quotes() {
+  const [showNew, setShowNew] = useState(false)
+  const { can } = useAuth()
   const [rows, setRows] = useState([])           // raw quote rows from view
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [drawerTaskId, setDrawerTaskId] = useState(null)
+  const [awaiting, setAwaiting] = useState([])   // open requests with no quotes yet
+  const navigate = useNavigate()
 
   useEffect(() => { load() }, [])
 
@@ -58,6 +123,13 @@ export default function Quotes() {
       return
     }
     setRows(data || [])
+    const withQuotes = new Set((data || []).map(r => r.task_id))
+    const [{ data: open }, { data: projs }] = await Promise.all([
+      supabase.from('tasks').select('id, title, project_id, created_at').eq('status', 'active').order('created_at', { ascending: false }).limit(200),
+      supabase.from('projects').select('id, project_name, project_ref'),
+    ])
+    const pmap = Object.fromEntries((projs || []).map(p => [p.id, p]))
+    setAwaiting((open || []).filter(t => !withQuotes.has(t.id)).map(t => ({ ...t, projects: pmap[t.project_id] })))
     setLoading(false)
   }
 
@@ -174,7 +246,20 @@ export default function Quotes() {
             {taskGroups.length} task{taskGroups.length === 1 ? '' : 's'} with quotes · {rows.length} quote{rows.length === 1 ? '' : 's'} total
           </p>
         </div>
+        {can('manage_projects') && <button className="btn btn-primary" onClick={() => setShowNew(true)}><IconPlus size={13} /> New quote request</button>}
       </div>
+      <NewQuoteRequest open={showNew} onClose={() => setShowNew(false)} />
+      {awaiting.length > 0 && (
+        <div className="card" style={{ padding: '10px 14px', marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text2)', marginBottom: 6 }}>Awaiting quotes · {awaiting.length}</div>
+          {awaiting.slice(0, 8).map(t => (
+            <div key={t.id} onClick={() => navigate(`/tasks/${t.id}`)} style={{ display: 'flex', gap: 10, padding: '6px 0', borderTop: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+              <span style={{ color: 'var(--text3)', fontSize: 12 }}>{t.projects?.project_ref ? `${t.projects.project_ref} · ` : ''}{t.projects?.project_name || ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Projects breakdown — replaces the 4 summary cards.
           Click a project row to filter the task list below.

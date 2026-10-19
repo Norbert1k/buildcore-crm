@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { useNav } from '../lib/access'
 import ProjectModal from '../components/ProjectModal'
 
 function calcDuration(start, end) {
@@ -23,10 +24,11 @@ export default function Projects() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
-  const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('proj_live_open') === 'true')
-  const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('proj_tender_open') === 'true')
+  const [liveOpen, setLiveOpen] = useState(() => localStorage.getItem('proj_live_open') !== 'false')
+  const [tenderOpen, setTenderOpen] = useState(() => localStorage.getItem('proj_tender_open') !== 'false')
   const navigate = useNavigate()
-  const { can, role, division } = useAuth()
+  const { can, role, division, canAccessProject } = useAuth()
+  const nav = useNav()
   const isAdmin = role === 'admin'
 
   function toggleLive() { setLiveOpen(v => { localStorage.setItem('proj_live_open', !v); return !v }) }
@@ -54,7 +56,8 @@ export default function Projects() {
       .order('project_ref', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
     if (error) console.error('[Projects] load error:', error)
-    setProjects(data || [])
+    // Site managers only see the jobs they're assigned to.
+    setProjects((data || []).filter(p => canAccessProject(p.id)))
     setLoading(false)
   }
 
@@ -79,10 +82,10 @@ export default function Projects() {
           <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{projects.length} projects total</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-sm" onClick={() => navigate('/projects/calendar')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {nav.includes('calendar') && <button className="btn btn-sm" onClick={() => navigate('/projects/calendar')} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
             Calendar View
-          </button>
+          </button>}
           {can('manage_projects') && (
             <button className="btn btn-primary" onClick={() => { setEditing(null); setShowModal(true) }}>
               <IconPlus size={14} /> New Project
@@ -136,8 +139,10 @@ export default function Projects() {
                       {liveProjects.map(p => (
                         <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
                           <td>
-                            <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                            {p.project_ref && <div className="td-muted">{p.project_ref}</div>}
+                            <div className="proj-cell">
+                              {p.project_ref && <span className="ref-chip"><span className="ref-lbl">REF</span><span className="ref-num">{p.project_ref}</span></span>}
+                              <span style={{ fontWeight: 600 }}>{p.project_name}</span>
+                            </div>
                           </td>
                           <td onClick={e => { if (p.client_id) { e.stopPropagation(); navigate(`/clients/${p.client_id}`) } }}>
                             {p.client_id
@@ -206,8 +211,10 @@ export default function Projects() {
                       {tenderProjects.map(p => (
                         <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
                           <td>
-                            <div style={{ fontWeight: 500 }}>{p.project_name}</div>
-                            {p.project_ref && <div className="td-muted">{p.project_ref}</div>}
+                            <div className="proj-cell">
+                              {p.project_ref && <span className="ref-chip"><span className="ref-lbl">REF</span><span className="ref-num">{p.project_ref}</span></span>}
+                              <span style={{ fontWeight: 600 }}>{p.project_name}</span>
+                            </div>
                           </td>
                           <td onClick={e => { if (p.client_id) { e.stopPropagation(); navigate(`/clients/${p.client_id}`) } }}>
                             {p.client_id
@@ -432,7 +439,7 @@ function PortfolioTab({ projects, canViewValue, onProjectClick }) {
                     {p.project_ref}
                     {retInfo.label && ` · ret. ${retInfo.label}`}
                     {retInfo.needsAttention && (
-                      <span title="Retention couldn't be read from PA — admin can set a fallback in the project edit modal"
+                      <span title="Retention couldn't be read from PA — an admin or project manager can set it in the project edit modal"
                         style={{ marginLeft: 4, color: 'var(--amber)' }}>⚠</span>
                     )}
                   </span>
@@ -687,7 +694,7 @@ function MonthlyPaymentsTab({ projects }) {
                               style={{ marginLeft: 4, color: 'var(--text3)' }}>(override)</span>
                           )}
                           {e.rate_source === 'none' && (
-                            <span title="No retention rate set — admin should set a fallback in the project edit modal"
+                            <span title="No retention rate set — an admin or project manager can set it in the project edit modal"
                               style={{ marginLeft: 4, color: 'var(--amber)' }}>⚠ no rate</span>
                           )}
                         </span>

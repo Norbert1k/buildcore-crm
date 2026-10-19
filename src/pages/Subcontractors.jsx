@@ -5,6 +5,7 @@ import { SUB_STATUSES, TRADES, DESIGN_TEAM_TRADES, subDocSummary, initials, avat
 import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconSearch, IconEdit, IconTrash, ConfirmDialog } from '../components/ui'
 import { RatingBadge } from '../components/PerformanceTab'
 import { useAuth } from '../lib/auth'
+import { useNav, useAllowedSubIds } from '../lib/access'
 import SubcontractorModal from '../components/SubcontractorModal'
 import EAModal from '../components/EAModal'
 import Documents from './Documents'
@@ -161,8 +162,9 @@ function AllSubcontractorsTab({ designTeam }) {
   const [sortDir, setSortDir] = useState('asc')
   const navigate = useNavigate()
   const { can } = useAuth()
+  const allowed = useAllowedSubIds()   // null = everyone; Set = site manager's project subs
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { if (allowed !== undefined) load() }, [allowed])
 
   async function deleteSub(id) {
     await supabase.from('subcontractors').delete().eq('id', id)
@@ -183,7 +185,8 @@ function AllSubcontractorsTab({ designTeam }) {
     }
     const { data, error } = await query
     if (error) console.error('[Subcontractors] load error:', error)
-    setSubs(sortBy(data || [], 'company_name'))
+    const rows = allowed ? (data || []).filter(s => allowed.has(String(s.id))) : (data || [])
+    setSubs(sortBy(rows, 'company_name'))
     setLoading(false)
   }
 
@@ -358,13 +361,6 @@ function AllSubcontractorsTab({ designTeam }) {
                     <td>{s.city || '—'}</td>
                     <td>
                       <Pill cls={SUB_STATUSES[s.status]?.cls || 'pill-gray'}>{SUB_STATUSES[s.status]?.label || s.status}</Pill>
-                      <div style={{ marginTop: 4 }}>
-                        {s.approved ? (
-                          <span style={{ fontSize: 10, background: 'var(--green-bg)', color: 'var(--green)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius)', padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>✓ Approved for Payment</span>
-                        ) : (
-                          <span style={{ fontSize: 10, background: 'var(--amber-bg)', color: 'var(--amber)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '2px 8px', fontWeight: 700, whiteSpace: 'nowrap' }}>⏳ Pending Approval</span>
-                        )}
-                      </div>
                     </td>
                     <td>{docPill}</td>
                     <td><RatingBadge ratings={s.performance_ratings} /></td>
@@ -410,6 +406,9 @@ function AllSubcontractorsTab({ designTeam }) {
 export default function Subcontractors() {
   const navigate = useNavigate()
   const location = useLocation()
+  const nav = useNav()
+  const seeEA = nav.includes('ea'), seeDT = nav.includes('design_team'), seeComp = nav.includes('documents')
+  const showTabs = seeEA || seeDT || seeComp
 
   // Derive active tab from URL
   const activeTab = location.pathname === '/subcontractors/ea' ? 'ea'
@@ -424,14 +423,14 @@ export default function Subcontractors() {
       </div>
 
       {/* Sub-navigation */}
-      <div className="filter-tabs" style={{ marginBottom: 20 }}>
-        <div className={`filter-tab ${activeTab === 'ea' ? 'active' : ''}`}
+      {showTabs && <div className="filter-tabs" style={{ marginBottom: 20 }}>
+        {seeEA && <div className={`filter-tab ${activeTab === 'ea' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors/ea')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
           </svg>
           01. Employers Agent
-        </div>
+        </div>}
         <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{flexShrink:0}}>
@@ -439,21 +438,21 @@ export default function Subcontractors() {
           </svg>
           02. Subcontractors
         </div>
-        <div className={`filter-tab ${activeTab === 'design-team' ? 'active' : ''}`}
+        {seeDT && <div className={`filter-tab ${activeTab === 'design-team' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors/design-team')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
           </svg>
           03. Design Team
-        </div>
-        <div className={`filter-tab ${activeTab === 'compliance' ? 'active' : ''}`}
+        </div>}
+        {seeComp && <div className={`filter-tab ${activeTab === 'compliance' ? 'active' : ''}`}
           onClick={() => navigate('/subcontractors/compliance')}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
           </svg>
           04. Compliance
-        </div>
-      </div>
+        </div>}
+      </div>}
 
       {/* Tab content */}
       {activeTab === 'ea' && <EmployersAgentTab />}

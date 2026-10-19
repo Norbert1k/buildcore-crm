@@ -1,206 +1,177 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatDate, daysUntilExpiry, DOCUMENT_TYPES, complianceScore } from '../lib/utils'
-import { Spinner, Pill, Avatar, IconAlert, IconChevron, IconPlus } from '../components/ui'
+import { formatCurrency, daysUntilExpiry, DOCUMENT_TYPES, ROLE_PERMISSIONS } from '../lib/utils'
+import { Spinner, Avatar, IconPlus } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { useAllowedSubIds } from '../lib/access'
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Home — "what needs me today": live projects with their programme position,
+// compliance that needs action, and the tender pipeline. Count-only queries
+// where only a number is shown.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function programmePct(start, end) {
+  if (!start || !end) return null
+  const s = new Date(start).getTime(), e = new Date(end).getTime(), now = Date.now()
+  if (!(e > s)) return null
+  return Math.max(0, Math.min(100, Math.round((now - s) / (e - s) * 100)))
+}
+function weeksLeft(end) {
+  if (!end) return null
+  const w = Math.round((new Date(end).getTime() - Date.now()) / (7 * 864e5))
+  return w
+}
 
 export default function Dashboard() {
   const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
-  const { profile, can, division } = useAuth()
+  const { profile, can, division, canAccessProject } = useAuth()
+  // Same visibility rules as the menu: each section only shows for roles
+  // that can open the page behind it; money only with view_project_value.
+  const nav = (ROLE_PERMISSIONS[profile?.role] || ROLE_PERMISSIONS.viewer).nav
+  const seeSubs = nav.includes('subcontractors')
+  const seeCompliance = nav.includes('documents')
 
-  useEffect(() => { loadDashboard() }, [division])
+  const allowedSubs = useAllowedSubIds()   // site managers: only subs on their projects
+  useEffect(() => { if (allowedSubs !== undefined) load() }, [division, allowedSubs])
 
-  async function loadDashboard() {
-    const [subsRes, docsRes, projectsRes, suppliersRes] = await Promise.all([
-      supabase.from('subcontractors').select('id, status, company_name, category, documents_with_status(id, expiry_date, status)'),
+  async function load() {
+    const [projRes, docsRes, subsCount, subsActive] = await Promise.all([
+      supabase.from('projects').select('id, project_ref, project_name, status, client_name, client_id, town, city, start_date, end_date, value').eq('division', division).order('project_ref', { ascending: false }),
       supabase.from('documents_with_status').select('id, document_name, document_type, expiry_date, status, subcontractor_id, subcontractors(company_name, trade)').in('status', ['expired', 'expiring_soon']).order('expiry_date'),
-      supabase.from('projects').select('id, status').eq('division', division),
-      supabase.from('suppliers').select('id, status'),
+      allowedSubs ? supabase.from('subcontractors').select('id, status').in('id', [...allowedSubs]) : supabase.from('subcontractors').select('id', { count: 'exact', head: true }),
+      allowedSubs ? Promise.resolve(null) : supabase.from('subcontractors').select('id', { count: 'exact', head: true }).in('status', ['active', 'approved']),
     ])
-    for (const [name, res] of [['subs', subsRes], ['docs', docsRes], ['projects', projectsRes], ['suppliers', suppliersRes]]) {
-      if (res?.error) console.error('[Dashboard] ' + name + ' query error:', res.error)
-    }
-    setData({
-      subs: subsRes.data || [],
-      alerts: docsRes.data || [],
-      projects: projectsRes.data || [],
-      suppliers: suppliersRes.data || [],
-    })
-    setLoading(false)
+    for (const [n, r] of [['projects', projRes], ['docs', docsRes]]) if (r?.error) console.error('[Dashboard] ' + n, r.error)
+    const projects = (projRes.data || []).filter(p => canAccessProject(p.id))
+    const mine = allowedSubs ? (subsCount.data || []) : null
+    setData({ projects, alerts: docsRes.data || [],
+      subsTotal: mine ? mine.length : (subsCount.count || 0),
+      subsActive: mine ? mine.filter(s => ['active', 'approved'].includes(s.status)).length : (subsActive.count || 0) })
   }
 
-  if (loading) return <Spinner />
-  const { subs, alerts, projects, suppliers } = data
+  if (!data) return <Spinner />
+  const { projects, alerts, subsTotal, subsActive } = data
+  const live = projects.filter(p => p.status === 'active')
+  const tender = projects.filter(p => p.status === 'tender')
   const expired = alerts.filter(a => a.status === 'expired')
   const expiring = alerts.filter(a => a.status === 'expiring_soon')
-
-  // Split by category: 'subcontractor', 'design_team', or 'both'
-  const contractualSubs = subs.filter(s => s.category === 'subcontractor' || s.category === 'both' || !s.category)
-  const designTeamSubs = subs.filter(s => s.category === 'design_team' || s.category === 'both')
-  const activeContractual = contractualSubs.filter(s => s.status === 'active' || s.status === 'approved').length
-  const activeDesign = designTeamSubs.filter(s => s.status === 'active' || s.status === 'approved').length
-
-  const activeProjects = projects.filter(p => p.status === 'active').length
-
-  // Worst compliance subs
-  const subsWithScores = subs
-    .map(s => ({ ...s, score: complianceScore(s.documents_with_status) }))
-    .filter(s => s.score && s.score.score < 100)
-    .sort((a, b) => a.score.score - b.score.score)
-    .slice(0, 3)
+  const showValue = can('view_project_value')
+  const liveValue = live.reduce((n, p) => n + (Number(p.value) || 0), 0)
+  const tenderValue = tender.reduce((n, p) => n + (Number(p.value) || 0), 0)
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div>
-      {/* Welcome */}
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600 }}>Welcome back{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}</h2>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 2 }}>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-      </div>
-
-      {/* Quick actions */}
-      {can('manage_subcontractors') && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-          <button className="btn btn-primary btn-sm" onClick={() => navigate('/subcontractors')}>
-            <IconPlus size={13} /> Add Subcontractor
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={() => navigate('/subcontractors/design-team')}>
-            <IconPlus size={13} /> Add Design Team
-          </button>
-          <button className="btn btn-sm" onClick={() => navigate('/projects')}>
-            <IconPlus size={13} /> New Project
-          </button>
-          <button className="btn btn-sm" onClick={() => navigate('/suppliers')}>
-            <IconPlus size={13} /> Add Supplier
-          </button>
+    <div className="home">
+      <div className="home-head">
+        <div>
+          <h2>{greeting}{profile?.full_name ? `, ${profile.full_name.split(' ')[0]}` : ''}</h2>
+          <p>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-      )}
-
-      {/* Stats */}
-      <div className="stats-grid">
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/subcontractors')}>
-          <div className="stat-label">Subcontractors</div>
-          <div className="stat-value">{contractualSubs.length}</div>
-          <div className="stat-sub">{activeContractual} active</div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/subcontractors/design-team')}>
-          <div className="stat-label">Design Team</div>
-          <div className="stat-value">{designTeamSubs.length}</div>
-          <div className="stat-sub">{activeDesign} active</div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/projects')}>
-          <div className="stat-label">Active Projects</div>
-          <div className="stat-value">{activeProjects}</div>
-          <div className="stat-sub">{projects.length} total</div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/documents')}>
-          <div className="stat-label">Expired Documents</div>
-          <div className={`stat-value ${expired.length > 0 ? 'red' : 'green'}`}>{expired.length}</div>
-          <div className="stat-sub">{expired.length > 0 ? 'Action needed' : 'All clear'}</div>
-        </div>
-        <div className="stat-card" style={{ cursor: 'pointer' }} onClick={() => navigate('/documents')}>
-          <div className="stat-label">Expiring Within 30d</div>
-          <div className={`stat-value ${expiring.length > 0 ? 'amber' : 'green'}`}>{expiring.length}</div>
-          <div className="stat-sub">Review soon</div>
+        <div className="home-actions">
+          {can('manage_subcontractors') && <button className="btn" onClick={() => navigate('/subcontractors')}><IconPlus size={13} /> Subcontractor</button>}
+          {can('manage_projects') && <button className="btn btn-primary" onClick={() => navigate('/projects')}><IconPlus size={13} /> New project</button>}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 20 }}>
+      <div className={`home-kpis${[seeSubs, seeCompliance].filter(Boolean).length < 2 ? ' few' : ''}`}>
+        <button className="home-kpi" onClick={() => navigate('/projects')}>
+          <span className="home-kpi-label">Live projects</span>
+          <span className="home-kpi-value">{live.length}</span>
+          <span className="home-kpi-sub">{showValue && liveValue ? formatCurrency(liveValue) + ' in contract' : `${projects.length} in total`}</span>
+        </button>
+        <button className="home-kpi" onClick={() => navigate('/projects')}>
+          <span className="home-kpi-label">Tenders</span>
+          <span className="home-kpi-value">{tender.length}</span>
+          <span className="home-kpi-sub">{showValue && tenderValue ? formatCurrency(tenderValue) + ' pipeline' : 'in the pipeline'}</span>
+        </button>
+        {seeSubs && <button className="home-kpi" onClick={() => navigate('/subcontractors')}>
+          <span className="home-kpi-label">Subcontractors</span>
+          <span className="home-kpi-value">{subsActive}</span>
+          <span className="home-kpi-sub">active of {subsTotal}</span>
+        </button>}
+        {seeCompliance && <button className={`home-kpi${expired.length ? ' bad' : expiring.length ? ' warn' : ''}`} onClick={() => navigate('/subcontractors/compliance')}>
+          <span className="home-kpi-label">Compliance</span>
+          <span className="home-kpi-value">{expired.length + expiring.length}</span>
+          <span className="home-kpi-sub">{expired.length} expired · {expiring.length} expiring</span>
+        </button>}
+      </div>
 
-        {/* Alerts */}
-        {alerts.length > 0 && (
-          <div>
-            <div className="section-header">
-              <div className="section-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <IconAlert size={15} /> Compliance Alerts
-              </div>
-              <button className="btn btn-sm" onClick={() => navigate('/documents')}>View all →</button>
-            </div>
-            {expired.length > 0 && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Expired — immediate action</div>
-                {expired.slice(0, 4).map(a => (
-                  <AlertRow key={a.id} alert={a} type="expired" onClick={() => navigate(`/subcontractors/${a.subcontractor_id}`)} />
-                ))}
-                {expired.length > 4 && <div style={{ fontSize: 12, color: 'var(--text3)', padding: '4px 0' }}>+{expired.length - 4} more</div>}
-              </div>
-            )}
-            {expiring.length > 0 && (
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Expiring soon</div>
-                {expiring.slice(0, 4).map(a => (
-                  <AlertRow key={a.id} alert={a} type="expiring" onClick={() => navigate(`/subcontractors/${a.subcontractor_id}`)} />
-                ))}
-              </div>
-            )}
+      <div className="home-grid">
+        <section className="card home-card">
+          <div className="home-card-head">
+            <h3>Live projects</h3>
+            <button className="btn btn-sm" onClick={() => navigate('/projects')}>All projects</button>
           </div>
-        )}
-
-        {/* All clear */}
-        {alerts.length === 0 && (
-          <div style={{ background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 'var(--radius-lg)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 32, height: 32, background: 'var(--green)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="14" height="14" fill="#fff" viewBox="0 0 16 16"><path d="M13.485 1.431a1.473 1.473 0 012.284 1.851l-8.56 13.095a1.473 1.473 0 01-2.284.18L1.42 12.87a1.473 1.473 0 012.12-2.05l2.41 2.49 7.535-11.878z"/></svg>
-            </div>
-            <div>
-              <div style={{ fontWeight: 600, color: 'var(--green)', marginBottom: 2 }}>All documents valid</div>
-              <div style={{ fontSize: 13, color: 'var(--green)' }}>No expired or expiring-soon documents.</div>
-            </div>
+          {live.length === 0 && <div className="empty-state">No live projects.</div>}
+          <div className="home-proj-list">
+            {live.map(p => {
+              const pct = programmePct(p.start_date, p.end_date)
+              const wl = weeksLeft(p.end_date)
+              return (
+                <button key={p.id} className="home-proj" onClick={() => navigate(`/projects/${p.id}`)}>
+                  <span className="ref-chip"><span className="ref-lbl">REF</span><span className="ref-num">{p.project_ref || '—'}</span></span>
+                  <span className="home-proj-main">
+                    <span className="home-proj-name">{p.project_name}</span>
+                    <span className="home-proj-meta">{[p.client_name, p.city || p.town].filter(Boolean).join(' · ')}</span>
+                  </span>
+                  <span className="home-proj-prog" title={pct != null ? `${pct}% of programme elapsed` : 'No programme dates'}>
+                    <span className="home-bar"><span style={{ width: (pct ?? 0) + '%' }} className={wl != null && wl < 0 ? 'over' : ''} /></span>
+                    <span className="home-proj-weeks">{wl == null ? 'No end date' : wl < 0 ? `${-wl} wk over` : `${wl} wk left`}</span>
+                  </span>
+                  {showValue && <span className="home-proj-value">{p.value ? formatCurrency(p.value) : '—'}</span>}
+                </button>
+              )
+            })}
           </div>
-        )}
+        </section>
 
-        {/* Compliance scores */}
-        {subsWithScores.length > 0 && (
-          <div>
-            <div className="section-header">
-              <div className="section-title">Lowest Compliance</div>
-              <button className="btn btn-sm" onClick={() => navigate('/subcontractors')}>View all →</button>
+        <div className="home-side">
+          {seeCompliance && <section className="card home-card">
+            <div className="home-card-head">
+              <h3>Compliance</h3>
+              <button className="btn btn-sm" onClick={() => navigate('/subcontractors/compliance')}>View all</button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {subsWithScores.map(s => (
-                <div key={s.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => navigate(`/subcontractors/${s.id}`)}>
-                  <Avatar name={s.company_name} size="sm" />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 500, fontSize: 13 }}>{s.company_name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{s.score.expired} expired, {s.score.expiring} expiring</div>
-                  </div>
-                  <ComplianceBadge score={s.score.score} />
+            {expired.length + expiring.length === 0
+              ? <div className="home-ok">All subcontractor documents are in date.</div>
+              : (
+                <div className="home-alerts">
+                  {[...expired, ...expiring].slice(0, 6).map(a => {
+                    const d = daysUntilExpiry(a.expiry_date)
+                    const isExp = a.status === 'expired'
+                    return (
+                      <button key={a.id} className={`home-alert ${isExp ? 'bad' : 'warn'}`} onClick={() => navigate(`/subcontractors/${a.subcontractor_id}`)}>
+                        <Avatar name={a.subcontractors?.company_name} size="sm" />
+                        <span className="home-alert-main">
+                          <span className="home-alert-name">{a.subcontractors?.company_name}</span>
+                          <span className="home-alert-doc">{a.document_name || DOCUMENT_TYPES[a.document_type] || 'Document'}</span>
+                        </span>
+                        <span className="home-alert-when">{isExp ? `${Math.abs(d)}d ago` : `${d}d left`}</span>
+                      </button>
+                    )
+                  })}
                 </div>
+              )}
+          </section>}
+
+          <section className="card home-card">
+            <div className="home-card-head"><h3>Tenders</h3></div>
+            {tender.length === 0 && <div className="home-ok">No tenders in progress.</div>}
+            <div className="home-tenders">
+              {tender.map(p => (
+                <button key={p.id} className="home-tender" onClick={() => navigate(`/projects/${p.id}`)}>
+                  <span className="ref-chip"><span className="ref-lbl">REF</span><span className="ref-num">{p.project_ref || '—'}</span></span>
+                  <span className="home-tender-name">{p.project_name}</span>
+                  {showValue && <span className="home-tender-value">{p.value ? formatCurrency(p.value) : ''}</span>}
+                </button>
               ))}
             </div>
-          </div>
-        )}
+          </section>
+        </div>
       </div>
-    </div>
-  )
-}
-
-function ComplianceBadge({ score }) {
-  const color = score >= 80 ? 'var(--green)' : score >= 50 ? 'var(--amber)' : 'var(--red)'
-  const bg = score >= 80 ? 'var(--green-bg)' : score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)'
-  return (
-    <div style={{ background: bg, color, fontWeight: 700, fontSize: 13, padding: '4px 10px', borderRadius: 20, flexShrink: 0 }}>
-      {score}%
-    </div>
-  )
-}
-
-function AlertRow({ alert, type, onClick }) {
-  const days = daysUntilExpiry(alert.expiry_date)
-  const isExp = type === 'expired'
-  return (
-    <div className={`alert-item ${isExp ? 'alert-expired' : 'alert-warning'}`} style={{ cursor: 'pointer' }} onClick={onClick}>
-      <Avatar name={alert.subcontractors?.company_name} size="sm" />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 500, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{alert.subcontractors?.company_name}</div>
-        <div style={{ fontSize: 12, opacity: .8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{DOCUMENT_TYPES[alert.document_type] || alert.document_name}</div>
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
-        {isExp ? `${Math.abs(days)}d ago` : `${days}d left`}
-      </div>
-      <IconChevron size={14} />
     </div>
   )
 }

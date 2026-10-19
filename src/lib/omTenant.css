@@ -1,0 +1,28 @@
+
+/* ── Tenant O&M (Home User Guide) — A5, friendlier ── */
+@page { size: A5; margin: 23mm 12mm 15mm 12mm; }
+@page cover { margin: 0; }
+body { font-size: 10pt; line-height: 1.45; }
+.cover { height: 210mm; }
+.cover-band { height: 104mm; padding: 13mm 12mm 0; }
+.cover-brand img { height: 15mm; }
+.cover-brand .rule { height: 10mm; }
+.cover-brand .co { font-size: 8.5pt; }
+.cover-brand .doc { font-size: 8pt; }
+.cover-title { left: 12mm; right: 12mm; bottom: 10mm; }
+.cover-title h1 { font-size: 25pt; }
+.cover-title .sub { font-size: 15pt; color: #fff; font-weight: 700; }
+.cover-title .addr { font-size: 9pt; }
+.cover-body { padding: 7mm 12mm 0; }
+.cover-foot { left: 12mm; right: 12mm; bottom: 8mm; font-size: 7pt; }
+h2.sec-h { font-size: 14.5pt; margin-bottom: 3mm; }
+h3 { font-size: 11pt; margin: 4mm 0 1.5mm; }
+table { font-size: 9pt; }
+table.kv td:first-child { width: 33mm; }
+.qr-grid { grid-template-columns: 1fr; gap: 2.5mm; }
+.qr-card .v { font-size: 10pt; }
+.toc-row { font-size: 9.8pt; padding: 0.8mm 0; }
+table.cal { font-size: 7.6pt; }
+table.cal th { padding: 1.1mm 0.3mm; font-size: 7pt; }
+.callout { font-size: 9.5pt; padding: 2.5mm 3mm; }
+.sec.flow { margin-top: 6mm; }

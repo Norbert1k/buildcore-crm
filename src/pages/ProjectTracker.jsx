@@ -262,6 +262,7 @@ export default function ProjectTracker() {
   }
 
   useEffect(() => {
+    let watchId = null
     if (loading || mapReady) return
     const link = document.createElement('link')
     link.rel = 'stylesheet'
@@ -284,7 +285,7 @@ export default function ProjectTracker() {
       // Show user's live location as blue dot
       if (navigator.geolocation) {
         const userMarkerRef = { current: null }
-        navigator.geolocation.watchPosition(
+        watchId = navigator.geolocation.watchPosition(
           (pos) => {
             const lat = pos.coords.latitude
             const lng = pos.coords.longitude
@@ -321,7 +322,8 @@ export default function ProjectTracker() {
       }
     }
     document.head.appendChild(script)
-    return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null } }
+    // Stop GPS tracking when leaving the page (it previously ran forever).
+    return () => { if (watchId != null && navigator.geolocation) navigator.geolocation.clearWatch(watchId); if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null } }
   }, [loading])
 
   useEffect(() => {

@@ -6,6 +6,18 @@ import UploadProgress from './UploadProgress'
 import GeneratePOModal from './GeneratePOModal'
 import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
+// Browsers return at most 100 entries per readEntries() call — keep reading
+// until the folder is drained so large dropped folders upload completely.
+async function readAllEntries(reader) {
+  const all = []
+  for (;;) {
+    const batch = await new Promise(res => reader.readEntries(res, () => res([])))
+    if (!batch.length) return all
+    all.push(...batch)
+  }
+}
+
+
 const SUB_DOC_FOLDERS = [
   { key: 'purchase-order',       label: '01. Purchase Order',             color: '#185FA5', bg: '#E6F1FB' },
   { key: 'payment-applications', label: '02. Payment Applications',      color: '#854F0B', bg: '#FAEEDA' },
@@ -42,7 +54,7 @@ async function readDropEntries(e) {
   const result = { files: [], folders: new Set() }
   async function walk(entry, path) {
     if (entry.isFile) { const file = await new Promise(r => entry.file(r)); result.files.push({ file, path }); if (path) result.folders.add(path) }
-    else if (entry.isDirectory) { const dirPath = path ? path + '/' + entry.name : entry.name; result.folders.add(dirPath); const reader = entry.createReader(); const children = await new Promise(r => reader.readEntries(r)); for (const child of children) await walk(child, dirPath) }
+    else if (entry.isDirectory) { const dirPath = path ? path + '/' + entry.name : entry.name; result.folders.add(dirPath); const reader = entry.createReader(); const children = await readAllEntries(reader); for (const child of children) await walk(child, dirPath) }
   }
   for (const entry of entries) await walk(entry, '')
   return { files: result.files, folders: [...result.folders] }

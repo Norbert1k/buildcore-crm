@@ -375,14 +375,14 @@ export default function Settings() {
 
       {/* My Profile — two cards side by side at desktop widths, stack on
           narrow screens. Profile card holds identity + auth buttons; the
-          Appearance card holds the theme picker. minmax(360px, 1fr) lets
+          Appearance card holds the theme picker. minmax(min(360px, 100%), 1fr) lets
           each card claim half the row but fall back to a single column when
           the available width drops below ~720px. */}
       <div style={{ marginBottom: 28 }}>
         <div className="section-title" style={{ marginBottom: 14 }}>My Profile</div>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(360px, 100%), 1fr))',
           gap: 16,
           alignItems: 'start',
         }}>
@@ -408,7 +408,7 @@ export default function Settings() {
 
           {/* Card 2 — Appearance (theme swatches). Heading lives inside the
               card now since it's no longer nested under Profile. */}
-          <div className="card card-pad">
+          <div className="card card-pad" data-no-remap>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>Appearance</div>
             <div style={{ fontSize: 12, color: division === 'fitout' ? '#0E7490' : '#448a40', fontWeight: 600, marginBottom: 10 }}>
               Appearance for the {division === 'fitout' ? 'Fit-Out' : 'Construction'} division
@@ -419,6 +419,7 @@ export default function Settings() {
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', marginBottom: 8 }}>STYLE</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 18 }}>
               {[
+                { value: 'refresh',   label: 'Refresh',   desc: 'New look (try-out)',      r: 10, demo: 'pill' },
                 { value: 'standard',  label: 'Standard',  desc: 'Today\u2019s look',        r: 8,  demo: 'rounded' },
                 { value: 'studio',    label: 'Studio',    desc: 'Soft & warm',             r: 14, demo: 'pill' },
                 { value: 'blueprint', label: 'Blueprint', desc: 'Sharp & technical',       r: 2,  demo: 'square' },

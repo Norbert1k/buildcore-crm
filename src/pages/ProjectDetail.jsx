@@ -1,21 +1,36 @@
-import { Fragment, useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { Fragment, useEffect, useState, lazy, Suspense } from 'react'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
-import GoogleDriveBrowser from '../components/GoogleDrivePicker'
+import { useNav } from '../lib/access'
 import ProjectModal from '../components/ProjectModal'
 import EAModal from '../components/EAModal'
-import ProjectDocumentation from '../components/ProjectDocumentation'
-import CaseStudyUploads from '../components/CaseStudyUploads'
-import HSHandover from '../components/HSHandover'
-import FitOutHandover from '../components/FitOutHandover'
-import ConstructionHandoverStatus from '../components/ConstructionHandoverStatus'
-import DrawingsSurveysTab from '../components/DrawingsSurveysTab'
-import SubcontractorDocs from '../components/SubcontractorDocs'
-import ProjectQuotesTab from '../components/ProjectQuotesTab'
-import ProcurementTab from './ProcurementTab'
+// Tabs load when first opened, not with the page (the project page used to
+// download every tab and editor up front).
+const ProjectDocumentation = lazy(() => import('../components/ProjectDocumentation'))
+const CaseStudyUploads = lazy(() => import('../components/CaseStudyUploads'))
+const FitOutHandover = lazy(() => import('../components/FitOutHandover'))
+const HandoverFile = lazy(() => import('../components/HandoverFile'))
+const DrawingsRegister = lazy(() => import('../components/DrawingsRegister'))
+const SubcontractorDocs = lazy(() => import('../components/SubcontractorDocs'))
+const ProjectQuotesTab = lazy(() => import('../components/ProjectQuotesTab'))
+const ProcurementTab = lazy(() => import('./ProcurementTab'))
+
+// ── Project tab groups ───────────────────────────────────────────────────
+// Six top-level tabs; groups with several views show them as a sub-bar.
+// The view keys are unchanged, so every existing view renders as before.
+const TAB_GROUPS = [
+  { key: 'overview',   label: 'Overview',   views: ['overview'] },
+  { key: 'documents',  label: 'Documents',  views: ['documents'] },
+  { key: 'drawings',   label: 'Drawings',   views: ['drawings'] },
+  { key: 'people',     label: 'People',     views: ['ccg_team', 'design_team', 'subcontractors'] },
+  { key: 'commercial', label: 'Commercial', views: ['procurement', 'quotes'] },
+  { key: 'handover',   label: 'Handover',   views: ['hs', 'casestudy'] },
+]
+const VIEW_LABELS = { ccg_team: 'CCG Team', design_team: 'Design Team', subcontractors: 'Subcontractors', procurement: 'Procurement', quotes: 'Quotes', hs: 'H&S File & O&M', casestudy: 'Case Study' }
+const ALL_VIEWS = TAB_GROUPS.flatMap(g => g.views)
 import { fetchAllProjectPas, aggregateFinancials } from '../lib/paExtractor'
 
 function calcDuration(start, end) {
@@ -67,11 +82,25 @@ function findInvalidEmail(raw) {
 }
 
 // ── Project File Search ───────────────────────────────────────────────────────
-function ProjectFileSearch({ projectId }) {
+function ProjectFileSearch({ projectId, isTender }) {
+  const { can, role } = useAuth()
+  // Same visibility rules as the Documents tab (ProjectDocumentation): search
+  // must never surface files from folders the person can't open.
+  function docAllowed(f) {
+    const hiddenFolders = [], hiddenSubfolders = []
+    if (!can('view_payments')) hiddenFolders.push('02-payment-application', '03-payment-notice')
+    if (!can('view_csa')) hiddenSubfolders.push('csa')
+    if (!can('view_cff')) hiddenSubfolders.push('cff')
+    if (f.folder_key === 'case_study') return can('view_case_study')
+    if (hiddenSubfolders.includes(f.subfolder_key)) return false
+    if (role === 'site_manager') return ['00-project-information', '05-progress-report', '06-project-programme'].includes(f.folder_key)
+    if (isTender) return ['00-project-information', '06-project-programme'].includes(f.folder_key)
+    return !hiddenFolders.includes(f.folder_key)
+  }
+  const hsAllowed = can('view_hs_handover') && !isTender
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
-  const wrapRef = useState(null)[0]
 
   useEffect(() => {
     if (!query.trim()) { setResults(null); return }
@@ -84,12 +113,14 @@ function ProjectFileSearch({ projectId }) {
     const term = `%${q}%`
     const [docRes, hsRes] = await Promise.all([
       supabase.from('project_doc_files').select('id, file_name, file_size, folder_key, subfolder_key, storage_path')
-        .eq('project_id', projectId).ilike('file_name', term).limit(10),
-      supabase.from('hs_files').select('id, file_name, file_size, folder_key, storage_path')
-        .eq('project_id', projectId).ilike('file_name', term).limit(10),
+        .eq('project_id', projectId).ilike('file_name', term).limit(40),
+      hsAllowed
+        ? supabase.from('hs_files').select('id, file_name, file_size, folder_key, storage_path')
+            .eq('project_id', projectId).ilike('file_name', term).limit(10)
+        : Promise.resolve({ data: [] }),
     ])
     setResults({
-      docs: (docRes.data || []).map(f => ({ ...f, section: 'Documents' })),
+      docs: (docRes.data || []).filter(docAllowed).slice(0, 10).map(f => ({ ...f, section: 'Documents' })),
       hs: (hsRes.data || []).map(f => ({ ...f, section: 'H&S Handover' })),
     })
     setLoading(false)
@@ -121,7 +152,7 @@ function ProjectFileSearch({ projectId }) {
         <input
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Search files across Documents & H&S Handover..."
+          placeholder={hsAllowed ? 'Find a file in Documents or H&S File & O&M…' : 'Find a file in Documents…'}
           style={{ paddingLeft: 32, paddingRight: 32, fontSize: 13, height: 36, width: '100%' }}
         />
         {query && (
@@ -162,23 +193,35 @@ export default function ProjectDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { can, profile } = useAuth()
+  const nav = useNav()
+  const seeEA = nav.includes('ea')
   const [project, setProject] = useState(null)
   const [subs, setSubs] = useState([])
   const [allSubs, setAllSubs] = useState([])
   const [loading, setLoading] = useState(true)
-  const _tabKey = 'tab:' + window.location.pathname
-  const [activeTab, setActiveTab] = useState(() => {
-    const saved = localStorage.getItem(_tabKey) || 'documents'
-    // Photos tab was removed — fall back to documents to avoid a blank screen
-    return saved === 'photos' ? 'documents' : saved
+  const _tabKey = 'tab:project:' + id
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTabState] = useState(() => {
+    const rawTab = searchParams.get('tab')
+    const fromUrl = rawTab === 'om' ? 'hs' : rawTab   // the O&M builder now lives in H&S File & O&M
+    if (fromUrl && ALL_VIEWS.includes(fromUrl)) return fromUrl
+    let saved = null
+    try { saved = localStorage.getItem(_tabKey) } catch {}
+    return saved && ALL_VIEWS.includes(saved) ? saved : 'overview'
   })
+  // Remember the last view per group so returning to "People" reopens the
+  // sub-view you were on.
+  const [lastInGroup, setLastInGroup] = useState({})
+  function setActiveTab(v) {
+    setActiveTabState(v)
+    try { localStorage.setItem(_tabKey, v) } catch {}
+    const g = TAB_GROUPS.find(g => g.views.includes(v))
+    if (g) setLastInGroup(m => ({ ...m, [g.key]: v }))
+    setSearchParams(prev => { const n = new URLSearchParams(prev); n.set('tab', v); return n }, { replace: true })
+  }
   const [driveFolderId, setDriveFolderId] = useState(null)
   // Collapse the top "Project overview" block (info + financial + description +
   // EA) so the tabs sit higher. Remembered per browser.
-  const [overviewCollapsed, setOverviewCollapsed] = useState(() => localStorage.getItem('projectOverviewCollapsed') === '1')
-  function toggleOverview() {
-    setOverviewCollapsed(v => { const n = !v; localStorage.setItem('projectOverviewCollapsed', n ? '1' : '0'); return n })
-  }
   const [driveFolderName, setDriveFolderName] = useState(null)
   const [showEdit, setShowEdit] = useState(false)
   const [programmes, setProgrammes] = useState([])
@@ -259,11 +302,9 @@ export default function ProjectDetail() {
   // last viewed one of those tabs and the project is in tender stage, fall
   // back to Documents to avoid a blank screen.
   useEffect(() => {
-    if (project?.status === 'tender' && (activeTab === 'hs' || activeTab === 'casestudy')) {
-      setActiveTab('documents')
-      localStorage.setItem(_tabKey, 'documents')
-    }
-  }, [project?.status, activeTab, _tabKey])
+    if (!project) return
+    if (!viewAllowed(activeTab)) setActiveTab('overview')
+  }, [project?.status, project?.division, activeTab])
 
   async function load() {
     setLoading(true)
@@ -809,57 +850,120 @@ export default function ProjectDetail() {
     setSavingEditEA(false)
   }
 
-  if (loading) return <Spinner />
+  // Which views this person / project can see (same rules as before).
+  function viewAllowed(v) {
+    if (!project) return true
+    const fitout = project.division === 'fitout'
+    const tender = project.status === 'tender'
+    if (v === 'procurement') return !fitout
+    if (v === 'quotes') return !fitout && nav.includes('quotes')
+    if (v === 'design_team') return nav.includes('design_team')
+    if (v === 'hs') return can('view_hs_handover') && !tender
+    if (v === 'casestudy') return can('view_case_study') && !tender
+    return ALL_VIEWS.includes(v)
+  }
+  function renderTabBar() {
+    const groups = TAB_GROUPS
+      .map(g => ({ ...g, views: g.views.filter(viewAllowed) }))
+      .filter(g => g.views.length)
+    const current = groups.find(g => g.views.includes(activeTab)) || groups[0]
+    const designCount = subs.filter(ps => ps.category === 'design_team').length
+    const subCount = subs.filter(ps => { const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'; return c === 'contractual_work' }).length
+    const counts = { people: team.length + subs.length, ccg_team: team.length, design_team: designCount, subcontractors: subCount }
+    return (
+      <>
+        <div className="proj-tabs" role="tablist">
+          {groups.map(g => (
+            <button key={g.key} role="tab" aria-selected={current?.key === g.key}
+              className={`filter-tab ${current?.key === g.key ? 'active' : ''}`}
+              onClick={() => setActiveTab(lastInGroup[g.key] && g.views.includes(lastInGroup[g.key]) ? lastInGroup[g.key] : g.views[0])}>
+              {g.label}{counts[g.key] ? <span className="tab-badge">{counts[g.key]}</span> : null}
+            </button>
+          ))}
+        </div>
+        {current && current.views.length > 1 && (
+          <div className="proj-subtabs" role="tablist">
+            {current.views.map(v => (
+              <button key={v} role="tab" aria-selected={activeTab === v} className={activeTab === v ? 'on' : ''} onClick={() => setActiveTab(v)}>
+                {VIEW_LABELS[v] || v}{counts[v] != null ? <span className="sub-count">{counts[v]}</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  }
+
+  if (loading && !project) return <Spinner />
   if (!project) return <div style={{ padding: 40, color: 'var(--text2)' }}>Project not found.</div>
 
   return (
     <div>
-      <button className="btn btn-sm" style={{ marginBottom: 16 }} onClick={() => navigate('/projects')}>
-        <IconChevron size={13} dir="left" /> Back
-      </button>
-
-      {/* Collapsible "Project overview" — folds the info/financial/description/EA
-          cards so the document tabs sit higher. State remembered per browser. */}
-      {overviewCollapsed ? (
-        <div onClick={toggleOverview}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', userSelect: 'none', padding: '12px 16px', background: 'var(--surface)', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 16 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 'var(--radius)', background: 'var(--surface2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#448a40" strokeWidth="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+      {/* Project header — REF, name and the key facts stay visible on every
+          tab (address especially, which people need while working). */}
+      <div className="proj-head">
+        <button className="proj-back" onClick={() => navigate('/projects')}><IconChevron size={13} dir="left" /> Projects</button>
+        <div className="proj-head-row">
+          <div className="proj-head-title">
+            {project.project_ref && <span className="proj-ref-badge" title="Project reference"><span className="ref-lbl">REF</span><span className="ref-num">{project.project_ref}</span></span>}
+            <h2>{project.project_name}</h2>
+            {PROJECT_STATUSES[project.status] && <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>}
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>{project.project_name}</span>
-              {project.project_ref && <span style={{ fontSize: 13, color: 'var(--text3)' }}>#{project.project_ref}</span>}
+          {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
+        </div>
+        {(() => {
+          const addr = [project.site_address, project.city, project.postcode].filter(Boolean).join(', ')
+          const lead = project.director?.full_name || project.manager?.full_name
+          const dur = calcDuration(project.start_date, project.end_date)
+          return (
+            <div className="proj-facts">
+              <div className="proj-fact proj-fact-addr">
+                <span className="proj-fact-label">Site address</span>
+                {addr
+                  ? <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`} target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      {addr}
+                    </a>
+                  : <span className="proj-fact-empty">Not set</span>}
+              </div>
+              <div className="proj-fact">
+                <span className="proj-fact-label">Client</span>
+                {project.client_name
+                  ? (project.client_id ? <a onClick={() => navigate(`/clients/${project.client_id}`)} role="link">{project.client_name}</a> : <span>{project.client_name}</span>)
+                  : <span className="proj-fact-empty">Not set</span>}
+              </div>
+              <div className="proj-fact">
+                <span className="proj-fact-label">{project.director?.full_name ? 'Project lead' : 'Project manager'}</span>
+                {lead ? <span>{lead}</span> : <span className="proj-fact-empty">Not set</span>}
+              </div>
+              <div className="proj-fact">
+                <span className="proj-fact-label">Programme</span>
+                {(project.start_date || project.end_date)
+                  ? <span>{project.start_date ? formatDate(project.start_date) : '—'} → {project.end_date ? formatDate(project.end_date) : '—'}{dur ? <em> · {dur}</em> : null}</span>
+                  : <span className="proj-fact-empty">Not set</span>}
+              </div>
+              {can('view_project_value') && project.value ? (
+                <div className="proj-fact">
+                  <span className="proj-fact-label">Contract</span>
+                  <span className="num">{formatCurrency(project.value)}</span>
+                </div>
+              ) : null}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text3)' }}>Project overview — tap to expand</div>
-          </div>
-          <div style={{ flex: 1 }} />
-          {PROJECT_STATUSES[project.status] && <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>}
-          <button className="btn btn-sm" onClick={e => { e.stopPropagation(); toggleOverview() }} style={{ flexShrink: 0 }}>Show</button>
-        </div>
-      ) : (
-        <div onClick={toggleOverview}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 12, userSelect: 'none' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Project overview</span>
-          <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>▾ hide</span>
-          <div style={{ flex: 1, height: '0.5px', background: 'var(--border)' }} />
-        </div>
-      )}
+          )
+        })()}
+      </div>
 
-      {!overviewCollapsed && (
+      {renderTabBar()}
+
+      <Suspense fallback={<div className="tab-loading"><Spinner /></div>}>
+      {activeTab === 'overview' && (
       <div>
       {/* Header row — project info card + financial summary card side by side.
           Stacks vertically on narrower screens via flex-wrap. */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div className="card card-pad" style={{ flex: '1 1 420px', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', minWidth: 0 }}>
-              <h2 style={{ fontSize: 20, fontWeight: 600 }}>{project.project_name}</h2>
-              {project.project_ref && <span style={{ color: 'var(--text3)', fontSize: 13 }}>#{project.project_ref}</span>}
-              <Pill cls={PROJECT_STATUSES[project.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[project.status]?.label}</Pill>
-            </div>
-            {can('manage_projects') && <button className="btn btn-sm" onClick={() => setShowEdit(true)}><IconEdit size={13} /> Edit</button>}
-          </div>
+          {/* Name, status and Edit now live in the page header above. */}
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 14 }}>Project details</div>
 
           {/* 2-column layout with vertical divider in the middle.
               Left: client / assignee / location.
@@ -1022,15 +1126,15 @@ export default function ProjectDetail() {
       )}
 
       {/* Employers Agent — always visible directly under Project Description */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: projectEAs.length > 0 ? 8 : 0, padding: '8px 12px', background: '#042C53', borderRadius: 'var(--radius)', borderLeft: '3px solid #5b9bd5' }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5b9bd5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      {seeEA && <div style={{ marginBottom: 16 }}>
+        <div className="section-band section-band-blue" style={{ marginBottom: projectEAs.length > 0 ? 8 : 0 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
             <rect x="2" y="3" width="20" height="18" rx="2"/><path d="M8 3v3"/><path d="M16 3v3"/><circle cx="12" cy="13" r="3"/><path d="M6 21v-1a6 6 0 0 1 12 0v1"/>
           </svg>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#85B7EB' }}>Employers Agent</div>
-          <div style={{ fontSize: 11, color: '#85B7EB99', flex: 1 }}>{projectEAs.length > 0 ? `${projectEAs.length} assigned` : 'None assigned'}</div>
+          <div className="section-band-title">Employers Agent</div>
+          <div className="section-band-sub">{projectEAs.length > 0 ? `${projectEAs.length} assigned` : 'None assigned'}</div>
           {(can('manage_projects') || can('manage_subcontractors')) && (
-            <button className="btn btn-sm" style={{ borderColor: '#5b9bd5', color: '#85B7EB', background: 'transparent' }} onClick={() => setShowAssignEA(true)}>
+            <button className="btn btn-sm" onClick={() => setShowAssignEA(true)}>
               <IconPlus size={13} /> Assign EA
             </button>
           )}
@@ -1108,92 +1212,11 @@ export default function ProjectDetail() {
             </table>
           </div>
         )}
-      </div>
+      </div>}
       </div>
       )}
 
-      <ProjectFileSearch projectId={id} />
-
-      <div className="filter-tabs">
-        <div className={`filter-tab ${activeTab === 'documents' ? 'active' : ''}`} onClick={() => { setActiveTab('documents'); localStorage.setItem(_tabKey, 'documents') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          Documents
-        </div>
-        <div className={`filter-tab ${activeTab === 'drawings' ? 'active' : ''}`} onClick={() => { setActiveTab('drawings'); localStorage.setItem(_tabKey, 'drawings') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-          Drawings &amp; surveys
-        </div>
-        {project.division !== 'fitout' && (
-        <div className={`filter-tab ${activeTab === 'procurement' ? 'active' : ''}`} onClick={() => { setActiveTab('procurement'); localStorage.setItem(_tabKey, 'procurement') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-          Procurement
-        </div>
-        )}
-        <div className={`filter-tab ${activeTab === 'ccg_team' ? 'active' : ''}`} onClick={() => { setActiveTab('ccg_team'); localStorage.setItem(_tabKey, 'ccg_team') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          CCG Team<span className="tab-badge">{team.length}</span>
-        </div>
-        <div className={`filter-tab ${activeTab === 'subcontractors' ? 'active' : ''}`} onClick={() => { setActiveTab('subcontractors'); localStorage.setItem(_tabKey, 'subcontractors') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Subcontractors<span className="tab-badge">{subs.filter(ps => { const c = ps.category && ps.category.trim() ? ps.category.trim() : 'contractual_work'; return c === 'contractual_work' }).length}</span>
-        </div>
-        <div className={`filter-tab ${activeTab === 'design_team' ? 'active' : ''}`} onClick={() => { setActiveTab('design_team'); localStorage.setItem(_tabKey, 'design_team') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
-          Design Team<span className="tab-badge">{subs.filter(ps => ps.category === 'design_team').length}</span>
-        </div>
-        {project.division !== 'fitout' && (
-        <div className={`filter-tab ${activeTab === 'quotes' ? 'active' : ''}`} onClick={() => { setActiveTab('quotes'); localStorage.setItem(_tabKey, 'quotes') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-          Quotes
-        </div>
-        )}
-        {can('view_hs_handover') && project?.status !== 'tender' && (
-        <div className={`filter-tab ${activeTab === 'hs' ? 'active' : ''}`} onClick={() => { setActiveTab('hs'); localStorage.setItem(_tabKey, 'hs') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          H&S Handover
-        </div>
-        )}
-        {can('view_case_study') && project?.status !== 'tender' && (
-        <div className={`filter-tab ${activeTab === 'casestudy' ? 'active' : ''}`} onClick={() => { setActiveTab('casestudy'); localStorage.setItem(_tabKey, 'casestudy') }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Case Study
-        </div>
-        )}
-
-      </div>
-
-      {activeTab === 'files' && (
-        <div>
-          <div className="section-header" style={{ marginBottom: 14 }}>
-            <div>
-              <div className="section-title">Google Drive</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {driveFolderId ? (
-                  <>
-                    <span>Linked: <strong>{driveFolderName || driveFolderId}</strong></span>
-                    <button className="btn btn-sm btn-danger" style={{ fontSize: 11 }} onClick={async () => {
-                      await supabase.from('projects').update({ drive_folder_id: null, drive_folder_name: null }).eq('id', id)
-                      setDriveFolderId(null)
-                      setDriveFolderName(null)
-                    }}>✕ Unlink</button>
-                  </>
-                ) : 'Connect Google Drive to browse and upload files for this project'}
-              </div>
-            </div>
-          </div>
-          <GoogleDriveBrowser
-            linkedFolderId={driveFolderId}
-            projectName={project?.project_name}
-            onLinkFolder={async (folderId, folderName) => {
-              await supabase.from('projects').update({ drive_folder_id: folderId, drive_folder_name: folderName }).eq('id', id)
-              setDriveFolderId(folderId)
-              setDriveFolderName(folderName)
-            }}
-          />
-        </div>
-      )}
-
-
+      {(activeTab === 'documents' || activeTab === 'hs') && <ProjectFileSearch projectId={id} isTender={project?.status === 'tender'} />}
 
       {activeTab === 'casestudy' && can('view_case_study') && project?.status !== 'tender' && (
         <CaseStudyPanel projectId={id} projectName={project?.project_name} canManage={can('manage_projects')} />
@@ -1252,13 +1275,17 @@ export default function ProjectDetail() {
                               <div style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, flex: 1 }} onClick={() => setExpandedSubId(isExpanded ? null : ps.id)}>
                                 <Avatar name={ps.subcontractors?.company_name} size="sm" />
                                 <div>
-                                  <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    {ps.subcontractors?.company_name}
-                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9"/></svg>
-                                  </div>
-                                  {subFiles.filter(f => f.project_sub_id === ps.id).length > 0 && (
-                                    <span style={{ fontSize: 9, color: 'var(--blue)', fontWeight: 500 }}>{subFiles.filter(f => f.project_sub_id === ps.id).length} docs</span>
-                                  )}
+                                  <div style={{ fontWeight: 600 }}>{ps.subcontractors?.company_name}</div>
+                                  {/* Clear, tappable toggle for this subcontractor's documents
+                                      (replaces the tiny arrow). */}
+                                  <button type="button" className={`sub-docs-toggle${isExpanded ? ' open' : ''}`}
+                                    aria-expanded={isExpanded}
+                                    onClick={e => { e.stopPropagation(); setExpandedSubId(isExpanded ? null : ps.id) }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                    Documents
+                                    <span className="sub-docs-count">{subFiles.filter(f => f.project_sub_id === ps.id).length}</span>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}><polyline points="6 9 12 15 18 9"/></svg>
+                                  </button>
                                 </div>
                               </div>
                               <span
@@ -1362,8 +1389,8 @@ export default function ProjectDetail() {
       )})()}
 
       {activeTab === 'drawings' && (
-        <DrawingsSurveysTab projectId={id} canManage={can('manage_projects')}
-          onOpenDocuments={() => { setActiveTab('documents'); localStorage.setItem(_tabKey, 'documents') }} />
+        <DrawingsRegister projectId={id} canManage={can('manage_projects')}
+          onOpenDocuments={() => setActiveTab('documents')} />
       )}
 
       {activeTab === 'documents' && (
@@ -1613,12 +1640,7 @@ export default function ProjectDetail() {
       {activeTab === 'hs' && can('view_hs_handover') && project?.status !== 'tender' && (
         project.division === 'fitout'
           ? <FitOutHandover projectId={id} projectName={project?.project_name} />
-          : <>
-              {/* Readiness layer rides ABOVE the tree — HSHandover and its
-                  files (hs_files / hs_folders) are untouched by it. */}
-              <ConstructionHandoverStatus projectId={id} />
-              <HSHandover projectId={id} projectName={project?.project_name} />
-            </>
+          : <HandoverFile projectId={id} project={project} />
       )}
 
       {showEdit && <ProjectModal project={project} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); load() }} />}
@@ -1726,6 +1748,7 @@ export default function ProjectDetail() {
       <ConfirmDialog open={!!confirmRemoveTeam} onClose={() => setConfirmRemoveTeam(null)}
         onConfirm={() => removeTeamMember(confirmRemoveTeam)}
         title="Remove team member" message="Remove this team member from the project?" danger />
+      </Suspense>
     </div>
   )
 }

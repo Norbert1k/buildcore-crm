@@ -63,6 +63,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
   const [saveState, setSaveState] = useState('')   // '', 'saving', 'saved'
   const [collapsed, setCollapsed] = useState({})   // stageId -> bool
   const saveTimer = useRef(null)
+  const pendingDoc = useRef(null)   // edit waiting for the autosave timer
   const firstLoad = useRef(true)
 
   // The active stages array depends on whether this is a multi-building project.
@@ -78,9 +79,21 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
     if (!doc) return
     setSaveState('saving')
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(save, 800)
+    pendingDoc.current = doc
+    saveTimer.current = setTimeout(() => { pendingDoc.current = null; save(doc) }, 800)
     return () => clearTimeout(saveTimer.current)
   }, [doc])
+
+  // Leaving the tab within the 0.8s autosave window used to drop the edit.
+  // Save anything still pending straight away on unmount.
+  useEffect(() => () => {
+    const pending = pendingDoc.current
+    if (!pending) return
+    pendingDoc.current = null
+    supabase.from('project_procurement')
+      .upsert({ project_id: projectId, data: pending, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
+      .then(({ error: e }) => { if (e) console.error('[procurement] save on leave failed', e) })
+  }, [projectId])
 
   async function load() {
     setLoading(true); setError('')
@@ -106,10 +119,10 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
     setLoading(false)
   }
 
-  async function save() {
+  async function save(d = doc) {
     const { error: e } = await supabase
       .from('project_procurement')
-      .upsert({ project_id: projectId, data: doc, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
+      .upsert({ project_id: projectId, data: d, updated_at: new Date().toISOString() }, { onConflict: 'project_id' })
     if (e) { setError('Save failed: ' + e.message); setSaveState(''); return }
     setSaveState('saved')
     setTimeout(() => setSaveState(''), 1500)

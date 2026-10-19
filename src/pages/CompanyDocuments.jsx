@@ -7,6 +7,18 @@ import UploadProgress from '../components/UploadProgress'
 import CompanyInformation from '../components/CompanyInformation'
 import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
+// Browsers return at most 100 entries per readEntries() call — keep reading
+// until the folder is drained so large dropped folders upload completely.
+async function readAllEntries(reader) {
+  const all = []
+  for (;;) {
+    const batch = await new Promise(res => reader.readEntries(res, () => res([])))
+    if (!batch.length) return all
+    all.push(...batch)
+  }
+}
+
+
 const CATEGORIES = [
   { key: 'logo',           icon: '🏢', label: 'Logo & Branding',   color: '#448a40', bg: '#e8f5e7' },
   { key: 'policies',       icon: '📋', label: 'Policies',           color: '#378ADD', bg: '#E6F1FB' },
@@ -102,7 +114,7 @@ function ExcelPreview({ url, fileName, onClose, onDownload }) {
       <div onClick={e => e.stopPropagation()} style={{ flex: 1, width: '95vw', maxHeight: '85vh', overflow: 'auto', background: '#fff', borderRadius: 'var(--radius)', padding: 0 }}>
         {loading ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading spreadsheet...</div>
           : error ? <div style={{ padding: 40, textAlign: 'center', color: '#e24b4a' }}>Failed to load: {error}</div>
-          : <div style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>table{border-collapse:collapse;width:100%}td,th{border:1px solid #d0d0d0;padding:6px 10px;font-size:13px;color:#1a1a1a;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}th{background:#e8e8e8;font-weight:600;color:#111;position:sticky;top:0}tr:nth-child(even){background:#f5f5f5}tr:hover{background:#e6f1fb}</style>${html}` }} />
+          : <div className="xlsx-prev" data-no-remap style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>.xlsx-prev table{border-collapse:collapse;width:100%}.xlsx-prev td,.xlsx-prev th{border:1px solid #d0d0d0;padding:6px 10px;font-size:13px;color:#1a1a1a;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}.xlsx-prev th{background:#e8e8e8;font-weight:600;color:#111;position:sticky;top:0}.xlsx-prev tr:nth-child(even){background:#f5f5f5}.xlsx-prev tr:hover{background:#e6f1fb}</style>${html}` }} />
         }
       </div>
     </div>
@@ -145,7 +157,7 @@ async function readDropEntries(e) {
       const dirPath = path ? path + '/' + entry.name : entry.name
       result.folders.add(dirPath)
       const reader = entry.createReader()
-      const children = await new Promise(r => reader.readEntries(r))
+      const children = await readAllEntries(reader)
       for (const child of children) await walk(child, dirPath)
     }
   }
@@ -996,13 +1008,17 @@ function CategoryFolder({ cat, canManage, onPreview, treeVersion, refreshTree })
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function CompanyDocuments() {
-  const { can } = useAuth()
+  const { can, role } = useAuth()
+  // Site managers only need the Site Folder — nothing else in company docs.
+  const siteOnly = role === 'site_manager'
   const hiddenCats = []
   if (!can('view_company_vat')) hiddenCats.push('vat')
   if (!can('view_company_bank')) hiddenCats.push('bank')
   if (!can('view_company_other')) hiddenCats.push('other')
   if (!can('view_company_templates')) hiddenCats.push('templates')
-  const visibleCategories = CATEGORIES.filter(c => !hiddenCats.includes(c.key))
+  const visibleCategories = siteOnly
+    ? CATEGORIES.filter(c => c.key === 'site_folder')
+    : CATEGORIES.filter(c => !hiddenCats.includes(c.key))
   const [previewDoc, setPreviewDoc] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -1029,9 +1045,9 @@ export default function CompanyDocuments() {
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600 }}>Company Documents</h2>
-        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>Upload and manage company-wide documents — accessible to all staff</p>
+        <p style={{ color: 'var(--text2)', fontSize: 13, marginTop: 4 }}>{siteOnly ? 'Site folder — documents for use on site' : 'Upload and manage company-wide documents — accessible to all staff'}</p>
       </div>
-      <CompanyInformation />
+      {!siteOnly && <CompanyInformation />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visibleCategories.map(cat => <CategoryFolder key={cat.key} cat={cat} canManage={canManage} onPreview={openPreview} treeVersion={treeVersion} refreshTree={refreshTree} />)}
       </div>

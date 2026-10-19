@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { avatarColor, initials } from '../lib/utils'
 
 // ── Avatar ───────────────────────────────────────────────────
@@ -180,3 +180,38 @@ export const IconBuilding = ({ size }) => <Icon size={size} path="M2 14V4l5-3 5 
 export const IconCalendar = ({ size }) => <Icon size={size} path="M4 1v2H2a1 1 0 00-1 1v10a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1h-2V1h-1v2H5V1H4zm-2 5h12v8H2V6z" />
 export const IconUpload = ({ size }) => <Icon size={size} path="M8 1L4 5h3v7h2V5h3L8 1zM2 13v2h12v-2H2z" />
 export const IconDownload = ({ size }) => <Icon size={size} path="M8 11l4-4H9V1H7v6H4l4 4zM2 13v2h12v-2H2z" />
+
+// ── RowMenu ───────────────────────────────────────────────────────────────
+// A "⋯" button that opens a small menu of secondary actions, so folder rows
+// show one primary action (Upload) instead of a row of buttons.
+//   items: [{ label, onClick, danger?, hidden? }]
+export function RowMenu({ items, title = 'More actions' }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!open) return
+    const close = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    const esc = e => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('touchstart', close)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('touchstart', close); document.removeEventListener('keydown', esc) }
+  }, [open])
+  const shown = (items || []).filter(i => i && !i.hidden)
+  if (!shown.length) return null
+  return (
+    <span className="row-menu" ref={ref} onClick={e => e.stopPropagation()}>
+      <button type="button" className="row-menu-btn" title={title} aria-label={title} aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      </button>
+      {open && (
+        <span className="row-menu-pop" role="menu">
+          {shown.map((it, i) => (
+            <button key={i} type="button" role="menuitem" className={`row-menu-item${it.danger ? ' danger' : ''}`}
+              onClick={() => { setOpen(false); it.onClick?.() }}>{it.label}</button>
+          ))}
+        </span>
+      )}
+    </span>
+  )
+}

@@ -65,7 +65,7 @@ export default function TaskDetail() {
     if (location.key && location.key !== 'default') {
       navigate(-1)
     } else {
-      navigate('/tasks')
+      navigate('/quotes')
     }
   }
   const [task, setTask] = useState(null)
@@ -978,7 +978,7 @@ export default function TaskDetail() {
   async function deleteTask() {
     const { error } = await supabase.from('tasks').delete().eq('id', taskId)
     if (error) { alert('Delete failed: ' + error.message); return }
-    navigate('/tasks')
+    navigate('/quotes')
   }
   function openAssignModal() {
     setSelectedAssignees(new Set(assignees.map(a => a.user_id)))

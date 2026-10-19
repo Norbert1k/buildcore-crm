@@ -27,7 +27,7 @@ export default function ProjectModal({ project, onClose, onSaved }) {
     project_manager_id: project?.project_manager_id || '',
     value: project?.value || '',
     description: project?.description || '',
-    // Admin-only retention fallback. Stored as decimal in DB (0.03 = 3%),
+    // Retention fallback — admins and project managers. Stored as decimal in DB (0.03 = 3%),
     // edited here as percent string (3 / 5 / 5.5) for usability.
     retention_pct_override: project?.retention_pct_override != null
       ? String(project.retention_pct_override * 100)
@@ -221,8 +221,8 @@ export default function ProjectModal({ project, onClose, onSaved }) {
         <Field label="Contract Value (£)">
           <input type="number" value={form.value} onChange={e => set('value', e.target.value)} placeholder="0" min="0" step="1000" />
         </Field>
-        {profile?.role === 'admin' && (
-          <Field label="Retention fallback (%) — admin only">
+        {['admin', 'project_manager', 'operations_manager', 'project_director'].includes(profile?.role) && (
+          <Field label="Retention (%)">
             <input type="number" value={form.retention_pct_override}
               onChange={e => set('retention_pct_override', e.target.value)}
               placeholder="leave blank if PAs are readable"

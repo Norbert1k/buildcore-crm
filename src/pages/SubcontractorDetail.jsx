@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo, daysUntilExpiry, formatCurrency, complianceScore, NOTE_TYPES, exportToCSV } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
+import { useAllowedSubIds } from '../lib/access'
 import SubcontractorModal from '../components/SubcontractorModal'
 import DocumentModal from '../components/DocumentModal'
 import ContactsTab from '../components/ContactsTab'
@@ -14,7 +15,8 @@ export default function SubcontractorDetail() {
   const navigate = useNavigate()
   const location = useLocation()
   const backPath = location.state?.from || '/subcontractors'
-  const { can, profile, division } = useAuth()
+  const { can, profile, division, canAccessProject } = useAuth()
+  const allowedSubs = useAllowedSubIds()
   const [sub, setSub] = useState(null)
   const [docs, setDocs] = useState([])
   const [projects, setProjects] = useState([])
@@ -26,7 +28,6 @@ export default function SubcontractorDetail() {
   const _tabKey = 'tab:' + window.location.pathname
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem(_tabKey) || 'documents')
   const [showEditSub, setShowEditSub] = useState(false)
-  const [approvingPayment, setApprovingPayment] = useState(false)
   const [showDocModal, setShowDocModal] = useState(false)
   const [editingDoc, setEditingDoc] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
@@ -56,8 +57,9 @@ export default function SubcontractorDetail() {
     ])
     setSub(subRes.data)
     setDocs(docsRes.data || [])
-    setProjects(projRes.data || [])
-    setAvailableProjects(allProjRes?.data || [])
+    // Site managers only see this subcontractor's work on their own jobs.
+    setProjects((projRes.data || []).filter(r => canAccessProject(r.project_id || r.projects?.id)))
+    setAvailableProjects((allProjRes?.data || []).filter(p => canAccessProject(p.id)))
     setNotes(notesRes.data || [])
     setContacts(contactsRes.data || [])
     setRatings(ratingsRes.data || [])
@@ -103,17 +105,6 @@ export default function SubcontractorDetail() {
   }
 
 
-  async function togglePaymentApproval() {
-    setApprovingPayment(true)
-    const newVal = !sub.approved
-    await supabase.from('subcontractors').update({
-      approved: newVal,
-      approved_by: newVal ? profile?.id : null,
-      approved_at: newVal ? new Date().toISOString() : null,
-    }).eq('id', id)
-    setSub(s => ({ ...s, approved: newVal, approved_by: newVal ? profile?.id : null, approved_at: newVal ? new Date().toISOString() : null }))
-    setApprovingPayment(false)
-  }
 
   async function blacklistSub() {
     if (!blacklistForm.reason.trim()) { alert('A reason is required.'); return }
@@ -193,7 +184,9 @@ export default function SubcontractorDetail() {
     exportToCSV(rows, `${sub.company_name}-documents.csv`)
   }
 
-  if (loading) return <Spinner />
+  if (loading || allowedSubs === undefined) return <Spinner />
+  // Site managers can only open subcontractors working on their projects.
+  if (allowedSubs && !allowedSubs.has(String(id))) return <div style={{ padding: 40, color: 'var(--text2)' }}>You don't have access to this subcontractor — they're not on any of your projects.</div>
   if (!sub) return <div style={{ padding: 40, color: 'var(--text2)' }}>Subcontractor not found.</div>
 
   const expired = docs.filter(d => d.status === 'expired')
@@ -245,30 +238,11 @@ export default function SubcontractorDetail() {
               <h2 style={{ fontSize: 18, fontWeight: 600 }}>{sub.company_name}</h2>
               <Pill cls={SUB_STATUSES[sub.status]?.cls || 'pill-gray'}>{SUB_STATUSES[sub.status]?.label || sub.status}</Pill>
               <Pill cls="pill-blue">{sub.trade}</Pill>
-              {sub.approved ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--green-bg)', border: '1px solid var(--green-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--green)' }}>
-                  ✓ Approved for Payment
-                </div>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 20, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>
-                  ⏳ Pending Approval
-                </div>
-              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {score && <div style={{ background: score.score >= 80 ? 'var(--green-bg)' : score.score >= 50 ? 'var(--amber-bg)' : 'var(--red-bg)', color: score.score >= 80 ? 'var(--green)' : score.score >= 50 ? 'var(--amber)' : 'var(--red)', fontWeight: 700, fontSize: 12, padding: '3px 10px', borderRadius: 20 }}>Docs {score.score}%</div>}
             {rating && <RatingBadge ratings={ratings} />}
-            {(can('manage_users') || profile?.role === 'accountant') && (
-              <button
-                className={`btn btn-sm ${sub.approved ? 'btn-danger' : 'btn-primary'}`}
-                onClick={togglePaymentApproval}
-                disabled={approvingPayment}
-                title={sub.approved ? 'Click to revoke payment approval' : 'Click to approve for payment'}
-              >
-                {approvingPayment ? '...' : sub.approved ? '✕ Revoke Approval' : '✓ Approve for Payment'}
-              </button>
-            )}
             {can('manage_subcontractors') && (
               <button className="btn btn-sm" onClick={() => setShowEditSub(true)}><IconEdit size={13} /> Edit</button>
             )}
@@ -283,12 +257,6 @@ export default function SubcontractorDetail() {
           </div>
         </div>
 
-        {/* Payment approval info */}
-        {sub.approved && sub.approved_at && (
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 10, marginTop: -6 }}>
-            Approved for payment by accounts on {new Date(sub.approved_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </div>
-        )}
         {/* Contact details grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px 24px', marginBottom: sub.vat_number || sub.cis_number ? 12 : 0 }}>
           {[
@@ -520,7 +488,7 @@ export default function SubcontractorDetail() {
       )}
 
       {/* Projects */}
-      {activeTab === 'projects' && <ProjectsTab projects={projects} navigate={navigate} />}
+      {activeTab === 'projects' && <ProjectsTab projects={projects} navigate={navigate} showMoney={can('view_project_value')} />}
 
 
       {/* Add Note Modal */}
@@ -615,7 +583,7 @@ export default function SubcontractorDetail() {
   )
 }
 
-function ProjectsTab({ projects, navigate }) {
+function ProjectsTab({ projects, navigate, showMoney }) {
   const running = projects.filter(ps => ps.projects?.status === 'active' || ps.projects?.status === 'tender' || ps.projects?.status === 'on_hold')
   const completed = projects.filter(ps => ps.projects?.status === 'completed' || ps.projects?.status === 'cancelled')
   const totalOrderValue = projects.reduce((s, ps) => s + (parseFloat(ps.contract_value)||0), 0)
@@ -630,6 +598,7 @@ function ProjectsTab({ projects, navigate }) {
         </td>
         <td className="td-muted">{ps.projects?.project_ref || '—'}</td>
         <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>{formatDate(ps.start_date)} – {formatDate(ps.end_date)}</td>
+        {showMoney && <>
         <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
         <td>
           {ps.variation_amount > 0 ? (
@@ -646,6 +615,7 @@ function ProjectsTab({ projects, navigate }) {
             ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
             : '—'}
         </td>
+        </>}
         <td>
           <Pill cls={ps.projects?.status === 'active' ? 'pill-green' : ps.projects?.status === 'tender' ? 'pill-blue' : ps.projects?.status === 'completed' ? 'pill-gray' : 'pill-amber'}>
             {ps.projects?.status?.charAt(0).toUpperCase() + ps.projects?.status?.slice(1) || ps.status}
@@ -664,9 +634,9 @@ function ProjectsTab({ projects, navigate }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
         <div className="stat-card"><div className="stat-label">Running</div><div className="stat-value green">{running.length}</div></div>
         <div className="stat-card"><div className="stat-label">Completed</div><div className="stat-value">{completed.length}</div></div>
-        <div className="stat-card"><div className="stat-label">Total Order Value</div><div className="stat-value" style={{ fontSize: 16 }}>{totalOrderValue > 0 ? formatCurrency(totalOrderValue) : '—'}</div></div>
-        {totalVariation > 0 && <div className="stat-card"><div className="stat-label">Total Variations</div><div className="stat-value amber" style={{ fontSize: 16 }}>+{formatCurrency(totalVariation)}</div></div>}
-        {totalOrderValue > 0 && <div className="stat-card" style={{ borderTop: '3px solid var(--green)' }}><div className="stat-label">Grand Total</div><div className="stat-value green" style={{ fontSize: 16 }}>{formatCurrency(totalOrderValue + totalVariation)}</div></div>}
+        {showMoney && <div className="stat-card"><div className="stat-label">Total Order Value</div><div className="stat-value" style={{ fontSize: 16 }}>{totalOrderValue > 0 ? formatCurrency(totalOrderValue) : '—'}</div></div>}
+        {showMoney && totalVariation > 0 && <div className="stat-card"><div className="stat-label">Total Variations</div><div className="stat-value amber" style={{ fontSize: 16 }}>+{formatCurrency(totalVariation)}</div></div>}
+        {showMoney && totalOrderValue > 0 && <div className="stat-card" style={{ borderTop: '3px solid var(--green)' }}><div className="stat-label">Grand Total</div><div className="stat-value green" style={{ fontSize: 16 }}>{formatCurrency(totalOrderValue + totalVariation)}</div></div>}
       </div>
 
       {running.length > 0 && (
@@ -676,7 +646,7 @@ function ProjectsTab({ projects, navigate }) {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th></tr></thead>
+              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th>{showMoney && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th></tr></thead>
               <tbody>{running.map(ps => <ProjectRow key={ps.id} ps={ps} />)}</tbody>
             </table>
           </div>
@@ -690,7 +660,7 @@ function ProjectsTab({ projects, navigate }) {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th><th>Order Value</th><th>Variation</th><th>Total</th><th>Status</th></tr></thead>
+              <thead><tr><th>Project</th><th>Ref</th><th>Dates</th>{showMoney && <><th>Order Value</th><th>Variation</th><th>Total</th></>}<th>Status</th></tr></thead>
               <tbody>{completed.map(ps => <ProjectRow key={ps.id} ps={ps} />)}</tbody>
             </table>
           </div>

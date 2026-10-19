@@ -1,12 +1,56 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, createContext, useContext } from 'react'
 import { supabase } from '../lib/supabase'
+import { RowMenu } from './ui'
 import { useAuth } from '../lib/auth'
 import { drawCover, drawLetterhead, drawFooter, addInternalLink, loadLogo, BRAND, bc, fmtDateLong } from '../lib/pdfTemplate'
 import UploadProgress from './UploadProgress'
 import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
+import { readDocument } from '../lib/omApi'
+
+// Optional extras supplied by the H&S File & O&M view (HandoverFile.jsx):
+//   showEmpty     — false hides template folders that have no files yet
+//   toggleEmpty   — flips showEmpty (button in the header)
+//   sectionChips  — (sectionKey) => element shown on a section row
+//   sectionPanel  — (sectionKey) => element shown when a section is opened
+// Without a provider the tree behaves exactly as before.
+export const HandoverUiCtx = createContext({ showEmpty: true })
+const deepCount = (counts, key) => Object.entries(counts || {}).reduce((sum, [k, n]) =>
+  k === key || k.startsWith(key + '-') || k.includes('-' + key + '-') ? sum + n : sum, 0)
+
+// New handover PDFs are read by Claude in the background so the H&S File &
+// O&M view already knows about them. One at a time (a dropped folder can hold
+// dozens of files); a failed read never blocks the upload.
+const readQueue = []
+let reading = false
+function readInBackground(row) {
+  if (!row?.id || !/\.(pdf|png|jpe?g)$/i.test(row.file_name || '')) return
+  readQueue.push(row)
+  if (reading) return
+  reading = true
+  ;(async () => {
+    while (readQueue.length) {
+      const next = readQueue.shift()
+      try { await readDocument(next, 'hs_files') } catch {}
+      window.dispatchEvent(new CustomEvent('hs-files-read'))
+    }
+    reading = false
+  })()
+}
+
+// Browsers return at most 100 entries per readEntries() call — keep reading
+// until the folder is drained so large dropped folders upload completely.
+async function readAllEntries(reader) {
+  const all = []
+  for (;;) {
+    const batch = await new Promise(res => reader.readEntries(res, () => res([])))
+    if (!batch.length) return all
+    all.push(...batch)
+  }
+}
+
 
 // ── Full H&S folder template ─────────────────────────────────
-const HS_STRUCTURE = [
+export const HS_STRUCTURE = [
   { key: 's1', label: 'Section 1 | H&S File', color: '#448a40', bg: '#e8f5e7', children: [] },
   { key: 's2', label: 'Section 2 | Project Directory', color: '#448a40', bg: '#e8f5e7', children: [] },
   { key: 's3', label: 'Section 3 | Record Drawings', color: '#378ADD', bg: '#E6F1FB', children: [
@@ -382,7 +426,7 @@ async function readDropEntries(e) {
       const dirPath = path ? path + '/' + entry.name : entry.name
       result.folders.add(dirPath)
       const reader = entry.createReader()
-      const children = await new Promise(r => reader.readEntries(r))
+      const children = await readAllEntries(reader)
       for (const child of children) await walk(child, dirPath)
     }
   }
@@ -452,7 +496,7 @@ function ExcelPreview({ url, fileName, onClose, onDownload }) {
       <div onClick={e => e.stopPropagation()} style={{ flex: 1, width: '95vw', maxHeight: '85vh', overflow: 'auto', background: '#fff', borderRadius: 'var(--radius)', padding: 0 }}>
         {loading ? <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Loading spreadsheet...</div>
           : error ? <div style={{ padding: 40, textAlign: 'center', color: '#e24b4a' }}>Failed to load: {error}</div>
-          : <div style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>table{border-collapse:collapse;width:100%}td,th{border:1px solid #d0d0d0;padding:6px 10px;font-size:13px;color:#1a1a1a;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}th{background:#e8e8e8;font-weight:600;color:#111;position:sticky;top:0}tr:nth-child(even){background:#f5f5f5}tr:hover{background:#e6f1fb}</style>${html}` }} />
+          : <div className="xlsx-prev" data-no-remap style={{ fontSize: 12, overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: `<style>.xlsx-prev table{border-collapse:collapse;width:100%}.xlsx-prev td,.xlsx-prev th{border:1px solid #d0d0d0;padding:6px 10px;font-size:13px;color:#1a1a1a;white-space:nowrap;max-width:300px;overflow:hidden;text-overflow:ellipsis}.xlsx-prev th{background:#e8e8e8;font-weight:600;color:#111;position:sticky;top:0}.xlsx-prev tr:nth-child(even){background:#f5f5f5}.xlsx-prev tr:hover{background:#e6f1fb}</style>${html}` }} />
         }
       </div>
     </div>
@@ -828,6 +872,7 @@ function HSFileListRow({ file, onDelete, canDelete, selected, onSelect, onPrevie
 
 function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolders, customFolders, onCustomFolderAdded, sectionColor, viewMode = 'grid', setViewMode, onPreview, onDeleteNode, onRenameNode }) {
   const { profile } = useAuth()
+  const ui = useContext(HandoverUiCtx)
   const [open, setOpen] = useState(false)
   const [files, setFiles] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -978,7 +1023,8 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       const path = `projects/${projectId}/hs/${node.key}/${Date.now()}-${file.name}`
       const { error } = await supabase.storage.from('hs-handover').upload(path, file)
       if (!error) {
-        await supabase.from('hs_files').insert({ project_id: projectId, folder_key: node.key, storage_path: path, file_name: file.name, file_size: file.size })
+        const { data: row } = await supabase.from('hs_files').insert({ project_id: projectId, folder_key: node.key, storage_path: path, file_name: file.name, file_size: file.size }).select('id, file_name').single()
+        readInBackground(row)
       } else { errors.push(file.name) }
     }
     setUploading(false)
@@ -1015,7 +1061,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
         const fKey = path ? keyMap[path] : node.key
         const storagePath = `projects/${projectId}/hs/${fKey}/${Date.now()}-${file.name}`
         const { error } = await supabase.storage.from('hs-handover').upload(storagePath, file)
-        if (!error) await supabase.from('hs_files').insert({ project_id: projectId, folder_key: fKey, storage_path: storagePath, file_name: file.name, file_size: file.size })
+        if (!error) { const { data: row } = await supabase.from('hs_files').insert({ project_id: projectId, folder_key: fKey, storage_path: storagePath, file_name: file.name, file_size: file.size }).select('id, file_name').single(); readInBackground(row) }
       }
       onCustomFolderAdded?.(); loadFiles()
     } else {
@@ -1124,13 +1170,15 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n }) }
 
     const hasChildren = (node.children?.length > 0) || myCustomFolders.length > 0
-  const totalCount = fileCount + (node.children || []).reduce((s, c) => s + (fileCounts?.[c.key] || 0), 0)
+  // Everything inside this folder, however deep (template keys share the
+  // parent's prefix; custom folder keys embed their parent's key)
+  const totalCount = deepCount(fileCounts, node.key)
 
   return (
     <div style={{ marginLeft: indent > 0 ? 0 : 0 }}>
       <UploadProgress uploadState={uploadProgress} />
       {/* Folder row */}
-      <div
+      <div className="folder-head"
         draggable={isMovableFolder && !renamingNode && !showAddFolder}
         onDragStart={startFolderDrag}
         onDragEnd={() => setDragOver(false)}
@@ -1192,8 +1240,10 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             : totalCount > 0 && <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 1 }}>{totalCount} file{totalCount !== 1 ? 's' : ''}</div>}
         </div>
 
+        {isSection && ui.sectionChips?.(node.key)}
+
         {/* Actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+        <div className="folder-actions" style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
           {showAddFolder ? (
             <>
               <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Subfolder name" autoFocus
@@ -1204,33 +1254,18 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
             </>
           ) : (
             <>
-              {node.key.startsWith('custom-') && canManage && (
-                <>
-                  <button onClick={e => { e.stopPropagation(); setRenameNodeVal(node.label); setRenamingNode(true) }} title="Rename folder"
-                    style={{ ...BtnG, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    Rename
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); setConfirmDelNode(true) }} title="Delete folder"
-                    style={{ ...BtnR, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                    Delete
-                  </button>
-                </>
-              )}
-              <button onClick={zipFolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-                Zip all
-              </button>
-              {canAddFolders && (
-                <button onClick={() => setShowAddFolder(true)} style={Btn}>+ Subfolder</button>
-              )}
               {canManage && (
-                <label style={BtnG}>
-                  {uploading ? '...' : '+ Upload'}
+                <label className="row-upload">
+                  {uploading ? 'Uploading…' : 'Upload'}
                   <input type="file" multiple style={{ display: 'none' }} onChange={e => upload(Array.from(e.target.files))} disabled={uploading} />
                 </label>
               )}
+              <RowMenu items={[
+                { label: 'Zip this folder', onClick: zipFolder },
+                { label: 'Add subfolder', onClick: () => setShowAddFolder(true), hidden: !canAddFolders },
+                { label: 'Rename folder', onClick: () => { setRenameNodeVal(node.label); setRenamingNode(true) }, hidden: !(node.key.startsWith('custom-') && canManage) },
+                { label: 'Delete folder', onClick: () => setConfirmDelNode(true), danger: true, hidden: !(node.key.startsWith('custom-') && canManage) },
+              ]} />
               {open && depth === 0 && setViewMode && <ViewToggle viewMode={viewMode} setView={setViewMode} />}
             </>
           )}
@@ -1244,8 +1279,9 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       {open && (
         <div onDragOver={onDragOverFolder} onDragLeave={onDragLeaveFolder} onDrop={onDrop}
           style={{ outline: dragOver ? '2px dashed var(--accent)' : 'none', outlineOffset: 2, borderRadius: 4, marginLeft: isSection ? 16 : 12, paddingLeft: 10, borderLeft: `1.5px solid ${color}30`, marginBottom: isSection ? 8 : 4, paddingTop: 4, paddingBottom: 4 }}>
-          {/* Sub-folders */}
-          {node.children?.map(child => (
+          {isSection && ui.sectionPanel?.(node.key)}
+          {/* Sub-folders (empty template folders hidden unless "Show empty folders") */}
+          {node.children?.filter(child => ui.showEmpty || deepCount(fileCounts, child.key) > 0).map(child => (
             <FolderNode key={child.key} node={child} projectId={projectId} depth={depth + 1}
               fileCounts={fileCounts} canManage={canManage} canAddFolders={canAddFolders}
               customFolders={customFolders} onCustomFolderAdded={onCustomFolderAdded}
@@ -1328,6 +1364,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
 // ── Main HSHandover component ─────────────────────────────────
 export default function HSHandover({ projectId, projectName }) {
   const { can, profile } = useAuth()
+  const ui = useContext(HandoverUiCtx)
   const [fileCounts, setFileCounts] = useState({})
   const [customFolders, setCustomFolders] = useState([])
   const [compilingFull, setCompilingFull] = useState(false)
@@ -1357,6 +1394,13 @@ export default function HSHandover({ projectId, projectName }) {
     loadCustomFolders()
   }, [projectId])
 
+  // Files filed from the drop zone above (or moved anywhere) → refresh counts
+  useEffect(() => {
+    const on = () => loadFileCounts()
+    window.addEventListener('hs-moved', on)
+    return () => window.removeEventListener('hs-moved', on)
+  }, [projectId])
+
   async function loadFileCounts() {
     const { data } = await supabase.from('hs_files').select('folder_key').eq('project_id', projectId)
     if (data) {
@@ -1378,7 +1422,7 @@ export default function HSHandover({ projectId, projectName }) {
     ;(function wk(ns){ ns.forEach(n => { templateKeys.add(n.key); wk(n.children) }) })(HS_STRUCTURE)
     const customKeys = new Set((data || []).map(f => f.folder_key))
     const orphanKeys = [...new Set((fileKeysRows || []).map(r => r.folder_key))]
-      .filter(k => k && !templateKeys.has(k) && !customKeys.has(k))
+      .filter(k => k && !k.startsWith('_') && !templateKeys.has(k) && !customKeys.has(k))   // '_inbox' = O&M builder's to-file list
     const nearestKeptAncestor = (key) => {
       const parts = key.split('-')
       for (let i = parts.length - 1; i >= 1; i--) {
@@ -1655,7 +1699,7 @@ export default function HSHandover({ projectId, projectName }) {
 
       // Add real uploaded files into their correct folders
       for (const f of (allFiles || [])) {
-        const folderPath = keyToPath[f.folder_key] || f.folder_key
+        const folderPath = f.folder_key === '_inbox' ? '00 To file' : (keyToPath[f.folder_key] || f.folder_key)
         const { data } = await supabase.storage.from('hs-handover').createSignedUrl(f.storage_path, 300)
         if (data?.signedUrl) {
           try {
@@ -1679,24 +1723,21 @@ export default function HSHandover({ projectId, projectName }) {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+      <div className="hs-bar">
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>H&S Handover File</div>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{totalFiles} file{totalFiles !== 1 ? 's' : ''} · Sections 1–11</div>
+          <div className="hs-bar-t">{ui.toggleEmpty ? 'Handover file' : 'H&S Handover File'}</div>
+          <div className="hs-bar-s">{totalFiles} file{totalFiles !== 1 ? 's' : ''} · 11 sections{ui.toggleEmpty && !ui.showEmpty ? ' · empty folders hidden' : ''}</div>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={zipAll} disabled={zippingAll} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid var(--border)', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
-            {zippingAll ? 'Zipping...' : 'Zip all files'}
+        <div className="hs-bar-a">
+          {ui.toggleEmpty && <button className="btn btn-sm" onClick={ui.toggleEmpty}>{ui.showEmpty ? 'Hide empty folders' : 'Show all folders'}</button>}
+          <button className="btn btn-sm" onClick={zipAll} disabled={zippingAll}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            {zippingAll ? 'Zipping…' : 'Download as folders (.zip)'}
           </button>
-          <button onClick={compileOmManuals} disabled={compilingOm} style={{ fontSize: 12, padding: '7px 14px', border: '0.5px solid #534AB7', borderRadius: 'var(--radius)', background: 'transparent', cursor: 'pointer', color: '#534AB7', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            {compilingOm ? 'Compiling...' : 'Export Section 8 O&M PDF'}
-          </button>
-          <button onClick={compileFullHandover} disabled={compilingFull} style={{ fontSize: 12, padding: '7px 14px', borderRadius: 'var(--radius)', background: '#448a40', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            {compilingFull ? 'Compiling...' : 'Compile Full H&S Handover PDF'}
-          </button>
+          <RowMenu title="More downloads" items={[
+            { label: compilingFull ? 'Compiling…' : 'Compile full H&S File as one PDF', onClick: compileFullHandover },
+            { label: compilingOm ? 'Compiling…' : 'Compile Section 8 (O&M manuals) as one PDF', onClick: compileOmManuals },
+          ]} />
         </div>
       </div>
 
@@ -1730,9 +1771,9 @@ export default function HSHandover({ projectId, projectName }) {
       </div>
 
       {/* Note */}
-      <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 11, color: 'var(--text3)' }}>
+      {!ui.toggleEmpty && <div style={{ marginTop: 16, padding: '10px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 11, color: 'var(--text3)' }}>
         Template structure fixed — add sub-folders within sections as needed per project. Drag files onto any folder to move them; drag your own sub-folders to re-file them (selected files move together). Only PDFs are embedded in compiled exports; other file types appear in the appendix index.
-      </div>
+      </div>}
 
       {/* Preview modal */}
       {previewFile && (
