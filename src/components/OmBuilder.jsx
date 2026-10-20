@@ -45,6 +45,10 @@ const safeName = n => String(n).replace(/[\u2014\u2013]/g, '-').normalize('NFKD'
 const toIso = d => { const m = String(d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : '' }
 const fromIso = d => { const [y, m, dd] = String(d).split('-'); return `${dd}/${m}/${y}` }
 const changed = keys => window.dispatchEvent(new CustomEvent('hs-moved', { detail: { keys } }))
+// The project's Practical Completion date (from the PC certificate on the
+// project) is the default completion date; a date typed in the O&M still wins.
+const withPc = (ov, project) => project?.pc_date && !ov?.practical_completion
+  ? { ...(ov || {}), practical_completion: fromIso(String(project.pc_date).slice(0, 10)) } : (ov || {})
 
 // Which building a Handover file belongs to: 'b1'… / 'site' / null (not tagged)
 const inBuilding = (f, key) => f._table !== 'hs_files' || !f.building || f.building === 'site' || f.building === key
@@ -163,54 +167,101 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
   }, { delay: 700 })
 
   // ── Drop anything: upload → read → file (drawings by type, revisions) ───
-  async function addDropped(items) {
+  // Dropped anywhere on the Handover page (or here): Claude picks the folder.
+  // Dropped onto a section (e.g. Record Drawings): Claude picks the folder
+  // inside that section. Only invoices / internal papers, and files Claude
+  // can't place at all, wait in "To file".
+  async function addDropped(items, { within = null } = {}) {
     const list = items.filter(x => x.file?.size)
     if (!list.length) return
+    const start = within && labels[within] ? within : '_inbox'
     setReading({ done: 0, total: list.length, label: 'Uploading' })
     const added = []
     for (const { file, path: rel } of list) {
       const path = `projects/${projectId}/hs/_inbox/${Date.now()}-${safeName(file.name)}`
       const { error: upErr } = await supabase.storage.from('hs-handover').upload(path, file)
       if (upErr) { setToast(`Couldn't upload ${file.name}`); continue }
-      const row = { project_id: projectId, folder_key: '_inbox', file_name: file.name, file_size: file.size, storage_path: path }
+      const row = { project_id: projectId, folder_key: start, file_name: file.name, file_size: file.size, storage_path: path }
       if (multi && bkey) row.building = bkey      // dropped while viewing a building → that building
       const { data } = await supabase.from('hs_files').insert(row).select().single()
       if (data) added.push({ ...data, _hint: rel, _table: 'hs_files', _source: 'Handover' })
       setReading(r => ({ ...r, done: added.length }))
     }
     let current = [...(files || []), ...added]
-    setFiles(current)
+    // Two drops can run at once (page + section): merge by id, never replace the list
+    const touched = new Set(added.map(f => f.id))
+    const publish = () => setFiles(fs => {
+      const byId = new Map(current.map(x => [x.id, x]))
+      const have = new Set((fs || []).map(x => x.id))
+      return [...(fs || []).map(x => touched.has(x.id) && byId.has(x.id) ? byId.get(x.id) : x), ...current.filter(x => touched.has(x.id) && !have.has(x.id))]
+    })
+    publish()
+    if (start !== '_inbox') changed([start])
+    // Read three at a time (a dropped folder can hold dozens); file in order
     setReading({ done: 0, total: added.length, label: 'Reading and filing' })
+    const readings = new Array(added.length)
+    let next = 0, doneN = 0
+    await Promise.all(Array.from({ length: Math.min(3, added.length) }, async () => {
+      while (next < added.length) {
+        const i = next++
+        try { readings[i] = { ai: await readDocument({ ...added[i], hint: added[i]._hint }, 'hs_files', labels, multi ? buildings : undefined) } }
+        catch (e) { console.error('[handover] read', e); readings[i] = { err: true } }
+        setReading(r => r && ({ ...r, done: ++doneN }))
+      }
+    }))
     const log = []
     for (let i = 0; i < added.length; i++) {
       const f = added[i]
+      const { ai, err } = readings[i] || {}
+      if (err) { log.push({ name: f.file_name, to: start === '_inbox' ? null : labels[start] }); continue }
       try {
-        const ai = await readDocument({ ...f, hint: f._hint }, 'hs_files', labels, multi ? buildings : undefined)
-        let folder = f.folder_key
-        if (ai?.suggested_folder && labels[ai.suggested_folder] && ai.confidence !== 'low' && ai.client_facing !== false) {
-          folder = ai.suggested_folder
-          await supabase.from('hs_files').update({ folder_key: folder }).eq('id', f.id)
-        }
+        const sug = ai?.suggested_folder && ai.suggested_folder !== '_inbox' && labels[ai.suggested_folder] ? ai.suggested_folder : null
+        const inScope = k => !within || k === within || k.startsWith(within + '-')
+        let folder = start, alt = null
+        if (ai?.client_facing === false) folder = '_inbox'       // invoices, quotes, letters: never into the client's file — a person decides
+        else if (sug && inScope(sug)) folder = sug
+        else if (sug) alt = sug                                   // Claude thinks it belongs in another section
+        if (folder !== f.folder_key) await supabase.from('hs_files').update({ folder_key: folder }).eq('id', f.id)
         let me = { ...f, ai, folder_key: folder, building: f.building || ai?.building || null }
         current = current.map(x => x.id === f.id ? me : x)
         // Revisions: older copy of the same drawing goes to Superseded
         for (const mv of revisionMoves(HS_STRUCTURE, me, current)) {
           await supabase.from('hs_files').update({ folder_key: mv.to }).eq('id', mv.file.id)
           current = current.map(x => x.id === mv.file.id ? { ...x, folder_key: mv.to } : x)
+          touched.add(mv.file.id)
           log.push({ id: mv.file.id, from: mv.file.folder_key, name: mv.file.file_name, to: labels[mv.to], note: mv.why })
           if (mv.file.id === me.id) me = { ...me, folder_key: mv.to }
           changed([mv.to, mv.file.folder_key])
         }
-        log.push({ id: f.id, from: '_inbox', name: f.file_name, to: me.folder_key === '_inbox' ? null : labels[me.folder_key], type: DOC_TYPES[ai?.doc_type]?.label })
-        setFiles(current)
-        changed([me.folder_key])
-      } catch (e) { console.error('[handover] read', e); log.push({ name: f.file_name, to: null }) }
-      setReading(r => ({ ...r, done: i + 1 }))
+        log.push({ id: f.id, from: start, name: f.file_name, to: me.folder_key === '_inbox' ? null : labels[me.folder_key], type: DOC_TYPES[ai?.doc_type]?.label,
+          check: me.folder_key !== start && ai?.confidence === 'low', alt: alt && labels[alt] ? { key: alt, label: labels[alt] } : null })
+        publish()
+        changed([me.folder_key, start])
+      } catch (e) { console.error('[handover] file', e); log.push({ name: f.file_name, to: null }) }
     }
     setReading(null)
-    setRecent(log)
-    const filed = log.filter(l => l.to && !l.note).length
-    setToast(`${filed} of ${added.length} filed automatically${added.length - filed ? ` · ${added.length - filed} to check` : ''}`)
+    setRecent(r => [...log, ...r].slice(0, 60))
+    const filed = log.filter(l => l.to && !l.note && !l.alt && (within ? l.to !== labels[within] : true)).length
+    const left = added.length - filed
+    setToast(`${filed} of ${added.length} filed automatically${left ? ` · ${left} to check` : ''}`)
+  }
+  // Drops from anywhere on the Handover page / onto a section of the folder tree
+  const dropRef = useRef(addDropped)
+  dropRef.current = addDropped
+  useEffect(() => {
+    if (!canDrop) return
+    const on = e => dropRef.current(e.detail?.items || [], { within: e.detail?.within || null })
+    window.addEventListener('hs-auto-file', on)
+    window.__hsAutoFile = (window.__hsAutoFile || 0) + 1
+    return () => { window.removeEventListener('hs-auto-file', on); window.__hsAutoFile = Math.max(0, (window.__hsAutoFile || 1) - 1) }
+  }, [canDrop])
+
+  async function moveTo(entry, key) {
+    if (!entry.id) return
+    await supabase.from('hs_files').update({ folder_key: key }).eq('id', entry.id)
+    setFiles(fs => fs.map(x => x.id === entry.id ? { ...x, folder_key: key } : x))
+    setRecent(r => r.map(x => x === entry ? { ...x, to: labels[key], alt: null, check: false } : x))
+    changed([key])
   }
 
   async function undoMove(entry) {
@@ -241,7 +292,7 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
   useEffect(() => { supabase.from('profiles').select('full_name').then(({ data }) => setStaffNames((data || []).map(p => p.full_name).filter(Boolean))) }, [])
   // A building's manual uses its own documents plus whole-site and untagged ones
   const scoped = useMemo(() => !files ? null : multi && bkey ? files.filter(f => inBuilding(f, bkey)) : files, [files, multi, bkey])
-  const analysis = useMemo(() => scoped && pack ? analyse({ project, files: scoped.filter(f => f.folder_key !== '_inbox' || f.ai), options: pack.options, overrides: pack.overrides || {}, staffNames }) : null, [scoped, pack, project, staffNames])
+  const analysis = useMemo(() => scoped && pack ? analyse({ project, files: scoped.filter(f => f.folder_key !== '_inbox' || f.ai), options: pack.options, overrides: withPc(pack.overrides, project), staffNames }) : null, [scoped, pack, project, staffNames])
   const untagged = multi ? (files || []).filter(f => f._table === 'hs_files' && !f.building && f.origin !== 'om_builder') : []
   async function setFileBuilding(f, key) {
     const { error } = await supabase.from('hs_files').update({ building: key || null }).eq('id', f.id)
@@ -262,7 +313,7 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
   // Out of date when a Handover document was read after the draft, or the settings/decisions changed
   const lastChange = useMemo(() => (scoped || []).filter(f => f._table === 'hs_files' && f.ai && !f.ai.error)
     .reduce((m, f) => Math.max(m, new Date(f.ai.read_at || 0).getTime()), 0), [scoped])
-  const draftStale = !!pack?.draft && (!pack.draft_at || new Date(pack.draft_at).getTime() < lastChange || pack.draft.key !== draftKey(pack))
+  const draftStale = !!pack?.draft && (!pack.draft_at || new Date(pack.draft_at).getTime() < lastChange || pack.draft.key !== draftKey({ ...pack, overrides: withPc(pack.overrides, project) }))
   const openDecisions = (analysis?.conflicts || []).filter(c => pack?.overrides?.[c.key] == null)
 
   const composingRef = useRef(false)
@@ -270,9 +321,9 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
     if (composingRef.current) return
     composingRef.current = true
     setComposing(true)
-    const key = draftKey(pack)
+    const key = draftKey({ ...pack, overrides: withPc(pack.overrides, project) })
     try {
-      const res = await composePack(projectId, pack.options, pack.overrides, multi && bkey ? building : undefined)
+      const res = await composePack(projectId, pack.options, withPc(pack.overrides, project), multi && bkey ? building : undefined)
       const draft = { ...res, key }, draft_at = new Date().toISOString()
       // Save only the draft — never overwrite settings or decisions made meanwhile
       setPack(p => ({ ...p, draft, draft_at }))
@@ -441,8 +492,8 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
           onDragOver={e => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
           onDragLeave={() => setDragOver(false)}
           onDrop={async e => { if (!e.dataTransfer?.types?.includes('Files')) return; e.preventDefault(); e.stopPropagation(); setDragOver(false); addDropped(await collectDropped(e.dataTransfer)) }}>
-          <b>Drop files or whole folders here</b>
-          <span>Each document is read and filed into the right folder below. Drawings go into Record Drawings by what they show — floor plans, elevations, fire strategy, services — and an older revision of the same drawing moves to Superseded.</span>
+          <b>Drop files or whole folders here — or anywhere on this page</b>
+          <span>Each document is read and filed into the right folder below; no need to pick one. Drawings go into Record Drawings by what they show — floor plans, elevations, fire strategy, services — and an older revision of the same drawing moves to Superseded.</span>
           <div className="om-drop-btns">
             <button className="btn btn-sm" onClick={() => inputRef.current?.click()}>Choose files</button>
             <button className="btn btn-sm" onClick={() => folderRef.current?.click()}>Choose a folder</button>
@@ -457,9 +508,10 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
           <div className="om-card-h">Just filed <button className="om-link" onClick={() => setRecent([])}>Clear</button></div>
           {recent.map((r, i) => (
             <div key={i} className="om-doc">
-              <div className="om-doc-main"><div className="om-doc-n">{r.name}</div><div className="om-doc-s">{r.note || r.type || ''}</div></div>
-              <div className="om-doc-where">{r.to ? `→ ${r.to}` : <span className="pill pill-amber">To file</span>}</div>
-              {r.to && canDrop && <button className="om-link" onClick={() => undoMove(r)}>Undo</button>}
+              <div className="om-doc-main"><div className="om-doc-n">{r.name}</div><div className="om-doc-s">{r.alt ? `Claude suggests ${r.alt.label}` : r.note || r.type || ''}</div></div>
+              <div className="om-doc-where">{r.to ? `→ ${r.to}` : <span className="pill pill-amber">To file</span>}{r.check && <span className="pill pill-amber om-check">check</span>}</div>
+              {r.alt && canDrop && <button className="om-link" onClick={() => moveTo(r, r.alt.key)}>Move there</button>}
+              {canDrop && r.id && r.to && !r.alt && r.to !== labels[r.from] && <button className="om-link" onClick={() => undoMove(r)}>Undo</button>}
             </div>
           ))}
         </section>
@@ -471,9 +523,12 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
           {inbox.map(f => (
             <div key={f.id} className="om-doc">
               <div className="om-doc-main"><div className="om-doc-n">{f.file_name}</div><div className="om-doc-s">{f.ai ? `${DOC_TYPES[f.ai.doc_type]?.label || 'Other'}${f.ai.client_facing === false ? ' · internal — not for the client' : ''}` : 'Reading…'}</div></div>
+              {canDrop && f.ai?.suggested_folder && labels[f.ai.suggested_folder] && f.ai.suggested_folder !== '_inbox' && (
+                <button className="btn btn-sm om-accept" title={labels[f.ai.suggested_folder]} onClick={() => fileTo(f, f.ai.suggested_folder)}>✓ {labels[f.ai.suggested_folder].split(' › ').pop()}</button>
+              )}
               {canDrop && <select className="om-sel" value="" onChange={e => e.target.value && fileTo(f, e.target.value)}>
-                <option value="">File to…</option>
-                {f.ai?.suggested_folder && labels[f.ai.suggested_folder] && <option value={f.ai.suggested_folder}>Suggested: {labels[f.ai.suggested_folder]}</option>}
+                <option value="">{f.ai?.suggested_folder && f.ai.suggested_folder !== '_inbox' && labels[f.ai.suggested_folder] ? 'Other…' : 'File to…'}</option>
+                {f.ai?.suggested_folder && f.ai.suggested_folder !== '_inbox' && labels[f.ai.suggested_folder] && <option value={f.ai.suggested_folder}>Suggested: {labels[f.ai.suggested_folder]}</option>}
                 {Object.entries(labels).filter(([k]) => k !== '_inbox').map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>}
             </div>
@@ -538,7 +593,7 @@ function BuildingsOverview({ buildings, files, allPacks, allIssues, project, sta
           const o = pk?.options || DEFAULT_OPTIONS
           const own = files.filter(f => f._table === 'hs_files' && f.building === b.key)
           const scope = files.filter(f => inBuilding(f, b.key))
-          const a = analyse({ project, files: scope.filter(f => f.folder_key !== '_inbox' || f.ai), options: o, overrides: pk?.overrides || {}, staffNames })
+          const a = analyse({ project, files: scope.filter(f => f.folder_key !== '_inbox' || f.ai), options: o, overrides: withPc(pk?.overrides, project), staffNames })
           const last = allIssues.find(i => i.building === b.key && i.kind === 'om')
           const packs = [o.type === 'building' ? 'Building O&M' : 'Package O&M', o.tenant && 'Tenant O&M', o.golden_thread && 'Golden Thread'].filter(Boolean)
           return (

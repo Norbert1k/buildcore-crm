@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { resolveBuildings } from '../lib/buildings'
+import { useAuth } from '../lib/auth'
+import { collectDropped } from '../lib/handoverFiling'
 import OmBuilder from './OmBuilder'
 import HSHandover, { HandoverUiCtx, setHandoverBuildings } from './HSHandover'
 import { useHandoverReadiness, SectionChips, SectionPanel } from './HandoverReadiness'
@@ -51,6 +53,33 @@ export default function HandoverFile({ projectId, project }) {
   const pick = k => { setScope(k); try { localStorage.setItem(scopeKey, k) } catch { /* ignore */ } }
   useEffect(() => { setHandoverBuildings(multi ? buildings : [], current?.key || null); return () => setHandoverBuildings([], null) }, [multi, current?.key])
 
+  // Drop files anywhere on the page → read and filed automatically (OmBuilder
+  // does the filing). Drops onto a folder are handled by that folder.
+  const { can } = useAuth()
+  const canDrop = can('manage_projects')
+  const [dragging, setDragging] = useState(false)
+  const depth = useRef(0)
+  const hasFiles = e => !!e.dataTransfer?.types?.includes?.('Files')
+  useEffect(() => {
+    const reset = () => { depth.current = 0; setDragging(false) }
+    window.addEventListener('drop', reset, true)
+    window.addEventListener('dragend', reset, true)
+    return () => { window.removeEventListener('drop', reset, true); window.removeEventListener('dragend', reset, true) }
+  }, [])
+  const dropProps = canDrop ? {
+    onDragEnter: e => { if (hasFiles(e)) { depth.current++; setDragging(true) } },
+    onDragLeave: e => { if (hasFiles(e) && --depth.current <= 0) { depth.current = 0; setDragging(false) } },
+    onDragOver: e => { if (hasFiles(e)) e.preventDefault() },
+    onDrop: async e => {
+      if (!hasFiles(e)) return
+      e.preventDefault()                      // never let the browser open the file instead
+      depth.current = 0; setDragging(false)
+      if (!window.__hsAutoFile) return
+      const items = await collectDropped(e.dataTransfer)
+      if (items.length) window.dispatchEvent(new CustomEvent('hs-auto-file', { detail: { items } }))
+    },
+  } : {}
+
   const ui = {
     showEmpty, toggleEmpty,
     sectionChips: key => <SectionChips r={r} folderKey={key} />,
@@ -58,7 +87,8 @@ export default function HandoverFile({ projectId, project }) {
   }
   if (buildings === null) return <div className="handover-file" />
   return (
-    <div className="handover-file">
+    <div className="handover-file" {...dropProps}>
+      {dragging && <div className="hs-drop-hint">Drop to read &amp; file automatically <small>or onto a section to keep it inside</small></div>}
       {multi && (
         <div className="hb-bar" role="tablist" aria-label="Building">
           <span className="hb-l">Building</span>

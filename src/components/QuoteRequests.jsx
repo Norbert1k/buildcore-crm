@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { formatCurrency, sortBy } from '../lib/utils'
+import { formatCurrency, formatMoney, sortBy } from '../lib/utils'
 import { Spinner, EmptyState, Modal, Field, IconPlus } from './ui'
 import { useAuth } from '../lib/auth'
 
@@ -231,7 +231,7 @@ export default function QuoteRequests({ projectId = null }) {
                         {r.sup.asked > 0 && <span className="qr-dots">{r.sup.rows.slice(0, 8).map(x => <i key={x.id} className={x.quote ? 'y' : x.status === 'declined' ? 'd' : ''} />)}</span>}
                         {r.sup.asked === 0 ? <span className="qr-muted">none logged</span> : `${r.sup.returned} of ${r.sup.asked - r.sup.declined} in${r.sup.declined ? ` · ${r.sup.declined} declined` : ''}`}
                       </span>}
-                  <span className="num"><b>{r.stage === 'awarded' ? (r.accepted.amount != null ? formatCurrency(r.accepted.amount) : '—') : r.lowest ? formatCurrency(r.lowest.amount) : '—'}</b></span>
+                  <span className="num"><b>{r.stage === 'awarded' ? (r.accepted.amount != null ? formatMoney(r.accepted.amount) : '—') : r.lowest ? formatMoney(r.lowest.amount) : '—'}</b></span>
                   <span className="num qr-muted">{r.stage === 'awarded' ? r.quotes.length : r.spread != null ? `+${Math.round(r.spread * 100)}%` : '—'}</span>
                   <span className={late ? 'qr-late' : 'qr-muted'}>{r.stage === 'pricing' ? (r.task.return_by ? fmtDay(r.task.return_by) + (late ? ' · overdue' : '') : '—') : fmtDay(r.latest || r.task.created_at)}</span>
                   <span className="qr-muted qr-owner">{r.owners.map(o => initials(o.profiles?.full_name)).join(', ') || '—'}</span>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo, daysUntilExpiry, formatCurrency, complianceScore, NOTE_TYPES, exportToCSV } from '../lib/utils'
+import { SUB_STATUSES, DOCUMENT_TYPES, formatDate, formatDateTime, docStatusInfo, daysUntilExpiry, formatMoney, complianceScore, NOTE_TYPES, exportToCSV } from '../lib/utils'
 import { Avatar, Pill, Spinner, Modal, Field, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { useAllowedSubIds } from '../lib/access'
@@ -599,11 +599,11 @@ function ProjectsTab({ projects, navigate, showMoney }) {
         <td className="td-muted">{ps.projects?.project_ref || '—'}</td>
         <td className="td-muted" style={{ whiteSpace: 'nowrap' }}>{formatDate(ps.start_date)} – {formatDate(ps.end_date)}</td>
         {showMoney && <>
-        <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
+        <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatMoney(ps.contract_value) : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
         <td>
           {ps.variation_amount > 0 ? (
             <div>
-              <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
+              <span style={{ color: 'var(--amber)', fontWeight: 600, whiteSpace: 'nowrap' }}>+{formatMoney(ps.variation_amount)}</span>
               {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
                 <div key={i} style={{ fontSize: 11, color: 'var(--text2)' }}>{line}</div>
               ))}
@@ -612,7 +612,7 @@ function ProjectsTab({ projects, navigate, showMoney }) {
         </td>
         <td style={{ fontWeight: 600 }}>
           {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
-            ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
+            ? formatMoney((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
             : '—'}
         </td>
         </>}
@@ -634,9 +634,9 @@ function ProjectsTab({ projects, navigate, showMoney }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 20 }}>
         <div className="stat-card"><div className="stat-label">Running</div><div className="stat-value green">{running.length}</div></div>
         <div className="stat-card"><div className="stat-label">Completed</div><div className="stat-value">{completed.length}</div></div>
-        {showMoney && <div className="stat-card"><div className="stat-label">Total Order Value</div><div className="stat-value" style={{ fontSize: 16 }}>{totalOrderValue > 0 ? formatCurrency(totalOrderValue) : '—'}</div></div>}
-        {showMoney && totalVariation > 0 && <div className="stat-card"><div className="stat-label">Total Variations</div><div className="stat-value amber" style={{ fontSize: 16 }}>+{formatCurrency(totalVariation)}</div></div>}
-        {showMoney && totalOrderValue > 0 && <div className="stat-card" style={{ borderTop: '3px solid var(--green)' }}><div className="stat-label">Grand Total</div><div className="stat-value green" style={{ fontSize: 16 }}>{formatCurrency(totalOrderValue + totalVariation)}</div></div>}
+        {showMoney && <div className="stat-card"><div className="stat-label">Total Order Value</div><div className="stat-value" style={{ fontSize: 16 }}>{totalOrderValue > 0 ? formatMoney(totalOrderValue) : '—'}</div></div>}
+        {showMoney && totalVariation > 0 && <div className="stat-card"><div className="stat-label">Total Variations</div><div className="stat-value amber" style={{ fontSize: 16 }}>+{formatMoney(totalVariation)}</div></div>}
+        {showMoney && totalOrderValue > 0 && <div className="stat-card" style={{ borderTop: '3px solid var(--green)' }}><div className="stat-label">Grand Total</div><div className="stat-value green" style={{ fontSize: 16 }}>{formatMoney(totalOrderValue + totalVariation)}</div></div>}
       </div>
 
       {running.length > 0 && (

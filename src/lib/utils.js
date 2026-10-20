@@ -141,6 +141,19 @@ export function formatCurrency(val) {
   if (val == null) return '—'
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(val)
 }
+
+// Pounds and pence — order values, variations, final accounts (£12,345.67)
+const GBP2 = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', minimumFractionDigits: 2, maximumFractionDigits: 2 })
+export function formatMoney(val) {
+  if (val == null || val === '' || isNaN(Number(val))) return '—'
+  return GBP2.format(Math.round(Number(val) * 100) / 100)
+}
+// Typed amounts → a number to the penny ("1,234.5" → 1234.5), or null
+export function parseMoney(v) {
+  if (v == null || v === '') return null
+  const n = Number(String(v).replace(/[£,\s]/g, ''))
+  return isNaN(n) ? null : Math.round(n * 100) / 100
+}
  
 export function initials(name) {
   if (!name) return '?'

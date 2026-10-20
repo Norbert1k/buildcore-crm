@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
+import { PROJECT_STATUSES, formatDate, formatMoney, parseMoney } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { useNav } from '../lib/access'
@@ -16,6 +16,7 @@ const FitOutHandover = lazy(() => import('../components/FitOutHandover'))
 const HandoverFile = lazy(() => import('../components/HandoverFile'))
 const DrawingsRegister = lazy(() => import('../components/DrawingsRegister'))
 const SubcontractorDocs = lazy(() => import('../components/SubcontractorDocs'))
+import { SubCompletionModal, CompletedBadge, PracticalCompletionFact } from '../components/CompletionCertificates'
 const ProjectQuotesTab = lazy(() => import('../components/ProjectQuotesTab'))
 const ProcurementTab = lazy(() => import('./ProcurementTab'))
 
@@ -269,6 +270,7 @@ export default function ProjectDetail() {
   // Inline sub docs state
   const [expandedSubId, setExpandedSubId] = useState(null)
   const [subFiles, setSubFiles] = useState([])
+  const [completeSub, setCompleteSub] = useState(null)   // subcontractor being marked complete (needs the signed final account)
 
   useEffect(() => { load() }, [id])
 
@@ -385,16 +387,18 @@ export default function ProjectDetail() {
     setSavingVariation(true)
     const ps = showVariation
     const currentVariation = parseFloat(ps.variation_amount) || 0
-    const addAmount = parseFloat(variationForm.amount) || 0
-    const newVariation = currentVariation + addAmount
-    const newNotes = ps.variation_notes
-      ? ps.variation_notes + '\n' + new Date().toLocaleDateString('en-GB') + ': £' + addAmount.toLocaleString() + (variationForm.notes ? ' — ' + variationForm.notes : '')
-      : new Date().toLocaleDateString('en-GB') + ': £' + addAmount.toLocaleString() + (variationForm.notes ? ' — ' + variationForm.notes : '')
-    await supabase.from('project_subcontractors').update({
+    const addAmount = parseMoney(variationForm.amount) || 0
+    const newVariation = Math.round((currentVariation + addAmount) * 100) / 100
+    const line = new Date().toLocaleDateString('en-GB') + ': ' + formatMoney(addAmount) + (variationForm.notes ? ' — ' + variationForm.notes : '')
+    const newNotes = ps.variation_notes ? ps.variation_notes + '\n' + line : line
+    const { data: upd, error } = await supabase.from('project_subcontractors').update({
       variation_amount: newVariation,
       variation_notes: newNotes
-    }).eq('id', ps.id)
+    }).eq('id', ps.id).select('id')
     setSavingVariation(false)
+    // Keep the form open on failure so nothing typed is lost
+    if (error) { alert('Variation not saved: ' + error.message + (/integer/i.test(error.message) ? ' — run 039_completion_certificates.sql so variations can hold pence.' : '')); return }
+    if (!upd?.length) { alert('Variation not saved — you don’t have permission to change this assignment.'); return }
     setShowVariation(null)
     setVariationForm({ amount: '', notes: '' })
     load()
@@ -404,11 +408,13 @@ export default function ProjectDetail() {
     if (!orderValueForm) return
     setSavingOrderValue(true)
     const ps = showOrderValue
-    const newValue = parseFloat(orderValueForm) || 0
-    await supabase.from('project_subcontractors').update({
+    const newValue = parseMoney(orderValueForm) || 0
+    const { data: upd, error } = await supabase.from('project_subcontractors').update({
       contract_value: newValue
-    }).eq('id', ps.id)
+    }).eq('id', ps.id).select('id')
     setSavingOrderValue(false)
+    if (error) { alert('Order value not saved: ' + error.message); return }
+    if (!upd?.length) { alert('Order value not saved — you don’t have permission to change this assignment.'); return }
     setShowOrderValue(null)
     setOrderValueForm('')
     load()
@@ -422,13 +428,19 @@ export default function ProjectDetail() {
       trade_on_project: editAssignForm.trade_on_project || null,
       start_date: editAssignForm.start_date || null,
       end_date: editAssignForm.end_date || null,
-      contract_value: editAssignForm.contract_value ? parseFloat(editAssignForm.contract_value) : null,
+      contract_value: parseMoney(editAssignForm.contract_value),
       status: editAssignForm.status || 'active',
     }
-    await supabase.from('project_subcontractors').update(payload).eq('id', ps.id)
+    // Completed needs the signed final account — save the rest, then ask for it
+    const needsProof = payload.status === 'completed' && ps.status !== 'completed'
+    if (needsProof) payload.status = ps.status || 'active'
+    const { data: upd, error } = await supabase.from('project_subcontractors').update(payload).eq('id', ps.id).select('id')
     setSavingEditAssign(false)
+    if (error) { alert('Could not save: ' + error.message); return }
+    if (!upd?.length) { alert('Not saved — you don’t have permission to change this assignment.'); return }
     setShowEditAssign(null)
     load()
+    if (needsProof) setCompleteSub({ ...ps, ...payload })
   }
 
   // Export Project Directory (Design Team) or Procured Works (Subcontractors) as PDF
@@ -601,7 +613,7 @@ export default function ProjectDetail() {
   }
 
   async function assignSub() {
-    await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: assignForm.contract_value || null })
+    await supabase.from('project_subcontractors').insert({ project_id: id, ...assignForm, contract_value: parseMoney(assignForm.contract_value) })
     setShowAssignSub(false)
     setAssignForm({ subcontractor_id: '', trade_on_project: '', category: 'contractual_work', start_date: '', end_date: '', contract_value: '', variation_amount: 0, variation_notes: '' })
     load()
@@ -957,10 +969,11 @@ export default function ProjectDetail() {
                   ? <span>{project.start_date ? formatDate(project.start_date) : '—'} → {project.end_date ? formatDate(project.end_date) : '—'}{dur ? <em> · {dur}</em> : null}</span>
                   : <span className="proj-fact-empty">Not set</span>}
               </div>
+              <PracticalCompletionFact project={project} canManage={can('manage_projects')} onSaved={load} />
               {can('view_project_value') && project.value ? (
                 <div className="proj-fact">
                   <span className="proj-fact-label">Contract</span>
-                  <span className="num">{formatCurrency(project.value)}</span>
+                  <span className="num">{formatMoney(project.value)}</span>
                 </div>
               ) : null}
             </div>
@@ -1091,7 +1104,7 @@ export default function ProjectDetail() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                     <span style={{ fontSize: 14, color: 'var(--text3)' }}>Original contract</span>
-                    <span style={{ fontSize: 16, fontWeight: 600 }}>{formatCurrency(original)}</span>
+                    <span style={{ fontSize: 16, fontWeight: 600 }}>{formatMoney(original)}</span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
                     <span style={{ fontSize: 14, color: 'var(--text3)' }}>
@@ -1099,12 +1112,12 @@ export default function ProjectDetail() {
                       {variations_count > 0 && <span style={{ color: 'var(--text3)' }}> ({variations_count})</span>}
                     </span>
                     <span style={{ fontSize: 16, fontWeight: 600, color: variations_total > 0 ? 'var(--green, #448a40)' : 'var(--text)' }}>
-                      {variations_total > 0 ? '+ ' : ''}{formatCurrency(variations_total)}
+                      {variations_total > 0 ? '+ ' : ''}{formatMoney(variations_total)}
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
                     <span style={{ fontSize: 14, fontWeight: 600 }}>Total order value</span>
-                    <span style={{ fontSize: 18, fontWeight: 700 }}>{formatCurrency(total_value)}</span>
+                    <span style={{ fontSize: 18, fontWeight: 700 }}>{formatMoney(total_value)}</span>
                   </div>
                   {buildings.length > 1 && (
                     <div style={{ marginTop: 8, paddingTop: 10, borderTop: '0.5px solid var(--border)' }}>
@@ -1115,7 +1128,7 @@ export default function ProjectDetail() {
                         {buildings.map((b, i) => (
                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                             <span style={{ color: 'var(--text2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, marginRight: 8 }}>{b.label}</span>
-                            <span style={{ color: 'var(--text2)' }}>{formatCurrency(b.original + b.variations_total)}</span>
+                            <span style={{ color: 'var(--text2)' }}>{formatMoney(b.original + b.variations_total)}</span>
                           </div>
                         ))}
                       </div>
@@ -1325,7 +1338,7 @@ export default function ProjectDetail() {
                           <td className="td-muted">{formatDate(ps.end_date)}</td>
                           {can('view_project_value') && (
                           <>
-                          <td style={{ fontWeight: 500 }}>{ps.contract_value ? formatCurrency(ps.contract_value) : (
+                          <td style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{ps.contract_value ? formatMoney(ps.contract_value) : (
                             can('manage_projects') ? (
                               <button className="btn btn-sm" style={{ fontSize: 11, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); setShowOrderValue(ps); setOrderValueForm('') }}>
                                 + Add
@@ -1335,7 +1348,7 @@ export default function ProjectDetail() {
                           <td>
                             {ps.variation_amount > 0 ? (
                               <div>
-                                <span style={{ color: 'var(--amber)', fontWeight: 600 }}>+{formatCurrency(ps.variation_amount)}</span>
+                                <span style={{ color: 'var(--amber)', fontWeight: 600, whiteSpace: 'nowrap' }}>+{formatMoney(ps.variation_amount)}</span>
                                 {ps.variation_notes && ps.variation_notes.split('\n').map((line, i) => (
                                   <div key={i} style={{ fontSize: 11, color: 'var(--text2)', marginTop: 2 }}>{line}</div>
                                 ))}
@@ -1348,14 +1361,14 @@ export default function ProjectDetail() {
                               )
                             )}
                           </td>
-                          <td style={{ fontWeight: 600, color: (parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                          <td style={{ fontWeight: 600, whiteSpace: 'nowrap', color: (parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0 ? 'var(--text)' : 'var(--text3)' }}>
                             {(parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0) > 0
-                              ? formatCurrency((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
+                              ? formatMoney((parseFloat(ps.contract_value)||0) + (parseFloat(ps.variation_amount)||0))
                               : '—'}
                           </td>
                           </>
                           )}
-                          <td><Pill cls={ps.status === 'active' ? 'pill-green' : 'pill-gray'}>{ps.status}</Pill></td>
+                          <td><CompletedBadge ps={ps} canManage={can('manage_projects')} onAddProof={setCompleteSub} /></td>
                           <td>
                             <div style={{ display: 'flex', gap: 4 }}>
                               {can('manage_projects') && (
@@ -1402,9 +1415,9 @@ export default function ProjectDetail() {
                 const totalAll = totalOrder + totalVar
                 return (
                   <div style={{ display: 'flex', gap: 16, justifyContent: 'flex-end', padding: '12px 0', borderTop: '2px solid var(--border)', marginTop: 8 }}>
-                    <div style={{ fontSize: 13, color: 'var(--text2)' }}>Total Order: <span style={{ fontWeight: 700, color: 'var(--text)' }}>{formatCurrency(totalOrder)}</span></div>
-                    {totalVar > 0 && <div style={{ fontSize: 13, color: 'var(--amber)' }}>Variations: <span style={{ fontWeight: 700 }}>+{formatCurrency(totalVar)}</span></div>}
-                    <div style={{ fontSize: 13, color: 'var(--green)' }}>Grand Total: <span style={{ fontWeight: 700 }}>{formatCurrency(totalAll)}</span></div>
+                    <div style={{ fontSize: 13, color: 'var(--text2)' }}>Total Order: <span style={{ fontWeight: 700, color: 'var(--text)' }}>{formatMoney(totalOrder)}</span></div>
+                    {totalVar > 0 && <div style={{ fontSize: 13, color: 'var(--amber)' }}>Variations: <span style={{ fontWeight: 700 }}>+{formatMoney(totalVar)}</span></div>}
+                    <div style={{ fontSize: 13, color: 'var(--green)' }}>Grand Total: <span style={{ fontWeight: 700 }}>{formatMoney(totalAll)}</span></div>
                   </div>
                 )
               })()}
@@ -1551,8 +1564,8 @@ export default function ProjectDetail() {
             onClick={e => e.stopPropagation()}>
             <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Add Variation</h3>
             <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 20 }}>
-              {showVariation.subcontractors?.company_name} · Current order: {formatCurrency(showVariation.contract_value)}
-              {showVariation.variation_amount > 0 && <> · Existing variation: <span style={{ color: 'var(--amber)' }}>+{formatCurrency(showVariation.variation_amount)}</span></>}
+              {showVariation.subcontractors?.company_name} · Current order: {formatMoney(showVariation.contract_value)}
+              {showVariation.variation_amount > 0 && <> · Existing variation: <span style={{ color: 'var(--amber)' }}>+{formatMoney(showVariation.variation_amount)}</span></>}
             </div>
             {showVariation.variation_notes && (
               <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 13, color: 'var(--text2)', marginBottom: 16, maxHeight: 100, overflowY: 'auto' }}>
@@ -1561,7 +1574,7 @@ export default function ProjectDetail() {
               </div>
             )}
             <Field label="Variation Amount (£) *">
-              <input type="number" value={variationForm.amount} onChange={e => setVariationForm(f => ({ ...f, amount: e.target.value }))}
+              <input type="number" step="0.01" inputMode="decimal" value={variationForm.amount} onChange={e => setVariationForm(f => ({ ...f, amount: e.target.value }))}
                 placeholder="e.g. 5000" autoFocus />
             </Field>
             <div style={{ marginTop: 12 }}>
@@ -1574,7 +1587,7 @@ export default function ProjectDetail() {
               <div style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 14px', fontSize: 14, marginTop: 12 }}>
                 <div style={{ color: 'var(--amber)', fontWeight: 600 }}>New total for {showVariation.subcontractors?.company_name}:</div>
                 <div style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>
-                  {formatCurrency((parseFloat(showVariation.contract_value)||0) + (parseFloat(showVariation.variation_amount)||0) + (parseFloat(variationForm.amount)||0))}
+                  {formatMoney((parseFloat(showVariation.contract_value)||0) + (parseFloat(showVariation.variation_amount)||0) + (parseFloat(variationForm.amount)||0))}
                 </div>
               </div>
             )}
@@ -1599,8 +1612,8 @@ export default function ProjectDetail() {
               {showOrderValue.subcontractors?.company_name}
             </div>
             <Field label="Order Value (£) *">
-              <input type="number" value={orderValueForm} onChange={e => setOrderValueForm(e.target.value)}
-                placeholder="e.g. 50000" autoFocus />
+              <input type="number" step="0.01" inputMode="decimal" value={orderValueForm} onChange={e => setOrderValueForm(e.target.value)}
+                placeholder="e.g. 50000.00" autoFocus />
             </Field>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <button className="btn" onClick={() => setShowOrderValue(null)}>Cancel</button>
@@ -1617,7 +1630,7 @@ export default function ProjectDetail() {
         footer={<>
           <button className="btn" onClick={() => setShowEditAssign(null)}>Cancel</button>
           <button className="btn btn-primary" onClick={saveEditAssign} disabled={savingEditAssign}>
-            {savingEditAssign ? 'Saving…' : 'Save Changes'}
+            {savingEditAssign ? 'Saving…' : editAssignForm.status === 'completed' && showEditAssign?.status !== 'completed' ? 'Save & add certificate' : 'Save Changes'}
           </button>
         </>}>
         <div className="form-grid">
@@ -1635,7 +1648,7 @@ export default function ProjectDetail() {
           {can('view_project_value') && (
             <div className="full">
               <Field label="Order Value (£)">
-                <input type="number" value={editAssignForm.contract_value} onChange={e => setEditAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" min="0" step="100" />
+                <input type="number" value={editAssignForm.contract_value} onChange={e => setEditAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000.00" min="0" step="0.01" inputMode="decimal" />
               </Field>
             </div>
           )}
@@ -1648,15 +1661,20 @@ export default function ProjectDetail() {
                 <option value="cancelled">Cancelled</option>
               </select>
             </Field>
+            {editAssignForm.status === 'completed' && showEditAssign?.status !== 'completed' && (
+              <div className="cc-next">Next you'll upload the final account signed by both parties — it's checked before the status changes.</div>
+            )}
           </div>
           {showEditAssign && showEditAssign.variation_amount > 0 && (
             <div className="full" style={{ background: 'var(--amber-bg)', border: '1px solid var(--amber-border)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 13, color: 'var(--text2)' }}>
-              <div style={{ fontWeight: 600, color: 'var(--amber)', marginBottom: 2 }}>Note: Variation of +{formatCurrency(showEditAssign.variation_amount)} is attached to this assignment.</div>
+              <div style={{ fontWeight: 600, color: 'var(--amber)', marginBottom: 2 }}>Note: Variation of +{formatMoney(showEditAssign.variation_amount)} is attached to this assignment.</div>
               <div>Use the +VAR button on the row to manage variations separately.</div>
             </div>
           )}
         </div>
       </Modal>
+
+      {completeSub && <SubCompletionModal ps={completeSub} project={project} onClose={() => setCompleteSub(null)} onDone={() => { setCompleteSub(null); load() }} />}
 
       {activeTab === 'quotes' && project.division !== 'fitout' && (
         <ProjectQuotesTab projectId={id} />
@@ -1683,7 +1701,7 @@ export default function ProjectDetail() {
           </select></Field></div>
           <Field label="Start Date"><input type="date" value={assignForm.start_date} onChange={e => setAssignForm(f => ({ ...f, start_date: e.target.value }))} /></Field>
           <Field label="End Date"><input type="date" value={assignForm.end_date} onChange={e => setAssignForm(f => ({ ...f, end_date: e.target.value }))} /></Field>
-          <div className="full"><Field label="Order Value (£)"><input type="number" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000" /></Field></div>
+          <div className="full"><Field label="Order Value (£)"><input type="number" step="0.01" inputMode="decimal" value={assignForm.contract_value} onChange={e => setAssignForm(f => ({ ...f, contract_value: e.target.value }))} placeholder="e.g. 50000.00" /></Field></div>
         </div>
       </Modal>
 

@@ -1095,7 +1095,7 @@ export default function TaskDetail() {
   const stepIdx = { pricing: sup.returned ? 1 : 0, decide: 2, awarded: 3, closed: -1 }[stage]
   const steps = ['Requested', `Prices in${sup.asked ? ` (${sup.returned}/${sup.asked - sup.declined})` : ''}`, 'Decide', 'Awarded & PO']
   const overdue = stage === 'pricing' && task.return_by && task.return_by < new Date().toISOString().slice(0, 10)
-  const money = n => n == null ? '—' : '£' + Number(n).toLocaleString('en-GB', { maximumFractionDigits: 0 })
+  const money = n => n == null ? '—' : '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   return (
     <div className="qd">
       <button className="btn btn-sm qd-back" onClick={goBack}><IconChevron size={13} dir="left" /> {location.key && location.key !== 'default' ? 'Back' : 'Back to Quotes'}</button>

@@ -1549,3 +1549,62 @@ html .proj-tabs .filter-tab { font-size: 13.5px; }
 .om-bsel { width: auto; max-width: 180px; padding: 4px 8px; font-size: 13px; flex-shrink: 0; }
 .om-bsel.none { border-color: #BA7517; }
 .om-btag { font-size: 12.5px; color: var(--text3); white-space: nowrap; }
+
+/* ── Completion certificates (final account / practical completion) ─────── */
+.cc { display: flex; flex-direction: column; gap: 12px; }
+.cc-lead { margin: 0; font-size: 14px; color: var(--text2); line-height: 1.5; }
+.cc-lead b { color: var(--text); }
+.cc-drop { border: 1.5px dashed var(--border2); border-radius: var(--radius-lg); padding: 26px 18px; text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; background: var(--surface2); color: var(--text3); transition: border-color .15s, background .15s; outline: none; }
+.cc-drop b { font-size: 15px; color: var(--text); margin-top: 4px; }
+.cc-drop span { font-size: 13px; color: var(--text2); }
+.cc-drop:hover, .cc-drop.over, .cc-drop:focus-visible { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+.cc-file { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text2); padding: 9px 12px; background: var(--surface2); border-radius: var(--radius); min-width: 0; }
+.cc-file-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 600; }
+.cc-link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.cc-link:hover { text-decoration: underline; }
+.cc-checking { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text2); padding: 6px 2px; }
+.cc-spin { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: cc-spin .8s linear infinite; flex-shrink: 0; }
+@keyframes cc-spin { to { transform: rotate(360deg); } }
+.cc-result { display: flex; flex-direction: column; gap: 8px; }
+.cc-sig { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); }
+.cc-sig.ok { border-color: var(--green-border); background: var(--green-bg); }
+.cc-sig.no { border-color: var(--red-border); background: var(--red-bg); }
+.cc-ok, .cc-no { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; flex-shrink: 0; color: #fff; }
+.cc-ok { background: var(--green); }
+.cc-no { background: var(--red); }
+.cc-sig-w { font-size: 14px; font-weight: 700; color: var(--text); }
+.cc-sig-s { font-size: 13px; color: var(--text2); margin-top: 1px; }
+.cc-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--text2); padding: 2px 2px; }
+.cc-facts b { color: var(--text); }
+.cc-good { font-size: 14px; font-weight: 700; color: var(--green); }
+.cc-bad { font-size: 14px; font-weight: 600; color: var(--red); }
+.cc-warn { font-size: 13.5px; color: var(--amber); background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: var(--radius); padding: 8px 12px; }
+.cc-flag { font-size: 13px; color: var(--text2); padding-left: 14px; position: relative; }
+.cc-flag::before { content: ""; position: absolute; left: 3px; top: .55em; width: 5px; height: 5px; border-radius: 50%; background: var(--amber); }
+.cc-hand { display: flex; align-items: flex-start; gap: 8px; font-size: 13.5px; color: var(--text); cursor: pointer; line-height: 1.4; }
+.cc-hand input { margin-top: 2px; }
+.cc-hand-link { align-self: flex-start; color: var(--text3); font-weight: 500; text-decoration: underline; }
+.cc-date { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13.5px; font-weight: 600; color: var(--text2); border-top: 1px solid var(--border); padding-top: 12px; }
+.cc-date input { width: auto; }
+.cc-date.big { font-size: 14.5px; color: var(--text); }
+.cc-next { margin-top: 6px; font-size: 13px; color: var(--text2); background: var(--accent-light); border-radius: var(--radius); padding: 7px 10px; }
+.cc-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; border: 1px solid var(--green-border); background: var(--green-bg); color: var(--green); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.cc-badge:hover { border-color: var(--green); }
+.cc-badge .cc-badge-doc { opacity: .7; }
+.cc-badge.nofile { background: var(--surface2); border-color: var(--border); color: var(--text2); }
+.cc-badge.nofile .cc-badge-doc { display: none; }
+.pc-fact { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; }
+.pc-date { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; background: none; border: 0; padding: 0; font: inherit; font-weight: 700; color: var(--green); cursor: pointer; }
+.pc-date:hover { text-decoration: underline; }
+.pc-edit { background: none; border: 0; padding: 0; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--text3); cursor: pointer; }
+.pc-edit:hover { color: var(--accent); text-decoration: underline; }
+.pc-add { align-self: flex-start; background: none; border: 1px dashed var(--border2); border-radius: 20px; padding: 2px 10px; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.pc-add:hover { border-color: var(--accent); background: var(--accent-light); }
+.om-check { margin-left: 6px; font-size: 11px; padding: 1px 6px; }
+.om-accept { white-space: nowrap; max-width: 34%; overflow: hidden; text-overflow: ellipsis; color: var(--green); border-color: var(--green-border); background: var(--green-bg); font-weight: 600; }
+/* Page-wide drop on Handover: a hint while dragging files over the page */
+.hs-dropping { position: relative; }
+.hs-drop-hint { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 350; pointer-events: none; background: var(--accent); color: #fff; padding: 11px 20px; border-radius: 28px; font-size: 14.5px; font-weight: 700; box-shadow: 0 8px 28px rgba(0,0,0,.22); display: flex; align-items: center; gap: 10px; white-space: nowrap; max-width: calc(100vw - 32px); }
+.hs-drop-hint small { font-weight: 500; opacity: .85; font-size: 13px; }
+@media (max-width: 640px) { .hs-drop-hint small { display: none; } }
+.folder-head.auto-target { outline: 2px dashed var(--accent) !important; background: var(--accent-light) !important; }

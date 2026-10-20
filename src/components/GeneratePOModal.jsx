@@ -389,10 +389,10 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
       const bits = []
       if (q.quote_reference) bits.push(`ref ${q.quote_reference}`)
       if (q.quote_date) bits.push(`dated ${q.quote_date}`)
-      if (q.total_value_ex_vat != null) bits.push(`total £${Number(q.total_value_ex_vat).toLocaleString()} ex VAT`)
+      if (q.total_value_ex_vat != null) bits.push(`total £${Number(q.total_value_ex_vat).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ex VAT`)
       setQuoteParseMsg(`✓ Quote read${bits.length ? ' — ' + bits.join(', ') : ''}. Fields filled below are drafts — review before saving.` +
         (q.total_value_ex_vat != null && ctx.contractValue && Number(q.total_value_ex_vat) !== Number(ctx.contractValue)
-          ? ` Note: quote total differs from the order value on this subcontractor assignment (£${Number(ctx.contractValue).toLocaleString()}).` : ''))
+          ? ` Note: quote total differs from the order value on this subcontractor assignment (£${Number(ctx.contractValue).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).` : ''))
     } catch (err) {
       setQuoteParseMsg('Quote reading failed: ' + (err.message || 'unknown error') + ' — the PDF was still saved to the Purchase Order folder if the upload succeeded.')
     }
@@ -701,7 +701,7 @@ export default function GeneratePOModal({ projectId, projectSubId, existingPO, e
                         <input type="radio" name="quotePick" checked={pickedQuoteId === q.id} onChange={() => pickQuote(q)} style={{ width: 14, height: 14, appearance: 'auto', flexShrink: 0 }} />
                         <span style={{ fontWeight: 600, flexShrink: 0 }}>{q.quote_reference || '(no ref)'}</span>
                         <span style={{ color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{q.tasks?.title || '—'}</span>
-                        {q.amount != null && <span style={{ flexShrink: 0 }}>£{Number(q.amount).toLocaleString()}</span>}
+                        {q.amount != null && <span style={{ flexShrink: 0 }}>£{Number(q.amount).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                         <span style={{ color: 'var(--text3)', flexShrink: 0 }}>{q.received_date ? fmtDate(q.received_date) : ''}</span>
                         <span style={{ flexShrink: 0, fontSize: 11, padding: '1px 8px', borderRadius: 'var(--radius)', background: q.status === 'accepted' ? 'rgba(68,138,64,0.15)' : 'var(--surface2)', color: q.status === 'accepted' ? '#448a40' : 'var(--text3)' }}>{q.status}</span>
                       </label>

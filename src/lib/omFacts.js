@@ -44,7 +44,7 @@ const REQUIREMENTS = {
         if (f.completion) return `Practical completion ${f.completion}${f.guaranteed.some(s => s.completion) ? ' · own dates used where a guarantee states one' : ''}`
         const no = f.guaranteed.filter(s => !s.completion)
         if (!no.length) return `${f.guaranteed.length} guaranteed system${f.guaranteed.length === 1 ? '' : 's'} dated`
-        return `${no.length} guaranteed system${no.length === 1 ? '' : 's'} with no date (${no.slice(0, 3).map(s => s.name).join(', ')}${no.length > 3 ? ` +${no.length - 3} more` : ''}) — set the practical completion date`
+        return `${no.length} guaranteed system${no.length === 1 ? '' : 's'} with no date (${no.slice(0, 3).map(s => s.name).join(', ')}${no.length > 3 ? ` +${no.length - 3} more` : ''}) — add the PC certificate at the top of the project, or set the date here`
       }, action: 'completion' },
   ],
   building: [

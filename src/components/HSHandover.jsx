@@ -421,17 +421,20 @@ async function triggerDownload(signedUrl, fileName) {
 
 async function readDropEntries(e) {
   const items = e.dataTransfer?.items
-  if (!items) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  // Always { file, path } — some browsers give no folder entries
+  if (!items) return { files: Array.from(e.dataTransfer?.files || []).map(file => ({ file, path: '' })), folders: [] }
   const entries = []
   for (let i = 0; i < items.length; i++) {
     const entry = items[i].webkitGetAsEntry?.()
     if (entry) entries.push(entry)
   }
-  if (!entries.length) return { files: Array.from(e.dataTransfer?.files || []), folders: [] }
+  if (!entries.length) return { files: Array.from(e.dataTransfer?.files || []).map(file => ({ file, path: '' })), folders: [] }
   const result = { files: [], folders: new Set() }
   async function walk(entry, path) {
     if (entry.isFile) {
-      const file = await new Promise(r => entry.file(r))
+      if (/^\./.test(entry.name)) return                         // .DS_Store and other hidden files
+      const file = await new Promise(r => entry.file(r, () => r(null)))
+      if (!file) return                                            // unreadable — skip, don't hang the drop
       result.files.push({ file, path })
       if (path) result.folders.add(path)
     } else if (entry.isDirectory) {
@@ -1044,6 +1047,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
     loadFiles()
   }
 
+  const isGroupNode = (node.children || []).length > 0
   async function onDrop(e) {
     e.preventDefault(); e.stopPropagation()
     setDragOver(false)
@@ -1058,6 +1062,14 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       return
     }
     const drop = await readDropEntries(e)
+    // A section or group with sub-folders (e.g. Record Drawings): Claude reads
+    // each file and puts it in the right folder inside it (O&M builder's filer).
+    // A single folder with no sub-folders: the files go exactly there, as before.
+    if (isGroupNode && window.__hsAutoFile) {
+      const items = drop.files.filter(x => x.file?.size)
+      if (items.length) window.dispatchEvent(new CustomEvent('hs-auto-file', { detail: { items, within: node.key } }))
+      return
+    }
     if (drop.folders.length > 0) {
       const keyMap = {}
       for (const fp of drop.folders.sort()) {
