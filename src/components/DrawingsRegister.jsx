@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import DrawingsSurveysTab, { buildInventory, designStatus, parseDrawing } from './DrawingsSurveysTab'
+import DrawingUpload from './DrawingUpload'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Drawings — a read-only mirror of the Design portal's drawing register.
@@ -76,7 +77,10 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
   const [preview, setPreview] = useState(null)                     // { file, url, kind, loading }
   const [crm, setCrm] = useState([])                               // CRM drawings (still in Documents)
   const [showTransfer, setShowTransfer] = useState(false)
-  const [workspace, setWorkspace] = useState(null)                  // full-screen Design intake
+  const [upload, setUpload] = useState(null)                        // { files } — add drawings to Design from here
+  const [proj, setProj] = useState(null)                            // this job: name, ref, design code
+  const [linkEdit, setLinkEdit] = useState(null)                    // code being typed, or null
+  const [dropping, setDropping] = useState(false)
   const [checkedAt, setCheckedAt] = useState(null)
   const [view, setView] = useState(() => { try { return localStorage.getItem('dr:view') || 'grid' } catch { return 'grid' } })
   const [full, setFull] = useState(false)                          // full-screen viewer
@@ -84,11 +88,28 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
   // Free the in-memory copy of a previewed drawing when it's closed or replaced
   useEffect(() => () => { if (preview?.blobUrl) URL.revokeObjectURL(preview.blobUrl) }, [preview?.blobUrl])
 
-  useEffect(() => { load(); loadCrm() }, [projectId])
+  useEffect(() => { load(); loadCrm(); loadProj() }, [projectId])
+  useEffect(() => {
+    const reset = () => setDropping(false)
+    window.addEventListener('drop', reset, true); window.addEventListener('dragend', reset, true)
+    return () => { window.removeEventListener('drop', reset, true); window.removeEventListener('dragend', reset, true) }
+  }, [])
+  async function loadProj() {
+    const { data } = await supabase.from('projects').select('id, project_name, project_ref, design_code').eq('id', projectId).maybeSingle()
+    setProj(data || null)
+  }
+  // Point this job at a different Design project code (blank = use the job's REF)
+  async function saveLink() {
+    const v = (linkEdit || '').trim() || null
+    const { data, error } = await supabase.from('projects').update({ design_code: v }).eq('id', projectId).select('id')
+    if (error || !data?.length) { alert('Couldn’t change the link' + (error ? ': ' + error.message : ' — you don’t have permission.')); return }
+    setLinkEdit(null); setProj(p => ({ ...p, design_code: v })); setState({ phase: 'loading' }); load()
+  }
 
   async function load() {
     setState(s => s.phase === 'ok' ? s : { phase: 'loading' })
     const { data, error } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'list' } })
+    if (data?.status === 'ambiguous') { setState({ phase: 'ambiguous', code: data.code, projects: data.projects || [] }); return }
     if (error || !data || data.status !== 'ok' || !Array.isArray(data.folders)) { setState({ phase: 'fallback' }); return }
     setState({ phase: 'ok', project: data.project, folders: data.folders, files: data.files || [] })
     setCheckedAt(new Date())
@@ -127,17 +148,31 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
     }
   }
 
-  async function openDesign(intake) {
-    if (intake) { setWorkspace({ loading: true }) }
-    // Open the tab before the await so pop-up blockers allow it (as the old tab did)
-    const w = intake ? null : window.open('', '_blank')
+  // Open this job in the Design portal (new tab). Never falls back to the
+  // portal's home page — that reopens whichever project was viewed last.
+  async function openDesign() {
+    const w = window.open('', '_blank')            // before the await so pop-up blockers allow it
     if (w) w.opener = null
-    const { data } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'handoff', embed: !!intake } })
-    if (intake) setWorkspace({ url: data?.status === 'ok' ? data.url : null })
-    else if (w) w.location.href = data?.status === 'ok' ? data.url : 'https://design.cltd.co.uk'
+    const { data } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'handoff', embed: false } })
+    if (data?.status === 'ok' && w) { w.location.href = data.url; return }
+    w?.close()
+    alert(data?.status === 'ambiguous' ? `Two Design projects use this job's code (${(data.projects || []).map(p => p.name).join(', ')}) — fix the link first.`
+      : data?.status === 'no_access' ? 'Your Design portal account isn’t a member of this project. Ask a CCG admin to add you there.'
+      : data?.status === 'no_account' ? 'You don’t have a Design portal account yet — ask a CCG admin to invite you.'
+      : data?.status === 'not_linked' ? 'This job isn’t linked to a Design project.'
+      : 'Couldn’t open the Design portal — try again.')
   }
+  const hasFiles = e => !!e.dataTransfer?.types?.includes?.('Files')
 
   if (state.phase === 'fallback') return <DrawingsSurveysTab projectId={projectId} canManage={canManage} onOpenDocuments={onOpenDocuments} />
+  if (state.phase === 'ambiguous') return (
+    <div className="dr-link-bad">
+      <b>Two Design projects use this job's code “{state.code}”</b>
+      <span>{state.projects.map(p => p.name).join(' · ')} — the CRM won't guess which one is this job.</span>
+      <span>Give each project its own code in the Design portal, or enter this job's Design code here:</span>
+      {canManage && <span className="dr-link-edit"><input value={linkEdit ?? ''} onChange={e => setLinkEdit(e.target.value)} placeholder="Design code, e.g. 2026-006" /> <button className="btn btn-sm btn-primary" onClick={saveLink}>Save</button></span>}
+    </div>
+  )
   if (state.phase === 'loading') return <div className="dr-loading">Loading drawings from the Design portal…</div>
 
   const { folders, files, project } = state
@@ -170,20 +205,46 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
   const flat = []
   ;(function walk(parent, depth) { (childrenOf[parent] || []).map(id => folders.find(f => f.id === id)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || natural(a.name, b.name)).forEach(f => { flat.push({ id: f.id, label: ' '.repeat(depth) + f.name }); walk(f.id, depth + 1) }) })('root', 0)
 
+  // A link that points at a differently named Design project is almost always a mistake
+  const words = t => new Set(String(t || '').toLowerCase().replace(/\(.*?\)/g, ' ').split(/[^a-z0-9]+/).filter(w => w.length >= 4 && !['road', 'street', 'lane', 'house', 'court', 'phase', 'block', 'building', 'project', 'sample', 'development', 'site'].includes(w)))
+  const mismatch = !!(proj?.project_name && project?.name) && (() => { const a = words(proj.project_name), b = words(project.name); return a.size > 0 && b.size > 0 && ![...a].some(w => b.has(w)) })()
+  const dropProps = canManage ? {
+    onDragOver: e => { if (hasFiles(e) && !upload) { e.preventDefault(); setDropping(true) } },
+    onDragLeave: e => { if (!e.currentTarget.contains(e.relatedTarget)) setDropping(false) },
+    onDrop: e => { if (!hasFiles(e) || upload) return; e.preventDefault(); setDropping(false); setUpload({ files: Array.from(e.dataTransfer.files || []) }) },
+  } : {}
+
   return (
-    <div className="dr">
+    <div className={`dr${dropping ? ' dr-dropping' : ''}`} {...dropProps}>
+      {dropping && <div className="hs-drop-hint">Drop to add to the Design portal <small>you'll pick the folder next</small></div>}
       <div className="dr-head">
         <div className="dr-source">
           <span className="dr-source-dot" />
-          <span>Mirrored from the Design portal{project?.code ? ` · ${project.code}` : ''}</span>
+          <span>Design project <b className="dr-linked">{project?.name || '—'}</b>{project?.code ? <span className="dr-muted"> · {project.code}</span> : null}</span>
+          {canManage && linkEdit == null && <button type="button" className="dr-link" onClick={() => setLinkEdit(proj?.design_code || '')}>Change link</button>}
           {checkedAt && <span className="dr-muted">· updated {checkedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>}
           <button type="button" className="dr-link" onClick={load}>Refresh</button>
         </div>
         <div className="dr-head-actions">
-          <button className="btn btn-sm" onClick={() => openDesign(false)}>Open in Design ↗</button>
-          {canManage && <button className="btn btn-sm btn-primary" onClick={() => openDesign(true)}>+ Add drawings</button>}
+          <button className="btn btn-sm" onClick={openDesign}>Open in Design ↗</button>
+          {canManage && <button className="btn btn-sm btn-primary" onClick={() => setUpload({ files: [] })}>+ Add drawings</button>}
         </div>
       </div>
+      {linkEdit != null && (
+        <div className="dr-link-edit card">
+          <span>Design project code for this job</span>
+          <input value={linkEdit} onChange={e => setLinkEdit(e.target.value)} placeholder={proj?.project_ref || 'e.g. 2026-006'} autoFocus />
+          <button className="btn btn-sm btn-primary" onClick={saveLink}>Save</button>
+          <button className="btn btn-sm" onClick={() => setLinkEdit(null)}>Cancel</button>
+          <span className="dr-muted">Blank = use this job's REF ({proj?.project_ref || '—'}).</span>
+        </div>
+      )}
+      {mismatch && linkEdit == null && (
+        <div className="dr-banner">
+          <div><b>Is this the right Design project?</b><span> This job is “{proj.project_name}” but it's linked to “{project.name}” in Design.</span></div>
+          {canManage && <button className="btn btn-sm" onClick={() => setLinkEdit(proj?.design_code || '')}>Change link</button>}
+        </div>
+      )}
 
       {crm.length > 0 && (
         <div className={`dr-banner${crmMissing ? '' : ' ok'}`}>
@@ -292,16 +353,9 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
         </div>
       )}
 
-      {workspace && (
-        <div className="dr-workspace" role="dialog" aria-label="Design portal">
-          <div className="dr-workspace-bar">
-            <button className="btn btn-sm" onClick={() => { setWorkspace(null); load() }}>← Back to project</button>
-            <span>Design portal · add and sort drawings</span>
-          </div>
-          {workspace.loading ? <div className="dr-workspace-msg">Opening the Design portal…</div>
-            : workspace.url ? <iframe title="Design portal" src={workspace.url} />
-            : <div className="dr-workspace-msg">The Design portal's upload and auto-sort opens here, full screen. It isn't available in this preview.</div>}
-        </div>
+      {upload && (
+        <DrawingUpload projectId={projectId} folders={folders} defaultFolder={selected} initialFiles={upload.files} designName={project?.name}
+          onClose={() => setUpload(null)} onDone={load} />
       )}
     </div>
   )

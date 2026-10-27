@@ -9,8 +9,11 @@
 //   { project_id, action: "handoff", embed: bool }  → { status, url? }            (crm-handoff)
 //   { project_id, action: "list" }                  → { status, project, folders, files }   (crm-drawings)
 //   { project_id, action: "file_url", file_id }     → { status, url, kind }       (crm-drawings)
+//   { project_id, action: "upload_prepare", folder_id, files }  → plan + one-time upload links (crm-drawings)
+//   { project_id, action: "upload_commit",  folder_id, items }  → files filed           (crm-drawings)
 //
-// Read-only by construction: no writes to the CRM or the Design portal.
+// No writes to the CRM. The Design portal is only ever ADDED to (uploads),
+// under that person's own Design rights — nothing there is changed or deleted.
 // Secrets (CRM project):
 //   DESIGN_HANDOFF_URL, DESIGN_HANDOFF_SECRET      — existing
 //   DESIGN_DRAWINGS_SECRET                          — new, same value as the Design project's CRM_DRAWINGS_SECRET
@@ -42,15 +45,16 @@ Deno.serve(async (req) => {
     const { data: staff, error: staffErr } = await supa.rpc("is_crm_staff");
     if (staffErr || staff !== true) return json({ error: "CRM staff only" }, 403);
 
-    const { project_id, action, embed, file_id } = await req.json();
+    const body = await req.json();
+    const { project_id, action, embed, file_id } = body;
     const { data: project } = await supa.from("projects")
       .select("id, project_ref, design_code").eq("id", project_id).maybeSingle();
     if (!project) return json({ error: "Project not found" }, 404);
 
     const code = (project.design_code || project.project_ref || "").trim();
 
-    // Drawing register (read-only) — the Design portal's crm-drawings function
-    if (action === "list" || action === "file_url") {
+    // Drawing register (read-only) and add-only uploads — the Design portal's crm-drawings function
+    if (action === "list" || action === "file_url" || action === "upload_prepare" || action === "upload_commit") {
       if (!code) return json({ status: "not_linked" });
       const secret = Deno.env.get("DESIGN_DRAWINGS_SECRET");
       if (!secret) return json({ status: "not_set_up" });   // CRM shows its previous Drawings view
@@ -58,11 +62,16 @@ Deno.serve(async (req) => {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-handoff-secret": secret },
-        body: JSON.stringify(action === "list" ? { action, code } : { action, code, file_id: String(file_id || "") }),
+        body: JSON.stringify(
+          action === "list" ? { action, code }
+          : action === "file_url" ? { action, code, file_id: String(file_id || "") }
+          // Uploads: add-only; Design checks this person's own rights by their email
+          : { action, code, email: user.email, folder_id: String(body.folder_id || ""), files: body.files, items: body.items }),
       });
       let out: Record<string, unknown> = {};
       try { out = await res.json(); } catch { out = { status: "error", message: `Design portal returned ${res.status}` }; }
-      return json({ ...out, code }, res.ok ? 200 : 502);
+      // Upload answers carry their own message (no access, wrong folder…) — pass them through
+      return json({ ...out, code }, res.ok || (action.startsWith("upload_") && res.status < 500) ? 200 : 502);
     }
 
     if (!code) return action === "resolve" ? json({ linked: false, code: "" }) : json({ status: "not_linked" });

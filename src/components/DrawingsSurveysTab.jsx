@@ -172,6 +172,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
     const { data, error } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'handoff', embed: true } })
     if (error || !data) { setEmbed({ state: 'error', url: null, message: 'Couldn’t reach the Design portal.' }); return }
     if (data.status === 'ok') { setDesignReady(false); setInventory(null); setEmbed({ state: 'ok', url: withTheme(data.url), message: '' }) }
+    else if (data.status === 'ambiguous') setEmbed({ state: 'error', url: null, message: `Two Design projects use this job's code (${(data.projects || []).map(p => p.name).join(', ')}) — set this job's own code in Link settings.` })
     else if (data.status === 'no_account') setEmbed({ state: 'no_account', url: null, message: '' })
     else if (data.status === 'no_access') setEmbed({ state: 'no_access', url: null, message: '' })
     else setEmbed({ state: 'error', url: null, message: data.message || 'Couldn’t open the Design portal.' })
@@ -182,7 +183,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
     const w = window.open('', '_blank')
     const { data } = await supabase.functions.invoke('design-link', { body: { project_id: projectId, action: 'handoff', embed: false } })
     if (data?.status === 'ok' && w) w.location.href = data.url
-    else if (w) w.location.href = 'https://design.cltd.co.uk'
+    else { w?.close(); alert(data?.status === 'ambiguous' ? 'Two Design projects use this job’s code — fix the link first.' : 'Couldn’t open this job in the Design portal.') }   // never the portal home: it reopens the last project viewed
   }
 
   // ── CRM drawings & surveys: read-only listing of the existing folders ──

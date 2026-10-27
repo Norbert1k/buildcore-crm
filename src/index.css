@@ -1608,3 +1608,39 @@ html .proj-tabs .filter-tab { font-size: 13.5px; }
 .hs-drop-hint small { font-weight: 500; opacity: .85; font-size: 13px; }
 @media (max-width: 640px) { .hs-drop-hint small { display: none; } }
 .folder-head.auto-target { outline: 2px dashed var(--accent) !important; background: var(--accent-light) !important; }
+
+/* ── Drawings: link + add drawings from the CRM ─────────────────────────── */
+.dr-linked { color: var(--text); }
+.dr-link-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 10px; font-size: 14px; color: var(--text2); }
+.dr-link-edit input { width: 200px; padding: 6px 10px; }
+.dr-link-bad { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: var(--radius-lg); background: var(--amber-bg); border: 1px solid var(--amber-border); color: var(--text2); font-size: 14px; }
+.dr-link-bad b { color: var(--amber); font-size: 15px; }
+.dr-link-bad .dr-link-edit { padding: 0; margin: 0; }
+.dr-dropping .dr-body { outline: 2px dashed var(--accent); outline-offset: 4px; border-radius: var(--radius-lg); }
+.du { display: flex; flex-direction: column; gap: 12px; }
+.du-l { font-size: 11.5px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; }
+.du-to { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 15px; }
+.du-code { font-size: 13px; color: var(--text3); }
+.du-folder { display: flex; flex-direction: column; gap: 5px; }
+.du-drop { border: 1.5px dashed var(--border2); border-radius: var(--radius-lg); padding: 18px; text-align: center; cursor: pointer; display: flex; flex-direction: column; gap: 3px; background: var(--surface2); outline: none; }
+.du-drop b { font-size: 15px; color: var(--text); }
+.du-drop span { font-size: 13px; color: var(--text2); }
+.du-drop:hover, .du-drop.over, .du-drop:focus-visible { border-color: var(--accent); background: var(--accent-light); }
+.du-note { font-size: 13.5px; color: var(--text2); }
+.du-err { font-size: 13.5px; color: var(--red); background: var(--red-bg); border: 1px solid var(--red-border); border-radius: var(--radius); padding: 8px 12px; }
+.du-ok { font-size: 14px; font-weight: 600; color: var(--green); background: var(--green-bg); border: 1px solid var(--green-border); border-radius: var(--radius); padding: 8px 12px; }
+.du-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); max-height: 46vh; overflow-y: auto; }
+.du-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--border); }
+.du-row:first-child { border-top: 0; }
+.du-row.skip { opacity: .65; }
+.du-n { flex: 1; min-width: 0; }
+.du-name { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.du-sub { font-size: 12.5px; color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.du-tag { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; background: var(--surface2); color: var(--text2); }
+.du-tag.new { background: var(--green-bg); color: var(--green); }
+.du-tag.rev { background: #E6F1FB; color: #185FA5; }
+.du-choice { width: auto; font-size: 13px; padding: 4px 6px; }
+.du-x { background: none; border: 0; color: var(--text3); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.du-x:hover { color: var(--red); }
+@media (max-width: 640px) { .du-row { flex-wrap: wrap; } .du-tag, .du-choice { margin-left: auto; } }
+.du-choice.need { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-bg); }
