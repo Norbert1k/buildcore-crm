@@ -82,6 +82,8 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
   const [dragOver, setDragOver] = useState(false)
   const [panel, setPanel] = useState(null)          // 'settings' | 'details' | null
   const [recent, setRecent] = useState([])          // what the last drop did
+  const [showRecent, setShowRecent] = useState(false)
+  const [showKept, setShowKept] = useState(false)
   const [detailsTab, setDetailsTab] = useState(null) // open Details on a given tab
   const inputRef = useRef(null)
   const folderRef = useRef(null)
@@ -368,6 +370,12 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
   }
 
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(null), 5000); return () => clearTimeout(t) } }, [toast])
+  // Tenant home guides switch on by themselves once the documents show 2+ homes (unless set by hand)
+  const unitsFound = (analysis?.units || []).length
+  useEffect(() => {
+    if (!canEdit || !pack || pack.options?.tenant || pack.options?.tenant_manual || unitsFound < 2) return
+    setOpt({ tenant: true })
+  }, [unitsFound, canEdit, !!pack])
 
   if (!files || !pack || !analysis) return <Spinner />
   const o = pack.options
@@ -382,6 +390,19 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
   const packsOn = [o.type === 'building' ? 'Building O&M' : 'Package O&M', o.warranty && 'Warranty', o.tenant && 'Tenant O&M', o.golden_thread && 'Golden Thread'].filter(Boolean)
   const toggle = p => setPanel(cur => cur === p ? null : p)
   const overview = multi && !bkey
+  // ── The simple view: what's filed, and what the one button will produce ──
+  const filedCount = scoped.filter(f => f._table === 'hs_files' && f.folder_key !== '_inbox' && f.origin !== 'om_builder').length
+  const recentCheck = recent.filter(r => r.check || r.alt || !r.to).length
+  const nUnits = (analysis.units || []).length
+  const missingNote = analysis.missing > 0 ? { state: 'warn', note: `${analysis.missing} thing${analysis.missing === 1 ? '' : 's'} still missing`, action: { label: 'What’s missing', fn: () => { setPanel('details'); setDetailsTab('todo') } } } : { state: 'ok', note: 'Ready' }
+  const outputs = [
+    { key: 'om', label: o.type === 'building' ? 'Building O&M manual' : 'O&M manual', ...missingNote },
+    o.warranty && { key: 'war', label: 'CCG workmanship warranty', state: 'ok', note: 'Bound in as Appendix A' },
+    o.tenant && { key: 'ten', label: 'Tenant home guide', state: 'ok', note: nUnits > 1 ? `One per home · ${nUnits} homes found` : 'One per home, from the unit schedule' },
+    o.golden_thread && { key: 'gt', label: 'Golden Thread', state: b.bsr_ref ? 'ok' : 'warn', note: b.bsr_ref ? `Higher-risk building · BSR ${b.bsr_ref}` : 'Higher-risk building — add the BSR registration in Settings' },
+    readiness && { key: 'hs', label: 'H&S File', state: readiness.outstanding ? 'warn' : 'ok', note: `${readiness.pct}% of expected documents · ${readiness.signed}/${readiness.total} sections signed off`,
+      action: { label: 'Folders', fn: () => window.dispatchEvent(new CustomEvent('hs-show-folders')) } },
+  ].filter(Boolean)
 
   return (
     <div className="om">
@@ -389,34 +410,74 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
         <BuildingsOverview buildings={buildings} files={files} allPacks={allPacks} allIssues={allIssues} project={project} staffNames={staffNames}
           onPick={onPickBuilding} reading={reading} canDrop={canDrop} untagged={untagged} setFileBuilding={setFileBuilding} labels={labels} onAutoTag={autoTag} />
       ) : (<>
-      {/* ── Status card ─────────────────────────────────────────── */}
-      <div className="om-head card">
-        <div className="om-head-main">
-          <div className="om-title">H&S File & O&M{building ? <span className="om-title-b"> — {building.name}</span> : null}</div>
-          <div className="om-sub">Everything for handover in one place. Drop documents or whole folders below — each is read and filed into the right folder, and the O&M manuals are kept up to date.</div>
-          <div className="om-packs">{packsOn.map(p => <span key={p} className={`pill ${p === 'Golden Thread' ? 'pill-amber' : 'pill-gray'}`}>{p}</span>)}
-            {canEdit && <button className="om-link" onClick={() => toggle('settings')}>{panel === 'settings' ? 'Close settings' : 'Change'}</button>}</div>
-        </div>
-        <div className="om-head-side">
-          <div className="om-state">
-            {reading ? <span className="pill pill-blue">{reading.label} {reading.done}/{reading.total}…</span>
-              : composing ? <span className="pill pill-blue">Writing draft…</span>
-              : draftOk && !draftStale ? <span className="pill pill-green">Draft up to date</span>
-              : draftOk ? <span className="pill pill-amber">Draft out of date</span>
-              : pack.draft?.status === 'insufficient' ? <span className="pill pill-amber">Needs more documents</span>
-              : <span className="pill pill-gray">No draft yet</span>}
-            {analysis.missing > 0 && <button className="pill pill-amber om-pillbtn" onClick={() => toggle('details')}>{analysis.missing} missing</button>}
-            {analysis.warnings.length > 0 && <button className="pill pill-gray om-pillbtn" onClick={() => toggle('details')}>{new Set(analysis.warnings.map(w => w.file.id)).size} documents to query</button>}
-            {lastIssue && <span className="pill pill-gray">{lastIssue.issue_no} · {fmt(lastIssue.created_at)}</span>}
-            {readiness && <span className={`pill ${readiness.outstanding ? 'pill-gray' : 'pill-green'}`} title={`${readiness.outstanding} expected documents not found yet`}>H&S file {readiness.pct}% · {readiness.signed}/{readiness.total} signed off</span>}
+      {/* ── One card: drop → filed automatically → one button for the documents ── */}
+      <section className="card hx">
+        <div className="hx-top">
+          <div>
+            <div className="om-title">Handover{building ? <span className="om-title-b"> — {building.name}</span> : null}</div>
+            <div className="om-sub">Drop everything for handover — certificates, guarantees, manuals, drawings. Each document is read and filed for you, then turned into the handover documents.</div>
           </div>
-          <div className="om-actions">
-            <button className="btn btn-sm" onClick={() => toggle('details')}>{panel === 'details' ? 'Hide details' : 'Details'}</button>
-            {canEdit && <button className="btn btn-sm" onClick={() => compose(true)} disabled={composing || !!reading}>{draftOk ? 'Rebuild' : 'Build draft'}</button>}
-            <button className="btn btn-sm btn-primary" disabled={!draftOk} onClick={() => setPreview({ tab: 'om' })}>Preview & issue</button>
+          <div className="hx-links">
+            {canEdit && <button className={`om-link${panel === 'settings' ? ' on' : ''}`} onClick={() => toggle('settings')}>Settings</button>}
+            <button className={`om-link${panel === 'details' ? ' on' : ''}`} onClick={() => toggle('details')}>Details</button>
           </div>
         </div>
-      </div>
+
+        {canDrop && (
+          <div className={`om-drop hx-drop${dragOver ? ' over' : ''}`}
+            onDragOver={e => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={async e => { if (!e.dataTransfer?.types?.includes('Files')) return; e.preventDefault(); e.stopPropagation(); setDragOver(false); addDropped(await collectDropped(e.dataTransfer)) }}
+            onClick={e => { if (e.target === e.currentTarget || e.target.tagName !== 'BUTTON') inputRef.current?.click() }} role="button" tabIndex={0}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click() } }}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <b>Drop files or whole folders</b>
+            <span>No need to pick a folder — everything is filed automatically</span>
+            <div className="om-drop-btns">
+              <button className="btn btn-sm" onClick={e => { e.stopPropagation(); inputRef.current?.click() }}>Choose files</button>
+              <button className="btn btn-sm" onClick={e => { e.stopPropagation(); folderRef.current?.click() }}>Choose a folder</button>
+            </div>
+            <input ref={inputRef} type="file" multiple hidden onChange={e => { addDropped(Array.from(e.target.files).map(file => ({ file, path: '' }))); e.target.value = '' }} />
+            <input ref={folderRef} type="file" multiple hidden webkitdirectory="" directory="" onChange={e => { addDropped(Array.from(e.target.files).map(file => ({ file, path: (file.webkitRelativePath || '').split('/').slice(0, -1).join('/') }))); e.target.value = '' }} />
+          </div>
+        )}
+
+        <div className="hx-status">
+          {reading ? <span className="hx-busy"><span className="hx-spin" />{reading.label} {reading.done}/{reading.total}…</span>
+            : <span>{filedCount} document{filedCount === 1 ? '' : 's'} filed</span>}
+          {recent.length > 0 && <button className="om-link" onClick={() => setShowRecent(v => !v)}>{showRecent ? 'Hide' : 'Just filed'} {recent.length}{recentCheck ? ` · ${recentCheck} to check` : ''}</button>}
+          {inbox.length > 0 && <button className="om-link hx-kept" onClick={() => setShowKept(v => !v)}>{inbox.length} kept out of the handover</button>}
+          {multi && untagged.length > 0 && <button className="om-link" onClick={() => { setPanel('details'); setDetailsTab('docs') }}>{untagged.length} not tagged to a building</button>}
+        </div>
+
+        <div className="hx-out">
+          <div className="hx-out-h">You'll get</div>
+          {outputs.map(r => (
+            <div key={r.key} className={`hx-row ${r.state}`}>
+              <span className="hx-tick" aria-hidden="true">{r.state === 'ok' ? '✓' : '!'}</span>
+              <span className="hx-name">{r.label}</span>
+              <span className="hx-note">{r.note}</span>
+              {r.action && <button className="om-link" onClick={r.action.fn}>{r.action.label}</button>}
+            </div>
+          ))}
+        </div>
+
+        <div className="hx-go">
+          {canEdit || draftOk ? (
+            <button className="btn btn-primary hx-main" disabled={!!reading || composing || (!draftOk && !canEdit) || (draftOk && !draftStale ? false : !analysis.read)}
+              onClick={() => draftOk && !draftStale ? setPreview({ tab: 'om' }) : compose(true)}>
+              {reading ? 'Reading documents…' : composing ? 'Writing your handover documents…' : draftOk && !draftStale ? 'Preview & issue' : 'Create handover documents'}
+            </button>
+          ) : null}
+          {draftOk && draftStale && !composing && <span className="hx-hint">New documents since the last draft — create again to include them.</span>}
+          {pack.draft?.status === 'insufficient' && !composing && <span className="hx-hint warn">Not enough yet: {(pack.draft.missing || []).join(', ')}.</span>}
+          {lastIssue && (
+            <span className="hx-issued">Last issued <b>{lastIssue.issue_no}</b> · {fmt(lastIssue.created_at)}
+              <button className="om-link" onClick={() => window.dispatchEvent(new CustomEvent('hs-compile-full'))}>Download full H&S File (PDF)</button>
+            </span>
+          )}
+        </div>
+      </section>
 
       {/* ── Decisions (always visible when there are any) ───────── */}
       {openDecisions.map(c => (
@@ -479,31 +540,14 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
       )}
 
       </>)}
-      {multi && !overview && untagged.length > 0 && (
+      {multi && !overview && untagged.length > 0 && panel === 'details' && (
         <div className="om-untagged">
           <span><b>{untagged.length} document{untagged.length === 1 ? '' : 's'}</b> not tagged to a building yet — {overview ? 'tag them below' : "they're included in every building's manual until tagged"}.</span>
           {canDrop && <button className="btn btn-sm" onClick={autoTag}>Tag by name</button>}
           {!overview && <button className="btn btn-sm" onClick={() => { setPanel('details'); setDetailsTab('docs') }}>Tag by hand</button>}
         </div>
       )}
-      {/* ── Drop zone ───────────────────────────────────────────── */}
-      {canDrop && (
-        <div className={`om-drop big${dragOver ? ' over' : ''}`}
-          onDragOver={e => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDragOver(true) } }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={async e => { if (!e.dataTransfer?.types?.includes('Files')) return; e.preventDefault(); e.stopPropagation(); setDragOver(false); addDropped(await collectDropped(e.dataTransfer)) }}>
-          <b>Drop files or whole folders here — or anywhere on this page</b>
-          <span>Each document is read and filed into the right folder below; no need to pick one. Drawings go into Record Drawings by what they show — floor plans, elevations, fire strategy, services — and an older revision of the same drawing moves to Superseded.</span>
-          <div className="om-drop-btns">
-            <button className="btn btn-sm" onClick={() => inputRef.current?.click()}>Choose files</button>
-            <button className="btn btn-sm" onClick={() => folderRef.current?.click()}>Choose a folder</button>
-          </div>
-          <input ref={inputRef} type="file" multiple hidden onChange={e => { addDropped(Array.from(e.target.files).map(file => ({ file, path: '' }))); e.target.value = '' }} />
-          <input ref={folderRef} type="file" multiple hidden webkitdirectory="" directory="" onChange={e => { addDropped(Array.from(e.target.files).map(file => ({ file, path: (file.webkitRelativePath || '').split('/').slice(0, -1).join('/') }))); e.target.value = '' }} />
-        </div>
-      )}
-
-      {recent.length > 0 && (
+      {showRecent && recent.length > 0 && (
         <section className="card om-card">
           <div className="om-card-h">Just filed <button className="om-link" onClick={() => setRecent([])}>Clear</button></div>
           {recent.map((r, i) => (
@@ -517,9 +561,9 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
         </section>
       )}
 
-      {inbox.length > 0 && (
+      {showKept && inbox.length > 0 && (
         <section className="card om-card om-inbox">
-          <div className="om-card-h">To file — Claude wasn't sure <span className="pill pill-amber">{inbox.length}</span></div>
+          <div className="om-card-h">Kept out of the handover <span className="pill pill-amber">{inbox.length}</span><span className="om-card-s">Invoices, quotes and letters, or files that couldn't be read. File any that belong in the handover.</span></div>
           {inbox.map(f => (
             <div key={f.id} className="om-doc">
               <div className="om-doc-main"><div className="om-doc-n">{f.file_name}</div><div className="om-doc-s">{f.ai ? `${DOC_TYPES[f.ai.doc_type]?.label || 'Other'}${f.ai.client_facing === false ? ' · internal — not for the client' : ''}` : 'Reading…'}</div></div>

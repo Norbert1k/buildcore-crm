@@ -14,7 +14,8 @@ const ProjectDocumentation = lazy(() => import('../components/ProjectDocumentati
 const CaseStudyUploads = lazy(() => import('../components/CaseStudyUploads'))
 const FitOutHandover = lazy(() => import('../components/FitOutHandover'))
 const HandoverFile = lazy(() => import('../components/HandoverFile'))
-const DrawingsRegister = lazy(() => import('../components/DrawingsRegister'))
+// Drawings: a plain link to the job in the Design portal (the in-CRM register is retired)
+const DesignLink = lazy(() => import('../components/DesignLink'))
 const SubcontractorDocs = lazy(() => import('../components/SubcontractorDocs'))
 import { SubCompletionModal, CompletedBadge, PracticalCompletionFact } from '../components/CompletionCertificates'
 const ProjectQuotesTab = lazy(() => import('../components/ProjectQuotesTab'))
@@ -1427,7 +1428,7 @@ export default function ProjectDetail() {
       )})()}
 
       {activeTab === 'drawings' && (
-        <DrawingsRegister projectId={id} canManage={can('manage_projects')}
+        <DesignLink projectId={id} canManage={can('manage_projects')}
           onOpenDocuments={() => setActiveTab('documents')} />
       )}
 

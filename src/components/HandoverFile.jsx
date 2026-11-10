@@ -80,6 +80,17 @@ export default function HandoverFile({ projectId, project }) {
     },
   } : {}
 
+  // The 11-section folder list is for people who want to look inside; the
+  // everyday view is just the drop zone and the one button above it.
+  const [showFolders, setShowFolders] = useState(() => { try { return localStorage.getItem('hs:folders') === '1' } catch { return false } })
+  const foldersRef = useRef(null)
+  const setFolders = v => { setShowFolders(v); try { localStorage.setItem('hs:folders', v ? '1' : '0') } catch { /* ignore */ } }
+  useEffect(() => {
+    const on = () => { setFolders(true); setTimeout(() => foldersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60) }
+    window.addEventListener('hs-show-folders', on)
+    return () => window.removeEventListener('hs-show-folders', on)
+  }, [])
+
   const ui = {
     showEmpty, toggleEmpty,
     sectionChips: key => <SectionChips r={r} folderKey={key} />,
@@ -88,7 +99,7 @@ export default function HandoverFile({ projectId, project }) {
   if (buildings === null) return <div className="handover-file" />
   return (
     <div className="handover-file" {...dropProps}>
-      {dragging && <div className="hs-drop-hint">Drop to read &amp; file automatically <small>or onto a section to keep it inside</small></div>}
+      {dragging && <div className="hs-drop-hint">Drop to read &amp; file automatically {showFolders && <small>or onto a section to keep it inside</small>}</div>}
       {multi && (
         <div className="hb-bar" role="tablist" aria-label="Building">
           <span className="hb-l">Building</span>
@@ -98,9 +109,19 @@ export default function HandoverFile({ projectId, project }) {
       )}
       <OmBuilder key={current?.key || 'all'} projectId={projectId} project={project} readiness={r.ready ? r.summary : null}
         multi={multi} has038={has038} buildings={multi ? buildings : []} building={current} onPickBuilding={pick} />
-      <HandoverUiCtx.Provider value={ui}>
-        <HSHandover projectId={projectId} projectName={project?.project_name} />
-      </HandoverUiCtx.Provider>
+      <div ref={foldersRef} className="hx-folders-bar">
+        <button type="button" className="hx-folders-toggle" aria-expanded={showFolders} onClick={() => setFolders(!showFolders)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          {showFolders ? 'Hide the folders' : 'See the folders'}
+          <span>11 sections · files are filed for you — open only to check or move something</span>
+        </button>
+      </div>
+      {/* Kept mounted when hidden: it also compiles the H&S File PDF */}
+      <div hidden={!showFolders}>
+        <HandoverUiCtx.Provider value={ui}>
+          <HSHandover projectId={projectId} projectName={project?.project_name} />
+        </HandoverUiCtx.Provider>
+      </div>
     </div>
   )
 }

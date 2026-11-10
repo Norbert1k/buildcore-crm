@@ -1644,3 +1644,52 @@ html .proj-tabs .filter-tab { font-size: 13.5px; }
 .du-x:hover { color: var(--red); }
 @media (max-width: 640px) { .du-row { flex-wrap: wrap; } .du-tag, .du-choice { margin-left: auto; } }
 .du-choice.need { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-bg); }
+
+/* ── Handover: the simple view (drop → filed → one button) ─────────────── */
+.hx { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.hx-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.hx-links { display: flex; gap: 14px; }
+.hx-links .om-link.on { text-decoration: underline; }
+.om-drop.hx-drop { padding: 22px 18px; gap: 4px; align-items: center; color: var(--text3); border-radius: var(--radius-lg); }
+.om-drop.hx-drop b { font-size: 15.5px; margin-top: 2px; }
+.om-drop.hx-drop:hover, .om-drop.hx-drop.over { color: var(--accent); }
+.hx-status { display: flex; align-items: center; gap: 6px 16px; flex-wrap: wrap; font-size: 14px; color: var(--text2); }
+.hx-busy { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-weight: 600; }
+.hx-spin { width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: cc-spin .8s linear infinite; }
+@keyframes cc-spin { to { transform: rotate(360deg); } }
+.hx-kept { color: var(--amber) !important; }
+.hx-out { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.hx-out-h { font-size: 11.5px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; padding: 9px 14px 7px; background: var(--surface2); }
+.hx-row { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid var(--border); font-size: 14px; flex-wrap: wrap; }
+.hx-tick { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: #fff; background: var(--green); flex-shrink: 0; }
+.hx-row.warn .hx-tick { background: var(--amber); }
+.hx-name { font-weight: 700; color: var(--text); min-width: 180px; }
+.hx-note { flex: 1; color: var(--text2); min-width: 160px; }
+.hx-go { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; }
+.hx-main { height: 44px; padding: 0 22px; font-size: 15px; font-weight: 700; }
+.hx-hint { font-size: 13.5px; color: var(--text2); }
+.hx-hint.warn { color: var(--amber); }
+.hx-issued { font-size: 13.5px; color: var(--text2); display: inline-flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.om-card-s { display: block; font-weight: 400; font-size: 13px; color: var(--text2); margin-top: 3px; }
+.hx-folders-bar { margin-top: 14px; }
+.hx-folders-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 16px; border: 1px dashed var(--border2); border-radius: var(--radius-lg); background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer; text-align: left; }
+.hx-folders-toggle span { font-weight: 400; color: var(--text3); font-size: 13px; }
+.hx-folders-toggle:hover { border-color: var(--accent); color: var(--accent); }
+.hx-folders-bar + div:not([hidden]) { margin-top: 12px; }
+@media (max-width: 640px) { .hx { padding: 14px; } .hx-name { min-width: 0; } .hx-folders-toggle span { display: none; } .hx-main { width: 100%; } }
+
+/* ── Drawings: a plain link to the Design portal ────────────────────────── */
+.dl { display: flex; gap: 16px; padding: 22px 24px; align-items: flex-start; }
+.dl-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--accent-light); color: var(--accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.dl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.dl-t { font-size: 16px; font-weight: 700; color: var(--text); }
+.dl-s { font-size: 14px; color: var(--text2); }
+.dl-s b { color: var(--text); }
+.dl-code { color: var(--text3); }
+.dl-warn { font-size: 13.5px; color: var(--amber); background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: var(--radius); padding: 8px 12px; }
+.dl-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.dl-link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--text3); text-decoration: underline; cursor: pointer; }
+.dl-edit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dl-edit input { width: 210px; padding: 6px 10px; }
+.dl-hint { font-size: 12.5px; color: var(--text3); width: 100%; }
+@media (max-width: 640px) { .dl { padding: 16px; } .dl-icon { display: none; } }

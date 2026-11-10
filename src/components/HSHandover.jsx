@@ -1664,6 +1664,14 @@ export default function HSHandover({ projectId, projectName }) {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
   }
 
+  // The simple Handover view's "Download full H&S File (PDF)" asks for this
+  const compileRef = useRef(null)
+  useEffect(() => {
+    const on = () => compileRef.current?.()
+    window.addEventListener('hs-compile-full', on)
+    return () => window.removeEventListener('hs-compile-full', on)
+  }, [])
+  compileRef.current = () => compileFullHandover()
   async function compileFullHandover() {
     setCompilingFull(true)
     try {
