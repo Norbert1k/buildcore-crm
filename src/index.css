@@ -1738,6 +1738,8 @@ html .proj-tabs .filter-tab { font-size: 13.5px; }
 .ib-settings label.ib-check { flex-direction: row; align-items: center; gap: 8px; }
 .ib-hint { font-size: 12px; color: var(--text3); margin-top: -6px; }
 .ib-maph { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 13px; }
+.ib-xero { padding-bottom: 12px; margin-bottom: 4px; }
+.ib-xero-btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .ib-maprow { display: flex; align-items: center; gap: 10px; }
 .ib-mapname { flex: 1; font-size: 13px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ib-maprow select { width: auto; flex: 0 1 280px; }

@@ -172,7 +172,7 @@ export default function Inbox() {
                 <div key={i.id} className="ib-row"><div className="ib-row-main"><div className="ib-fn">{i.file_name}</div>
                   <div className="ib-meta">{i.status === 'error' ? `Retrying — ${i.last_error || ''}` : 'Waiting to be read'} · {fmtWhen(i.created_at)}</div></div></div>))}</div>
             : <div className="ib-empty">Nothing waiting.</div>)}
-          {tab === 'materials' && <Materials projects={lists.projects} canFile={canFile} />}
+          {tab === 'materials' && <Materials projects={lists.projects} canFile={canFile} isAdmin={profile?.role === 'admin'} />}
           {tab === 'settings' && canSet && <Settings settings={settings} onSaved={load} projects={lists.projects} />}
         </>
       )}
@@ -502,8 +502,59 @@ function Settings({ settings, onSaved, projects = [] }) {
 // by email. Datasheets go into a job's Handover only for products bought for
 // that job; the CRM looks up missing ones each morning (each find waits in
 // To check for approval).
+// Xero, read-only: the robot reads the supplier invoice attached to each bill
+// to see what was bought for which job. Nothing is written to Xero.
+function XeroLink({ isAdmin, canFile, onRead }) {
+  const [st, setSt] = useState(null)
+  const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState('')
+  async function load() { try { setSt(await call({ action: 'xero_status' })) } catch (e) { setSt({ error: e.message }) } }
+  useEffect(() => {
+    load()
+    const onMsg = e => { if (e?.data?.source === 'xero-oauth-callback') { setMsg(e.data.success ? 'Connected — bills are read within the hour, or press Read bills now.' : (e.data.message || 'Xero didn’t connect.')); setBusy(''); load() } }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+  }, [])
+  async function connect() {
+    // Open the window first (phones block pop-ups opened after a wait), then send it to Xero
+    const w = window.open('', 'xero-connect', 'width=620,height=760')
+    setBusy('connect'); setMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('xero-oauth-start', { body: { return_to: window.location.origin + '/inbox' } })
+      if (error || !data?.url) throw new Error(data?.error || error?.message || 'Couldn’t start')
+      if (w) w.location.href = data.url; else window.location.href = data.url
+    } catch (e) { if (w) w.close(); setMsg(e.message); setBusy('') }
+  }
+  async function readNow() {
+    setBusy('read'); setMsg('')
+    try { const r = await call({ action: 'xero' }); setMsg(r.note || '') } catch (e) { setMsg(e.message) }
+    setBusy(''); load(); onRead?.()
+  }
+  const r = st?.reads || {}
+  const done = (r.read || 0) + (r.no_job || 0) + (r.no_products || 0)
+  return (
+    <div className="ib-xero">
+      <div className="ib-maph" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+        <b>Xero bills <span className="ib-meta">· read-only</span></b>
+        <span className="ib-xero-btns">
+          {st?.connected && canFile && <button className="btn btn-sm" onClick={readNow} disabled={!!busy}>{busy === 'read' ? 'Reading…' : 'Read bills now'}</button>}
+          {isAdmin && st && !st.error && (!st.connected || !st.read_only) && <button className="btn btn-sm btn-primary" onClick={connect} disabled={!!busy}>{busy === 'connect' ? 'Waiting for Xero…' : st.connected ? 'Reconnect (read-only)' : 'Connect Xero'}</button>}
+        </span>
+      </div>
+      <div className="ib-hint" style={{ marginTop: 4 }}>
+        {st === null ? 'Checking…'
+          : st.error ? st.error
+          : st.connected ? <>Connected to {st.tenant}. Every hour the CRM reads the supplier invoices attached to new bills to see what each job bought — {done} read, {r.read || 0} matched to a job{r.skipped ? `, ${r.skipped} skipped (labour, hire, fuel…)` : ''}.{st.last_sync?.started_at ? ` Last Xero check ${fmtWhen(st.last_sync.started_at)}.` : ''}</>
+          : isAdmin ? 'Not connected. Connect once with your Xero login — the CRM can only read bills and the invoices attached to them, never change anything.'
+          : 'Not connected — an admin connects it once.'}
+        {msg ? ' ' + msg : ''}
+      </div>
+    </div>
+  )
+}
+
 const DS = { needed: ['Needed', 'ib-chip-amber'], found: ['Found — check it', 'ib-chip-amber'], filed: ['In the O&M', 'ib-chip-green'], not_found: ['Not found online', 'ib-chip-grey'], not_needed: ['Not needed', 'ib-chip-grey'] }
-function Materials({ projects, canFile }) {
+function Materials({ projects, canFile, isAdmin }) {
   const [rows, setRows] = useState(null)
   const [job, setJob] = useState('')
   const [form, setForm] = useState({ manufacturer: '', product: '' })
@@ -531,11 +582,12 @@ function Materials({ projects, canFile }) {
   }
   return (
     <div className="ib-card">
-      <div className="ib-maph" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+      <XeroLink isAdmin={isAdmin} canFile={canFile} onRead={load} />
+      <div className="ib-maph">
         <b>Materials bought → datasheets</b>
         {canFile && <button className="btn btn-sm" onClick={findNow} disabled={busy}>{busy ? 'Looking up…' : 'Find datasheets now'}</button>}
       </div>
-      <div className="ib-hint" style={{ marginTop: 4 }}>From the invoices, delivery notes and orders that came in by email. Only datasheets for these go into a job's O&M.{msg ? ' ' + msg : ''}</div>
+      <div className="ib-hint" style={{ marginTop: 4 }}>From the invoices, delivery notes and orders that came in by email, and the supplier invoices on Xero bills. Only datasheets for these go into a job's O&M.{msg ? ' ' + msg : ''}</div>
       <div className="ib-form" style={{ borderTop: 'none', paddingTop: 0 }}>
         <select value={job} onChange={e => setJob(e.target.value)} aria-label="Job">
           <option value="">All jobs</option>
@@ -547,7 +599,7 @@ function Materials({ projects, canFile }) {
           <button className="btn btn-sm" onClick={add} disabled={!form.product.trim()}>Add</button>
         </>}
       </div>
-      {rows === null ? <div className="tab-loading"><Spinner /></div> : !list.length ? <div className="ib-empty">Nothing recorded yet — items appear as invoices and delivery notes come in.</div> : (
+      {rows === null ? <div className="tab-loading"><Spinner /></div> : !list.length ? <div className="ib-empty">Nothing recorded yet — items appear as invoices, delivery notes and Xero bills come in.</div> : (
         <div className="ib-list" style={{ marginTop: 10 }}>
           {list.map(r => (
             <div key={r.id} className="ib-row">

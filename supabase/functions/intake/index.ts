@@ -467,9 +467,11 @@ const STOP = new Set(["the", "and", "with", "for", "mm", "m", "x", "ltd", "limit
 const toks = (s: unknown) => new Set(String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter(w => w.length >= 2 && !STOP.has(w)))
 const normKey = (mf: unknown, pr: unknown) => [...toks(mf), ...toks(pr)].sort().join(" ").slice(0, 200)
 
-async function recordPurchases(projectId: string, g: any, item: any, source: "invoice" | "delivery" | "order") {
-  const supplier = g.vendor?.name || null
+async function recordPurchases(projectId: string, g: any, item: any, source: "invoice" | "delivery" | "order" | "xero", label = "") {
+  const supplier = g.vendor?.name || item.supplier || null
   const when = item.source_created_at ? new Date(item.source_created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""
+  const evidence = label || `${supplier || "Supplier"} ${source === "invoice" ? "invoice" : source === "delivery" ? "delivery note" : "order"}${when ? " " + when : ""}`
+  let n = 0
   for (const p of (g.products || []).slice(0, 60)) {
     if (!p?.product) continue
     const key = normKey(p.manufacturer, p.product)
@@ -477,10 +479,45 @@ async function recordPurchases(projectId: string, g: any, item: any, source: "in
     await sb.from("job_materials").upsert({
       project_id: projectId, norm_key: key, manufacturer: p.manufacturer || null, product: String(p.product).slice(0, 200),
       code: p.code || null, qty: p.qty || null, supplier, source, purchased: source !== "order",
-      evidence_item_id: item.id, evidence_label: `${supplier || "Supplier"} ${source === "invoice" ? "invoice" : source === "delivery" ? "delivery note" : "order"}${when ? " " + when : ""}`,
+      evidence_item_id: source === "xero" ? null : item.id, evidence_label: evidence,
       updated_at: new Date().toISOString(),
     }, { onConflict: "project_id,norm_key", ignoreDuplicates: true })
+    // Ordered earlier, now invoiced/delivered → it was bought
+    if (source !== "order") await sb.from("job_materials").update({ purchased: true, source, evidence_label: evidence, updated_at: new Date().toISOString() })
+      .eq("project_id", projectId).eq("norm_key", key).eq("purchased", false)
+    n++
   }
+  return n
+}
+
+// Datasheets that waited as "probably sent for info" — the purchase may have
+// shown up since (a later invoice, delivery note or Xero bill). Filed then.
+async function recheckForInfo(projectId: string) {
+  const { data: st } = await sb.from("intake_settings").select("trial, auto_threshold").eq("id", 1).maybeSingle()
+  const trial = st?.trial !== false
+  const threshold = Number(st?.auto_threshold) || 0.85
+  const { data: waiting } = await sb.from("intake_items").select("*").eq("status", "to_check")
+    .eq("doc_type", "product_datasheet").like("reason", "No purchase of%").limit(200)
+  let n = 0
+  for (const it of (waiting || []) as any[]) {
+    const plan = it.guess?._plan
+    if (!plan || plan.target !== "handover" || plan.project_id !== projectId) continue
+    const m = await matchPurchase(projectId, (it.guess?.products || [])[0] || {})
+    if (!m) continue
+    const decision = { ...plan, material_id: m.id, path_label: `${plan.path_label} — bought: ${m.evidence_label || m.supplier || "on file"}` }
+    const now = new Date().toISOString()
+    const sure = (num(it.guess?.project_confidence) ?? 0) >= threshold
+    if (trial || !sure || !it.staged_path) {
+      await sb.from("intake_items").update({ reason: `Bought after all (${m.evidence_label || m.supplier || "on file"}) — ${sure ? "ready to file" : "please confirm the job"}`,
+        guess: { ...it.guess, _plan: decision }, updated_at: now }).eq("id", it.id)
+    } else {
+      const res = await fileToHandover(it, decision)
+      await sb.from("intake_items").update({ status: res.status, filed_to: res.filed_to, filed_at: now, filed_by: null,
+        reason: `Filed once the purchase showed up (${m.evidence_label || m.supplier})`, guess: { ...it.guess, _plan: decision }, updated_at: now }).eq("id", it.id)
+    }
+    n++
+  }
+  return n
 }
 
 // A datasheet matches a bought item when the product words (or the code) line up
@@ -588,6 +625,107 @@ async function findDatasheets(limit = 4) {
   return { ok: true, checked: (mats || []).length, found }
 }
 
+// ─── Xero (read-only): what each job bought ──────────────────────────────────
+// Xero bill lines are only cost codes ("Materials: Roofing"), so the robot
+// reads the supplier invoice attached to each bill: products + which job
+// (delivery address, site, order ref). Nothing is written to Xero; invoices
+// still never go into the CRM — only the products are noted per job.
+const XERO_FROM = "2026-01-01"             // older bills aren't read
+const XERO_PER_RUN = 5                     // invoices read per run (hourly)
+const NOT_GOODS = /\b(fuel|fuels|petrol|diesel|esso|shell|bp|hotel|hotels|travelodge|premier inn|parking|crossing|toll|tfl|congestion|ulez|trainline|uber|hmrc|bank|accountants?|software|subscription|vodafone|o2|insurance|restaurant|cafe)\b/i
+
+async function xeroCall(body: any) {
+  return await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/xero-sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+    body: JSON.stringify(body),
+  })
+}
+
+function billIsGoods(bill: any, lines: any[]) {
+  if (NOT_GOODS.test(bill.contact_name || "")) return false
+  const tags = lines.flatMap((l: any) => (Array.isArray(l.tracking_codes) ? l.tracking_codes : []).map((t: any) => `${t.Name}:${t.Option}`))
+  if (tags.some(t => /^materials:/i.test(t)) || lines.some((l: any) => /material/i.test(l.description || ""))) return true
+  // Only labour / hire / overheads on it → nothing for the O&M
+  const otherOnly = lines.length > 0 && lines.every((l: any) => {
+    const t = (Array.isArray(l.tracking_codes) ? l.tracking_codes : []).map((x: any) => x.Name).join(" ")
+    return /service/i.test(t) || /^(labour|hire|overheads|expenses)\b/i.test(String(l.description || "").trim())
+  })
+  return !otherOnly
+}
+
+async function xeroRun(limit = XERO_PER_RUN) {
+  const started = Date.now()
+  const st = await (await xeroCall({ mode: "status" })).json().catch(() => ({}))
+  if (!st.connected) return { ok: false, note: "Xero isn't connected (Inbox › Settings)" }
+
+  // 1. New bills from Xero, at most every 6 hours
+  let sync = ""
+  const last = st.last_sync
+  if (!last || Date.now() - new Date(last.started_at).getTime() > 6 * 3600e3) {
+    const r = await xeroCall({ mode: "full" })
+    const o = await r.json().catch(() => ({}))
+    sync = r.ok ? `${o.bills_fetched ?? 0} bills synced` : `Xero sync failed: ${o.error || r.status}`
+    if (!r.ok) return { ok: false, note: sync }
+  }
+
+  // 2. Bills whose supplier invoice hasn't been read yet (newest first)
+  const { data: reads } = await sb.from("xero_bill_reads").select("xero_invoice_id, status, attempts").limit(20000)
+  const seen = new Set((reads || []).filter((r: any) => r.status !== "error" || r.attempts >= 3).map((r: any) => r.xero_invoice_id))
+  const tries = new Map((reads || []).map((r: any) => [r.xero_invoice_id, r.attempts || 0]))
+  const { data: bills } = await sb.from("xero_bills")
+    .select("xero_invoice_id, invoice_number, reference, contact_name, date, total, has_att:raw_payload->HasAttachments")
+    .gte("date", XERO_FROM).order("date", { ascending: false }).limit(3000)
+  const todo = ((bills || []) as any[]).filter(b => !seen.has(b.xero_invoice_id)).slice(0, 80)
+  if (!todo.length) return { ok: true, read: 0, left: 0, note: sync || "All Xero bills read" }
+
+  const { data: lineRows } = await sb.from("xero_bill_lines").select("xero_invoice_id, description, tracking_codes")
+    .in("xero_invoice_id", todo.map(b => b.xero_invoice_id))
+  const linesOf = (id: string) => ((lineRows || []) as any[]).filter(l => l.xero_invoice_id === id)
+  const save = (b: any, patch: any) => sb.from("xero_bill_reads").upsert({ xero_invoice_id: b.xero_invoice_id, read_at: new Date().toISOString(), ...patch }, { onConflict: "xero_invoice_id" })
+
+  const ctx = await loadContext()
+  const system = systemPrompt(ctx)
+  let read = 0, noted = 0, skipped = 0, refiled = 0
+  for (const b of todo) {
+    if (read >= limit || Date.now() - started > 95_000) break
+    const lines = linesOf(b.xero_invoice_id)
+    if (!billIsGoods(b, lines)) { await save(b, { status: "skipped", note: "Not materials (labour, hire, fuel, travel…)" }); skipped++; continue }
+    if (b.has_att === false) { await save(b, { status: "no_attachment" }); skipped++; continue }
+    try {
+      const r = await xeroCall({ mode: "attachment", invoice_id: b.xero_invoice_id })
+      if (r.status === 404) { await save(b, { status: "no_attachment" }); skipped++; continue }
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `Xero ${r.status}`)
+      const bytes = new Uint8Array(await r.arrayBuffer())
+      const name = decodeURIComponent(r.headers.get("x-file-name") || "invoice.pdf")
+      const item = { id: null, file_name: name, mime_type: r.headers.get("content-type") || "", file_size: bytes.length,
+        source_path: "Xero bill", source_created_at: b.date, supplier: b.contact_name }
+      const notes = [...new Set(lines.map((l: any) => String(l.description || "").trim()).filter(d => d.length > 1))].slice(0, 8).join("; ")
+      const hint = `This is the supplier's invoice attached to a bill in CCG's Xero: ${b.contact_name || "supplier"} ${b.invoice_number || ""}, dated ${b.date}, £${b.total ?? "?"}${b.reference ? `, reference "${b.reference}"` : ""}.` +
+        (notes ? `\nBookkeeping notes on the bill: ${notes}` : "") +
+        `\nThe job is usually shown by the delivery / site address, a site or job name, or an order reference. List every product on it.`
+      const g = await readWithClaude(system, item, bytes, hint)
+      read++
+      const project = ctx.projects.find((p: any) => p.id === g.project_id) || null
+      const pc = project ? (num(g.project_confidence) ?? 0) : 0
+      const products = Array.isArray(g.products) ? g.products : []
+      let n = 0
+      if (project && pc >= 0.7 && products.length) {
+        const when = b.date ? new Date(b.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""
+        n = await recordPurchases(project.id, g, item, "xero", `Xero bill — ${b.contact_name || "supplier"}${b.invoice_number ? " " + b.invoice_number : ""}${when ? " " + when : ""}`)
+        noted += n
+        if (n) refiled += await recheckForInfo(project.id).catch(() => 0)
+      }
+      await save(b, { status: !products.length ? "no_products" : (project && pc >= 0.7) ? "read" : "no_job",
+        project_id: project?.id || null, confidence: pc, summary: g.summary || null, products, attempts: (tries.get(b.xero_invoice_id) || 0) + 1, note: g.reason || null })
+    } catch (e) {
+      await save(b, { status: "error", attempts: (tries.get(b.xero_invoice_id) || 0) + 1, note: String((e as Error).message || e).slice(0, 300) })
+    }
+  }
+  const left = Math.max(0, ((bills || []) as any[]).filter(b => !seen.has(b.xero_invoice_id)).length - read - skipped)
+  return { ok: true, read, skipped, noted, refiled, left, note: [sync, `${read} Xero invoice${read === 1 ? "" : "s"} read · ${noted} item${noted === 1 ? "" : "s"} noted${refiled ? ` · ${refiled} datasheet${refiled === 1 ? "" : "s"} matched` : ""} · ${left} to go`].filter(Boolean).join(" · ") }
+}
+
 // ─── Deciding where it goes ──────────────────────────────────────────────────
 type Plan = { status: "filed" | "to_check" | "ignored"; decision?: any; reason: string }
 
@@ -604,7 +742,10 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
 
   if (type === "invoice" || type === "supplier_order") {
     // What was bought for which job — feeds the datasheet checks (invoices themselves stay in Xero)
-    if (project && pc >= 0.7) await recordPurchases(project.id, g, item, type === "invoice" ? "invoice" : (/deliver/i.test(item.file_name + " " + (g.summary || "")) ? "delivery" : "order"))
+    if (project && pc >= 0.7) {
+      const src = type === "invoice" ? "invoice" : (/deliver/i.test(item.file_name + " " + (g.summary || "")) ? "delivery" : "order")
+      if (await recordPurchases(project.id, g, item, src) && src !== "order") await recheckForInfo(project.id).catch(() => 0)
+    }
   }
   if (type === "invoice") return { status: "ignored", reason: project && pc >= 0.7 && (g.products || []).length ? `Invoice — handled in Xero (${(g.products || []).length} item${(g.products || []).length === 1 ? "" : "s"} noted for ${project.project_name}'s datasheets)` : "Invoice — handled in Xero" }
   if (type === "other") return sure(tc) ? { status: "ignored", reason: g.reason || "Not a project document" } : { status: "to_check", reason: "Not sure what this is" }
@@ -1014,7 +1155,7 @@ Deno.serve(async (req) => {
     const { data: prof } = await sb.from("profiles").select("id, role").eq("id", u.user.id).maybeSingle()
     if (!prof || !FILERS.includes(prof.role)) return json({ error: "Your role can't file documents" }, 403)
     actorId = prof.id
-  } else if (action !== "run" && action !== "datasheets") {
+  } else if (action !== "run" && action !== "datasheets" && action !== "xero") {
     return json({ error: "Schedule can only run" }, 403)
   }
 
@@ -1028,6 +1169,14 @@ Deno.serve(async (req) => {
     }
 
     if (action === "datasheets") return json(await findDatasheets(cron ? 4 : 3))
+    if (action === "xero") return json(await xeroRun(cron ? XERO_PER_RUN : 3))
+    if (action === "xero_status") {
+      const st = await (await xeroCall({ mode: "status" })).json().catch(() => ({}))
+      const { data: rs } = await sb.from("xero_bill_reads").select("status").limit(20000)
+      const reads: Record<string, number> = {}
+      for (const r of (rs || []) as any[]) reads[r.status] = (reads[r.status] || 0) + 1
+      return json({ connected: !!st.connected, tenant: st.tenant || null, read_only: !!st.read_only, last_sync: st.last_sync || null, reads })
+    }
     if (action === "folders") {
       // The Drive folder's sub-folders, each with a suggested CRM job
       const { data: st } = await sb.from("intake_settings").select("drive_folder_id").eq("id", 1).maybeSingle()
