@@ -740,7 +740,8 @@ async function write(ctx: any, prev: any) {
     `REPORTING PERIOD: ${fmt(ctx.since)} → ${fmt(ymd(new Date()))}`,
     pa ? `LATEST PA (${ctx.paName || "latest"}): claimed to date £${Math.round(pa.totals.cumulative).toLocaleString("en-GB")} of £${Math.round(pa.totals.total).toLocaleString("en-GB")} original${claimedPct != null ? ` (${claimedPct}% of the original contract works)` : ""}.
 Progress by section (average % complete): ${(pa.groups || []).map((g: any) => `${g.name} ${g.avg_pct}%`).join("; ")}
-Variations on the PA: ${(pa.variations || []).map((v: any) => `${v.instruction_no} ${v.instruction_details}${v.cost_impact ? " £" + v.cost_impact : ""}`).join("; ") || "none"}` : "LATEST PA: none found",
+Variations on the PA: ${(pa.variations || []).map((v: any) => `${v.instruction_no} ${v.instruction_details}${v.cost_impact ? " £" + v.cost_impact : ""}`).join("; ") || "none"}
+VO TOTALS (use these exact figures): ${(() => { const pr = (pa.variations || []).map((v: any) => parseFloat(v.cost_impact)).filter((n: number) => Number.isFinite(n) && n !== 0); return `${pr.length} priced VO${pr.length === 1 ? "" : "s"} of ${(pa.variations || []).length} listed, total £${pr.reduce((a: number, b: number) => a + b, 0).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` })()}` : "LATEST PA: none found",
     ctx.tasks.length ? `PROGRAMME TASKS: ${ctx.tasks.slice(0, 40).map((t: any) => `${t.name} (${fmt(t.start_date)}–${fmt(t.end_date)}, ${Math.round(t.progress || 0)}%)`).join("; ")}` : "PROGRAMME: none in the CRM",
     `JOB DIARY THIS PERIOD (from emails and documents):\n${ctx.log.map((l: any) => `- ${fmt(l.happened_at)} [${l.kind}${l.status ? ", " + l.status : ""}] ${l.ref ? l.ref + ": " : ""}${l.title}${l.detail ? " — " + l.detail : ""}${l.source_label ? ` (${l.source_label})` : ""}`).join("\n") || "- nothing recorded"}`,
     ctx.openRfis.length ? `RFIs STILL OPEN FROM BEFORE: ${ctx.openRfis.map((l: any) => `${l.ref || "RFI"} ${l.title} (raised ${fmt(l.happened_at)})`).join("; ")}` : "",
@@ -760,7 +761,8 @@ Variations on the PA: ${(pa.variations || []).map((v: any) => `${v.instruction_n
 
   const system = `You draft the monthly progress report that City Construction Group (CCG), a UK main contractor, issues to its client for one job. A CCG manager will check and approve it before the client sees it.
 Write in plain, professional UK English from CCG's side ("we", "CCG"). Use ONLY the facts given (PA, diary, programme, documents, photos, previous report). Never invent dates, numbers, names, RFIs or problems. Where something a report would normally say isn't in the facts, leave it out — or for something important write "[check: …]" so the manager fills it in.
-Progress must agree with the latest PA's claimed percentages. Mention VOs by number. Keep each section tight: a client reads it in five minutes.
+Progress must agree with the latest PA's claimed percentages. Mention VOs by number. Never add up or work out figures yourself — quote only the totals and amounts given. Keep each section tight: a client reads it in five minutes.
+Plain text only — no markdown, no asterisks or # headings (it is printed as-is into a PDF); separate paragraphs with a blank line.
 
 Reply with JSON only:
 {"current_phase": "a few words, e.g. 'Internal finishes and external works'",

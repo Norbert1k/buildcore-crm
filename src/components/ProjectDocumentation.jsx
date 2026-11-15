@@ -1144,7 +1144,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
   async function loadProgressReports() {
     if (!isPrSubfolder) return
     const { data } = await supabase.from('progress_reports')
-      .select('id, report_number, report_date, created_at, updated_at, profiles:created_by(full_name)')
+      .select('id, report_number, report_date, created_at, updated_at, ai_draft, profiles:created_by(full_name)')
       .eq('project_id', projectId)
       .eq('subfolder_key', subfolder.key)
       .order('created_at', { ascending: false })
@@ -1959,7 +1959,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     // subfolders (e.g. Merton's Sports Hall) are shown by their respective
     // SubfolderSection instances. PostgREST: use .is(null) for IS NULL.
     const { data } = await supabase.from('progress_reports')
-      .select('id, report_number, report_date, created_at, updated_at, profiles:created_by(full_name)')
+      .select('id, report_number, report_date, created_at, updated_at, ai_draft, profiles:created_by(full_name)')
       .eq('project_id', projectId)
       .is('subfolder_key', null)
       .order('created_at', { ascending: false })
@@ -1967,6 +1967,16 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   }
 
   useEffect(() => { if (open && folder.key === '05-progress-report') loadProgressReports() }, [open, folder.key, projectId, treeVersion])
+  // A job only has separate buildings when its PAs are kept per building
+  // (sub-folders of 02). Other sub-folders in 05 (e.g. "Final Account") don't
+  // stop a report being published at the job level.
+  const [buildingCount, setBuildingCount] = useState(null)
+  useEffect(() => {
+    if (folder.key !== '05-progress-report') return
+    supabase.from('project_doc_folders').select('folder_key').eq('project_id', projectId).eq('parent_key', '02-payment-application')
+      .then(({ data }) => setBuildingCount((data || []).length))
+  }, [folder.key, projectId, treeVersion])
+  const perBuilding = subfolders.length > 0 && buildingCount !== 0
 
   async function deleteProgressReport(reportId) {
     // Best-effort: delete photos from storage first
@@ -2229,7 +2239,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                       style={{ fontSize: 11, padding: '3px 8px', border: '0.5px solid #448a40', borderRadius: 4, background: '#448a40', cursor: 'pointer', color: 'white' }}>
                       📄 Export PDF
                     </button>
-                    {canManage && subfolders.length === 0 && (
+                    {canManage && !perBuilding && (
                       <button
                         disabled={publishingReportId === r.id}
                         onClick={async (e) => {
@@ -2253,7 +2263,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                         {publishingReportId === r.id ? 'Publishing…' : '📤 Publish to client'}
                       </button>
                     )}
-                    {canManage && subfolders.length > 0 && (
+                    {canManage && perBuilding && (
                       <span
                         title="This project has separate buildings. Open a building's Progress Report section below and publish from there, so the report appears under that building in the client portal."
                         style={{ fontSize: 11, color: 'var(--text3)', fontStyle: 'italic', padding: '3px 0' }}>
