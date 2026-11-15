@@ -28,6 +28,8 @@ alter table public.intake_settings add column if not exists trial boolean not nu
 -- The schedule's pass for calling the function — made here, never typed by anyone
 alter table public.intake_settings add column if not exists cron_token text not null
   default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+-- Drive job folder name → CRM project id, or "skip" (Inbox › Settings)
+alter table public.intake_settings add column if not exists folder_map jsonb not null default '{}'::jsonb;
 insert into public.intake_settings (id) values (1) on conflict (id) do nothing;
 
 create table if not exists public.intake_items (

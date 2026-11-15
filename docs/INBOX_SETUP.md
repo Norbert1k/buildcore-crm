@@ -86,6 +86,25 @@ are filed automatically, and only the unsure ones wait in To check.
 
 ---
 
+## The rules it follows
+
+**Which job:**
+1. The Drive job folder, set in Inbox › Settings › "Drive job folders → CRM jobs".
+2. A project reference on the document.
+3. The site address or postcode.
+4. The project name or client, cross-checked. A client or consultant alone is never enough.
+
+If the file contradicts its Drive folder, for example another job's address, it waits in
+To check.
+
+**Which folder:** files go into the job's existing sub-folders when one fits by meaning (same
+consultant and discipline, plot, or package).
+- New folders are only made when nothing fits. They're numbered the CCG way:
+  "15. KSA – Structural", "03. Ground Investigation", "02. RAMS – ABC Groundworks".
+- Nothing goes into Old, Archive or Superseded folders.
+- Revisions stay together.
+- New folders are private to CCG until you show them to the client.
+
 ## What goes where
 
 | File | Goes to |

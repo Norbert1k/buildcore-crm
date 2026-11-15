@@ -166,7 +166,7 @@ export default function Inbox() {
                 <div key={i.id} className="ib-row"><div className="ib-row-main"><div className="ib-fn">{i.file_name}</div>
                   <div className="ib-meta">{i.status === 'error' ? `Retrying — ${i.last_error || ''}` : 'Waiting to be read'} · {fmtWhen(i.created_at)}</div></div></div>))}</div>
             : <div className="ib-empty">Nothing waiting.</div>)}
-          {tab === 'settings' && canSet && <Settings settings={settings} onSaved={load} />}
+          {tab === 'settings' && canSet && <Settings settings={settings} onSaved={load} projects={lists.projects} />}
         </>
       )}
     </div>
@@ -188,9 +188,15 @@ function CheckCard({ item, lists, canFile, onDone }) {
   const [target, setTarget] = useState(plan?.target || targetForType(g.doc_type))
   const [projectId, setProjectId] = useState(plan?.project_id || g.project_id || '')
   const firstFolder = FOLDERS.find(f => f.types.includes(g.doc_type))?.v || FOLDERS[0].v
-  const [folder, setFolder] = useState(plan ? `${plan.folder_key}|${plan.subfolder_key || ''}` : firstFolder)
+  const planBase = plan && FOLDERS.find(f => f.v.startsWith(plan.folder_key + '|') && f.types.includes(g.doc_type))?.v
+  const [folder, setFolder] = useState(plan ? (FOLDERS.some(f => f.v === `${plan.folder_key}|${plan.subfolder_key || ''}`) ? `${plan.folder_key}|${plan.subfolder_key || ''}` : (planBase || firstFolder)) : firstFolder)
   const [building, setBuilding] = useState('')
   const [buildings, setBuildings] = useState([])
+  // Sub-folders inside the chosen section (e.g. 01. Drawings › 14. CIAO …)
+  const [subTree, setSubTree] = useState([])
+  const [subPick, setSubPick] = useState(plan?.new_folder ? 'new' : (plan?.subfolder_key || ''))
+  const [newSub, setNewSub] = useState(plan?.new_folder?.name || '')
+  const [newSubParent] = useState(plan?.new_folder?.parent_key || null)
   const [subId, setSubId] = useState(plan?.subcontractor_id || (g.vendor?.kind === 'subcontractor' ? g.vendor.id : '') || '')
   const [vendor, setVendor] = useState(
     plan?.subcontractor_id ? 's:' + plan.subcontractor_id : plan?.supplier_id ? 'u:' + plan.supplier_id
@@ -211,6 +217,24 @@ function CheckCard({ item, lists, canFile, onDone }) {
       .then(({ data }) => setBuildings(data || []))
   }, [target, projectId, fk])
 
+  // Load the section's sub-folders for this job
+  const [, baseSub] = folder.split('|')
+  useEffect(() => {
+    setSubTree([])
+    if (target !== 'project_doc' || !projectId || !baseSub) return
+    supabase.from('project_doc_folders').select('folder_key, parent_key, label').eq('project_id', projectId).then(({ data }) => {
+      const out = []
+      const walk = (parent, prefix, depth) => {
+        if (depth > 4) return
+        ;(data || []).filter(f => f.parent_key === parent)
+          .sort((a, b) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true }))
+          .forEach(f => { out.push({ key: f.folder_key, path: prefix ? prefix + ' / ' + f.label : f.label, depth }); walk(f.folder_key, prefix ? prefix + ' / ' + f.label : f.label, depth + 1) })
+      }
+      walk(baseSub, '', 0)
+      setSubTree(out)
+    })
+  }, [target, projectId, baseSub])
+
   const reqs = lists.reqs.filter(r => r.project_id === projectId)
   const project = lists.projects.find(p => p.id === projectId)
 
@@ -218,7 +242,11 @@ function CheckCard({ item, lists, canFile, onDone }) {
     let decision
     if (target === 'project_doc') {
       const [folder_key, sub] = folder.split('|')
-      decision = { target, project_id: projectId, folder_key, subfolder_key: building || sub || null }
+      decision = { target, project_id: projectId, folder_key, subfolder_key: building || (subPick && subPick !== 'new' ? subPick : sub) || null }
+      if (subPick === 'new' && newSub.trim()) {
+        const parentOk = newSubParent && (newSubParent === sub || subTree.some(t => t.key === newSubParent))
+        decision.new_folder = { parent_key: parentOk ? newSubParent : sub, name: newSub.trim() }
+      }
     } else if (target === 'compliance') {
       decision = { target, subcontractor_id: subId, document_type: docType, expiry_date: expiry || null }
     } else {
@@ -250,6 +278,7 @@ function CheckCard({ item, lists, canFile, onDone }) {
         {g.doc_type && <span className="ib-chip ib-chip-grey">{TYPE_LABEL[g.doc_type] || g.doc_type}</span>}
       </div>
       {item.summary && <div className="ib-sum">{item.summary}</div>}
+      {plan?.path_label && <div className="ib-meta">Suggested: <b>{plan.path_label}</b></div>}
       <div className="ib-meta">
         <span className={item.reason?.startsWith('Trial') ? 'ib-ok' : 'ib-why'}>{item.reason}</span>
         {item.source_path ? <> · {item.source_path}</> : null} · {fmtWhen(item.source_created_at || item.created_at)}
@@ -275,6 +304,19 @@ function CheckCard({ item, lists, canFile, onDone }) {
               <select value={folder} onChange={e => setFolder(e.target.value)} aria-label="Folder">
                 {FOLDERS.map(f => <option key={f.v} value={f.v}>{f.label}</option>)}
               </select>
+              {subTree.length > 0 || subPick === 'new' ? (
+                <select value={subPick} onChange={e => setSubPick(e.target.value)} aria-label="Sub-folder">
+                  <option value="">(main folder)</option>
+                  {subTree.map(t => <option key={t.key} value={t.key}>{'\u00a0\u00a0'.repeat(t.depth)}{t.path.split(' / ').pop()}</option>)}
+                  <option value="new">+ New sub-folder…</option>
+                </select>
+              ) : baseSub ? (
+                <select value={subPick} onChange={e => setSubPick(e.target.value)} aria-label="Sub-folder">
+                  <option value="">(main folder)</option>
+                  <option value="new">+ New sub-folder…</option>
+                </select>
+              ) : null}
+              {subPick === 'new' && <input value={newSub} onChange={e => setNewSub(e.target.value)} placeholder="e.g. KSA – Structural (number added for you)" />}
               {buildings.length > 0 && (
                 <select value={building} onChange={e => setBuilding(e.target.value)} aria-label="Building">
                   <option value="">Building…</option>
@@ -372,7 +414,19 @@ function OtherRow({ item, canFile, onDone }) {
   )
 }
 
-function Settings({ settings, onSaved }) {
+function Settings({ settings, onSaved, projects = [] }) {
+  const [map, setMap] = useState(() => ({ ...(settings?.folder_map || {}) }))
+  const [driveFolders, setDriveFolders] = useState(null)
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  async function loadFolders() {
+    setLoadingFolders(true)
+    try {
+      const { folders } = await call({ action: 'folders' })
+      setDriveFolders(folders)
+      setMap(m => { const n = { ...m }; for (const f of folders) if (!(f.name in n) && f.suggestion) n[f.name] = f.suggestion; return n })
+    } catch (e) { alert(e.message) }
+    setLoadingFolders(false)
+  }
   const [f, setF] = useState(() => ({
     folder: settings?.drive_folder_id || '', enabled: !!settings?.enabled, trial: settings?.trial !== false,
     threshold: Math.round((Number(settings?.auto_threshold) || 0.85) * 100),
@@ -386,6 +440,7 @@ function Settings({ settings, onSaved }) {
       drive_folder_id: driveFolderId(f.folder) || null, enabled: f.enabled, trial: f.trial,
       auto_threshold: Math.min(0.99, Math.max(0.5, Number(f.threshold) / 100 || 0.85)),
       start_from: new Date(f.start + 'T00:00:00Z').toISOString(), updated_at: new Date().toISOString(),
+      folder_map: Object.fromEntries(Object.entries(map).filter(([, v]) => v)),
     }).eq('id', 1).select('id')
     setSaving(false)
     if (error || !data?.length) { alert('Couldn’t save' + (error ? ': ' + error.message : ' — you don’t have permission.')); return }
@@ -406,6 +461,21 @@ function Settings({ settings, onSaved }) {
         <span className="ib-inl"><input type="number" min="50" max="99" value={f.threshold} onChange={e => set('threshold', e.target.value)} style={{ width: 70 }} /> %</span>
       </label>
       <div className="ib-hint">Lower = more filed automatically, more mistakes. 85% is a good start.</div>
+      <div className="ib-maph">
+        <b>Drive job folders → CRM jobs</b>
+        <button className="btn btn-sm" onClick={loadFolders} disabled={loadingFolders || !settings?.drive_folder_id}>{loadingFolders ? 'Loading…' : driveFolders ? 'Reload' : 'Load from Drive'}</button>
+      </div>
+      <div className="ib-hint">The job a file's Drive folder belongs to is the strongest clue. Anything the file itself contradicts (another job's address or ref) waits in To check. "Skip" = never file from that folder.</div>
+      {(driveFolders || Object.keys(map).map(name => ({ name }))).map(df => (
+        <div key={df.name} className="ib-maprow">
+          <span className="ib-mapname">{df.name}</span>
+          <select value={map[df.name] || ''} onChange={e => setMap(m => ({ ...m, [df.name]: e.target.value }))}>
+            <option value="">Let Claude decide</option>
+            <option value="skip">Skip — not a job</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.project_ref ? p.project_ref + ' · ' : ''}{p.project_name}</option>)}
+          </select>
+        </div>
+      ))}
       <div><button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button></div>
     </div>
   )
