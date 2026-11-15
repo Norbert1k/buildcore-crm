@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { ROLE_PERMISSIONS, ROLES } from '../lib/utils'
 import { Avatar, IconDashboard, IconUsers, IconDoc, IconProject, IconSettings, IconBuilding } from './ui'
@@ -38,6 +39,18 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
   const role = profile?.role || 'viewer'
   const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer
 
+  // Inbox: files from Google Drive waiting for a person to check
+  const [inboxCount, setInboxCount] = useState(0)
+  useEffect(() => {
+    if (!perms.nav.includes('documents')) return
+    let stop = false
+    const load = () => supabase.from('intake_items').select('id', { count: 'exact', head: true }).eq('status', 'to_check')
+      .then(({ count, error }) => { if (!stop && !error) setInboxCount(count || 0) })
+    load()
+    const t = setInterval(load, 60000)
+    return () => { stop = true; clearInterval(t) }
+  }, [role])
+
   function handleNav() {
     if (window.innerWidth < 768) onClose()
   }
@@ -53,6 +66,8 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
   const iconCalendar = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
   const iconTasks = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
   const iconQuotes = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+
+  const iconInbox = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
 
   const navGroups = [
     { label: null, items: [
@@ -72,6 +87,7 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
       { to: '/suppliers',                  key: 'suppliers',      label: 'Suppliers',        icon: <IconBuilding /> },
     ]},
     { label: 'Compliance & files', items: [
+      { to: '/inbox',                     key: 'documents', label: 'Inbox',        icon: iconInbox, todo: inboxCount },
       { to: '/subcontractors/compliance', key: 'documents', label: 'Compliance',   icon: <IconDoc />, expired: expCounts.expired || 0, expiring: expCounts.expiring || 0 },
       { to: '/company-documents',         key: 'company',   label: 'Company Docs', icon: <IconDoc /> },
     ]},
@@ -164,6 +180,7 @@ export default function Sidebar({ expCounts = {}, reminderCount = 0, open, onClo
                   )}
                   {item.expired > 0 && <span className="nav-badge nav-badge-red" title="Expired documents">{item.expired}</span>}
                   {item.expiring > 0 && <span className="nav-badge nav-badge-amber" title="Expiring within 30 days" style={{ marginLeft: item.expired > 0 ? 4 : 'auto' }}>{item.expiring}</span>}
+                  {item.todo > 0 && <span className="nav-badge nav-badge-amber" title="Files waiting to be checked">{item.todo}</span>}
                 </NavLink>
               ))}
             </div>

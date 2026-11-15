@@ -37,6 +37,7 @@ const Clients           = lazy(() => import('./pages/Clients'))
 const ClientDetail      = lazy(() => import('./pages/ClientDetail'))
 const TaskDetail        = lazy(() => import('./pages/TaskDetail'))
 const Quotes            = lazy(() => import('./pages/Quotes'))
+const Inbox             = lazy(() => import('./pages/Inbox'))
 
 function HamburgerIcon() {
   return (
@@ -362,6 +363,7 @@ function ProtectedLayout() {
     '/projects/tracker': 'Project Tracker',
     '/suppliers': 'Suppliers',
     '/quotes': 'Quotes',
+    '/inbox': 'Inbox',
     '/settings': 'Settings',
   }
   const p = location.pathname
@@ -406,6 +408,7 @@ function ProtectedLayout() {
               <Route path="/projects/:id" element={<ProjectGuard><ProjectDetail /></ProjectGuard>} />
               <Route path="/suppliers" element={<NavGuard k="suppliers"><Suppliers /></NavGuard>} />
               <Route path="/quotes" element={<NavGuard k="quotes"><Quotes /></NavGuard>} />
+              <Route path="/inbox" element={<NavGuard k="documents"><Inbox /></NavGuard>} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/company-documents" element={<NavGuard k="company"><CompanyDocuments /></NavGuard>} />
               <Route path="/clients" element={<NavGuard k="clients"><Clients /></NavGuard>} />
