@@ -53,7 +53,9 @@ var PAX = (() => {
   __export(pax_entry_exports, {
     autoMatch: () => autoMatch,
     extractFromPa: () => extractFromPa,
-    fetchLatestPaForSubfolder: () => fetchLatestPaForSubfolder
+    fetchLatestPaForSubfolder: () => fetchLatestPaForSubfolder,
+    valuationsWithPa: () => valuationsWithPa,
+    variationsFromPa: () => variationsFromPa
   });
 
   // src/lib/paOrdering.js
@@ -629,9 +631,68 @@ var PAX = (() => {
     if (r.fromJob === "omIssued" && job.omIssued) return { reason: `In the issued O&M manual (${job.omIssued})` };
     return null;
   }
+
+  // src/lib/reportValuation.js
+  function parseMoney(v) {
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    const s = String(v ?? "").replace(/[£,\s]/g, "").replace(/^\((.*)\)$/, "-$1");
+    if (!s || !/^-?\d*\.?\d+$/.test(s)) return null;
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  function tidyMoney(v) {
+    if (v === "" || v == null) return "";
+    const n = parseMoney(v);
+    if (n == null) return String(v);
+    return (Math.round(n * 100) / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  var paNumber = (name) => {
+    const m = String(name || "").match(/\bPA\s*[-_ ]?0*(\d{1,3})\b/i);
+    return m ? parseInt(m[1], 10) : null;
+  };
+  function dateFromName(name) {
+    const m = String(name || "").match(/\b(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2}|\d{4})\b/);
+    if (!m) return null;
+    const d = +m[1], mo = +m[2], y = m[3].length === 2 ? 2e3 + +m[3] : +m[3];
+    if (d < 1 || d > 31 || mo < 1 || mo > 12 || y < 2015 || y > 2100) return null;
+    return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  }
+  function valuationsWithPa(history, { totals, paName, paDate, retention }) {
+    const hist = (history || []).map((r) => ({ ...r }));
+    if (!totals || !(totals.cumulative > 0)) return hist;
+    const nums = hist.map((r) => parseInt(r.no, 10)).filter(Number.isFinite);
+    const no = paNumber(paName) ?? (nums.length ? Math.max(...nums) + 1 : hist.length + 1);
+    const prev = parseMoney(totals.prev_certified);
+    const gross = prev != null && prev > 0 && prev < totals.cumulative ? totals.cumulative - prev : totals.cumulative;
+    const ret = parseMoney(totals.retention_pct) ?? parseMoney(retention) ?? 0;
+    const row = {
+      no: String(no),
+      date_submitted: dateFromName(paName) || (paDate ? String(paDate).slice(0, 10) : (/* @__PURE__ */ new Date()).toISOString().slice(0, 10)),
+      gross_claimed: tidyMoney(gross),
+      retention_pct: String(ret),
+      amount_claimed: tidyMoney(gross * (1 - ret / 100)),
+      amount_agreed: ""
+    };
+    const at = hist.findIndex((r) => String(r.no).trim() === row.no);
+    if (at >= 0) hist[at] = { ...row, amount_agreed: hist[at].amount_agreed || "" };
+    else hist.push(row);
+    return hist;
+  }
+  function variationsFromPa(variations) {
+    return (variations || []).map((v) => ({
+      instruction_no: v.instruction_no,
+      si_ref: "",
+      issue_date: "",
+      instruction_details: v.instruction_details,
+      scope_impact: "",
+      cost_impact: tidyMoney(v.cost_impact),
+      time_impact: "",
+      agreed_cost: ""
+    }));
+  }
   return __toCommonJS(pax_entry_exports);
 })();
-const { extractFromPa, fetchLatestPaForSubfolder, autoMatch } = PAX
+const { extractFromPa, fetchLatestPaForSubfolder, autoMatch, valuationsWithPa, variationsFromPa } = PAX
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")
 const MODEL = "claude-sonnet-4-5"
@@ -742,7 +803,7 @@ async function gather(projectId: string, prev: any, sub: string | null = null) {
     sb.from("programmes").select("id, current_version_id").eq("project_id", projectId).is("building_ordinal", null).limit(1).maybeSingle()
       .then((r: any) => r.data || null, () => null),
   ])
-  let pa: any = null, paName: string | null = null
+  let pa: any = null, paName: string | null = null, paDate: string | null = null
   if (paBuf) pa = await extractFromPa(paBuf).catch(() => null)
   {
     let q = sb.from("project_doc_files").select("file_name, created_at").eq("project_id", projectId).eq("folder_key", "02-payment-application")
@@ -751,6 +812,7 @@ async function gather(projectId: string, prev: any, sub: string | null = null) {
     const named = (paFiles || []).filter((f: any) => /\.xlsx$/i.test(f.file_name) && paNo(f.file_name) != null)
       .sort((a: any, b: any) => paNo(b.file_name)! - paNo(a.file_name)!)
     paName = named[0]?.file_name || null
+    paDate = named[0]?.created_at || null
   }
   let tasks: any[] = []
   if (prog?.current_version_id) {
@@ -774,7 +836,7 @@ async function gather(projectId: string, prev: any, sub: string | null = null) {
   const near = !why.length && (claimed >= 0.95 || daysLeft <= 28)
     ? [claimed >= 0.95 && `${Math.round(claimed * 100)}% of the original works claimed`, daysLeft <= 28 && `completion due ${fmt(project.end_date)}`].filter(Boolean) as string[] : []
   const om = why.length || near.length ? await omStatus(projectId).catch(() => null) : null
-  return { project, since, pa, paName, log, openRfis, files, photos: picked, photosNew: inPeriod.length, latestPhoto, tasks, closeout: why, near, om }
+  return { project, since, pa, paName, paDate, log, openRfis, files, photos: picked, photosNew: inPeriod.length, latestPhoto, tasks, closeout: why, near, om }
 }
 
 async function photoBytes(p: any): Promise<{ bytes: Uint8Array; mime: string } | null> {
@@ -935,15 +997,8 @@ async function draft(projectId: string, paRefIn: string | null, force = false) {
     target_completion: prev?.target_completion || p.end_date || null,
     estimated_completion: (/^\d{4}-\d{2}-\d{2}$/.test(String(out.estimated_completion || "")) ? out.estimated_completion : null) || prev?.estimated_completion || p.end_date || null,
     programme_groups: pa ? pa.groups.map((g: any) => ({ name: g.name, items: [{ label: `Avg progress (${g.item_count} item${g.item_count === 1 ? "" : "s"})`, percent: g.avg_pct }] })) : (prev?.programme_groups || []),
-    variations: pa ? pa.variations.map((v: any) => ({ instruction_no: v.instruction_no, si_ref: "", issue_date: "", instruction_details: v.instruction_details, scope_impact: "", cost_impact: v.cost_impact, time_impact: "", agreed_cost: "" })) : (prev?.variations || []),
-    valuations: (() => {
-      const hist = prev?.valuations || []
-      if (!pa?.totals?.cumulative) return hist
-      const t = pa.totals
-      return [...hist, t.net_cumulative != null
-        ? { no: String(hist.length + 1), date_submitted: ymd(new Date()), gross_claimed: String(Math.round(t.cumulative)), retention_pct: String(t.retention_pct ?? retention), amount_claimed: String(Math.round(t.net_cumulative)), amount_agreed: "" }
-        : { no: String(hist.length + 1), date_submitted: ymd(new Date()), gross_claimed: "", retention_pct: String(retention), amount_claimed: String(Math.round(t.cumulative)), amount_agreed: "" }]
-    })(),
+    variations: pa ? variationsFromPa(pa.variations) : (prev?.variations || []),
+    valuations: valuationsWithPa(prev?.valuations || [], { totals: pa?.totals, paName: ctx.paName, paDate: ctx.paDate, retention }),
     rfis: Array.isArray(out.rfis) ? out.rfis.slice(0, 40).map((x: any) => ({ rfi_no: String(x.rfi_no || ""), description: String(x.description || ""), status: x.status === "closed" ? "closed" : "open" })) : (prev?.rfis || []),
     risks: Array.isArray(out.risks) ? out.risks.slice(0, 20).map((x: any) => ({ description: String(x.description || ""), consequence: String(x.consequence || ""), risk_rag: ["red", "amber", "green"].includes(x.risk_rag) ? x.risk_rag : "amber", mitigation: String(x.mitigation || "") })) : (prev?.risks || []),
     ai_draft: true, ai_pa_ref: paRef,
@@ -992,7 +1047,7 @@ Deno.serve(async (req) => {
   if (given) {
     const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
     if (!st?.cron_token || given !== st.cron_token) return json({ error: "Bad key" }, 401)
-    if (body.action !== "draft" && body.action !== "om_status") return json({ error: "Schedule can only draft" }, 403)
+    if (!["draft", "om_status", "pa_totals"].includes(body.action)) return json({ error: "Schedule can only draft" }, 403)
   } else {
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
     const { data: u } = token ? await sb.auth.getUser(token) : { data: { user: null } }
@@ -1004,6 +1059,23 @@ Deno.serve(async (req) => {
     if (body.action === "draft") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
       return json(await draft(body.project_id, body.pa_ref ? String(body.pa_ref).slice(0, 10) : null, !!body.force))
+    }
+    if (body.action === "pa_totals") {
+      // For cross-checking figures read from emails: the job's latest PA(s), every building
+      if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
+      const { data: files } = await sb.from("project_doc_files").select("file_name, subfolder_key").eq("project_id", body.project_id).eq("folder_key", "02-payment-application")
+      const subs = [...new Set((files || []).filter((f: any) => /\.xlsx$/i.test(f.file_name) && paNo(f.file_name) != null && f.subfolder_key !== "superseded").map((f: any) => f.subfolder_key ?? null))]
+      let total = 0, cumulative = 0, retention: number | null = null, name: string[] = []
+      for (const sub of subs.slice(0, 6)) {
+        const buf = await fetchLatestPaForSubfolder(sb, body.project_id, sub as any).catch(() => null)
+        const pa = buf ? await extractFromPa(buf).catch(() => null) : null
+        if (!pa?.totals) continue
+        total += pa.totals.total || 0; cumulative += pa.totals.cumulative || 0
+        if (pa.totals.retention_pct != null) retention = pa.totals.retention_pct
+        const latest = (files || []).filter((f: any) => (f.subfolder_key ?? null) === sub && paNo(f.file_name) != null).sort((a: any, b: any) => paNo(b.file_name)! - paNo(a.file_name)!)[0]
+        if (latest) name.push(PA(paNo(latest.file_name)!))
+      }
+      return json({ ok: true, pa: name.join(" + ") || null, total, cumulative, retention_pct: retention })
     }
     if (body.action === "om_status") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)

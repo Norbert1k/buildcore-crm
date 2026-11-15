@@ -229,6 +229,21 @@ async function check(): Promise<Alert[]> {
       title: `Subcontractor application waiting ${days(w.created_at)} days`, detail: `${w.summary || w.file_name} — check it so the payment notice goes out in time.`,
       action_label: "Inbox", action_url: "/inbox" })
   }
+  // 12. Job details the CRM read from emails that wait for a person (money, awards, client, new firms)
+  const { data: fills } = await sb.from("job_fills").select("project_id").eq("status", "pending").then((r: any) => r.error ? { data: [] } : r)
+  const fillCount = new Map<string, number>()
+  for (const f of (fills || []) as any[]) fillCount.set(f.project_id, (fillCount.get(f.project_id) || 0) + 1)
+  const missing = [...fillCount.keys()].filter(id => !jobs.find((j: any) => j.id === id))
+  const extra = missing.length ? ((await sb.from("projects").select("id, project_name, status").in("id", missing)).data || []).filter((p: any) => p.status !== "cancelled") : []
+  for (const [pid, n] of fillCount) {
+    const p: any = jobs.find((j: any) => j.id === pid) || extra.find((j: any) => j.id === pid)
+    if (!p) continue
+    out.push({ key: `job_fills:${pid}`, project_id: pid, kind: "job_fills", severity: "soon",
+      title: `${n} job detail${n === 1 ? "" : "s"} to check — ${p.project_name}`,
+      detail: "The CRM read these from emails and documents (contract sum, retention, LADs, client, new firms, awards). Accept or reject each one.",
+      action_label: "Check them", action_url: `/projects/${pid}?tab=contract` })
+  }
+
   const others = old.filter((w: any) => w.doc_type !== "subcontractor_application")
   if (others.length) out.push({ key: "inbox_waiting", kind: "inbox", severity: "info",
     title: `${others.length} file${others.length === 1 ? "" : "s"} waiting in the Inbox`, detail: "Files from email that need a person to say where they go.",

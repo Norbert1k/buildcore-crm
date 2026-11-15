@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Spinner, Field, IconPlus, IconTrash, ConfirmDialog } from './ui'
 import { extractFromPa, fetchLatestPaForSubfolder } from '../lib/paExtractor'
+import { parseMoney, tidyMoney, paNumber, valuationsWithPa, variationsFromPa } from '../lib/reportValuation'
 
 // Default % groups so first-time users have a sensible starting point — based on a typical CCG report
 const DEFAULT_GROUPS = [
@@ -162,7 +163,9 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         //   • project_employer_agents → employer_agents.company_name (multi)
         //   • project_team_members where role in (Project Manager, Site Manager) (multi)
         // All run in parallel with the existing prev-report and PA-buffer fetches.
-        const [prevRes, projRes, paBuf, eaRes, teamRes, retRes] = await Promise.all([
+        const paListQ = supabase.from('project_doc_files').select('file_name, created_at, subfolder_key')
+          .eq('project_id', projectId).eq('folder_key', '02-payment-application')
+        const [prevRes, projRes, paBuf, eaRes, teamRes, retRes, paListRes] = await Promise.all([
           prevQuery.maybeSingle(),
           supabase.from('projects')
             .select('project_name, project_ref, client_name, start_date, end_date')
@@ -177,7 +180,13 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
             .in('role', ['Project Manager', 'Site Manager'])
             .order('position_order').order('created_at'),
           supabase.from('projects').select('retention_pct').eq('id', projectId).maybeSingle(),
+          subfolderKey == null ? paListQ.is('subfolder_key', null) : paListQ.eq('subfolder_key', subfolderKey),
         ])
+        // The PA the figures come from: its name (number, date) and upload date
+        const paFile = (paListRes.data || []).filter(f => /\.xlsx$/i.test(f.file_name) && paNumber(f.file_name) != null)
+          .sort((a, b) => paNumber(b.file_name) - paNumber(a.file_name))[0] || null
+        const paFileName = paFile?.file_name || null
+        const paFileDate = paFile?.created_at || null
         const prev = prevRes.data
         const proj = projRes.data
         // Project retention % — fetched in its own query so the editor keeps
@@ -219,7 +228,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         // with a single summary item showing the average % (option A in user picker).
         let paGroups = null
         let paVariations = null
-        let paValuationRow = null
+        let paValuationTotals = null
         if (paBuf) {
           const extract = await extractFromPa(paBuf)
           if (extract) {
@@ -229,41 +238,9 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
             }))
             // Variations: convert to the editor's shape. Numeric cost from PA goes
             // into cost_impact; user can fill the rest (SI ref, dates, etc) later.
-            paVariations = extract.variations.map(v => ({
-              instruction_no: v.instruction_no,
-              si_ref: '',
-              issue_date: '',
-              instruction_details: v.instruction_details,
-              scope_impact: '',
-              cost_impact: v.cost_impact,
-              time_impact: '',
-              agreed_cost: '',
-            }))
-            // Single valuation row: latest application's cumulative claim
-            if (extract.totals && extract.totals.cumulative > 0) {
-              const today = new Date().toISOString().slice(0, 10)
-              // When the PA's own retention row was captured, feed the full
-              // Gross − retention → Net split from the PA itself. Otherwise
-              // behave EXACTLY as before (cumulative → claimed, gross blank).
-              const t = extract.totals
-              paValuationRow = (t.net_cumulative != null)
-                ? {
-                    no: String((prev?.valuations?.length || 0) + 1),
-                    date_submitted: today,
-                    gross_claimed: String(Math.round(t.cumulative)),
-                    retention_pct: t.retention_pct != null ? String(t.retention_pct) : String(projectRetention),
-                    amount_claimed: String(Math.round(t.net_cumulative)),
-                    amount_agreed: '',
-                  }
-                : {
-                    no: String((prev?.valuations?.length || 0) + 1),
-                    date_submitted: today,
-                    gross_claimed: '',
-                    retention_pct: String(projectRetention),
-                    amount_claimed: String(Math.round(t.cumulative)),
-                    amount_agreed: '',
-                  }
-            }
+            paVariations = variationsFromPa(extract.variations)
+            // This PA's valuation row: its number, its date, this application's gross and net, tidy figures
+            if (extract.totals && extract.totals.cumulative > 0) paValuationTotals = extract.totals
           }
         }
 
@@ -334,8 +311,8 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           hs_text: prev?.hs_text || 'Zero health and safety incidents have occurred during this reporting period.',
           // Valuations: append the latest PA cumulative as a fresh row to the
           // history carried over from the previous report.
-          valuations: paValuationRow
-            ? [...(prev?.valuations || []), paValuationRow]
+          valuations: paValuationTotals
+            ? valuationsWithPa(prev?.valuations || [], { totals: paValuationTotals, paName: paFileName, paDate: paFileDate, retention: projectRetention })
             : (prev?.valuations || []),
           // Variations: PA's variation list is authoritative for new reports.
           // Falls back to previous report's list if no PA was found.
@@ -727,12 +704,13 @@ function CommercialTab({ report, addRow, updateRow, removeRow, defaultRetention 
   // Gross − retention → net. Returns '' when gross isn't a number so manual
   // typing in the net field is never fought.
   const netOf = (gross, retPct) => {
-    const g = parseFloat(gross)
-    if (isNaN(g)) return null
-    const r = parseFloat(retPct)
-    const net = g * (1 - (isNaN(r) ? 0 : r) / 100)
-    return String(Math.round(net))
+    const g = parseMoney(gross)
+    if (g == null) return null
+    const r = parseMoney(retPct)
+    return tidyMoney(g * (1 - (r == null ? 0 : r) / 100))
   }
+  // Money cells tidy themselves when you leave them: 2161073 → 2,161,073.00
+  const tidy = (list, i, field, v) => { const t = tidyMoney(v); if (t !== (v ?? '')) updateRow(list, i, { [field]: t }) }
   const variations = report.variations || []
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -749,15 +727,15 @@ function CommercialTab({ report, addRow, updateRow, removeRow, defaultRetention 
                   // Auto-fill Claimed (net) from Gross − retention; still
                   // editable — typing in the net field directly always wins.
                   updateRow('valuations', i, net != null ? { gross_claimed: gross, amount_claimed: net } : { gross_claimed: gross })
-                }} style={S.cell} /></td>
+                }} onBlur={e => tidy('valuations', i, 'gross_claimed', e.target.value)} inputMode="decimal" style={S.cell} /></td>
               <td><input value={v.retention_pct ?? String(defaultRetention)} placeholder="%"
                 onChange={e => {
                   const ret = e.target.value
                   const net = netOf(v.gross_claimed, ret)
                   updateRow('valuations', i, net != null ? { retention_pct: ret, amount_claimed: net } : { retention_pct: ret })
                 }} style={{ ...S.cell, maxWidth: 60 }} /></td>
-              <td><input value={v.amount_claimed || ''} onChange={e => updateRow('valuations', i, { amount_claimed: e.target.value })} style={S.cell} /></td>
-              <td><input value={v.amount_agreed || ''} onChange={e => updateRow('valuations', i, { amount_agreed: e.target.value })} style={S.cell} /></td>
+              <td><input value={v.amount_claimed || ''} onChange={e => updateRow('valuations', i, { amount_claimed: e.target.value })} onBlur={e => tidy('valuations', i, 'amount_claimed', e.target.value)} inputMode="decimal" style={S.cell} /></td>
+              <td><input value={v.amount_agreed || ''} onChange={e => updateRow('valuations', i, { amount_agreed: e.target.value })} onBlur={e => tidy('valuations', i, 'amount_agreed', e.target.value)} inputMode="decimal" style={S.cell} /></td>
               <td><button onClick={() => removeRow('valuations', i)} style={S.removeBtn}>✕</button></td>
             </tr>
           ))}
@@ -776,9 +754,9 @@ function CommercialTab({ report, addRow, updateRow, removeRow, defaultRetention 
               <td><input type="date" value={v.issue_date || ''} onChange={e => updateRow('variations', i, { issue_date: e.target.value })} style={S.cell} /></td>
               <td><input value={v.instruction_details || ''} onChange={e => updateRow('variations', i, { instruction_details: e.target.value })} style={S.cell} /></td>
               <td><input value={v.scope_impact || ''} onChange={e => updateRow('variations', i, { scope_impact: e.target.value })} style={S.cell} /></td>
-              <td><input value={v.cost_impact || ''} onChange={e => updateRow('variations', i, { cost_impact: e.target.value })} style={S.cell} /></td>
+              <td><input value={v.cost_impact || ''} onChange={e => updateRow('variations', i, { cost_impact: e.target.value })} onBlur={e => tidy('variations', i, 'cost_impact', e.target.value)} inputMode="decimal" style={S.cell} /></td>
               <td><input value={v.time_impact || ''} onChange={e => updateRow('variations', i, { time_impact: e.target.value })} style={S.cell} /></td>
-              <td><input value={v.agreed_cost || ''} onChange={e => updateRow('variations', i, { agreed_cost: e.target.value })} style={S.cell} /></td>
+              <td><input value={v.agreed_cost || ''} onChange={e => updateRow('variations', i, { agreed_cost: e.target.value })} onBlur={e => tidy('variations', i, 'agreed_cost', e.target.value)} inputMode="decimal" style={S.cell} /></td>
               <td><input value={v.instructed || ''} onChange={e => updateRow('variations', i, { instructed: e.target.value })} style={S.cell} /></td>
               <td><button onClick={() => removeRow('variations', i)} style={S.removeBtn}>✕</button></td>
             </tr>
@@ -1224,10 +1202,10 @@ export async function generateProgressReportPdf(report, photos, projectName, opt
         body: (report.valuations?.length ? report.valuations : [{}, {}, {}, {}]).map(v => [
           v.no || '',
           v.date_submitted ? fmtDateUK(v.date_submitted) : '',
-          v.gross_claimed ? '£' + v.gross_claimed : '£',
+          v.gross_claimed ? '£' + tidyMoney(v.gross_claimed) : '£',
           v.retention_pct != null && v.retention_pct !== '' ? v.retention_pct + '%' : '',
-          v.amount_claimed ? '£' + v.amount_claimed : '£',
-          v.amount_agreed ? '£' + v.amount_agreed : '£',
+          v.amount_claimed ? '£' + tidyMoney(v.amount_claimed) : '£',
+          v.amount_agreed ? '£' + tidyMoney(v.amount_agreed) : '£',
         ]),
         theme: 'plain',
         styles: { fontSize: 9, cellPadding: 3, lineWidth: 0.1, lineColor: [200, 200, 200] },
@@ -1248,9 +1226,9 @@ export async function generateProgressReportPdf(report, photos, projectName, opt
           v.issue_date ? fmtDateUK(v.issue_date) : '',
           v.instruction_details || '',
           v.scope_impact || '',
-          v.cost_impact || '',
+          v.cost_impact ? (parseMoney(v.cost_impact) != null ? '£' + tidyMoney(v.cost_impact) : v.cost_impact) : '',
           v.time_impact || '',
-          v.agreed_cost || '',
+          v.agreed_cost ? (parseMoney(v.agreed_cost) != null ? '£' + tidyMoney(v.agreed_cost) : v.agreed_cost) : '',
           v.instructed || '',
         ]),
         theme: 'plain',

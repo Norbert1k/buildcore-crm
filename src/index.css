@@ -1835,3 +1835,49 @@ tfoot .proj-total td { font-weight: 700; background: var(--surface2); border-bot
 .pr-diary-kind.k-variation, .pr-diary-kind.k-instruction { background: #EEEDFE; color: #534AB7; }
 .pr-diary-kind.k-issue, .pr-diary-kind.k-delay, .pr-diary-kind.k-hs { background: #FCEBEB; color: #A32D2D; }
 @media (max-width: 640px) { .pr-diary-row { grid-template-columns: 1fr; gap: 4px; } }
+
+/* Commercial › Contract (JobContract.jsx) */
+.jc { display: flex; flex-direction: column; gap: 14px; }
+.jc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.jc-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.jc-sub { font-size: 12.5px; color: var(--text3); margin-top: 2px; max-width: 620px; }
+.jc-err { padding: 8px 12px; border-radius: var(--radius); background: color-mix(in srgb, #FCEBEB 60%, var(--surface)); color: var(--red); font-size: 13px; }
+.jc-note { font-size: 12.5px; color: var(--text2); }
+.jc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.jc-card-title { display: flex; align-items: center; gap: 8px; padding: 10px 14px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text3); border-bottom: 1px solid var(--border); }
+.jc-count { background: var(--accent); color: #fff; border-radius: 10px; padding: 1px 7px; font-size: 11px; letter-spacing: 0; }
+.jc-empty { padding: 12px 14px; font-size: 13px; color: var(--text3); }
+.jc-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.jc-row:last-child { border-bottom: none; }
+.jc-row-main { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.jc-row-label { font-size: 12px; color: var(--text3); }
+.jc-row-value { font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.jc-row-why { font-size: 12.5px; color: var(--text2); }
+.jc-row-meta { font-size: 11.5px; color: var(--text3); overflow-wrap: anywhere; }
+.jc-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.jc-input { max-width: 240px; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.jc-terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.jc-term { padding: 10px 14px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); min-width: 0; }
+.jc-term-label { font-size: 11.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px; }
+.jc-term-value { all: unset; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.jc-term-value:hover { text-decoration: underline; }
+.jc-term-edit { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.jc-term-edit .jc-input { flex: 1; min-width: 120px; }
+.jc-term-src { font-size: 11px; color: var(--accent); margin-top: 3px; overflow-wrap: anywhere; }
+.jc-blank { color: var(--text3); font-weight: 400; }
+.jc-log { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--border); }
+.jc-log:last-child { border-bottom: none; }
+.jc-log-main { min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.jc-log-label { font-size: 12.5px; color: var(--text2); }
+.jc-log-value { font-size: 13px; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.jc-undo { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .jc-row { flex-direction: column; }
+  .jc-row-actions { width: 100%; }
+  .jc-row-actions .btn { flex: 1; justify-content: center; text-align: center; }
+  .jc-input { max-width: none; width: 100%; }
+}
+
+/* Procurement: what the CRM did on a row, and rows the job doesn't need */
+.proc-crm { grid-column: 1 / -1; font-size: 11px; color: var(--accent); margin: -2px 0 2px; }
+.proc-na input, .proc-na select { opacity: .5; }

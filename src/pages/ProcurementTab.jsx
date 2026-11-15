@@ -18,7 +18,7 @@ import { supabase } from '../lib/supabase'
 //   • multi-building (Merton): { buildings: { residential: {stages}, ... } }
 // Autosaves shortly after any edit.
 
-const STATUS_OPTIONS = ['Not started', 'Quoting', 'Ordered', 'On site', 'Complete']
+const STATUS_OPTIONS = ['Not started', 'Quoting', 'Ordered', 'On site', 'Complete', 'Not required']
 
 // Merton's fixed building set. Detected by project name containing "Merton".
 const MERTON_BUILDINGS = [
@@ -117,6 +117,23 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
       else setDoc(buildTemplate())
     }
     setLoading(false)
+  }
+
+  // Fit the tracker to this job: Claude reads the job's description, CSA / PA,
+  // firms and quote requests, adds its packages and marks rows it doesn't need
+  const [tailoring, setTailoring] = useState(false)
+  const [tailorNote, setTailorNote] = useState('')
+  async function tailor() {
+    if (merton) { setTailorNote('This job has separate buildings — adjust each building by hand.'); return }
+    if (!confirm('Fit this tracker to the job? The CRM adds the packages this job has and marks rows it clearly doesn\u2019t need as "Not required". Rows already started aren\u2019t touched.')) return
+    clearTimeout(saveTimer.current)
+    if (pendingDoc.current || saveState === 'saving') { pendingDoc.current = null; await save(doc) }
+    setTailoring(true); setTailorNote('')
+    const { data: r, error: e } = await supabase.functions.invoke('job-facts', { body: { action: 'tailor', project_id: projectId } })
+    setTailoring(false)
+    if (e || r?.error) { setError(r?.error || e.message); return }
+    setTailorNote(`${r.summary ? r.summary + ' — ' : ''}${r.added} package${r.added === 1 ? '' : 's'} added, ${r.not_required} marked Not required.`)
+    await load()
   }
 
   async function save(d = doc) {
@@ -306,7 +323,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
 
   // Progress: count materials+labour ticks done vs total.
   let done = 0, total = 0
-  for (const s of data.stages) for (const t of s.trades) { total += 2; if (t.materials) done++; if (t.labour) done++ }
+  for (const s of data.stages) for (const t of s.trades) { if (t.status === 'Not required') continue; total += 2; if (t.materials) done++; if (t.labour) done++ }
   const pct = total ? Math.round((done / total) * 100) : 0
 
   return (
@@ -344,6 +361,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {saveState === 'saving' && <span style={{ fontSize: 12, color: 'var(--text3)' }}>Saving…</span>}
           {saveState === 'saved' && <span style={{ fontSize: 12, color: 'var(--green)' }}>Saved</span>}
+          <button className="btn btn-sm" onClick={tailor} disabled={tailoring}>{tailoring ? 'Fitting to job…' : 'Tailor to this job'}</button>
           <button className="btn btn-sm" onClick={exportExcel}>Export Excel</button>
           <button className="btn btn-sm" onClick={exportPDF}>Export PDF</button>
           <button className="btn btn-sm" onClick={addStage}>+ Stage</button>
@@ -351,6 +369,8 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
           <button className="btn btn-sm btn-primary" onClick={() => { clearTimeout(saveTimer.current); save() }}>Save</button>
         </div>
       </div>
+
+      {tailorNote && <div style={{ fontSize: 12.5, color: 'var(--text2)', margin: '-4px 0 10px' }}>{tailorNote}</div>}
 
       {/* Stages */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -393,7 +413,7 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
                     <div style={{ padding: '8px 10px', fontSize: 13, color: 'var(--text3)' }}>No trades in this stage yet.</div>
                   )}
                   {stage.trades.map((t, ti) => (
-                    <div key={t.id} style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, padding: '5px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center' }}>
+                    <div key={t.id} className={t.status === 'Not required' ? 'proc-na' : ''} style={{ display: 'grid', gridTemplateColumns: GRID, gap: 6, padding: '5px 10px', borderTop: '0.5px solid var(--border)', alignItems: 'center' }}>
                       <input value={t.name} onChange={e => updateTrade(si, ti, 'name', e.target.value)} placeholder="trade / element" style={{ fontSize: 13 }} />
                       <span style={{ textAlign: 'center' }}><Tick on={t.materials} onClick={() => updateTrade(si, ti, 'materials', !t.materials)} /></span>
                       <span style={{ textAlign: 'center' }}><Tick on={t.labour} onClick={() => updateTrade(si, ti, 'labour', !t.labour)} /></span>
@@ -408,6 +428,9 @@ export default function ProcurementTab({ projectId, project, appointed = [] }) {
                         <button onClick={() => moveTrade(si, ti, 1)} disabled={ti === stage.trades.length - 1} style={iconBtn}>↓</button>
                         <button onClick={() => removeTrade(si, ti)} style={{ ...iconBtn, color: 'var(--red)' }}>✕</button>
                       </div>
+                      {t.crm && (
+                        <div className="proc-crm">CRM: {t.crm.did}{t.crm.from ? ` — ${t.crm.from}` : ''}{t.crm.at ? `, ${new Date(t.crm.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}</div>
+                      )}
                     </div>
                   ))}
                   <div style={{ padding: '6px 10px', borderTop: '0.5px solid var(--border)' }}>

@@ -355,6 +355,9 @@ Reply with JSON only, no prose:
  "products": [{"manufacturer": string or null, "product": "product name as written", "code": "product code or null", "qty": "e.g. 24 sheets, or null", "installed": true when it's a material/product built into the works that the O&M needs a datasheet for (insulation, boards, membranes, roofing, sanitaryware, fittings, equipment…); false for tools, drill bits, blades, consumables, fixings packs, stationery, PPE, cleaning, fuel, hire, welfare, delivery charges}] — the materials/products on an invoice, delivery note, order confirmation, or the product a datasheet / manual / warranty is about; [] if none,
  "application": {"number": string or null, "period_to": "YYYY-MM-DD" or null, "gross_to_date": number or null, "amount_due": number or null},
  "log": [{"kind": "rfi"|"rfi_answer"|"instruction"|"variation"|"issue"|"delay"|"progress"|"hs"|"drawing"|"delivery"|"payment"|"other", "ref": "RFI / VO / instruction / drawing number as written, or null", "title": "one line: what happened", "detail": "one or two sentences with the specifics — who, what, where, dates, amounts", "status": "open"|"answered"|"closed"|null, "date": "YYYY-MM-DD" or null}] — events on the job worth recording in the job diary for the monthly progress report: an RFI raised (open) or answered (rfi_answer, with the RFI's number), an instruction or change given, a variation raised/agreed, a site issue, a delay and its cause, progress reported, a health & safety matter, a drawing revision issued, a delivery, a payment notice. Facts only, as stated in the file. Every email about a job (doc_type correspondence or rfi) gets at least one entry — kind "correspondence" with a one-line summary when nothing more specific applies — so the job diary holds all of the job's emails. [] when there is nothing (an invoice, a datasheet, a quote),
+ "parties": [{"role": "client"|"employer_agent"|"quantity_surveyor"|"architect"|"structural_engineer"|"civil_engineer"|"mep_engineer"|"principal_designer"|"building_control"|"fire_consultant"|"warranty_provider"|"other_consultant"|"subcontractor", "company": "company name as written", "contact_name": string or null, "job_title": string or null, "email": string or null, "phone": string or null, "trade": "for a subcontractor, e.g. Groundworks, or null"}] — the organisations acting on THIS job that the file makes clear (contract parties, letterhead, signature blocks, "on behalf of", the sender's own firm and role). Never CCG / City Construction Group / @cltd.co.uk. Only a role the file actually shows — don't guess a firm's role from its name alone. [] if none,
+ "contract": {"applies": true ONLY when the file sets, confirms or changes terms of the MAIN contract between the client / employer and CCG (letter of intent, contract, appointment, contract particulars, an agreed contract sum, an extension of time to the completion date) — never a subcontract CCG issues, a quote or a payment application; otherwise false, "form": "e.g. JCT Design and Build Contract 2016" or null, "contract_date": "YYYY-MM-DD" or null, "reference": string or null, "contract_sum": number excluding VAT or null, "retention_pct": number or null, "retention_release": string or null, "lads_amount": number or null, "lads_per": "week"|"day"|null, "start_date": "YYYY-MM-DD" or null, "completion_date": "YYYY-MM-DD" or null, "payment_terms": short string or null, "defects_period_months": number or null, "insurance": short summary of insurance CCG must hold, or null},
+ "procurement": [{"trade": "e.g. Groundworks, Scaffolding, Windows", "company": "the subcontractor or supplier", "stage": "quoting" (their quote / tender for this job) | "ordered" (CCG has awarded, ordered or issued a subcontract / order / letter of intent to them) | "on_site" (they have started, are applying for payment, or have delivered materials) | "complete" (their package is finished), "materials": true when they supply materials, else null, "labour": true when they provide labour, else null}] — where a subcontractor or supplier stands on this job, as the file shows it. [] if none,
  "reason": "why, in a few words (what in the file told you)"}`
 }
 
@@ -367,7 +370,7 @@ async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: MODEL, max_tokens: 2000,
+      model: MODEL, max_tokens: 3000,
       // The job/subcontractor lists are the same for every file in a run → cached
       system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content }],
@@ -764,6 +767,22 @@ async function writeLog(projectId: string, g: any, item: any) {
   return entries.length
 }
 
+// ─── Job details (parties, contract terms, procurement) → job-facts ─────────
+let factsKey: string | null = null
+async function sendFacts(projectId: string, g: any, item: any, trial: boolean) {
+  const facts = { parties: Array.isArray(g.parties) ? g.parties : [], contract: g.contract || null, procurement: Array.isArray(g.procurement) ? g.procurement : [] }
+  if (!facts.parties.length && !facts.contract?.applies && !facts.procurement.length) return
+  if (!factsKey) factsKey = (await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()).data?.cron_token || null
+  if (!factsKey) return
+  const sender = senderOf(item.file_name)
+  const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/job-facts`, {
+    method: "POST", headers: { "Content-Type": "application/json", "x-intake-key": factsKey },
+    body: JSON.stringify({ action: "apply", project_id: projectId, facts, trial,
+      source: { item_id: item.id, label: isEmailText(item) ? `Email${sender ? " from " + sender : ""}` : cleanName(item.file_name), date: item.source_created_at || null, doc_type: g.doc_type || null } }),
+  })
+  if (!r.ok) console.warn("[intake] job-facts", r.status, (await r.text()).slice(0, 200))
+}
+
 // ─── Deciding where it goes ──────────────────────────────────────────────────
 type Plan = { status: "filed" | "to_check" | "ignored"; decision?: any; reason: string }
 
@@ -1134,7 +1153,11 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
     }
     const plan: Plan = g._conflict ? { status: "to_check", reason: g._conflict } : await planFor(g, item, ctx, threshold)
     // Job diary — whatever the file says happened, when we know the job
-    if (!g._conflict && g.project_id && (num(g.project_confidence) ?? 0) >= 0.7) await writeLog(g.project_id, g, item).catch(e => console.warn("[intake] diary", e))
+    if (!g._conflict && g.project_id && (num(g.project_confidence) ?? 0) >= 0.7) {
+      await writeLog(g.project_id, g, item).catch(e => console.warn("[intake] diary", e))
+      // Parties, contract terms, procurement → the job's details (job-facts decides what waits for a person)
+      if ((num(g.project_confidence) ?? 0) >= 0.85) await sendFacts(g.project_id, g, item, trial).catch(e => console.warn("[intake] job facts", e))
+    }
     const base = {
       staged_path: staged, file_size: item.file_size, doc_type: g.doc_type || null, summary: g.summary || null,
       confidence: Math.min(num(g.type_confidence) ?? 0, g.project_id ? (num(g.project_confidence) ?? 0) : 1),

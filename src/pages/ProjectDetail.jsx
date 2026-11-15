@@ -21,6 +21,7 @@ const SubcontractorDocs = lazy(() => import('../components/SubcontractorDocs'))
 import { SubCompletionModal, CompletedBadge, PracticalCompletionFact } from '../components/CompletionCertificates'
 const ProjectQuotesTab = lazy(() => import('../components/ProjectQuotesTab'))
 const ProcurementTab = lazy(() => import('./ProcurementTab'))
+const JobContract = lazy(() => import('../components/JobContract'))
 
 // ── Project tab groups ───────────────────────────────────────────────────
 // Six top-level tabs; groups with several views show them as a sub-bar.
@@ -30,10 +31,10 @@ const TAB_GROUPS = [
   { key: 'documents',  label: 'Documents',  views: ['documents'] },
   { key: 'drawings',   label: 'Drawings',   views: ['drawings'] },
   { key: 'people',     label: 'People',     views: ['ccg_team', 'design_team', 'subcontractors'] },
-  { key: 'commercial', label: 'Commercial', views: ['procurement', 'quotes'] },
+  { key: 'commercial', label: 'Commercial', views: ['contract', 'procurement', 'quotes'] },
   { key: 'handover',   label: 'Handover',   views: ['hs', 'casestudy'] },
 ]
-const VIEW_LABELS = { ccg_team: 'CCG Team', design_team: 'Design Team', subcontractors: 'Subcontractors', procurement: 'Procurement', quotes: 'Quotes', hs: 'H&S File & O&M', casestudy: 'Case Study' }
+const VIEW_LABELS = { ccg_team: 'CCG Team', design_team: 'Design Team', subcontractors: 'Subcontractors', contract: 'Contract', procurement: 'Procurement', quotes: 'Quotes', hs: 'H&S File & O&M', casestudy: 'Case Study' }
 const ALL_VIEWS = TAB_GROUPS.flatMap(g => g.views)
 import { fetchAllProjectPas, aggregateFinancials } from '../lib/paExtractor'
 
@@ -885,6 +886,7 @@ export default function ProjectDetail() {
     const fitout = project.division === 'fitout'
     const tender = project.status === 'tender'
     if (v === 'procurement') return !fitout
+    if (v === 'contract') return can('manage_projects') || can('view_project_value')
     if (v === 'quotes') return !fitout && nav.includes('quotes')
     if (v === 'design_team') return nav.includes('design_team')
     if (v === 'hs') return can('view_hs_handover') && !tender
@@ -1677,6 +1679,10 @@ export default function ProjectDetail() {
       </Modal>
 
       {completeSub && <SubCompletionModal ps={completeSub} project={project} onClose={() => setCompleteSub(null)} onDone={() => { setCompleteSub(null); load() }} />}
+
+      {activeTab === 'contract' && (
+        <JobContract projectId={id} project={project} onChanged={load} />
+      )}
 
       {activeTab === 'quotes' && project.division !== 'fitout' && (
         <ProjectQuotesTab projectId={id} />
