@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { fetchAll } from '../lib/fetchAll'
+import { paNumberFromFilename } from '../lib/paOrdering'
 import { RowMenu } from './ui'
 import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
@@ -991,6 +992,30 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
   // styled xlsx straight back into this subfolder.
   const isCffSubfolder = folder.key === '00-project-information' && subfolder.key === 'cff'
   const [showCffGenerator, setShowCffGenerator] = useState(false)
+  // A PA uploaded after the latest CFF means the CFF file is behind —
+  // flagged on the button so it's one click to bring it up to date.
+  const [cffBehind, setCffBehind] = useState(null)   // 'PA07' | null
+  useEffect(() => {
+    if (!isCffSubfolder) return
+    let cancelled = false
+    ;(async () => {
+      const [{ data: pas }, { data: cffs }] = await Promise.all([
+        supabase.from('project_doc_files').select('file_name, created_at')
+          .eq('project_id', projectId).eq('folder_key', '02-payment-application').is('subfolder_key', null)
+          .ilike('file_name', '%.xlsx').order('created_at', { ascending: false }).limit(1),
+        supabase.from('project_doc_files').select('created_at')
+          .eq('project_id', projectId).eq('folder_key', '00-project-information').eq('subfolder_key', 'cff')
+          .order('created_at', { ascending: false }).limit(1),
+      ])
+      if (cancelled) return
+      const pa = pas?.[0], cff = cffs?.[0]
+      if (pa && cff && new Date(pa.created_at) > new Date(cff.created_at)) {
+        const n = paNumberFromFilename(pa.file_name)
+        setCffBehind(n != null ? `PA${String(n).padStart(2, '0')}` : 'a newer PA')
+      } else setCffBehind(null)
+    })()
+    return () => { cancelled = true }
+  }, [isCffSubfolder, projectId, treeVersion, fileCount])
   const [showProgressEditor, setShowProgressEditor] = useState(false)
   const [editingReportId, setEditingReportId] = useState(null)
   const [progressReports, setProgressReports] = useState([])
@@ -1403,10 +1428,12 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCffGenerator(true) }}
                     style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3, color: '#448a40', borderColor: '#448a40' }}
-                    title="Generate a cashflow forecast from the project CSA"
+                    title={cffBehind
+                      ? `${cffBehind} was uploaded after this CFF — re-generate to bring the file up to date (the client portal already re-forecasts from the PAs)`
+                      : 'Generate a cashflow forecast from the project CSA'}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
-                    {fileCount > 0 ? 'Re-generate CFF' : 'Generate CFF'}
+                    {cffBehind ? `Update CFF · ${cffBehind} newer` : fileCount > 0 ? 'Re-generate CFF' : 'Generate CFF'}
                   </button>
                 )}
                 <button onClick={zipSubfolder} style={{ ...Btn, display: 'inline-flex', alignItems: 'center', gap: 3 }} title="Zip">
