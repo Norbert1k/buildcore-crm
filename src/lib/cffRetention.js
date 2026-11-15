@@ -1,3 +1,4 @@
+import { fillMissingFormulaValues } from './xlsxFormulas'
 // Reads the retention / release rates written into an existing cashflow
 // forecast, so a regenerate can keep the release rate the job was set up
 // with (e.g. "Less Retention 3%" / "Plus Retention Release 1.5% (at PC)").
@@ -25,7 +26,8 @@ const pctIn = (s, re) => {
 // → { retention: 0.03 | null, release: 0.015 | null }
 export async function readCffRates(arrayBuffer) {
   const XLSX = await loadSheetJs()
-  const wb = XLSX.read(arrayBuffer, { type: 'array' })
+  const wb = XLSX.read(arrayBuffer, { type: 'array', sheetStubs: true })
+  fillMissingFormulaValues(wb)   // formulas saved without results
   let retention = null, release = null
   for (const name of wb.SheetNames) {
     const ws = wb.Sheets[name]

@@ -1,3 +1,4 @@
+import { fillMissingFormulaValues } from './xlsxFormulas'
 // ─────────────────────────────────────────────────────────────────────────────
 // csaExtractor.js
 // Reads a Contract Sum Analysis (CSA) xlsx file and extracts the line-item
@@ -369,7 +370,8 @@ function aggregateIntoGroups(items) {
 export async function extractCsa(file) {
   const XLSX = await loadSheetJs()
   const arrayBuffer = await file.arrayBuffer()
-  const wb = XLSX.read(arrayBuffer, { type: 'array' })
+  const wb = XLSX.read(arrayBuffer, { type: 'array', sheetStubs: true })
+  fillMissingFormulaValues(wb)   // formulas saved without results
   if (!wb.SheetNames.length) throw new Error('CSA file contains no sheets')
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null })

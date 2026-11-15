@@ -25,6 +25,7 @@
 
 import { groupKeyFor } from './csaExtractor'
 import { sortPaRowsByPaNumber, paNumberFromFilename } from './paOrdering'
+import { fillMissingFormulaValues } from './xlsxFormulas'
 
 async function loadSheetJs() {
   if (window.XLSX) return window.XLSX
@@ -134,7 +135,8 @@ function extractRetention(rows, headerRowIdx) {
 export async function extractPaGroups(file) {
   const XLSX = await loadSheetJs()
   const arrayBuffer = await file.arrayBuffer()
-  const wb = XLSX.read(arrayBuffer, { type: 'array' })
+  const wb = XLSX.read(arrayBuffer, { type: 'array', sheetStubs: true })
+  fillMissingFormulaValues(wb)   // formulas saved without results
   if (!wb.SheetNames.length) throw new Error('PA file contains no sheets')
   // Pick the standard CCG PA sheet (matches "- PA" suffix) or fall back to first.
   let ws = wb.Sheets[wb.SheetNames[0]]

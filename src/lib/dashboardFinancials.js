@@ -53,7 +53,7 @@ import { fetchAllProjectPas as fetchLatestPas, aggregateFinancials } from './paE
 import { fetchAllPasAcrossSubfolders as fetchPaHistory } from './paGroupExtractor'
 import { fetchLatestCff, projectCffOnCalendar } from './cffReader'
 
-const CACHE_PREFIX = 'buildcore:dashFin:v5:'
+const CACHE_PREFIX = 'buildcore:dashFin:v6:'
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000   // 30 days
 
 // ── localStorage cache helpers ────────────────────────────────────────────

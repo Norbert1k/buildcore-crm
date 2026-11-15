@@ -1,3 +1,4 @@
+import { fillMissingFormulaValues } from './xlsxFormulas'
 // ─────────────────────────────────────────────────────────────────────────────
 // clientCffExtractor.js
 //
@@ -94,7 +95,8 @@ export async function extractClientCff(input) {
   const arrayBuffer = input instanceof ArrayBuffer
     ? input
     : await input.arrayBuffer()
-  const wb = XLSX.read(arrayBuffer, { type: 'array' })
+  const wb = XLSX.read(arrayBuffer, { type: 'array', sheetStubs: true })
+  fillMissingFormulaValues(wb)   // formulas saved without results
   const ws = wb.Sheets[wb.SheetNames[0]]
   if (!ws) {
     throw new Error('Spreadsheet has no sheets')

@@ -27,6 +27,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { sortPaRowsByPaNumber } from './paOrdering'
+import { fillMissingFormulaValues } from './xlsxFormulas'
 
 async function loadSheetJs() {
   if (window.XLSX) return window.XLSX
@@ -55,7 +56,8 @@ const TOTAL_ROW_LABELS = new Set([
 export async function extractFromPa(arrayBuffer) {
   try {
     const XLSX = await loadSheetJs()
-    const wb = XLSX.read(arrayBuffer, { type: 'array' })
+    const wb = XLSX.read(arrayBuffer, { type: 'array', sheetStubs: true })
+    fillMissingFormulaValues(wb)   // formulas saved without results
 
     // Choose the main sheet — prefer one ending with " - PA"; otherwise first
     let sheetName = wb.SheetNames[0]

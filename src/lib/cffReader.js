@@ -1,3 +1,4 @@
+import { fillMissingFormulaValues } from './xlsxFormulas'
 // ─────────────────────────────────────────────────────────────────────────────
 // cffReader.js
 //
@@ -87,7 +88,8 @@ function extractMonthLabels(headerRow) {
 export async function extractCff(buf) {
   try {
     const XLSX = await loadXlsx()
-    const wb = XLSX.read(buf, { type: 'array' })
+    const wb = XLSX.read(buf, { type: 'array', sheetStubs: true })
+    fillMissingFormulaValues(wb)   // formulas saved without results
     const ws = wb.Sheets[wb.SheetNames[0]]
     if (!ws) return null
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true })
