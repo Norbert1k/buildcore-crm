@@ -286,8 +286,9 @@ async function fill(reportId: string) {
   for (const f of TEXT_FIELDS) if (typeof out[f] === "string" && out[f].trim()) patch[f] = out[f]
   if (Array.isArray(out.rfis)) patch.rfis = out.rfis.slice(0, 40).map((x: any) => ({ rfi_no: String(x.rfi_no || ""), description: String(x.description || ""), status: x.status === "closed" ? "closed" : "open" }))
   if (Array.isArray(out.risks)) patch.risks = out.risks.slice(0, 20).map((x: any) => ({ description: String(x.description || ""), consequence: String(x.consequence || ""), risk_rag: ["red", "amber", "green"].includes(x.risk_rag) ? x.risk_rag : "amber", mitigation: String(x.mitigation || "") }))
-  const nPhotos = await addPhotos(reportId, used, out.photos)
-  patch.ai_sources = sources(ctx, nPhotos)
+  await addPhotos(reportId, used, out.photos)
+  const { count: nPhotos } = await sb.from("progress_report_photos").select("id", { count: "exact", head: true }).eq("report_id", reportId)
+  patch.ai_sources = sources(ctx, nPhotos || 0)
   patch.period_from = rep.period_from || ctx.since
   patch.period_to = rep.period_to || ymd(new Date())
   const { error } = await sb.from("progress_reports").update(patch).eq("id", reportId)
