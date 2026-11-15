@@ -616,21 +616,25 @@ Never list CCG / City Construction Group as a party. Facts only, as written — 
   "start_date": "YYYY-MM-DD", "completion_date": "YYYY-MM-DD", "payment_terms": "short, e.g. monthly interim valuations, final date for payment 28 days after due date",
   "defects_period_months": number, "insurance": "short summary of the insurance CCG must hold"}}`
 
+const MAX_READ_BYTES = 12_000_000   // bigger PDFs don't fit the function's memory
 async function trimForTerms(bytes: Uint8Array) {
   try {
-    const src = await PDFDocument.load(bytes, { ignoreEncryption: true })
+    if (bytes.length < 6_000_000) {
+      const src0 = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false })
+      if (src0.getPageCount() <= 40) return bytes
+    }
+    const src = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false })
     const n = src.getPageCount()
-    if (n <= 40 && bytes.length < 20_000_000) return bytes
-    const keep = [...new Set([...Array(Math.min(n, 35)).keys(), n - 3, n - 2, n - 1].filter(i => i >= 0 && i < n))]
+    const keep = [...new Set([...Array(Math.min(n, 30)).keys(), n - 2, n - 1].filter(i => i >= 0 && i < n))]
     const out = await PDFDocument.create()
     ;(await out.copyPages(src, keep)).forEach((p: any) => out.addPage(p))
     const b = await out.save()
-    return b.length < 25_000_000 ? b : null
-  } catch { return bytes.length < 20_000_000 ? bytes : null }
+    return b.length < 15_000_000 ? b : null
+  } catch { return bytes.length < 8_000_000 ? bytes : null }
 }
 
 async function backfill(projectId: string | null, limit: number) {
-  let q = sb.from("project_doc_files").select("id, project_id, file_name, storage_path, created_at").eq("folder_key", "01-project-order").order("created_at", { ascending: true }).limit(400)
+  let q = sb.from("project_doc_files").select("id, project_id, file_name, storage_path, created_at, file_size").eq("folder_key", "01-project-order").order("created_at", { ascending: true }).limit(400)
   if (projectId) q = q.eq("project_id", projectId)
   const { data: files } = await q
   const { data: active } = await sb.from("projects").select("id").in("status", ["active", "tender", "on_hold"])
@@ -640,12 +644,21 @@ async function backfill(projectId: string | null, limit: number) {
   const todo = (files || []).filter((f: any) => /\.pdf$/i.test(f.file_name) && (projectId || live.has(f.project_id)) && !read.get(f.project_id)?.has(f.id)).slice(0, limit)
   const results: any[] = []
   const started = Date.now()
+  const markRead = async (f: any) => {
+    const set = read.get(f.project_id) || new Set()
+    set.add(f.id); read.set(f.project_id, set)
+    await sb.from("project_contract").upsert({ project_id: f.project_id, read_files: [...set], updated_at: new Date().toISOString() }, { onConflict: "project_id" })
+  }
   for (const f of todo) {
     if (Date.now() - started > 100_000) break
     let res: any = { file: f.file_name }
+    // Marked read first, so a file that can't be read is never retried in a loop
+    await markRead(f)
+    if ((f.file_size || 0) > MAX_READ_BYTES) { results.push({ ...res, error: "too large to read automatically — add its terms by hand" }); continue }
     try {
       const { data: blob, error } = await sb.storage.from("project-docs").download(f.storage_path)
       if (error || !blob) throw new Error(error?.message || "download failed")
+      if (blob.size > MAX_READ_BYTES) throw new Error("too large to read automatically — add its terms by hand")
       const pdf = await trimForTerms(new Uint8Array(await blob.arrayBuffer()))
       if (!pdf) throw new Error("too large to read")
       const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -660,10 +673,6 @@ async function backfill(projectId: string | null, limit: number) {
       const facts = m ? JSON.parse(m[0]) : {}
       res = { ...res, ...(await apply(f.project_id, facts, { label: f.file_name, date: f.created_at, doc_type: "client_order" })) }
     } catch (e) { res.error = String((e as Error).message || e) }
-    // Read once, whatever happened (a person can still add terms by hand)
-    const set = read.get(f.project_id) || new Set()
-    set.add(f.id); read.set(f.project_id, set)
-    await sb.from("project_contract").upsert({ project_id: f.project_id, read_files: [...set], updated_at: new Date().toISOString() }, { onConflict: "project_id" })
     results.push(res)
   }
   return { ok: true, read: results.length, left: Math.max(0, (files || []).filter((f: any) => /\.pdf$/i.test(f.file_name) && (projectId || live.has(f.project_id)) && !read.get(f.project_id)?.has(f.id)).length), results }
@@ -774,7 +783,7 @@ Deno.serve(async (req) => {
     }
     if (body.action === "backfill") {
       if (body.project_id && !isUuid(body.project_id)) return json({ error: "Bad project" }, 400)
-      return json(await backfill(body.project_id || null, Math.min(Math.max(Number(body.limit) || 3, 1), 6)))
+      return json(await backfill(body.project_id || null, Math.min(Math.max(Number(body.limit) || 2, 1), 3)))
     }
     return json({ error: "Unknown action" }, 400)
   } catch (e) {

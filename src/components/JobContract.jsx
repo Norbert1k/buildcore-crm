@@ -73,7 +73,13 @@ export default function JobContract({ projectId, project, onChanged }) {
     setBusy(id); setErr('')
     const { data, error } = await supabase.functions.invoke('job-facts', { body })
     setBusy('')
-    if (error || data?.error) { setErr(data?.error || error.message); return false }
+    if (error || data?.error) {
+      // The function's own message (e.g. "That row has been used since…"), not "non-2xx"
+      let msg = data?.error
+      try { if (!msg && error?.context) msg = (await error.context.json())?.error } catch { /* not JSON */ }
+      setErr(msg || (/non-2xx/i.test(error?.message || '') ? 'The CRM couldn\u2019t finish that just now — try again in a minute.' : error?.message))
+      return false
+    }
     await load(); onChanged?.()
     return data
   }
@@ -96,9 +102,13 @@ export default function JobContract({ projectId, project, onChanged }) {
 
   async function readDocs() {
     setReading(true); setReadNote('')
-    const r = await act({ action: 'backfill', project_id: projectId, limit: 4 }, 'read')
+    const r = await act({ action: 'backfill', project_id: projectId, limit: 2 }, 'read')
     setReading(false)
-    if (r) setReadNote(r.read ? `Read ${r.read} document${r.read === 1 ? '' : 's'}${r.left ? ` — ${r.left} more, press again` : ''}.` : 'Nothing new to read in 01. Project Order.')
+    if (!r) return
+    const skipped = (r.results || []).filter(x => x.error).map(x => `${x.file} (${x.error})`)
+    setReadNote(r.read
+      ? `Read ${r.read - skipped.length} document${r.read - skipped.length === 1 ? '' : 's'}${skipped.length ? `; couldn\u2019t read ${skipped.join(', ')}` : ''}${r.left ? ` — ${r.left} more in 01. Project Order, press again` : ''}.`
+      : 'Nothing new to read in 01. Project Order.')
   }
 
   if (fills == null) return <div style={{ padding: 30, textAlign: 'center' }}><Spinner /></div>
