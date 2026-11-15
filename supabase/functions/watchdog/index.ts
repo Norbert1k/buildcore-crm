@@ -64,7 +64,8 @@ async function check(): Promise<Alert[]> {
   const [files, reports, folders] = await Promise.all([
     all(() => sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, created_at, client_visible")
       .in("project_id", ids).in("folder_key", ["02-payment-application", "03-payment-notice", "00-project-information"])),
-    sb.from("progress_reports").select("project_id, report_date, created_at").in("project_id", ids).then((r: any) => r.data || []),
+    sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref").in("project_id", ids)
+      .then((r: any) => r.error ? sb.from("progress_reports").select("project_id, report_date, created_at").in("project_id", ids).then((x: any) => x.data || []) : (r.data || [])),
     sb.from("project_doc_folders").select("project_id, folder_key, parent_key").in("project_id", ids).then((r: any) => r.data || []),
   ])
 
@@ -96,12 +97,24 @@ async function check(): Promise<Alert[]> {
     if (latest) {
       const age = days(latest.created_at)
       // 2. Progress report due with each new PA (reported at the claimed %)
-      const lastReport = (reports as any[]).filter(r => r.project_id === p.id).map(r => r.report_date || r.created_at).sort().slice(-1)[0]
+      // Drafts written by the CRM don't count until a person publishes them
+      const mineReports = (reports as any[]).filter(r => r.project_id === p.id)
+      const lastReport = mineReports.filter(r => !r.ai_draft).map(r => r.report_date || r.created_at).sort().slice(-1)[0]
       if (!lastReport || new Date(lastReport) < new Date(latest.created_at)) {
-        out.push({ key: `report_due:${p.id}:${latest.n}`, project_id: p.id, kind: "report_due", severity: age > 7 ? "urgent" : "soon",
-          title: `Progress report due — ${p.project_name}`,
-          detail: `${PA(latest.n)} went in on ${fmt(latest.created_at)}; the progress report should follow at the claimed % from ${PA(latest.n)}.`,
-          action_label: "New progress report", action_url: docs })
+        const draft = mineReports.find(r => r.ai_draft && r.ai_pa_ref === PA(latest.n))
+        if (draft) {
+          out.push({ key: `report_draft:${p.id}:${PA(latest.n)}`, project_id: p.id, kind: "report_draft", severity: age > 7 ? "urgent" : "soon",
+            title: `Progress report drafted — review & publish — ${p.project_name}`,
+            detail: `The CRM drafted it from ${PA(latest.n)}, the job diary and site photos. Check it, then press Publish to client.`,
+            action_label: "Open the draft", action_url: docs })
+        } else {
+          // Single-building jobs: the CRM drafts it (each morning, or "Draft it now")
+          const canDraft = !latest.subfolder_key
+          out.push({ key: `report_due:${p.id}:${latest.n}`, project_id: p.id, kind: "report_due", severity: age > 7 ? "urgent" : "soon",
+            title: `Progress report due — ${p.project_name}`,
+            detail: `${PA(latest.n)} went in on ${fmt(latest.created_at)}; the progress report should follow at the claimed % from ${PA(latest.n)}.${canDraft ? " The CRM drafts it each morning — or press Draft it now." : ""}`,
+            action_label: "New progress report", action_url: docs, ...(canDraft ? { fix: "draft_report" } : {}) })
+        }
       }
       // 3. Latest PA hidden from the client
       if (latest.client_visible === false && age >= 1) {
@@ -244,10 +257,19 @@ async function run(digest: boolean) {
     await sb.from("crm_alerts").update({ notified: true }).in("key", toNotify.map(a => a.key))
   }
 
+  // Each morning: draft the progress reports that are due (single-building jobs, 2 a run)
+  let drafted = 0
+  if (digest) {
+    for (const a of found.filter(x => x.kind === "report_due" && x.fix === "draft_report").slice(0, 2)) {
+      const ok = await draftReport(a.key).catch(e => { console.warn("[watchdog] draft", e); return false })
+      if (ok) drafted++
+    }
+  }
+
   // Morning email to admins
   let emailed = 0
   if (digest) emailed = await sendDigest()
-  return { ok: true, open: found.length, new: fresh.length, emailed }
+  return { ok: true, open: found.length, new: fresh.length, emailed, drafted }
 }
 
 async function sendDigest() {
@@ -278,10 +300,29 @@ async function sendDigest() {
 }
 const esc = (s: string) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!))
 
-// One-tap fixes — only ever hide or archive
+// Ask progress-draft to write the report for report_due:<job>:<PA no>
+async function draftReport(key: string) {
+  const [, projectId, n] = key.split(":")
+  const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
+  const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/progress-draft`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`, "x-intake-key": st?.cron_token || "" },
+    body: JSON.stringify({ action: "draft", project_id: projectId, pa_ref: PA(Number(n)) }),
+  })
+  const out = await r.json().catch(() => ({}))
+  if (!r.ok || out.error) throw new Error(out.error || `progress-draft ${r.status}`)
+  return true
+}
+
+// One-tap fixes — only ever hide or archive (or have the CRM draft a report)
 async function fix(id: string, actorId: string) {
   const { data: a } = await sb.from("crm_alerts").select("*").eq("id", id).maybeSingle()
   if (!a || !a.fix || !a.project_id) throw new Error("Nothing to fix here")
+  if (a.fix === "draft_report") {
+    await draftReport(a.key)
+    await sb.from("crm_alerts").update({ status: "done", resolved_at: new Date().toISOString(), resolved_by: actorId }).eq("id", id)
+    return
+  }
   const files = await all(() => sb.from("project_doc_files").select("id, file_name, subfolder_key, created_at, client_visible")
     .eq("project_id", a.project_id).eq("folder_key", "02-payment-application"))
   const pas = files.filter((f: any) => f.subfolder_key !== "superseded" && paNo(f.file_name) != null)

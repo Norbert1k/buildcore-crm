@@ -1821,3 +1821,16 @@ tfoot .proj-total td { font-weight: 700; background: var(--surface2); border-bot
 .vo-li { display: grid; grid-template-columns: 44px 1fr auto; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; align-items: baseline; }
 .vo-li b { white-space: nowrap; }
 .vo-li-total { border-bottom: none; font-weight: 600; }
+
+/* Progress reports drafted by the CRM */
+.pr-ai-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #FAEEDA; color: #854F0B; }
+.pr-ai-banner { margin: 0; padding: 10px 14px; font-size: 12.5px; line-height: 1.5; color: var(--text2); background: color-mix(in srgb, #FAEEDA 55%, var(--surface)); border-bottom: 1px solid var(--border); }
+.pr-diary { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.pr-diary-row { display: grid; grid-template-columns: 86px 128px 1fr; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border); align-items: start; }
+.pr-diary-row:last-child { border-bottom: none; }
+.pr-diary-date { font-size: 12px; color: var(--text3); font-variant-numeric: tabular-nums; }
+.pr-diary-kind { justify-self: start; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--surface2); color: var(--text2); white-space: nowrap; }
+.pr-diary-kind.k-rfi, .pr-diary-kind.k-rfi_answer { background: #E6F1FB; color: #185FA5; }
+.pr-diary-kind.k-variation, .pr-diary-kind.k-instruction { background: #EEEDFE; color: #534AB7; }
+.pr-diary-kind.k-issue, .pr-diary-kind.k-delay, .pr-diary-kind.k-hs { background: #FCEBEB; color: #A32D2D; }
+@media (max-width: 640px) { .pr-diary-row { grid-template-columns: 1fr; gap: 4px; } }

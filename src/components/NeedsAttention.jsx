@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase'
 // mark it done, snooze it, or say it's not relevant (it won't come back).
 const SEV = { urgent: { label: 'Urgent', cls: 'na-urgent' }, soon: { label: 'Soon', cls: 'na-soon' }, info: { label: 'Tidy-up', cls: 'na-info' } }
 const ORDER = { urgent: 0, soon: 1, info: 2 }
-const FIX_LABEL = { show_pa: 'Show to client', archive_older_pa: 'Keep newest' }
+const FIX_LABEL = { show_pa: 'Show to client', archive_older_pa: 'Keep newest', draft_report: 'Draft it now' }
 
 export default function NeedsAttention({ projectId = null, limit = 8 }) {
   const navigate = useNavigate()
@@ -68,7 +68,7 @@ export default function NeedsAttention({ projectId = null, limit = 8 }) {
             {a.detail && <div className="na-detail">{a.detail}</div>}
             <div className="na-actions">
               {a.action_url && <button className="btn btn-sm" onClick={() => navigate(a.action_url)}>{a.action_label || 'Open'}</button>}
-              {a.fix && FIX_LABEL[a.fix] && <button className="btn btn-sm btn-primary" disabled={busy === a.id} onClick={() => fix(a)}>{FIX_LABEL[a.fix]}</button>}
+              {a.fix && FIX_LABEL[a.fix] && <button className="btn btn-sm btn-primary" disabled={busy === a.id} onClick={() => fix(a)}>{busy === a.id && a.fix === 'draft_report' ? 'Drafting… (about a minute)' : FIX_LABEL[a.fix]}</button>}
               <button className="na-link" disabled={busy === a.id} onClick={() => setStatus(a, { status: 'done' })}>Done</button>
               <button className="na-link" disabled={busy === a.id} onClick={() => setStatus(a, { snoozed_until: new Date(Date.now() + 3 * 864e5).toISOString() })}>Snooze 3 days</button>
               <button className="na-link" disabled={busy === a.id} onClick={() => setStatus(a, { status: 'dismissed' })} title="Won't be raised again">Not relevant</button>

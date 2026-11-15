@@ -372,11 +372,48 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
       }
       if (onSaved) onSaved(savedId)
       setDirty(false)
+      setSaving(false)
+      return savedId
     } catch (e) {
       console.error('[ProgressReport] save error:', e)
       alert('Save failed: ' + e.message)
     }
     setSaving(false)
+    return null
+  }
+
+  // ── The CRM writes the text + picks site photos (progress-draft 'fill') ──
+  const [drafting, setDrafting] = useState(false)
+  async function reloadReport(id) {
+    const [rRes, pRes] = await Promise.all([
+      supabase.from('progress_reports').select('*').eq('id', id).single(),
+      supabase.from('progress_report_photos').select('*').eq('report_id', id).order('display_order'),
+    ])
+    if (rRes.data) setReport(r => ({ ...rRes.data, job_no: r?.job_no || rRes.data.job_no }))
+    setPhotos(pRes.data || [])
+    setDirty(false)
+  }
+  async function draftWithClaude() {
+    if (!window.confirm('Let the CRM write this report\'s text — progress, PM statement, H&S, RFIs and risks — and add the best recent site photos, from the latest PA, the job diary (emails and documents) and the photo folder?\n\nThe text sections are replaced. Nothing goes to the client until you publish.')) return
+    let id = report.id
+    if (!id || dirty) id = await save()
+    if (!id) return
+    setDrafting(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('progress-draft', { body: { action: 'fill', report_id: id } })
+      if (error || data?.error) {
+        let msg = data?.error || error?.message
+        try { msg = (await error?.context?.json())?.error || msg } catch { /* keep */ }
+        throw new Error(msg)
+      }
+      await reloadReport(id)
+      setActiveTab('statement')
+    } catch (e) { alert('Couldn\'t draft: ' + e.message) }
+    setDrafting(false)
+  }
+  async function setCaption(photoId, caption) {
+    setPhotos(ps => ps.map(p => p.id === photoId ? { ...p, caption } : p))
+    await supabase.from('progress_report_photos').update({ caption: caption || null }).eq('id', photoId)
   }
 
   async function uploadPhotos(fileList) {
@@ -447,6 +484,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
     { id: 'commercial', label: '4. Valuations & Variations' },
     { id: 'risks', label: '5. Risks & RFIs' },
     { id: 'photos', label: `6. Photos (${photos.length})` },
+    { id: 'diary', label: '7. Job diary' },
   ]
 
   return (
@@ -458,9 +496,14 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
             📋 {report.report_number} — {projectName}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
-            {report.id ? 'Editing existing report' : 'New report (not yet saved)'}
+            {report.ai_draft
+              ? <span className="pr-ai-chip">Drafted by the CRM — check before publishing</span>
+              : report.id ? 'Editing existing report' : 'New report (not yet saved)'}
           </div>
         </div>
+        <button className="btn btn-sm" onClick={draftWithClaude} disabled={saving || drafting} title="Write the text and pick site photos from the PA, job diary and photo folder">
+          {drafting ? 'Drafting… (about a minute)' : '✨ Draft with Claude'}
+        </button>
         <button className={'btn btn-sm' + (dirty ? ' btn-primary' : '')} onClick={save} disabled={saving || !dirty}>
           {saving ? 'Saving…' : dirty ? (report.id ? 'Save changes' : 'Create report') : '✓ Saved'}
         </button>
@@ -488,6 +531,18 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         ))}
       </div>
 
+      {report.ai_draft && report.ai_sources && (
+        <div className="pr-ai-banner">
+          <b>Written by the CRM</b> from {report.ai_sources.pa || 'the latest PA'}
+          {` · ${report.ai_sources.diary} job-diary note${report.ai_sources.diary === 1 ? '' : 's'}`}
+          {report.ai_sources.rfis ? ` (${report.ai_sources.rfis} RFI${report.ai_sources.rfis === 1 ? '' : 's'})` : ''}
+          {` · ${report.ai_sources.photos} photo${report.ai_sources.photos === 1 ? '' : 's'}`}
+          {report.ai_sources.programme ? ' · programme' : ''}
+          {report.ai_sources.period_from ? ` · ${fmtDateUK(report.ai_sources.period_from)} – ${fmtDateUK(report.ai_sources.period_to)}` : ''}.
+          {' '}It only uses what the CRM holds — check each tab (anything marked [check: …] needs you), then Save and Publish to client.
+        </div>
+      )}
+
       {/* Body */}
       <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
         {activeTab === 'info' && <InfoTab report={report} patch={patch} />}
@@ -498,8 +553,9 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
         {activeTab === 'photos' && (
           <PhotosTab photos={photos} uploading={uploading} onUpload={uploadPhotos}
             onDelete={(id) => setConfirmDeletePhoto(id)} fileInputRef={fileInputRef}
-            reportSaved={!!report.id} />
+            reportSaved={!!report.id} onCaption={setCaption} />
         )}
+        {activeTab === 'diary' && <DiaryTab projectId={report.project_id} from={report.period_from || report.ai_sources?.period_from} />}
       </div>
 
       <ConfirmDialog open={!!confirmDeletePhoto} onClose={() => setConfirmDeletePhoto(null)}
@@ -784,7 +840,7 @@ function RisksTab({ report, patch, addRow, updateRow, removeRow }) {
   )
 }
 
-function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, reportSaved }) {
+function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, reportSaved, onCaption }) {
   const [previewMap, setPreviewMap] = useState({})
 
   useEffect(() => {
@@ -817,7 +873,8 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10 }}>
           {photos.map(p => (
-            <div key={p.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface2)', border: '0.5px solid var(--border)' }}>
+            <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ position: 'relative', aspectRatio: '1', borderRadius: 'var(--radius)', overflow: 'hidden', background: 'var(--surface2)', border: '0.5px solid var(--border)' }}>
               {previewMap[p.id] ? (
                 <img src={previewMap[p.id]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={p.file_name} />
               ) : (
@@ -825,6 +882,49 @@ function PhotosTab({ photos, uploading, onUpload, onDelete, fileInputRef, report
               )}
               <button onClick={() => onDelete(p.id)}
                 style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(204,0,0,0.85)', color: 'white', border: 'none', borderRadius: 3, padding: '2px 6px', cursor: 'pointer', fontSize: 11, fontWeight: 700 }}>✕</button>
+            </div>
+            <input defaultValue={p.caption || ''} placeholder="Caption (prints under the photo)" onBlur={e => { if ((e.target.value || '') !== (p.caption || '')) onCaption?.(p.id, e.target.value.trim()) }}
+              style={{ fontSize: 12, padding: '4px 6px' }} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// What the CRM recorded on the job from emails and documents — the facts a
+// drafted report is written from. Read-only.
+const DIARY_KIND = { rfi: 'RFI', rfi_answer: 'RFI answer', instruction: 'Instruction', variation: 'Variation', issue: 'Issue', delay: 'Delay',
+  progress: 'Progress', hs: 'H&S', drawing: 'Drawing', delivery: 'Delivery', payment: 'Payment', quote: 'Quote', application: 'Application',
+  handover: 'Handover', correspondence: 'Email', other: 'Other' }
+function DiaryTab({ projectId, from }) {
+  const [rows, setRows] = useState(null)
+  const [all, setAll] = useState(false)
+  useEffect(() => {
+    let q = supabase.from('project_log').select('*').eq('project_id', projectId).order('happened_at', { ascending: false }).limit(300)
+    if (from && !all) q = q.gte('happened_at', new Date(from + 'T00:00:00Z').toISOString())
+    q.then(({ data, error }) => setRows(error ? [] : data || []))
+  }, [projectId, from, all])
+  return (
+    <div style={{ maxWidth: 900 }}>
+      <div style={{ marginBottom: 12, padding: '12px 14px', background: 'var(--surface2)', borderRadius: 'var(--radius)', fontSize: 13, color: 'var(--text2)' }}>
+        What the CRM picked up on this job from emails and documents{from && !all ? ` since ${fmtDateUK(from)}` : ''} — RFIs, instructions, VOs, issues, drawings, deliveries. A drafted report is written from these.
+        {from && <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={() => setAll(v => !v)}>{all ? 'This period only' : 'Show everything'}</button>}
+      </div>
+      {rows === null ? <Spinner /> : rows.length === 0 ? (
+        <div style={{ textAlign: 'center', color: 'var(--text3)', padding: 40, fontSize: 13 }}>Nothing recorded yet — the diary fills as emails and documents for this job come in.</div>
+      ) : (
+        <div className="pr-diary">
+          {rows.map(r => (
+            <div key={r.id} className="pr-diary-row">
+              <span className="pr-diary-date">{fmtDateUK(r.happened_at)}</span>
+              <span className={'pr-diary-kind k-' + r.kind}>{DIARY_KIND[r.kind] || r.kind}{r.status ? ` · ${r.status}` : ''}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{r.ref ? <span style={{ color: 'var(--text3)' }}>{r.ref} · </span> : null}{r.title}</div>
+                {r.detail && <div style={{ fontSize: 12.5, color: 'var(--text2)', marginTop: 2 }}>{r.detail}</div>}
+                {r.source_label && <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>{r.source_label}</div>}
+              </div>
             </div>
           ))}
         </div>
@@ -908,7 +1008,7 @@ export async function generateProgressReportPdf(report, photos, projectName, opt
           const r = await fetch(data.signedUrl)
           const blob = await r.blob()
           const dataUrl = await new Promise(res => { const fr = new FileReader(); fr.onloadend = () => res(fr.result); fr.readAsDataURL(blob) })
-          photoDataUrls.push({ dataUrl, mime: blob.type || 'image/jpeg' })
+          photoDataUrls.push({ dataUrl, mime: blob.type || 'image/jpeg', caption: p.caption || '' })
         } catch (e) { console.warn('photo skipped', p.file_name, e) }
       }
 
@@ -1222,8 +1322,9 @@ export async function generateProgressReportPdf(report, photos, projectName, opt
         let col = 0
         let curY = y
 
+        const capH = photoDataUrls.some(ph => ph.caption) ? 9 : 0
         for (const ph of photoDataUrls) {
-          if (curY + photoH > pageH - 20) {
+          if (curY + photoH + capH > pageH - 20) {
             doc.addPage(); drawLetterhead()
             curY = 46
             col = 0
@@ -1232,10 +1333,14 @@ export async function generateProgressReportPdf(report, photos, projectName, opt
           try {
             doc.addImage(ph.dataUrl, ph.mime.includes('png') ? 'PNG' : 'JPEG', x, curY, photoW, photoH, undefined, 'FAST')
           } catch (e) { console.warn('addImage failed', e) }
+          if (ph.caption) {
+            doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(80, 80, 80)
+            doc.text(doc.splitTextToSize(ph.caption, photoW).slice(0, 2), x, curY + photoH + 3.5)
+          }
           col++
           if (col >= cols) {
             col = 0
-            curY += photoH + gap
+            curY += photoH + gap + capH
           }
         }
       }

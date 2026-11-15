@@ -300,6 +300,8 @@ async function publishProgressReportToFolder({ reportId, projectId, projectName,
     return false
   }
 
+  // Published by a person → a CRM draft becomes a normal report
+  await supabase.from('progress_reports').update({ ai_draft: false }).eq('id', reportId).then(() => {}, () => {})
   return true
 }
 
@@ -1515,7 +1517,7 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: 'var(--surface)', borderRadius: 4, cursor: 'pointer', border: '0.5px solid var(--border)' }}>
                     <span style={{ fontSize: 14 }}>📋</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.report_number}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.report_number}{r.ai_draft && <span className="pr-ai-chip" style={{ marginLeft: 8 }}>Draft by the CRM — review & publish</span>}</div>
                       <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                         Last updated {new Date(r.updated_at).toLocaleDateString('en-GB')} · {r.profiles?.full_name || 'Unknown'}
                       </div>
@@ -2205,7 +2207,7 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', background: 'var(--surface)', borderRadius: 4, cursor: 'pointer', border: '0.5px solid var(--border)' }}>
                     <span style={{ fontSize: 14 }}>📋</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.report_number}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{r.report_number}{r.ai_draft && <span className="pr-ai-chip" style={{ marginLeft: 8 }}>Draft by the CRM — review & publish</span>}</div>
                       <div style={{ fontSize: 11, color: 'var(--text3)' }}>
                         Last updated {new Date(r.updated_at).toLocaleDateString('en-GB')} · {r.profiles?.full_name || 'Unknown'}
                       </div>

@@ -77,8 +77,13 @@ const DOC_TYPES = [
   "subcontractor_quote", "supplier_quote", "insurance", "certificate", "accreditation",
   "client_order", "subcontractor_application", "supplier_order",
   "product_datasheet", "om_manual", "warranty", "test_certificate", "as_built_drawing",
+  "rfi", "correspondence",
   "invoice", "other",
 ]
+// Job diary (project_log) — what happened on each job, for the progress report
+const LOG_KINDS = new Set(["rfi", "rfi_answer", "instruction", "variation", "issue", "delay", "progress", "hs", "drawing", "delivery", "payment", "quote", "application", "handover", "correspondence", "other"])
+// Quant saves each job email's text as "… - EMAIL - subject.txt"
+const isEmailText = (item: any) => /\.(txt|eml)$/i.test(item.file_name || "") && (/ - email - /i.test(item.file_name || "") || /\.eml$/i.test(item.file_name || ""))
 // Handover (H&S File / O&M) documents — filed into the job's Handover, read
 // there like a dropped file, so "Create handover documents" picks them up
 const HANDOVER_TYPES = new Set(["product_datasheet", "om_manual", "warranty", "test_certificate", "as_built_drawing"])
@@ -89,6 +94,7 @@ const HANDOVER_FOLDERS: Record<string, string> = {"s1": "Section 1", "s2": "Sect
 const TOP_FOLDERS: Record<string, string> = {
   subcontractor_application: "Subcontractor Applications",
   supplier_order: "Orders & Deliveries",
+  rfi: "RFIs",
 }
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -244,6 +250,10 @@ async function contentFor(name: string, mime: string, bytes: Uint8Array) {
       return [{ type: "text", text: `Spreadsheet contents (CSV):\n${text.slice(0, 20000)}` }]
     } catch { /* fall through */ }
   }
+  if (/^(txt|eml|md|csv)$/.test(ext) && bytes.length < 400_000) {
+    const text = new TextDecoder().decode(bytes).replace(/\r\n/g, "\n")
+    return [{ type: "text", text: `${ext === "eml" || / - email - /i.test(name) ? "Email" : "Text file"} contents:\n${text.slice(0, 24000)}` }]
+  }
   if (ext === "docx") {
     try {
       const zip = await JSZip.loadAsync(bytes)
@@ -309,10 +319,13 @@ Document types:
 - warranty: a warranty or guarantee for installed products or completed works on the job
 - test_certificate: a test / commissioning / completion certificate FOR THE JOB (electrical EIC/EICR, gas commissioning, fire alarm, emergency lighting, sprinkler, water hygiene, air tightness, sound test, EPC, SAP, building control completion) — not a person's or company's competence card
 - as_built_drawing: as-built / record drawings issued at completion
+- rfi: a Request for Information form, RFI register or a formal RFI response for a job (the document itself)
+- correspondence: an email (saved as a text file) or letter about a job that isn't one of the document types above — questions, instructions given by email, progress updates, delays, site issues, complaints, chasers
 - invoice: invoices, statements, credit notes, receipts (these are handled in Xero, never filed here) — still list the products on it
 - other: anything else (newsletters, marketing, signatures, unrelated) — including CCG's own internal working files (quote comparisons, cost analyses, summaries, draft BoQs, rate libraries, notes made by CCG or its AI assistant)
 
 File names may start with "date_time - sender email - " (added when the email was saved): that sender is who sent it; @cltd.co.uk senders are CCG staff forwarding or sending our own documents.
+A file named "… - EMAIL - subject.txt" is the text of an email (From, To, Date, Subject, body, attachment names). Its doc_type is "correspondence" unless the email itself is an RFI ("rfi"); never "variation" or another document type — the attachments arrive as their own files. Read the whole thread, newest message first.
 
 Compliance document_type values: ${COMPLIANCE_TYPES.join(", ")}
 
@@ -341,6 +354,7 @@ Reply with JSON only, no prose:
  "pa_revision_by": for a payment application that the client / employer's agent has marked up or revised: "client"; CCG's own (re)issued version: "ccg"; otherwise null,
  "products": [{"manufacturer": string or null, "product": "product name as written", "code": "product code or null", "qty": "e.g. 24 sheets, or null", "installed": true when it's a material/product built into the works that the O&M needs a datasheet for (insulation, boards, membranes, roofing, sanitaryware, fittings, equipment…); false for tools, drill bits, blades, consumables, fixings packs, stationery, PPE, cleaning, fuel, hire, welfare, delivery charges}] — the materials/products on an invoice, delivery note, order confirmation, or the product a datasheet / manual / warranty is about; [] if none,
  "application": {"number": string or null, "period_to": "YYYY-MM-DD" or null, "gross_to_date": number or null, "amount_due": number or null},
+ "log": [{"kind": "rfi"|"rfi_answer"|"instruction"|"variation"|"issue"|"delay"|"progress"|"hs"|"drawing"|"delivery"|"payment"|"other", "ref": "RFI / VO / instruction / drawing number as written, or null", "title": "one line: what happened", "detail": "one or two sentences with the specifics — who, what, where, dates, amounts", "status": "open"|"answered"|"closed"|null, "date": "YYYY-MM-DD" or null}] — events on the job worth recording in the job diary for the monthly progress report: an RFI raised (open) or answered (rfi_answer, with the RFI's number), an instruction or change given, a variation raised/agreed, a site issue, a delay and its cause, progress reported, a health & safety matter, a drawing revision issued, a delivery, a payment notice. Facts only, as stated in the file. [] when there is nothing (an invoice, a datasheet, a quote),
  "reason": "why, in a few words (what in the file told you)"}`
 }
 
@@ -353,7 +367,7 @@ async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
-      model: MODEL, max_tokens: 1200,
+      model: MODEL, max_tokens: 2000,
       // The job/subcontractor lists are the same for every file in a run → cached
       system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content }],
@@ -728,6 +742,28 @@ async function xeroRun(limit = XERO_PER_RUN) {
   return { ok: true, read, skipped, noted, refiled, left, note: [sync, `${read} Xero invoice${read === 1 ? "" : "s"} read · ${noted} item${noted === 1 ? "" : "s"} noted${refiled ? ` · ${refiled} datasheet${refiled === 1 ? "" : "s"} matched` : ""} · ${left} to go`].filter(Boolean).join(" · ") }
 }
 
+// ─── Job diary ───────────────────────────────────────────────────────────────
+async function writeLog(projectId: string, g: any, item: any) {
+  const entries = (Array.isArray(g.log) ? g.log : []).filter((e: any) => e && LOG_KINDS.has(e.kind) && e.title).slice(0, 12)
+  const sender = senderOf(item.file_name)
+  const when = (d: any) => (/^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? new Date(d + "T12:00:00Z") : new Date(item.source_created_at || Date.now())).toISOString()
+  const label = isEmailText(item) ? `Email${sender ? " from " + sender : ""}` : cleanName(item.file_name)
+  for (const e of entries) {
+    const ref = e.ref ? String(e.ref).slice(0, 60) : null
+    // An answer closes the RFI it answers
+    if (e.kind === "rfi_answer" && ref) {
+      await sb.from("project_log").update({ status: "answered" }).eq("project_id", projectId).eq("kind", "rfi").eq("ref", ref).eq("status", "open")
+    }
+    const { error } = await sb.from("project_log").insert({
+      project_id: projectId, kind: e.kind, ref, title: String(e.title).slice(0, 200), detail: e.detail ? String(e.detail).slice(0, 800) : null,
+      status: ["open", "answered", "closed"].includes(e.status) ? e.status : (e.kind === "rfi" ? "open" : null),
+      happened_at: when(e.date), source_item_id: isUuid(item.id) ? item.id : null, source_label: label,
+    })
+    if (error && !/duplicate|unique/i.test(error.message)) console.warn("[intake] diary insert", error.message)
+  }
+  return entries.length
+}
+
 // ─── Deciding where it goes ──────────────────────────────────────────────────
 type Plan = { status: "filed" | "to_check" | "ignored"; decision?: any; reason: string }
 
@@ -748,6 +784,12 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
       const src = type === "invoice" ? "invoice" : (/deliver/i.test(item.file_name + " " + (g.summary || "")) ? "delivery" : "order")
       if (await recordPurchases(project.id, g, item, src) && src !== "order") await recheckForInfo(project.id).catch(() => 0)
     }
+  }
+  // Emails (text saved by Quant) are never filed as documents — they feed the job diary
+  if (isEmailText(item) || type === "correspondence") {
+    const n = Array.isArray(g.log) ? g.log.length : 0
+    if (!project || pc < 0.7) return { status: "ignored", reason: `Email — couldn't tell which job${n ? ` (${n} diary note${n === 1 ? "" : "s"} not recorded)` : ""}` }
+    return { status: "ignored", reason: n ? `Email — ${n} note${n === 1 ? "" : "s"} added to ${project.project_name}'s job diary` : `Email about ${project.project_name} — nothing for the diary` }
   }
   if (type === "invoice") return { status: "ignored", reason: project && pc >= 0.7 && (g.products || []).length ? `Invoice — handled in Xero (${(g.products || []).length} item${(g.products || []).length === 1 ? "" : "s"} noted for ${project.project_name}'s datasheets)` : "Invoice — handled in Xero" }
   if (type === "other") return sure(tc) ? { status: "ignored", reason: g.reason || "Not a project document" } : { status: "to_check", reason: "Not sure what this is" }
@@ -823,8 +865,9 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
   if (TOP_FOLDERS[type]) {
     if (!project) return { status: "to_check", reason: "Couldn't tell which job" }
     const who = (sub || sup)?.company_name || g.vendor?.name || ""
-    const decision: any = { target: "project_doc", project_id: project.id, top_folder: TOP_FOLDERS[type], sub_name: who || null,
-      path_label: `${project.project_name} › ${TOP_FOLDERS[type]}${who ? " › " + who : ""}` }
+    const sub_name = type === "rfi" ? null : (who || null)
+    const decision: any = { target: "project_doc", project_id: project.id, top_folder: TOP_FOLDERS[type], sub_name,
+      path_label: `${project.project_name} › ${TOP_FOLDERS[type]}${sub_name ? " › " + sub_name : ""}` }
     if (type === "subcontractor_application") {
       const a = g.application || {}
       const amt = num(a.amount_due) ?? num(a.gross_to_date)
@@ -1090,6 +1133,8 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
       } else { g.project_id = mappedProject.id; g.project_confidence = 0.9 }
     }
     const plan: Plan = g._conflict ? { status: "to_check", reason: g._conflict } : await planFor(g, item, ctx, threshold)
+    // Job diary — whatever the file says happened, when we know the job
+    if (!g._conflict && g.project_id && (num(g.project_confidence) ?? 0) >= 0.7) await writeLog(g.project_id, g, item).catch(e => console.warn("[intake] diary", e))
     const base = {
       staged_path: staged, file_size: item.file_size, doc_type: g.doc_type || null, summary: g.summary || null,
       confidence: Math.min(num(g.type_confidence) ?? 0, g.project_id ? (num(g.project_confidence) ?? 0) : 1),
