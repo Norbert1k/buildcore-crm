@@ -35,7 +35,7 @@ alter table public.job_materials add constraint job_materials_source_check
 
 notify pgrst, 'reload schema';
 
--- Every hour at :25 — new bills from Xero (every 6 h) + read up to 5 invoices
+-- Every hour at :25 — new bills from Xero (every 6 h) + read up to 8 invoices
 select cron.unschedule('xero-hourly')
 where exists (select 1 from cron.job where jobname = 'xero-hourly');
 select cron.schedule(

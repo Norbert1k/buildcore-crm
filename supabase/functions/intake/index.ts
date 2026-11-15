@@ -339,7 +339,7 @@ Reply with JSON only, no prose:
  "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
  "pa_number": number or null,
  "pa_revision_by": for a payment application that the client / employer's agent has marked up or revised: "client"; CCG's own (re)issued version: "ccg"; otherwise null,
- "products": [{"manufacturer": string or null, "product": "product name as written", "code": "product code or null", "qty": "e.g. 24 sheets, or null"}] — the materials/products on an invoice, delivery note, order confirmation, or the product a datasheet / manual / warranty is about; [] if none,
+ "products": [{"manufacturer": string or null, "product": "product name as written", "code": "product code or null", "qty": "e.g. 24 sheets, or null", "installed": true when it's a material/product built into the works that the O&M needs a datasheet for (insulation, boards, membranes, roofing, sanitaryware, fittings, equipment…); false for tools, drill bits, blades, consumables, fixings packs, stationery, PPE, cleaning, fuel, hire, welfare, delivery charges}] — the materials/products on an invoice, delivery note, order confirmation, or the product a datasheet / manual / warranty is about; [] if none,
  "application": {"number": string or null, "period_to": "YYYY-MM-DD" or null, "gross_to_date": number or null, "amount_due": number or null},
  "reason": "why, in a few words (what in the file told you)"}`
 }
@@ -479,6 +479,8 @@ async function recordPurchases(projectId: string, g: any, item: any, source: "in
     await sb.from("job_materials").upsert({
       project_id: projectId, norm_key: key, manufacturer: p.manufacturer || null, product: String(p.product).slice(0, 200),
       code: p.code || null, qty: p.qty || null, supplier, source, purchased: source !== "order",
+      // Tools, consumables, stationery… are noted but need no datasheet
+      ...(p.installed === false ? { datasheet_status: "not_needed" } : {}),
       evidence_item_id: source === "xero" ? null : item.id, evidence_label: evidence,
       updated_at: new Date().toISOString(),
     }, { onConflict: "project_id,norm_key", ignoreDuplicates: true })
@@ -631,7 +633,7 @@ async function findDatasheets(limit = 4) {
 // (delivery address, site, order ref). Nothing is written to Xero; invoices
 // still never go into the CRM — only the products are noted per job.
 const XERO_FROM = "2026-01-01"             // older bills aren't read
-const XERO_PER_RUN = 5                     // invoices read per run (hourly)
+const XERO_PER_RUN = 8                     // invoices read per run (hourly)
 const NOT_GOODS = /\b(fuel|fuels|petrol|diesel|esso|shell|bp|hotel|hotels|travelodge|premier inn|parking|crossing|toll|tfl|congestion|ulez|trainline|uber|hmrc|bank|accountants?|software|subscription|vodafone|o2|insurance|restaurant|cafe)\b/i
 
 async function xeroCall(body: any) {
