@@ -412,7 +412,7 @@ Deno.serve(async (req) => {
         const latest = (files || []).filter((f: any) => (f.subfolder_key ?? null) === sub && paNo(f.file_name) != null).sort((a: any, b: any) => paNo(b.file_name)! - paNo(a.file_name)!)[0]
         if (latest) name.push(PA(paNo(latest.file_name)!))
       }
-      return json({ ok: true, pa: name.join(" + ") || null, total, cumulative, retention_pct: retention })
+      return json({ ok: true, pa: name.length > 1 ? `the latest PAs (${name.length} buildings)` : name[0] || null, total, cumulative, retention_pct: retention })
     }
     if (body.action === "om_status") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)

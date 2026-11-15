@@ -57,12 +57,15 @@ export default function JobContract({ projectId, project, onChanged }) {
   const [termEdit, setTermEdit] = useState(null)   // { key, value }
   const [reading, setReading] = useState(false)
   const [readNote, setReadNote] = useState('')
+  const [buildings, setBuildings] = useState(0)
 
   async function load() {
-    const [f, c] = await Promise.all([
+    const [f, c, b] = await Promise.all([
       supabase.from('job_fills').select('*').eq('project_id', projectId).in('status', ['pending', 'applied']).order('created_at', { ascending: false }).limit(200),
       supabase.from('project_contract').select('*').eq('project_id', projectId).maybeSingle(),
+      supabase.from('project_doc_folders').select('folder_key, label').eq('project_id', projectId).eq('parent_key', '02-payment-application'),
     ])
+    setBuildings((b.data || []).filter(x => x.folder_key !== 'superseded' && !/supersed|archive|final account/i.test(x.label || '')).length)
     if (f.error && /job_fills|schema cache/i.test(f.error.message)) { setErr('Run supabase-sql/045_job_facts.sql to switch this on.'); setFills([]); return }
     setFills(f.data || [])
     setContract(c.data || null)
@@ -129,6 +132,7 @@ export default function JobContract({ projectId, project, onChanged }) {
         <button className="btn btn-sm" onClick={readDocs} disabled={reading}>{reading ? 'Reading…' : 'Read job documents'}</button>
       </div>
       {readNote && <div className="jc-note">{readNote}</div>}
+      {buildings >= 2 && <div className="jc-note">This job has {buildings} buildings, each with its own contract, so the CRM doesn't fill in contract terms here — enter them by hand. It still fills in the parties and procurement.</div>}
 
       {/* To check */}
       <section className="jc-card">

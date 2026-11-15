@@ -64,6 +64,8 @@ const sameCo = (a: unknown, b: unknown) => {
   const [s, l] = x.length < y.length ? [x, y] : [y, x]
   return s.length >= 5 && (l.startsWith(s + " ") || l.endsWith(" " + s) || l.includes(" " + s + " "))
 }
+// Not job parties: lawyers, banks / funders, insurers, guarantors, administrators
+const NOT_PARTY = /\b(solicitors?|llp law|law|legal|fieldfisher|field fisher|bank|finance|capital|lending|insurance|insurers?|underwriters?|guarantor|administrators?|receivers?|kpmg|deloitte|pwc|ernst|grant thornton|interpath|frp advisory)\b/i
 const isCcg = (p: any) => /city construction|\bcltd\b|\bccg\b/i.test(String(p?.company || "")) || /@cltd\.co\.uk$/i.test(String(p?.email || ""))
 
 // Roles → directory trade (the names already used in Subcontractors) and the role on the job
@@ -226,14 +228,17 @@ async function alertPending(projectId: string) {
 
 // ─── Loading the job as it stands ───────────────────────────────────────────
 async function loadJob(projectId: string) {
-  const [p, c, subsOnJob, eaLinks] = await Promise.all([
+  const [p, c, subsOnJob, eaLinks, paFolders] = await Promise.all([
     sb.from("projects").select("id, project_name, client_name, client_id, value, retention_pct, start_date, end_date, division").eq("id", projectId).maybeSingle(),
     sb.from("project_contract").select("*").eq("project_id", projectId).maybeSingle(),
     sb.from("project_subcontractors").select("id, subcontractor_id, category, trade_on_project, status").eq("project_id", projectId),
     sb.from("project_employer_agents").select("id, ea_id, employer_agents(id, company_name, email, payment_submission_email)").eq("project_id", projectId),
+    sb.from("project_doc_folders").select("folder_key, label").eq("project_id", projectId).eq("parent_key", "02-payment-application"),
   ])
   if (!p.data) throw new Error("Job not found")
-  return { project: p.data as any, contract: (c.data || null) as any, subsOnJob: (subsOnJob.data || []) as any[], eaLinks: (eaLinks.data || []) as any[] }
+  // Separate buildings, each with its own contract (e.g. Merton) — one set of job-wide terms doesn't fit
+  const buildings = (paFolders.data || []).filter((f: any) => f.folder_key !== "superseded" && !/supersed|archive|final account/i.test(f.label || "")).length
+  return { multi: buildings >= 2, project: p.data as any, contract: (c.data || null) as any, subsOnJob: (subsOnJob.data || []) as any[], eaLinks: (eaLinks.data || []) as any[] }
 }
 let dirCache: { subs: any[]; eas: any[]; eaContacts: any[]; clients: any[]; at: number } | null = null
 async function directory() {
@@ -309,9 +314,12 @@ async function apply(projectId: string, facts: any, src: Src, trial = false) {
   }
 
   // 1. Parties
-  const parties = (Array.isArray(facts?.parties) ? facts.parties : []).filter((x: any) => x && str(x.company) && !isCcg(x)).slice(0, 12)
+  const parties = (Array.isArray(facts?.parties) ? facts.parties : []).filter((x: any) => x && str(x.company) && !isCcg(x) && (x.role === "client" || !NOT_PARTY.test(x.company))).slice(0, 12)
+  // One role per firm: the first the file gave (the EA isn't also "consultant")
+  const seenCo = new Set<string>()
   for (const party of parties) {
     const company = str(party.company, 160)!
+    if (party.role !== "subcontractor") { const k = normCo(company); if ([...seenCo].some(x => sameCo(x, k))) continue; seenCo.add(k) }
     const contact = { contact_name: str(party.contact_name, 120), job_title: str(party.job_title, 120), email: str(party.email, 160)?.toLowerCase() || null, phone: str(party.phone, 40) }
     if (party.role === "client") {
       if (sameCo(job.project.client_name, company)) continue
@@ -351,7 +359,7 @@ async function apply(projectId: string, facts: any, src: Src, trial = false) {
             const { data } = await sb.from("project_subcontractors").insert({ project_id: projectId, subcontractor_id: s.id, category: "design_team", trade_on_project: r.role, status: "active" }).select("id").maybeSingle()
             if (data) job.subsOnJob.push({ id: data.id, subcontractor_id: s.id, category: "design_team" })
           } })
-      } else if (!s) {
+      } else if (!s && party.role !== "other_consultant") {
         await note({ kind: "party", field: `design:${party.role}:${normCo(company)}`, label: `Design team — ${r.role}`, value: { new: true, name: company, role: r.role, trade: r.trade, ...contact }, display: `${company} (new firm)`,
           status: "pending", why: "Not in the directory yet — accept to add the firm and put it on this job" })
       }
@@ -377,7 +385,7 @@ async function apply(projectId: string, facts: any, src: Src, trial = false) {
   // 2. Contract terms (the main contract between the client and CCG only)
   const c = facts?.contract
   let pa: any = undefined
-  if (c && c.applies === true) {
+  if (c && c.applies === true && !job.multi) {
     for (const [k, t] of Object.entries(TERMS)) {
       const v = termValue(t, c[k])
       if (v == null) continue
@@ -628,7 +636,7 @@ async function undo(fillId: string, actor: string) {
 // ─── Reading what's already filed (letters of intent, contracts) ────────────
 const READER = `You read a construction contract document for City Construction Group (CCG), the main contractor.
 From the document, list the organisations acting on the job and the agreed terms of the MAIN contract between the client/employer and CCG.
-Never list CCG / City Construction Group as a party. Facts only, as written — null for anything not stated. Reply with JSON only:
+Never list CCG / City Construction Group as a party. Parties are the client / employer, the employer's agent and the design team and consultants on the works — never solicitors, banks or funders, insurers, guarantors or administrators; list each firm once, in its main role; a local authority only as client or building control. Facts only, as written — null for anything not stated. "insurance" is only what insurance CCG must take out or hold. Reply with JSON only:
 {"parties": [{"role": "client"|"employer_agent"|"quantity_surveyor"|"architect"|"structural_engineer"|"civil_engineer"|"mep_engineer"|"principal_designer"|"building_control"|"fire_consultant"|"other_consultant", "company": "...", "contact_name": null, "job_title": null, "email": null, "phone": null}],
  "contract": {"applies": true when the document sets or confirms terms of the main contract with CCG (letter of intent, contract, appointment, contract particulars), else false,
   "form": "e.g. JCT Design and Build Contract 2016", "contract_date": "YYYY-MM-DD", "reference": null, "contract_sum": number excluding VAT, "retention_pct": number,
