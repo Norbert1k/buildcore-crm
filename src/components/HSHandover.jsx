@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, createContext, useContext } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from '../lib/fetchAll'
 import { RowMenu } from './ui'
 import { useAuth } from '../lib/auth'
 import { drawCover, drawLetterhead, drawFooter, addInternalLink, loadLogo, BRAND, bc, fmtDateLong } from '../lib/pdfTemplate'
@@ -1154,7 +1155,7 @@ function FolderNode({ node, projectId, depth, fileCounts, canManage, canAddFolde
       while (cur && cur !== node.key) { parts.unshift(labelByKey[cur] || cur); cur = parentByKey[cur]; if (!cur) break }
       return parts.join('/')
     }
-    const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId).in('folder_key', Array.from(descendants))
+    const { data: allFiles } = await fetchAll(() => supabase.from('hs_files').select('*').eq('project_id', projectId).in('folder_key', Array.from(descendants)))
     if (!allFiles?.length) { alert('No files in this folder.'); return }
     const script = document.createElement('script')
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
@@ -1426,7 +1427,7 @@ export default function HSHandover({ projectId, projectName }) {
   }, [projectId])
 
   async function loadFileCounts() {
-    const { data } = await supabase.from('hs_files').select('folder_key').eq('project_id', projectId)
+    const { data } = await fetchAll(() => supabase.from('hs_files').select('id, folder_key').eq('project_id', projectId))
     if (data) {
       const counts = {}
       data.forEach(f => { counts[f.folder_key] = (counts[f.folder_key] || 0) + 1 })
@@ -1441,7 +1442,7 @@ export default function HSHandover({ projectId, projectName }) {
     //    '(Archive)' folder under its nearest surviving ancestor. Files are
     //    never hidden or touched. Synthetic entries ride the customFolders
     //    channel so the renderer needs no special handling.
-    const { data: fileKeysRows } = await supabase.from('hs_files').select('folder_key').eq('project_id', projectId)
+    const { data: fileKeysRows } = await fetchAll(() => supabase.from('hs_files').select('id, folder_key').eq('project_id', projectId))
     const templateKeys = new Set()
     ;(function wk(ns){ ns.forEach(n => { templateKeys.add(n.key); wk(n.children) }) })(HS_STRUCTURE)
     const customKeys = new Set((data || []).map(f => f.folder_key))
@@ -1512,10 +1513,9 @@ export default function HSHandover({ projectId, projectName }) {
     })
 
     // ── Pull files first (we need them to know which sections actually have content) ──
-    const query = sectionKeys
+    const { data: allFiles } = await fetchAll(() => (sectionKeys
       ? supabase.from('hs_files').select('*').eq('project_id', projectId).in('folder_key', sectionKeys)
-      : supabase.from('hs_files').select('*').eq('project_id', projectId)
-    const { data: allFiles } = await query.order('folder_key').order('file_name')
+      : supabase.from('hs_files').select('*').eq('project_id', projectId)).order('folder_key').order('file_name'))
     const pdfFiles = (allFiles || []).filter(f => f.file_name?.toLowerCase().endsWith('.pdf'))
     const otherFiles = (allFiles || []).filter(f => !f.file_name?.toLowerCase().endsWith('.pdf'))
 
@@ -1719,7 +1719,7 @@ export default function HSHandover({ projectId, projectName }) {
       }
 
       // Add real uploaded files into their correct folders
-      const { data: allFiles } = await supabase.from('hs_files').select('*').eq('project_id', projectId)
+      const { data: allFiles } = await fetchAll(() => supabase.from('hs_files').select('*').eq('project_id', projectId))
       const foldersWithFiles = new Set((allFiles || []).map(f => f.folder_key))
 
       // Create .gitkeep only in folders that have no uploaded files

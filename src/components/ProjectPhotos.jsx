@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from '../lib/fetchAll'
 import { useAuth } from '../lib/auth'
 import { zipProgressShow, zipProgressUpdate, zipProgressHide } from '../lib/zipProgress'
 
@@ -67,11 +68,11 @@ export default function ProjectPhotos({ projectId }) {
     setLoading(true)
 
     const [photosRes, visRes, tgRes] = await Promise.all([
-      supabase
+      fetchAll(() => supabase
         .from('project_photos')
         .select('*')
         .eq('project_id', projectId)
-        .order('taken_at', { ascending: false }),
+        .order('taken_at', { ascending: false })),
       supabase
         .from('project_photo_folder_visibility')
         .select('folder_slug, client_visible')

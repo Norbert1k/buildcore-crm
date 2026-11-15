@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from '../lib/fetchAll'
 import { useAuth } from '../lib/auth'
 import { autoMatch } from '../lib/handoverChecks'
 
@@ -56,7 +57,7 @@ export function useHandoverReadiness(projectId) {
 
   async function loadFiles() {
     const [{ data: hs }, { data: subs }, { data: iss }] = await Promise.all([
-      supabase.from('hs_files').select('id, file_name, folder_key, ai, origin').eq('project_id', projectId),
+      fetchAll(() => supabase.from('hs_files').select('id, file_name, folder_key, ai, origin').eq('project_id', projectId)),
       supabase.from('project_subcontractors').select('id, category').eq('project_id', projectId),
       supabase.from('om_issues').select('issue_no, kind').eq('project_id', projectId).order('created_at', { ascending: false }),
     ])

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from '../lib/fetchAll'
 import { PROJECT_STATUSES, formatDate, formatMoney, parseMoney } from '../lib/utils'
 import { Avatar, Pill, Spinner, IconPlus, IconEdit, IconTrash, IconChevron, ConfirmDialog, Modal, Field } from '../components/ui'
 import { useAuth } from '../lib/auth'
@@ -337,7 +338,7 @@ export default function ProjectDetail() {
     loadEAContacts([...divEAs.map(e => e.id), ...(eaRes.data || []).map(p => p.ea_id)]).then(setEaContacts)
     setTeam(teamRes.data || [])
     // Load subcontractor files
-    const { data: sfData } = await supabase.from('project_sub_files').select('*').eq('project_id', id).order('created_at', { ascending: false })
+    const { data: sfData } = await fetchAll(() => supabase.from('project_sub_files').select('*').eq('project_id', id).order('created_at', { ascending: false }))
     setSubFiles(sfData || [])
     const { data: progData } = await supabase.from('project_programmes').select('*').eq('project_id', id).order('created_at', { ascending: false })
     setProgrammes(progData || [])

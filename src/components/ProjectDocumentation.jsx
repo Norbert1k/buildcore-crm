@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from '../lib/fetchAll'
 import { RowMenu } from './ui'
 import { useAuth } from '../lib/auth'
 import UploadProgress from './UploadProgress'
@@ -1086,18 +1087,22 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
     setTogglingVisible(false)
   }
 
+  // Counts everything inside, including files in its own sub-folders
   async function loadFileCount() {
+    const { data: rows } = await supabase.from('project_doc_folders').select('folder_key, parent_key').eq('project_id', projectId)
+    const keys = new Set([subfolder.key]); let grew = true
+    while (grew) { grew = false; for (const r of rows || []) if (keys.has(r.parent_key) && !keys.has(r.folder_key)) { keys.add(r.folder_key); grew = true } }
     const { count } = await supabase.from('project_doc_files').select('id', { count: 'exact', head: true })
-      .eq('project_id', projectId).eq('subfolder_key', subfolder.key)
+      .eq('project_id', projectId).in('subfolder_key', [...keys])
     setFileCount(count || 0)
   }
 
   async function loadFiles() {
-    const { data } = await supabase.from('project_doc_files').select('*')
+    const { data } = await fetchAll(() => supabase.from('project_doc_files').select('*')
       .eq('project_id', projectId).eq('folder_key', folder.key).eq('subfolder_key', subfolder.key)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }))
     setFiles(naturalSort(data || []))
-    setFileCount((data || []).length)
+    loadFileCount()
   }
 
   async function loadChildFolders() {
@@ -1165,12 +1170,14 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
     setUploading(false)
     setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
     loadFiles()
+    refreshTree?.()          // folder counts above follow
   }
 
   async function deleteFile(f) {
     await supabase.storage.from('project-docs').remove([f.storage_path])
     await supabase.from('project_doc_files').delete().eq('id', f.id)
     setFiles(prev => prev.filter(x => x.id !== f.id))
+    refreshTree?.()
   }
 
   async function addChildFolder() {
@@ -1218,9 +1225,9 @@ function SubfolderSection({ projectId, projectName, folder, subfolder, canManage
       // Pull ALL files under this subfolder AND any descendants
       const pathMap = await buildFolderPathMap(projectId, subfolder.key)
       const folderKeys = Object.keys(pathMap)
-      const { data: allFiles } = await supabase.from('project_doc_files').select('*')
+      const { data: allFiles } = await fetchAll(() => supabase.from('project_doc_files').select('*')
         .eq('project_id', projectId)
-        .in('subfolder_key', folderKeys)
+        .in('subfolder_key', folderKeys))
       const fileList = allFiles || []
       if (!fileList.length) {
         setZipProgress(null)
@@ -1730,9 +1737,9 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
   }
 
   async function loadRootFiles() {
-    const { data } = await supabase.from('project_doc_files').select('*')
+    const { data } = await fetchAll(() => supabase.from('project_doc_files').select('*')
       .eq('project_id', projectId).eq('folder_key', folder.key).is('subfolder_key', null)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }))
     setFiles(naturalSort(data || []))
   }
 
@@ -1772,12 +1779,14 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
     setUploading(false)
     setUploadProgress({ active: false, files: fileArr.map(f => f.name), current: fileArr.length, total: fileArr.length, errors })
     loadRootFiles()
+    refreshTree?.()          // folder counts follow
   }
 
   async function deleteFile(f) {
     await supabase.storage.from('project-docs').remove([f.storage_path])
     await supabase.from('project_doc_files').delete().eq('id', f.id)
     setFiles(prev => prev.filter(x => x.id !== f.id))
+    refreshTree?.()
   }
 
   async function zipFolder() {
@@ -1857,8 +1866,8 @@ function PrimeFolderSection({ projectId, projectName, folder, canManage, canAddF
         alert('No subfolders selected.')
         return
       }
-      const { data: allFiles } = await supabase.from('project_doc_files').select('*')
-        .eq('project_id', projectId).in('subfolder_key', Array.from(wantedKeys))
+      const { data: allFiles } = await fetchAll(() => supabase.from('project_doc_files').select('*')
+        .eq('project_id', projectId).in('subfolder_key', Array.from(wantedKeys)))
       if (!allFiles?.length) {
         setZipProgress(null)
         alert('Selected subfolders contain no files.')
@@ -2489,9 +2498,11 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
   }, [])
 
   useEffect(() => { loadFileCounts(); loadCustomTopFolders() }, [projectId])
+  // Counts follow uploads, moves and deletes anywhere in the tree
+  useEffect(() => { if (treeVersion) loadFileCounts() }, [treeVersion])
 
   async function loadFileCounts() {
-    const { data } = await supabase.from('project_doc_files').select('folder_key').eq('project_id', projectId)
+    const { data } = await fetchAll(() => supabase.from('project_doc_files').select('id, folder_key').eq('project_id', projectId))
     if (data) {
       const counts = {}
       data.forEach(f => { counts[f.folder_key] = (counts[f.folder_key] || 0) + 1 })
@@ -2520,7 +2531,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
     setZipProgress({ label: 'Preparing zip', current: 0, total: 0 })
     try {
       await loadJsZip()
-      const { data: allFiles } = await supabase.from('project_doc_files').select('*').eq('project_id', projectId)
+      const { data: allFiles } = await fetchAll(() => supabase.from('project_doc_files').select('*').eq('project_id', projectId))
       const filesList = allFiles || []
       // Build label paths for every top-level folder (template + custom)
       const allTopFolders = [...TEMPLATE_FOLDERS, ...customTopFolders]

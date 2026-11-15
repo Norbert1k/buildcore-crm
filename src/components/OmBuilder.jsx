@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchAll } from '../lib/fetchAll'
 import { useAuth } from '../lib/auth'
 import { Spinner } from './ui'
 import { HS_STRUCTURE } from './HSHandover'
@@ -102,8 +103,8 @@ export default function OmBuilder({ projectId, project, readiness, multi = false
   const [allIssues, setAllIssues] = useState([])
   async function load(catchUp) {
     const [hs, docs, pkAll, iss] = await Promise.all([
-      supabase.from('hs_files').select('*').eq('project_id', projectId),
-      supabase.from('project_doc_files').select('*').eq('project_id', projectId),
+      fetchAll(() => supabase.from('hs_files').select('*').eq('project_id', projectId)),
+      fetchAll(() => supabase.from('project_doc_files').select('*').eq('project_id', projectId)),
       supabase.from('om_packs').select('*').eq('project_id', projectId),
       supabase.from('om_issues').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
     ])
