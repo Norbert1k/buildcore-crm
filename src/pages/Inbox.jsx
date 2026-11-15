@@ -35,8 +35,10 @@ const TYPE_LABEL = {
   subcontractor_quote: 'Subcontractor quote', supplier_quote: 'Supplier quote', insurance: 'Insurance',
   certificate: 'Certificate', accreditation: 'Accreditation', invoice: 'Invoice', other: 'Other',
   client_order: 'Client order / contract', subcontractor_application: 'Subcontractor application', supplier_order: 'Order / delivery note',
+  product_datasheet: 'Datasheet', om_manual: 'O&M manual', warranty: 'Warranty', test_certificate: 'Test certificate', as_built_drawing: 'As-built drawing',
 }
-const targetForType = t => (t === 'subcontractor_quote' || t === 'supplier_quote') ? 'quote'
+const HANDOVER_TYPES = ['product_datasheet', 'om_manual', 'warranty', 'test_certificate', 'as_built_drawing']
+const targetForType = t => HANDOVER_TYPES.includes(t) ? 'handover' : (t === 'subcontractor_quote' || t === 'supplier_quote') ? 'quote'
   : (t === 'insurance' || t === 'certificate' || t === 'accreditation') ? 'compliance' : 'project_doc'
 
 const fmtWhen = iso => {
@@ -146,7 +148,7 @@ export default function Inbox() {
 
       <div className="ib-tabs" role="tablist">
         {[['check', 'To check', groups.check.length], ['filed', 'Filed', groups.filed.length],
-          ['other', 'Ignored & duplicates', groups.other.length], ['pending', 'Waiting', groups.pending.length],
+          ['other', 'Ignored & duplicates', groups.other.length], ['pending', 'Waiting', groups.pending.length], ['materials', 'Materials', null],
           ...(canSet ? [['settings', 'Settings', null]] : [])].map(([k, l, n]) => (
           <button key={k} role="tab" aria-selected={tab === k} className={'ib-tab' + (tab === k ? ' on' : '')} onClick={() => setTab(k)}>
             {l}{n ? <span className="ib-n">{n}</span> : null}
@@ -170,6 +172,7 @@ export default function Inbox() {
                 <div key={i.id} className="ib-row"><div className="ib-row-main"><div className="ib-fn">{i.file_name}</div>
                   <div className="ib-meta">{i.status === 'error' ? `Retrying — ${i.last_error || ''}` : 'Waiting to be read'} · {fmtWhen(i.created_at)}</div></div></div>))}</div>
             : <div className="ib-empty">Nothing waiting.</div>)}
+          {tab === 'materials' && <Materials projects={lists.projects} canFile={canFile} />}
           {tab === 'settings' && canSet && <Settings settings={settings} onSaved={load} projects={lists.projects} />}
         </>
       )}
@@ -246,7 +249,9 @@ function CheckCard({ item, lists, canFile, onDone }) {
 
   async function file() {
     let decision
-    if (target === 'project_doc' && folder.startsWith('top:')) {
+    if (target === 'handover') {
+      decision = { target, project_id: projectId, material_id: plan?.material_id || null }
+    } else if (target === 'project_doc' && folder.startsWith('top:')) {
       decision = { target, project_id: projectId, top_folder: folder.slice(4, -1), sub_name: company.trim() || null }
     } else if (target === 'project_doc') {
       const [folder_key, sub] = folder.split('|')
@@ -275,7 +280,7 @@ function CheckCard({ item, lists, canFile, onDone }) {
     setBusy(false)
   }
 
-  const ready = target === 'project_doc' ? !!projectId && (!buildings.length || !!building)
+  const ready = target === 'handover' ? !!projectId : target === 'project_doc' ? !!projectId && (!buildings.length || !!building)
     : target === 'compliance' ? !!subId && !!docType
     : !!projectId && !!vendor && (reqId === 'new' ? !!newTitle.trim() : !!reqId)
 
@@ -298,6 +303,7 @@ function CheckCard({ item, lists, canFile, onDone }) {
             <option value="project_doc">Job documents</option>
             <option value="quote">Quote for a job</option>
             <option value="compliance">Subcontractor compliance</option>
+            <option value="handover">Job handover (H&S File / O&M)</option>
           </select>
 
           {target !== 'compliance' && (
@@ -487,6 +493,74 @@ function Settings({ settings, onSaved, projects = [] }) {
         </div>
       ))}
       <div><button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button></div>
+    </div>
+  )
+}
+
+// ─── Materials bought per job → datasheets for the O&M ─────────────────────
+// Read from the invoices, delivery notes and order confirmations that came in
+// by email. Datasheets go into a job's Handover only for products bought for
+// that job; the CRM looks up missing ones each morning (each find waits in
+// To check for approval).
+const DS = { needed: ['Needed', 'ib-chip-amber'], found: ['Found — check it', 'ib-chip-amber'], filed: ['In the O&M', 'ib-chip-green'], not_found: ['Not found online', 'ib-chip-grey'], not_needed: ['Not needed', 'ib-chip-grey'] }
+function Materials({ projects, canFile }) {
+  const [rows, setRows] = useState(null)
+  const [job, setJob] = useState('')
+  const [form, setForm] = useState({ manufacturer: '', product: '' })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  async function load() {
+    const { data, error } = await supabase.from('job_materials').select('*').order('created_at', { ascending: false }).limit(500)
+    setRows(error ? [] : data || [])
+  }
+  useEffect(() => { load() }, [])
+  const name = id => projects.find(p => p.id === id)?.project_name || 'Job'
+  const list = (rows || []).filter(r => !job || r.project_id === job)
+  async function add() {
+    if (!job || !form.product.trim()) return
+    const key = [form.manufacturer, form.product].join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(w => w.length > 1).sort().join(' ')
+    const { error } = await supabase.from('job_materials').insert({ project_id: job, norm_key: key, manufacturer: form.manufacturer.trim() || null, product: form.product.trim(), source: 'manual', purchased: true, evidence_label: 'Added by hand' })
+    if (error) { alert(error.message); return }
+    setForm({ manufacturer: '', product: '' }); load()
+  }
+  async function notNeeded(r) { await supabase.from('job_materials').update({ datasheet_status: 'not_needed' }).eq('id', r.id); load() }
+  async function findNow() {
+    setBusy(true); setMsg('')
+    try { const r = await call({ action: 'datasheets' }); setMsg(`Looked up ${r.checked} · found ${r.found} — see To check`) } catch (e) { setMsg(e.message) }
+    setBusy(false); load()
+  }
+  return (
+    <div className="ib-card">
+      <div className="ib-maph" style={{ marginTop: 0, paddingTop: 0, borderTop: 'none' }}>
+        <b>Materials bought → datasheets</b>
+        {canFile && <button className="btn btn-sm" onClick={findNow} disabled={busy}>{busy ? 'Looking up…' : 'Find datasheets now'}</button>}
+      </div>
+      <div className="ib-hint" style={{ marginTop: 4 }}>From the invoices, delivery notes and orders that came in by email. Only datasheets for these go into a job's O&M.{msg ? ' ' + msg : ''}</div>
+      <div className="ib-form" style={{ borderTop: 'none', paddingTop: 0 }}>
+        <select value={job} onChange={e => setJob(e.target.value)} aria-label="Job">
+          <option value="">All jobs</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.project_ref ? p.project_ref + ' · ' : ''}{p.project_name}</option>)}
+        </select>
+        {canFile && job && <>
+          <input value={form.manufacturer} onChange={e => setForm(f => ({ ...f, manufacturer: e.target.value }))} placeholder="Manufacturer" />
+          <input value={form.product} onChange={e => setForm(f => ({ ...f, product: e.target.value }))} placeholder="Product bought, e.g. Kooltherm K118 62.5mm" />
+          <button className="btn btn-sm" onClick={add} disabled={!form.product.trim()}>Add</button>
+        </>}
+      </div>
+      {rows === null ? <div className="tab-loading"><Spinner /></div> : !list.length ? <div className="ib-empty">Nothing recorded yet — items appear as invoices and delivery notes come in.</div> : (
+        <div className="ib-list" style={{ marginTop: 10 }}>
+          {list.map(r => (
+            <div key={r.id} className="ib-row">
+              <div className="ib-row-main">
+                <div className="ib-fn">{[r.manufacturer, r.product].filter(Boolean).join(' — ')}{r.qty ? <span className="ib-meta"> · {r.qty}</span> : null}</div>
+                <div className="ib-meta">{name(r.project_id)} · {r.evidence_label || r.supplier || r.source}{r.datasheet_status === 'not_found' && r.last_error ? ' · ' + r.last_error : ''}</div>
+              </div>
+              <span className={'ib-chip ' + (DS[r.datasheet_status] || DS.needed)[1]}>{(DS[r.datasheet_status] || DS.needed)[0]}</span>
+              {canFile && ['needed', 'not_found'].includes(r.datasheet_status) && <button className="na-link" onClick={() => notNeeded(r)}>Not needed</button>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

@@ -76,8 +76,15 @@ const DOC_TYPES = [
   "our_payment_application", "client_payment_notice", "variation", "programme",
   "subcontractor_quote", "supplier_quote", "insurance", "certificate", "accreditation",
   "client_order", "subcontractor_application", "supplier_order",
+  "product_datasheet", "om_manual", "warranty", "test_certificate", "as_built_drawing",
   "invoice", "other",
 ]
+// Handover (H&S File / O&M) documents — filed into the job's Handover, read
+// there like a dropped file, so "Create handover documents" picks them up
+const HANDOVER_TYPES = new Set(["product_datasheet", "om_manual", "warranty", "test_certificate", "as_built_drawing"])
+// The Handover's folders (from HSHandover.jsx HS_STRUCTURE) — key → label
+const HANDOVER_FOLDERS: Record<string, string> = {"s1": "Section 1", "s2": "Section 2", "s3": "Section 3", "s3-1": "Section 3 › 3.1 As Built Drawings", "s3-1-01": "Section 3 › 3.1 As Built Drawings › 01. Superseded", "s3-1-02": "Section 3 › 3.1 As Built Drawings › 02. Unclassified", "s3-1-03": "Section 3 › 3.1 As Built Drawings › 03. Floor Plans", "s3-1-04": "Section 3 › 3.1 As Built Drawings › 04. Drawings", "s3-1-04-01": "Section 3 › 3.1 As Built Drawings › 04. Drawings › 01. Superseded", "s3-1-04-02": "Section 3 › 3.1 As Built Drawings › 04. Drawings › 02. Unclassified", "s3-1-04-03": "Section 3 › 3.1 As Built Drawings › 04. Drawings › 03. Fire Strategy", "s3-1-04-15": "Section 3 › 3.1 As Built Drawings › 04. Drawings › 04. Floor Plans", "s3-1-04-16": "Section 3 › 3.1 As Built Drawings › 04. Drawings › 05. Elevations", "s3-1-05": "Section 3 › 3.1 As Built Drawings › 05. General Drawings", "s3-1-05-02": "Section 3 › 3.1 As Built Drawings › 05. General Drawings › 01. Superseded", "s3-1-05-03": "Section 3 › 3.1 As Built Drawings › 05. General Drawings › 02. Unclassified", "s3-1-05-07": "Section 3 › 3.1 As Built Drawings › 05. General Drawings › 03. Windows", "s3-2": "Section 3 › 3.2 Soft & Hard Landscaping", "s3-3": "Section 3 › 3.3 Services Drawings", "s4": "Section 4", "s4-1": "Section 4 › 4.1 Schedule of Equipment", "s4-1-01": "Section 4 › 4.1 Schedule of Equipment › 01. Walls & Partitions", "s4-1-01-00": "Section 4 › 4.1 Schedule of Equipment › 01. Walls & Partitions › 01. Unclassified", "s4-1-02": "Section 4 › 4.1 Schedule of Equipment › 02. Doors", "s4-1-02-02": "Section 4 › 4.1 Schedule of Equipment › 02. Doors › 01. Ironmongery", "s4-1-02-03": "Section 4 › 4.1 Schedule of Equipment › 02. Doors › 02. Doors", "s4-1-04": "Section 4 › 4.1 Schedule of Equipment › 03. Roofing", "s4-1-05": "Section 4 › 4.1 Schedule of Equipment › 04. Radiators", "s4-1-05-02": "Section 4 › 4.1 Schedule of Equipment › 04. Radiators › 01. Bathrooms", "s4-1-06": "Section 4 › 4.1 Schedule of Equipment › 05. Plumbing", "s4-1-06-03": "Section 4 › 4.1 Schedule of Equipment › 05. Plumbing › 01. Gas Safe Certificates", "s4-1-07": "Section 4 › 4.1 Schedule of Equipment › 06. Electrical", "s4-1-09": "Section 4 › 4.1 Schedule of Equipment › 07. Insulation", "s4-1-11": "Section 4 › 4.1 Schedule of Equipment › 08. Bathrooms", "s4-1-14": "Section 4 › 4.1 Schedule of Equipment › 09. MVHR", "s4-1-16": "Section 4 › 4.1 Schedule of Equipment › 10. Flooring", "s4-1-18": "Section 4 › 4.1 Schedule of Equipment › 11. Lifts", "s4-1-18-01": "Section 4 › 4.1 Schedule of Equipment › 11. Lifts › 01. Maintenance Agreement", "s4-1-18-02": "Section 4 › 4.1 Schedule of Equipment › 11. Lifts › 02. Lift", "s4-1-18-02-01": "Section 4 › 4.1 Schedule of Equipment › 11. Lifts › 02. Lift › 01. Owner Manual", "s4-1-18-02-02": "Section 4 › 4.1 Schedule of Equipment › 11. Lifts › 02. Lift › 02. Declarations & Test Certs", "s4-1-18-02-03": "Section 4 › 4.1 Schedule of Equipment › 11. Lifts › 02. Lift › 03. Drawings", "s4-1-18-02-04": "Section 4 › 4.1 Schedule of Equipment › 11. Lifts › 02. Lift › 04. Service Contact Details", "s4-1-19": "Section 4 › 4.1 Schedule of Equipment › 12. Lighting", "s4-1-20": "Section 4 › 4.1 Schedule of Equipment › 13. Landscaping", "s4-1-23": "Section 4 › 4.1 Schedule of Equipment › 14. Windows", "s4-1-24": "Section 4 › 4.1 Schedule of Equipment › 15. Brickwork", "s4-1-25": "Section 4 › 4.1 Schedule of Equipment › 16. Kitchens", "s4-1-30": "Section 4 › 4.1 Schedule of Equipment › 17. Fire System", "s4-1-32": "Section 4 › 4.1 Schedule of Equipment › 18. Residents Information", "s4-1-34": "Section 4 › 4.1 Schedule of Equipment › 19. HVAC", "s5": "Section 5", "s5-1": "Section 5 › 5.1 Site Investigations, Environmental Reports & Soil Remediation", "s5-2": "Section 5 › 5.2 Site Waste Management Plan (Record Information)", "s6": "Section 6", "s6-1": "Section 6 › 6.1 Structural Designs - Principle", "s6-2": "Section 6 › 6.2 Structural Engineer", "s7": "Section 7", "s7-1": "Section 7 › 7.1 Services Overview", "s7-1-01": "Section 7 › 7.1 Services Overview › 01. As Built Drawings", "s7-1-01-01": "Section 7 › 7.1 Services Overview › 01. As Built Drawings › 01. Floor Plans", "s7-1-01-02": "Section 7 › 7.1 Services Overview › 01. As Built Drawings › 02. Roof", "s7-1-03": "Section 7 › 7.1 Services Overview › 02. Utilities", "s7-1-03-01": "Section 7 › 7.1 Services Overview › 02. Utilities › 01. Electrical", "s7-1-03-02": "Section 7 › 7.1 Services Overview › 02. Utilities › 02. Fibre", "s8": "Section 8", "s8-1": "Section 8 › 8.1 Residents Information Pack", "s8-2": "Section 8 › 8.2 Façade & Roof Maintenance Information", "s8-3": "Section 8 › 8.3 Cleaning and Maintenance", "s8-4": "Section 8 › 8.4 Catalogue - All", "s8-4-01": "Section 8 › 8.4 Catalogue - All › 01. Walls & Partitions", "s8-4-01-00": "Section 8 › 8.4 Catalogue - All › 01. Walls & Partitions › 01. Unclassified", "s8-4-02": "Section 8 › 8.4 Catalogue - All › 02. Doors", "s8-4-02-02": "Section 8 › 8.4 Catalogue - All › 02. Doors › 01. Ironmongery", "s8-4-02-03": "Section 8 › 8.4 Catalogue - All › 02. Doors › 02. Doors", "s8-4-04": "Section 8 › 8.4 Catalogue - All › 03. Roof", "s8-4-05": "Section 8 › 8.4 Catalogue - All › 04. Radiators", "s8-4-06": "Section 8 › 8.4 Catalogue - All › 05. Plumbing", "s8-4-06-03": "Section 8 › 8.4 Catalogue - All › 05. Plumbing › 01. Gas Safe Certificates", "s8-4-07": "Section 8 › 8.4 Catalogue - All › 06. Electrical", "s8-4-09": "Section 8 › 8.4 Catalogue - All › 07. Insulation", "s8-4-11": "Section 8 › 8.4 Catalogue - All › 08. Bathrooms", "s8-4-15": "Section 8 › 8.4 Catalogue - All › 09. MVHR", "s8-4-17": "Section 8 › 8.4 Catalogue - All › 10. Flooring", "s8-4-17-01": "Section 8 › 8.4 Catalogue - All › 10. Flooring › 01. Tiles", "s8-4-19": "Section 8 › 8.4 Catalogue - All › 11. Lifts", "s8-4-19-01": "Section 8 › 8.4 Catalogue - All › 11. Lifts › 01. Maintenance Agreement", "s8-4-19-02": "Section 8 › 8.4 Catalogue - All › 11. Lifts › 02. Lift", "s8-4-19-02-01": "Section 8 › 8.4 Catalogue - All › 11. Lifts › 02. Lift › 01. Owner Manual", "s8-4-19-02-02": "Section 8 › 8.4 Catalogue - All › 11. Lifts › 02. Lift › 02. Declarations & Test Certs", "s8-4-19-02-03": "Section 8 › 8.4 Catalogue - All › 11. Lifts › 02. Lift › 03. Drawings", "s8-4-19-02-04": "Section 8 › 8.4 Catalogue - All › 11. Lifts › 02. Lift › 04. Service Contact Details", "s8-4-20": "Section 8 › 8.4 Catalogue - All › 12. Lighting", "s8-4-21": "Section 8 › 8.4 Catalogue - All › 13. Landscaping", "s8-4-24": "Section 8 › 8.4 Catalogue - All › 14. Windows", "s8-4-25": "Section 8 › 8.4 Catalogue - All › 15. Brickwork", "s8-4-26": "Section 8 › 8.4 Catalogue - All › 16. Kitchens", "s8-4-31": "Section 8 › 8.4 Catalogue - All › 17. Fire System", "s8-4-31-01": "Section 8 › 8.4 Catalogue - All › 17. Fire System › 01. Data Sheets", "s8-4-33": "Section 8 › 8.4 Catalogue - All › 18. Residents Information", "s8-4-35": "Section 8 › 8.4 Catalogue - All › 19. HVAC", "s9": "Section 9", "s9-1": "Section 9 › 9.1 Commissioning Records (Part 1)", "s9-2": "Section 9 › 9.2 Commissioning Records (Part 2)", "s10": "Section 10", "s10-1": "Section 10 › 10.1 Operating Records", "s11": "Section 11", "s11-1": "Section 11 › 11.1 Building Control & Building Insurance", "s11-2": "Section 11 › 11.2 Emergency Lighting Safety Certificate", "s11-3": "Section 11 › 11.3 Electrical Safety Certificate", "s11-4": "Section 11 › 11.4 Fire Alarm Certificate", "s11-5": "Section 11 › 11.5 AOV & Smoke Shaft", "s11-6": "Section 11 › 11.6 Dry Riser Commissioning", "s11-7": "Section 11 › 11.7 Lift Commissioning", "s11-7-01": "Section 11 › 11.7 Lift Commissioning › 01. Declarations & Test Certs", "s11-7-02": "Section 11 › 11.7 Lift Commissioning › 02. Lift", "s11-7-02-01": "Section 11 › 11.7 Lift Commissioning › 02. Lift › 01. Owner Manual", "s11-7-02-02": "Section 11 › 11.7 Lift Commissioning › 02. Lift › 02. Drawings", "s11-7-02-03": "Section 11 › 11.7 Lift Commissioning › 02. Lift › 03. Service Contact Details", "s11-8": "Section 11 › 11.8 Energy Performance Certificates & SAP", "s11-9": "Section 11 › 11.9 Air & Sound Test Certificates", "s11-10": "Section 11 › 11.10 Fire Stopping Certificate", "s11-11": "Section 11 › 11.11 Water Efficiency Certs (Block)", "s11-12": "Section 11 › 11.12 Planning Approval & Condition Sign Off"}
+
 // Job-level folders the CRM makes on first use (top level of the job's Documents)
 const TOP_FOLDERS: Record<string, string> = {
   subcontractor_application: "Subcontractor Applications",
@@ -297,7 +304,12 @@ Document types:
 - client_order: the client's order, contract, appointment, letter of intent or instruction to proceed for the job
 - subcontractor_application: a subcontractor's payment application / valuation / interim application TO CCG (what they claim from us)
 - supplier_order: a supplier's order confirmation, delivery note or collection note for materials/plant (NOT a purchase order CCG issued — those are already in the CRM, so they're "other")
-- invoice: invoices, statements, credit notes, receipts (these are handled in Xero, never filed here)
+- product_datasheet: a manufacturer's product datasheet, technical data sheet, Declaration of Performance, BBA/ETA certificate or installation guide for a material or product
+- om_manual: an operation & maintenance manual or user manual for installed equipment/systems
+- warranty: a warranty or guarantee for installed products or completed works on the job
+- test_certificate: a test / commissioning / completion certificate FOR THE JOB (electrical EIC/EICR, gas commissioning, fire alarm, emergency lighting, sprinkler, water hygiene, air tightness, sound test, EPC, SAP, building control completion) — not a person's or company's competence card
+- as_built_drawing: as-built / record drawings issued at completion
+- invoice: invoices, statements, credit notes, receipts (these are handled in Xero, never filed here) — still list the products on it
 - other: anything else (newsletters, marketing, signatures, unrelated) — including CCG's own internal working files (quote comparisons, cost analyses, summaries, draft BoQs, rate libraries, notes made by CCG or its AI assistant)
 
 File names may start with "date_time - sender email - " (added when the email was saved): that sender is who sent it; @cltd.co.uk senders are CCG staff forwarding or sending our own documents.
@@ -327,6 +339,7 @@ Reply with JSON only, no prose:
  "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
  "pa_number": number or null,
  "pa_revision_by": for a payment application that the client / employer's agent has marked up or revised: "client"; CCG's own (re)issued version: "ccg"; otherwise null,
+ "products": [{"manufacturer": string or null, "product": "product name as written", "code": "product code or null", "qty": "e.g. 24 sheets, or null"}] — the materials/products on an invoice, delivery note, order confirmation, or the product a datasheet / manual / warranty is about; [] if none,
  "application": {"number": string or null, "period_to": "YYYY-MM-DD" or null, "gross_to_date": number or null, "amount_due": number or null},
  "reason": "why, in a few words (what in the file told you)"}`
 }
@@ -449,6 +462,132 @@ async function ensureFolder(projectId: string, parentKey: string | null, name: s
   return { key, label }
 }
 
+// ─── Materials bought per job (for datasheet checks) ─────────────────────────
+const STOP = new Set(["the", "and", "with", "for", "mm", "m", "x", "ltd", "limited", "uk", "pack", "each", "per", "of", "in", "to", "a"])
+const toks = (s: unknown) => new Set(String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter(w => w.length >= 2 && !STOP.has(w)))
+const normKey = (mf: unknown, pr: unknown) => [...toks(mf), ...toks(pr)].sort().join(" ").slice(0, 200)
+
+async function recordPurchases(projectId: string, g: any, item: any, source: "invoice" | "delivery" | "order") {
+  const supplier = g.vendor?.name || null
+  const when = item.source_created_at ? new Date(item.source_created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""
+  for (const p of (g.products || []).slice(0, 60)) {
+    if (!p?.product) continue
+    const key = normKey(p.manufacturer, p.product)
+    if (!key) continue
+    await sb.from("job_materials").upsert({
+      project_id: projectId, norm_key: key, manufacturer: p.manufacturer || null, product: String(p.product).slice(0, 200),
+      code: p.code || null, qty: p.qty || null, supplier, source, purchased: source !== "order",
+      evidence_item_id: item.id, evidence_label: `${supplier || "Supplier"} ${source === "invoice" ? "invoice" : source === "delivery" ? "delivery note" : "order"}${when ? " " + when : ""}`,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "project_id,norm_key", ignoreDuplicates: true })
+  }
+}
+
+// A datasheet matches a bought item when the product words (or the code) line up
+async function matchPurchase(projectId: string, prod: any) {
+  const { data: mats } = await sb.from("job_materials").select("id, manufacturer, product, code, supplier, evidence_label, purchased")
+    .eq("project_id", projectId).eq("purchased", true)
+  if (!mats?.length || !prod?.product) return null
+  const want = toks(prod.product), wantMf = toks(prod.manufacturer)
+  let best: any = null, bestScore = 0
+  for (const m of mats as any[]) {
+    if (prod.code && m.code && String(prod.code).replace(/\s/g, "").toLowerCase() === String(m.code).replace(/\s/g, "").toLowerCase()) return m
+    const have = toks(m.product), haveMf = toks(m.manufacturer)
+    const common = [...want].filter(w => have.has(w)).length
+    const mfOk = !wantMf.size || !haveMf.size || [...wantMf].some(w => haveMf.has(w) || have.has(w))
+    const score = mfOk ? common / Math.max(1, Math.min(want.size, have.size)) : 0
+    if (score > bestScore) { best = m; bestScore = score }
+  }
+  return bestScore >= 0.6 ? best : null
+}
+
+// File into the job's Handover and have it read there (same as a dropped file)
+async function fileToHandover(item: any, d: any) {
+  const { data: p } = await sb.from("projects").select("id, project_name").eq("id", d.project_id).maybeSingle()
+  if (!p) throw new Error("Job not found")
+  const { data: dup } = await sb.from("hs_files").select("id").eq("project_id", p.id).eq("file_name", item.file_name).limit(1)
+  if (dup?.length) return { status: "duplicate", filed_to: { target: "handover", project_id: p.id, label: `Already in ${p.project_name}'s Handover` } }
+  const path = `projects/${p.id}/hs/_inbox/${Date.now()}-${safeName(item.file_name)}`
+  const { data: blob, error: dErr } = await sb.storage.from(BUCKET).download(item.staged_path)
+  if (dErr || !blob) throw new Error("Couldn't read the staged file")
+  const { error: upErr } = await sb.storage.from("hs-handover").upload(path, blob, { contentType: item.mime_type || undefined })
+  if (upErr) throw new Error("Handover upload failed: " + upErr.message)
+  const { data: row, error } = await sb.from("hs_files").insert({ project_id: p.id, folder_key: "_inbox", file_name: item.file_name, file_size: item.file_size, storage_path: path }).select("id").single()
+  if (error) throw new Error(error.message)
+  // The Handover's own reader picks the section and stores what the O&M needs
+  let folder = "_inbox"
+  try {
+    const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/handover-ai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`, "x-intake-key": st?.cron_token || "" },
+      body: JSON.stringify({ action: "read", table: "hs_files", file_id: row.id, folders: { _inbox: "To file", ...HANDOVER_FOLDERS }, hint: item.source_path || "" }),
+    })
+    const out = await r.json().catch(() => ({}))
+    const sug = out?.ai?.suggested_folder
+    if (out?.ai?.client_facing !== false && sug && HANDOVER_FOLDERS[sug]) {
+      folder = sug
+      await sb.from("hs_files").update({ folder_key: folder }).eq("id", row.id)
+    }
+  } catch (e) { console.warn("[intake] handover read failed", e) }
+  if (d.material_id && isUuid(d.material_id)) await sb.from("job_materials").update({ datasheet_status: "filed", datasheet_item_id: item.id, updated_at: new Date().toISOString() }).eq("id", d.material_id)
+  return { status: "filed", filed_to: { target: "handover", project_id: p.id, hs_file_id: row.id,
+    label: `${p.project_name} › Handover › ${folder === "_inbox" ? "To file (pick the section in Handover)" : HANDOVER_FOLDERS[folder]}` } }
+}
+
+// ─── Datasheets for what each job bought ─────────────────────────────────────
+// Looks up the manufacturer's own datasheet for bought items that still have
+// none. Every find waits in Inbox › To check for one tap — never filed blind.
+async function findDatasheets(limit = 4) {
+  const { data: mats } = await sb.from("job_materials").select("*").eq("purchased", true).eq("datasheet_status", "needed").lt("attempts", 2)
+    .order("created_at", { ascending: true }).limit(limit)
+  let found = 0
+  for (const m of (mats || []) as any[]) {
+    await sb.from("job_materials").update({ attempts: (m.attempts || 0) + 1, updated_at: new Date().toISOString() }).eq("id", m.id)
+    try {
+      const what = [m.manufacturer, m.product, m.code ? `(code ${m.code})` : ""].filter(Boolean).join(" ")
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({
+          model: MODEL, max_tokens: 800,
+          tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+          messages: [{ role: "user", content: `Find the manufacturer's official product datasheet (or Declaration of Performance) as a PDF for this construction product, as sold in the UK:\n${what}\nBought from: ${m.supplier || "unknown"}.\nOnly the manufacturer's own site or a major UK merchant's hosted copy. It must be for exactly this product (same range, thickness/size where given). Reply with JSON only: {"url": direct https link to the PDF or null, "title": "document title", "confidence": 0-1, "reason": "few words"}` }],
+        }),
+      })
+      if (!r.ok) throw new Error(`Claude ${r.status}`)
+      const text = ((await r.json()).content || []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("")
+      const ans = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || "{}")
+      if (!ans.url || !/^https:\/\//i.test(ans.url) || (num(ans.confidence) ?? 0) < 0.6) {
+        await sb.from("job_materials").update({ datasheet_status: (m.attempts || 0) + 1 >= 2 ? "not_found" : "needed", last_error: ans.reason || "No datasheet found" }).eq("id", m.id)
+        continue
+      }
+      const res = await fetch(ans.url, { redirect: "follow" })
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      const isPdf = bytes.length > 4 && String.fromCharCode(...bytes.slice(0, 4)) === "%PDF"
+      if (!res.ok || !isPdf || bytes.length > 20_000_000) throw new Error("Link wasn't a downloadable PDF")
+      const fname = safeName(`${[m.manufacturer, m.product].filter(Boolean).join(" ")} - datasheet`).slice(0, 120) + ".pdf"
+      const { data: it, error } = await sb.from("intake_items").insert({
+        source: "web", source_file_id: "web:" + ans.url.slice(0, 400) + ":" + m.project_id, file_name: fname, mime_type: "application/pdf",
+        file_size: bytes.length, source_path: "Found online: " + new URL(ans.url).hostname, source_created_at: new Date().toISOString(),
+        status: "to_check", doc_type: "product_datasheet", summary: ans.title || fname,
+        reason: `Datasheet found online for ${m.product} (bought: ${m.evidence_label || m.supplier || "on file"}) — check it's the right one`,
+      }).select("id").single()
+      if (error) throw new Error(error.message)
+      const staged = `intake/${it.id}/${fname}`
+      await sb.storage.from(BUCKET).upload(staged, bytes, { contentType: "application/pdf", upsert: true })
+      const { data: pj } = await sb.from("projects").select("project_name").eq("id", m.project_id).maybeSingle()
+      await sb.from("intake_items").update({ staged_path: staged, guess: { doc_type: "product_datasheet", project_id: m.project_id, source_url: ans.url,
+        _plan: { target: "handover", project_id: m.project_id, material_id: m.id, path_label: `${pj?.project_name || "Job"} › Handover (H&S File / O&M)` } } }).eq("id", it.id)
+      await sb.from("job_materials").update({ datasheet_status: "found", datasheet_item_id: it.id, last_error: null }).eq("id", m.id)
+      found++
+    } catch (e) {
+      await sb.from("job_materials").update({ last_error: String((e as Error).message || e).slice(0, 300), datasheet_status: (m.attempts || 0) + 1 >= 2 ? "not_found" : "needed" }).eq("id", m.id)
+    }
+  }
+  return { ok: true, checked: (mats || []).length, found }
+}
+
 // ─── Deciding where it goes ──────────────────────────────────────────────────
 type Plan = { status: "filed" | "to_check" | "ignored"; decision?: any; reason: string }
 
@@ -463,7 +602,11 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
   const sup = vendor.kind === "supplier" ? ctx.suppliers.find((s: any) => s.id === vendor.id) : null
   const sure = (c: number) => c >= threshold
 
-  if (type === "invoice") return { status: "ignored", reason: "Invoice — handled in Xero" }
+  if (type === "invoice" || type === "supplier_order") {
+    // What was bought for which job — feeds the datasheet checks (invoices themselves stay in Xero)
+    if (project && pc >= 0.7) await recordPurchases(project.id, g, item, type === "invoice" ? "invoice" : (/deliver/i.test(item.file_name + " " + (g.summary || "")) ? "delivery" : "order"))
+  }
+  if (type === "invoice") return { status: "ignored", reason: project && pc >= 0.7 && (g.products || []).length ? `Invoice — handled in Xero (${(g.products || []).length} item${(g.products || []).length === 1 ? "" : "s"} noted for ${project.project_name}'s datasheets)` : "Invoice — handled in Xero" }
   if (type === "other") return sure(tc) ? { status: "ignored", reason: g.reason || "Not a project document" } : { status: "to_check", reason: "Not sure what this is" }
   if (!sure(tc)) return { status: "to_check", reason: `Not sure it's a ${type.replace(/_/g, " ")}` }
 
@@ -516,6 +659,21 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
     }
     // RAMS from a known subcontractor also goes on their Compliance record
     if (type === "rams" && sub && sure(vc)) decision.also_compliance = { subcontractor_id: sub.id, document_type: "rams" }
+    return { status: "filed", decision, reason: g.reason || "" }
+  }
+
+  if (HANDOVER_TYPES.has(type)) {
+    if (!project) return { status: "to_check", reason: "Couldn't tell which job's handover this is for" }
+    const decision: any = { target: "handover", project_id: project.id, path_label: `${project.project_name} › Handover (H&S File / O&M)` }
+    if (type === "product_datasheet") {
+      // Only products we actually bought for this job go into its O&M
+      const prod = (g.products || [])[0] || {}
+      const m = await matchPurchase(project.id, prod)
+      if (!m) return { status: "to_check", decision, reason: `No purchase of ${[prod.manufacturer, prod.product].filter(Boolean).join(" ") || "this product"} found on ${project.project_name} — probably sent for info. File it only if we used it.` }
+      decision.material_id = m.id
+      decision.path_label += ` — bought: ${m.evidence_label || m.supplier || "on file"}`
+    }
+    if (!sure(pc)) return { status: "to_check", decision, reason: `Probably ${project.project_name} — please confirm` }
     return { status: "filed", decision, reason: g.reason || "" }
   }
 
@@ -627,6 +785,7 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
   }
 
   if (d.target === "compliance") return { status: "filed", filed_to: await fileCompliance(item, d, actorId, g) }
+  if (d.target === "handover") return await fileToHandover(item, d)
 
   if (d.target === "quote") {
     let taskId = d.task_id
@@ -855,7 +1014,7 @@ Deno.serve(async (req) => {
     const { data: prof } = await sb.from("profiles").select("id, role").eq("id", u.user.id).maybeSingle()
     if (!prof || !FILERS.includes(prof.role)) return json({ error: "Your role can't file documents" }, 403)
     actorId = prof.id
-  } else if (action !== "run") {
+  } else if (action !== "run" && action !== "datasheets") {
     return json({ error: "Schedule can only run" }, 403)
   }
 
@@ -868,6 +1027,7 @@ Deno.serve(async (req) => {
       return json(await run())
     }
 
+    if (action === "datasheets") return json(await findDatasheets(cron ? 4 : 3))
     if (action === "folders") {
       // The Drive folder's sub-folders, each with a suggested CRM job
       const { data: st } = await sb.from("intake_settings").select("drive_folder_id").eq("id", 1).maybeSingle()
@@ -913,7 +1073,7 @@ Deno.serve(async (req) => {
       if (item.status === "filed") return json({ error: "Already filed", filed_to: item.filed_to }, 409)
       if (!item.staged_path) return json({ error: "The file hasn't been downloaded yet — press Retry first" }, 409)
       const d = body.decision || {}
-      if (!["project_doc", "compliance", "quote"].includes(d.target)) return json({ error: "Pick where it goes" }, 400)
+      if (!["project_doc", "compliance", "quote", "handover"].includes(d.target)) return json({ error: "Pick where it goes" }, 400)
       for (const k of ["project_id", "subcontractor_id", "supplier_id", "task_id"]) if (d[k] && !isUuid(d[k])) return json({ error: `Bad ${k}` }, 400)
       const res = await fileItem(item, d, actorId)
       await recordLesson(item, d, "file", res)

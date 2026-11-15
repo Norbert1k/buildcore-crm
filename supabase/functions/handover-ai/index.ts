@@ -275,6 +275,16 @@ Deno.serve(async (req: Request) => {
   try {
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY secret not set")
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!)
+    // The Inbox robot (intake function) asks for a reading of a handover file it
+    // has just filed — it proves itself with the database-made pass. Read only.
+    const intakeKey = req.headers.get("x-intake-key") || ""
+    if (intakeKey) {
+      const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
+      if (!st?.cron_token || intakeKey !== st.cron_token) return json({ error: "Bad key" }, 401)
+      const body = await req.json()
+      if (body.action !== "read" || body.table !== "hs_files") return json({ error: "Only handover reads" }, 403)
+      return await read(sb, body)
+    }
     // Who is asking: a signed-in CCG staff member (never a client-portal user)
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "")
     const { data: { user } } = await sb.auth.getUser(token)
