@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import DrawingsSurveysTab, { buildInventory, designStatus, parseDrawing } from './DrawingsSurveysTab'
+import DrawingsSurveysTab, { buildInventory, designStatus, parseDrawing, matchName } from './DrawingsSurveysTab'
 import DrawingUpload from './DrawingUpload'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,7 +124,8 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
       const stack = [root]
       while (stack.length) { const k = stack.pop(); keys.push(k); (rows || []).filter(r => r.parent_key === k).forEach(r => stack.push(r.folder_key)) }
     }
-    const { data: files } = await supabase.from('project_doc_files').select('id, file_name, subfolder_key').eq('project_id', projectId).in('subfolder_key', keys)
+    let { data: files, error } = await supabase.from('project_doc_files').select('id, file_name, subfolder_key, meta').eq('project_id', projectId).in('subfolder_key', keys)
+    if (error && /meta/.test(error.message)) ({ data: files } = await supabase.from('project_doc_files').select('id, file_name, subfolder_key').eq('project_id', projectId).in('subfolder_key', keys))
     setCrm(files || [])
   }
 
@@ -197,7 +198,7 @@ export default function DrawingsRegister({ projectId, canManage, onOpenDocuments
 
   // What the CRM still holds that Design doesn't (same matching rules as before)
   const inv = buildInventory(files.map(f => f.file_name))
-  const crmStatus = crm.map(f => ({ f, st: designStatus(inv, f.file_name)?.status }))
+  const crmStatus = crm.map(f => ({ f, st: designStatus(inv, matchName(f))?.status }))
   const crmMissing = crmStatus.filter(x => x.st === 'missing' || x.st === 'newer' || x.st === 'check').length
   const crmAlready = crmStatus.length - crmMissing
 

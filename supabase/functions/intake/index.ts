@@ -963,10 +963,20 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
     if (dup?.length) return { status: "duplicate", filed_to: { ...out, project_id: p.id, label: `Already in ${p.project_name}` } }
     const path = sub ? `projects/${p.id}/${folder}/${sub}/${stamp}` : `projects/${p.id}/${folder}/${stamp}`
     await copyStaged(item, path)
-    const { data: row, error } = await sb.from("project_doc_files").insert({
+    // What the Inbox read from it (the drawing's title block, who sent it, when) stays with the file
+    const dr = g?.drawing && (g.drawing.number || g.drawing.title) ? Object.fromEntries(Object.entries(g.drawing).filter(([, v]) => v != null && v !== "")) : null
+    const meta = Object.fromEntries(Object.entries({ drawing: dr, doc_type: g?.doc_type || null, summary: g?.summary || item.summary || null,
+      sender: senderOf(item0.file_name) || null, received_at: item.source_created_at || null, intake_item_id: isUuid(item.id) ? item.id : null }).filter(([, v]) => v != null))
+    let ins = await sb.from("project_doc_files").insert({
+      project_id: p.id, folder_key: folder, subfolder_key: sub, file_name: item.file_name,
+      file_size: item.file_size, storage_path: path, client_visible: false, meta,
+    }).select("id").single()
+    // Before 046 is run there's no meta column — file it without
+    if (ins.error && /meta/.test(ins.error.message)) ins = await sb.from("project_doc_files").insert({
       project_id: p.id, folder_key: folder, subfolder_key: sub, file_name: item.file_name,
       file_size: item.file_size, storage_path: path, client_visible: false,
     }).select("id").single()
+    const { data: row, error } = ins
     if (error) throw new Error(error.message)
     if (replacing) {
       // Old version → hidden archive (kept, recoverable; out of the CRM list, portal and figures)

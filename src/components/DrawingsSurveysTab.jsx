@@ -104,11 +104,45 @@ export function designStatus(inv, name) {
 }
 const inDesign = (inv, name) => designStatus(inv, name)?.status === 'in'
 
+// ── What the Inbox read from the drawing's title block (project_doc_files.meta) ──
+export const dwgOf = f => f?.meta?.drawing || null
+// The name to match a file by: its title-block number + revision when that reads
+// as a drawing number, else the file name (older / hand-uploaded files)
+export function matchName(f) {
+  const d = dwgOf(f)
+  if (d?.number) {
+    const n = `${d.number}${d.revision ? ' Rev ' + d.revision : ''}`
+    if (parseDrawing(n).byNumber) return n
+  }
+  return f.file_name
+}
+const DISCIPLINE = { architectural: 'Architectural', structural: 'Structural', civils: 'Civils', mep: 'MEP', landscape: 'Landscape', fire: 'Fire', specialist: 'Specialist' }
+const shortDate = d => { try { return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) } catch { return '' } }
+// Newest revision per drawing number among the CRM's own files → which are superseded
+export function revisionMap(files) {
+  const newest = new Map()
+  for (const f of files) {
+    const p = parseDrawing(matchName(f))
+    if (!p.byNumber) continue
+    const cur = newest.get(p.key)
+    if (!cur || compareRev(p.rev, cur.rev) === 1 || (!cur.rev && p.rev)) newest.set(p.key, { rev: p.rev, id: f.id })
+  }
+  return f => {
+    const p = parseDrawing(matchName(f))
+    if (!p.byNumber) return null
+    const n = newest.get(p.key)
+    if (!n || n.id === f.id || !p.rev || !n.rev) return null
+    return compareRev(p.rev, n.rev) === -1 ? n.rev : null
+  }
+}
+const searchText = f => { const d = dwgOf(f) || {}; return [f.file_name, d.number, d.title, d.originator, DISCIPLINE[d.discipline] || d.discipline, d.plot_or_block, f.meta?.sender].filter(Boolean).join(' ').toLowerCase() }
+
 export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocuments }) {
   const [proj, setProj] = useState(null)
   const [link, setLink] = useState(null)            // { linked, project?, code }
   const [embed, setEmbed] = useState({ state: 'idle', url: null, message: '' })
   const [groups, setGroups] = useState([])          // [{ path, files: [...] }]
+  const [crmSearch, setCrmSearch] = useState('')
   const [crmLoading, setCrmLoading] = useState(true)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [showLinkSettings, setShowLinkSettings] = useState(false)
@@ -205,9 +239,12 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
       }
     }
     const { data: files } = await supabase.from('project_doc_files')
-      .select('id, file_name, file_size, storage_path, subfolder_key, created_at')
+      .select('id, file_name, file_size, storage_path, subfolder_key, created_at, meta')
       .eq('project_id', projectId).in('subfolder_key', keys)
       .order('created_at', { ascending: false })
+      .then(r => r.error && /meta/.test(r.error.message)
+        ? supabase.from('project_doc_files').select('id, file_name, file_size, storage_path, subfolder_key, created_at').eq('project_id', projectId).in('subfolder_key', keys).order('created_at', { ascending: false })
+        : r)
     const byPath = {}
     ;(files || []).forEach(f => { const p = pathOf[f.subfolder_key] || 'Other'; (byPath[p] ||= []).push({ ...f, root: rootOf[f.subfolder_key], path: p }) })
     setGroups(Object.keys(byPath).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
@@ -246,7 +283,8 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
       const { data, error } = await supabase.storage.from('project-docs').download(f.storage_path)
       if (error || !data) { failed++; continue }
       files.push(new File([data], f.file_name, { type: data.type || 'application/octet-stream' }))
-      meta.push({ path: f.path || '', root: f.root || '' })
+      const d = dwgOf(f)
+      meta.push({ path: f.path || '', root: f.root || '', ...(d ? { number: d.number || null, revision: d.revision || null, title: d.title || null, discipline: d.discipline || null, originator: d.originator || null, status: d.status || null } : {}) })
     }
     setSending(false)
     if (!files.length) { setSendMsg('Couldn’t read those files from the CRM.'); return }
@@ -261,13 +299,15 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
   const linked = !!link?.linked
   const canSend = linked && embed.state === 'ok' && designReady
   const allFiles = groups.flatMap(g => g.files)
-  const notInDesign = inventory ? allFiles.filter(f => !inDesign(inventory, f.file_name)) : []
+  const notInDesign = inventory ? allFiles.filter(f => !inDesign(inventory, matchName(f))) : []
+  const supersededBy = revisionMap(allFiles)
+  const q = crmSearch.trim().toLowerCase()
   // Hide what's already in the Design portal — purely a view filter, the CRM
   // files themselves are untouched.
   const hideDone = !!inventory && !showDone
   const doneCount = inventory ? allFiles.length - notInDesign.length : 0
   const shownGroups = groups
-    .map(g => ({ ...g, shown: hideDone ? g.files.filter(f => !inDesign(inventory, f.file_name)) : g.files }))
+    .map(g => ({ ...g, shown: (hideDone ? g.files.filter(f => !inDesign(inventory, matchName(f))) : g.files).filter(f => !q || searchText(f).includes(q)) }))
     .filter(g => g.shown.length > 0)
   const togglePick = id => setPicked(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
@@ -306,6 +346,12 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
         {linked && isDesignSource && <span style={{ color: 'var(--text3)' }}>{archiveOpen ? '▴' : '▾'}</span>}
       </div>
       {sendMsg && <div style={{ padding: '0 14px 8px', fontSize: 13, color: 'var(--text2)' }}>{sendMsg}</div>}
+      {(!linked || !isDesignSource || archiveOpen) && !crmLoading && allFiles.length > 0 && (
+        <div style={{ padding: '0 14px 8px' }}>
+          <input value={crmSearch} onChange={e => { setCrmSearch(e.target.value); if (e.target.value) setOpenGroups(new Set(groups.map(g => g.path))) }}
+            placeholder="Search number, title, discipline, originator or sender" style={{ width: '100%', maxWidth: 420, fontSize: 13, padding: '6px 10px' }} />
+        </div>
+      )}
       {(!linked || !isDesignSource || archiveOpen) && !crmLoading && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '6px 14px 12px' }}>
           {groups.length === 0 && <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>No drawings or surveys stored in the CRM for this project.</div>}
@@ -314,7 +360,7 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
             <div key={g.path} style={{ marginTop: 6 }}>
               {(() => {
                 const isOpen = openGroups.has(g.path)
-                const missing = inventory ? g.files.filter(f => !inDesign(inventory, f.file_name)) : []
+                const missing = inventory ? g.files.filter(f => !inDesign(inventory, matchName(f))) : []
                 const allPicked = missing.length > 0 && missing.every(f => picked.has(f.id))
                 return (
                   <div onClick={() => setOpenGroups(prev => { const n = new Set(prev); n.has(g.path) ? n.delete(g.path) : n.add(g.path); return n })}
@@ -333,9 +379,24 @@ export default function DrawingsSurveysTab({ projectId, canManage, onOpenDocumen
               {openGroups.has(g.path) && g.shown.map(f => (
                 <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', borderTop: '1px solid var(--border)', fontSize: 13.5 }}>
                   {canSend && <input type="checkbox" checked={picked.has(f.id)} onChange={() => togglePick(f.id)} />}
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</span>
+                  {(() => {
+                    const d = dwgOf(f)
+                    const sup = supersededBy(f)
+                    const head = d && (d.number || d.title)
+                    const sub = [d && (DISCIPLINE[d.discipline] || d.discipline), d?.originator, d?.status, d?.plot_or_block,
+                      f.meta?.sender && `from ${f.meta.sender}`, f.meta?.received_at && shortDate(f.meta.received_at)].filter(Boolean).join(' · ')
+                    return (
+                      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }} title={f.file_name}>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: sup ? .6 : 1 }}>
+                          {head ? <><b style={{ fontWeight: 600 }}>{d.number || ''}</b>{d.revision ? <span className="dws-rev">Rev {d.revision}</span> : null}{d.title ? <span> {d.number ? '— ' : ''}{d.title}</span> : null}</> : f.file_name}
+                          {sup && <span className="pill" style={{ fontSize: 11, marginLeft: 6 }}>Superseded by Rev {sup}</span>}
+                        </span>
+                        {(sub || head) && <span style={{ fontSize: 11.5, color: 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}{head ? `${sub ? ' · ' : ''}${f.file_name}` : ''}</span>}
+                      </span>
+                    )
+                  })()}
                   {inventory && (() => {
-                    const st = designStatus(inventory, f.file_name)
+                    const st = designStatus(inventory, matchName(f))
                     if (st.status === 'in') return <span className="pill pill-green" style={{ fontSize: 11, flexShrink: 0 }}>In Design</span>
                     if (st.status === 'newer') return <span className="pill pill-amber" style={{ fontSize: 11, flexShrink: 0 }} title="This CRM copy is a later revision than the Design portal's">Newer than Design (Rev {st.designRev})</span>
                     if (st.status === 'check') return <span className="pill pill-amber" style={{ fontSize: 11, flexShrink: 0 }} title="Same drawing number, revisions can't be compared">Check revision · Design Rev {st.designRev}</span>

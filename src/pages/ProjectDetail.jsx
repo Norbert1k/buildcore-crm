@@ -116,9 +116,14 @@ function ProjectFileSearch({ projectId, isTender }) {
   async function doSearch(q) {
     setLoading(true)
     const term = `%${q}%`
+    // File name, or what the Inbox read from it: drawing number / title / discipline / originator, who sent it
+    const t = `%${q.replace(/[,()*%]/g, ' ').trim()}%`
+    const byMeta = ['file_name', 'meta->drawing->>number', 'meta->drawing->>title', 'meta->drawing->>discipline', 'meta->drawing->>originator', 'meta->>sender'].map(c => `${c}.ilike.${t}`).join(',')
     const [docRes, hsRes] = await Promise.all([
-      supabase.from('project_doc_files').select('id, file_name, file_size, folder_key, subfolder_key, storage_path')
-        .eq('project_id', projectId).ilike('file_name', term).limit(40),
+      supabase.from('project_doc_files').select('id, file_name, file_size, folder_key, subfolder_key, storage_path, meta')
+        .eq('project_id', projectId).or(byMeta).limit(40)
+        .then(r => r.error ? supabase.from('project_doc_files').select('id, file_name, file_size, folder_key, subfolder_key, storage_path')
+          .eq('project_id', projectId).ilike('file_name', term).limit(40) : r),
       hsAllowed
         ? supabase.from('hs_files').select('id, file_name, file_size, folder_key, storage_path')
             .eq('project_id', projectId).ilike('file_name', term).limit(10)
@@ -181,6 +186,11 @@ function ProjectFileSearch({ projectId, isTender }) {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text)' }}>{f.file_name}</div>
+                {f.meta?.drawing && (f.meta.drawing.number || f.meta.drawing.title) && (
+                  <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {[f.meta.drawing.number && `${f.meta.drawing.number}${f.meta.drawing.revision ? ' Rev ' + f.meta.drawing.revision : ''}`, f.meta.drawing.title, f.meta.drawing.originator].filter(Boolean).join(' · ')}
+                  </div>
+                )}
                 <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>
                   {f.section}{f.folder_key ? ' · ' + f.folder_key : ''}{f.subfolder_key ? ' / ' + f.subfolder_key : ''}
                 </div>

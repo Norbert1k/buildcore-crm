@@ -643,6 +643,14 @@ function BulkBar({ selected, onZip, onMove, onClear, moveTargets }) {
 }
 
 // ── File Card (grid / compact view) ──────────────────────────────────────────
+// What the Inbox read from a drawing's title block (project_doc_files.meta.drawing)
+const DISCIPLINE_LABEL = { architectural: 'Architectural', structural: 'Structural', civils: 'Civils', mep: 'MEP', landscape: 'Landscape', fire: 'Fire', specialist: 'Specialist' }
+function drawingLine(file) {
+  const d = file?.meta?.drawing
+  if (!d || !(d.number || d.title)) return ''
+  return [d.number && `${d.number}${d.revision ? ' Rev ' + d.revision : ''}`, d.title, DISCIPLINE_LABEL[d.discipline] || d.discipline, d.originator, d.status].filter(Boolean).join(' · ')
+}
+
 function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, onGenerateGantt }) {
   const [url, setUrl] = useState(null)
   const [confirmDel, setConfirmDel] = useState(false)
@@ -737,7 +745,7 @@ function FileCard({ file, onPreview, onDelete, canDelete, selected, onSelect, on
                   onFocus={e => e.target.select()} onClick={e => e.stopPropagation()}
                   style={{ flex: 1, fontSize: 12, padding: '1px 5px', border: '1px solid var(--accent)', borderRadius: 4, background: 'var(--surface2)', color: 'var(--text)', minWidth: 0 }} />
               : <>
-                  <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.file_name}>{file.file_name}</div>
+                  <div style={{ flex: 1, fontSize: 12, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={[file.file_name, drawingLine(file), file.meta?.sender && 'from ' + file.meta.sender].filter(Boolean).join('\n')}>{file.file_name}</div>
                   {canDelete && (
                     <>
                       <button onClick={toggleFileVisibility} disabled={togglingVisible}
@@ -907,7 +915,8 @@ function FileListRow({ file, onPreview, onDelete, canDelete, selected, onSelect 
                     </>
                   )}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
+                {drawingLine(file) && <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2, overflowWrap: 'anywhere' }}>{drawingLine(file)}</div>}
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{fmtSize(file.file_size)}{file.created_at ? ' · ' + new Date(file.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}{file.meta?.sender ? ` · from ${file.meta.sender}` : ''}</div>
               </div>
             )
           }
