@@ -82,6 +82,9 @@ const safeName = (n: string) => String(n)
   .replace(/[—–]/g, "-").normalize("NFKD").replace(/[̀-ͯ]/g, "")
   .replace(/[^\x20-\x7E]/g, "").replace(/[#?%{}\\^~\[\]`>|<\/:*"]/g, "-")
   .replace(/\s{2,}/g, " ").trim() || "file"
+// Quant saves attachments as "2026-11-15_1117 - sender@x.co.uk - Original name.pdf":
+// the CRM keeps the original name (and uses it to spot files already filed)
+const cleanName = (n: string) => String(n).replace(/^\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*[^\s@]+@[^\s]+\s*-\s*/, "").trim() || String(n)
 const extOf = (n: string) => (n.match(/\.([a-z0-9]{1,6})$/i)?.[1] || "").toLowerCase()
 const b64url = (bytes: Uint8Array) => {
   let s = ""; for (const b of bytes) s += String.fromCharCode(b)
@@ -280,6 +283,8 @@ Document types:
 - accreditation: CHAS, Constructionline, ISO certificates
 - invoice: invoices, statements, credit notes, receipts (these are handled in Xero, not filed here)
 - other: anything else (newsletters, marketing, signatures, unrelated) — including CCG's own internal working files (quote comparisons, cost analyses, summaries, draft BoQs, rate libraries, notes made by CCG or its AI assistant)
+
+File names may start with "date_time - sender email - " (added when the email was saved): that sender is who sent it; @cltd.co.uk senders are CCG staff forwarding or sending our own documents.
 
 Compliance document_type values: ${COMPLIANCE_TYPES.join(", ")}
 
@@ -496,7 +501,8 @@ async function copyStaged(item: any, to: string, bucket = BUCKET) {
   }
 }
 
-async function fileItem(item: any, d: any, actorId: string | null) {
+async function fileItem(item0: any, d: any, actorId: string | null) {
+  const item = { ...item0, file_name: cleanName(item0.file_name) }
   const g = item.guess || {}
   const stamp = `${Date.now()}-${safeName(item.file_name)}`
   const out: any = { target: d.target }
@@ -515,10 +521,8 @@ async function fileItem(item: any, d: any, actorId: string | null) {
       }
     }
     // Same file already in that folder → don't add it twice
-    let dupQ = sb.from("project_doc_files").select("id").eq("project_id", p.id).eq("folder_key", folder).eq("file_name", item.file_name)
-    dupQ = sub ? dupQ.eq("subfolder_key", sub) : dupQ.is("subfolder_key", null)
-    if (item.file_size) dupQ = dupQ.eq("file_size", item.file_size)
-    const { data: dup } = await dupQ.limit(1)
+    // Same name anywhere in this section of the job (e.g. PA07 already uploaded by hand)
+    const { data: dup } = await sb.from("project_doc_files").select("id").eq("project_id", p.id).eq("folder_key", folder).eq("file_name", item.file_name).limit(1)
     if (dup?.length) return { status: "duplicate", filed_to: { ...out, project_id: p.id, label: `Already in ${p.project_name}` } }
     const path = sub ? `projects/${p.id}/${folder}/${sub}/${stamp}` : `projects/${p.id}/${folder}/${stamp}`
     await copyStaged(item, path)
@@ -632,7 +636,7 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
   try {
     const topFolder = String(item.source_path || "").split(" / ")[0]
     if (folderMap[topFolder] === "skip") return upd({ status: "ignored", reason: `Drive folder "${topFolder}" is set to skip` })
-    if (JUNK.test(item.file_name) || (/^image\//.test(item.mime_type || "") && (item.file_size || 0) < 40_000)) {
+    if (JUNK.test(cleanName(item.file_name)) || (/^image\//.test(item.mime_type || "") && (item.file_size || 0) < 40_000)) {
       return upd({ status: "ignored", reason: "Email signature / logo / calendar file" })
     }
     if (String(item.mime_type || "").startsWith("application/vnd.google-apps.")) {
