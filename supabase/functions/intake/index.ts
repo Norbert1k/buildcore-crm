@@ -1175,7 +1175,7 @@ Deno.serve(async (req) => {
       const { data: rs } = await sb.from("xero_bill_reads").select("status").limit(20000)
       const reads: Record<string, number> = {}
       for (const r of (rs || []) as any[]) reads[r.status] = (reads[r.status] || 0) + 1
-      return json({ connected: !!st.connected, tenant: st.tenant || null, read_only: !!st.read_only, last_sync: st.last_sync || null, reads })
+      return json({ connected: !!st.connected, tenant: st.tenant || null, attachments: !!st.attachments, last_sync: st.last_sync || null, reads })
     }
     if (action === "folders") {
       // The Drive folder's sub-folders, each with a suggested CRM job

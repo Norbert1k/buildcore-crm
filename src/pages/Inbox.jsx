@@ -555,7 +555,7 @@ function XeroLink({ isAdmin, canFile, onRead, back }) {
         <b>Xero bills <span className="ib-meta">· read-only</span></b>
         <span className="ib-xero-btns">
           {st?.connected && canFile && <button className="btn btn-sm" onClick={readNow} disabled={!!busy}>{busy === 'read' ? 'Reading…' : 'Read bills now'}</button>}
-          {isAdmin && st && !st.error && (!st.connected || !st.read_only) && <button className="btn btn-sm btn-primary" onClick={connect} disabled={!!busy}>{busy === 'connect' ? 'Waiting for Xero…' : st.connected ? 'Reconnect (read-only)' : 'Connect Xero'}</button>}
+          {isAdmin && st && !st.error && (!st.connected || !st.attachments) && <button className="btn btn-sm btn-primary" onClick={connect} disabled={!!busy}>{busy === 'connect' ? 'Waiting for Xero…' : st.connected ? 'Reconnect Xero' : 'Connect Xero'}</button>}
         </span>
       </div>
       <div className="ib-hint" style={{ marginTop: 4 }}>

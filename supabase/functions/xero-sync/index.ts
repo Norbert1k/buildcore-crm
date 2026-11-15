@@ -385,7 +385,9 @@ Deno.serve(async (req) => {
     return json({
       connected: !!c && !expired,
       tenant: c?.tenant_name || null,
-      read_only: !!c && !/accounting\.invoices(\s|$)/.test(c.scopes || '') && /attachments/.test(c.scopes || ''),
+      // What the robot needs: bills + their attached invoices. (Xero keeps any
+      // permissions granted earlier; this code only ever reads.)
+      attachments: !!c && /accounting\.attachments/.test(c.scopes || ''),
       connected_at: c?.connected_at || null,
       last_sync: last || null,
     })
