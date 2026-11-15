@@ -4,6 +4,7 @@ import { Modal, Field, Spinner } from './ui'
 import { extractCsa, groupKeyFor } from '../lib/csaExtractor'
 import { generateCff } from '../lib/cffGenerator'
 import { fetchAllProjectPas } from '../lib/paGroupExtractor'
+import { readCffRates } from '../lib/cffRetention'
 import { resolveBuildings, findBuildingByCsaSubfolder } from '../lib/buildings'
 import { extractClientCff } from '../lib/clientCffExtractor'
 import {
@@ -63,12 +64,20 @@ export default function CffGeneratorModal({
   // of the flow (preview, PA overlay, generate) is identical to CSA mode.
   const [clientCffParsed, setClientCffParsed] = useState(null)
 
-  // Retention / release rates — entered as percentages (e.g. 8 not 0.08).
-  // Defaults match Merton (most common case for client-CFF conversions).
-  // For pure CSA-mode regenerates of older Bishops-style projects the user
-  // can manually enter 3 / 1.5 to preserve historical defaults.
-  const [retentionPctInput, setRetentionPctInput] = useState('8')
-  const [releasePctInput, setReleasePctInput] = useState('6.5')
+  // Retention / release rates — entered as percentages (e.g. 3 not 0.03).
+  // Filled in for this job (see retentionSuggestion below) until the user
+  // types their own: the latest PA's "Less Retention X%" wins, then the
+  // rate on the last CFF, then the project's retention setting, then 3%.
+  // Release defaults to the last CFF's release when that CFF used the same
+  // retention, otherwise half the retention (the usual UK split: half back
+  // at PC, half at the end of the defects period).
+  const [retentionPctInput, setRetentionPctInput] = useState('')
+  const [releasePctInput, setReleasePctInput] = useState('')
+  const [retTouched, setRetTouched] = useState(false)
+  const [projectRates, setProjectRates] = useState({ override: null, pct: null, value: null })
+  const [lastCffRates, setLastCffRates] = useState(null)   // { retention, release, file_name }
+  const [lastCffChecked, setLastCffChecked] = useState(false)
+  const [paLoading, setPaLoading] = useState(true)
 
   // Multi-building state — derived from project_doc_folders. Empty array
   // means single-building (Bishops-style) → all behaviour falls back to
@@ -296,7 +305,7 @@ export default function CffGeneratorModal({
             .order('created_at', { ascending: false }),
           supabase
             .from('projects')
-            .select('start_date, end_date')
+            .select('start_date, end_date, value, retention_pct, retention_pct_override')
             .eq('id', projectId)
             .maybeSingle(),
           supabase
@@ -332,6 +341,12 @@ export default function CffGeneratorModal({
         setClientCffExistingFiles(cffXlsx)
 
         if (projectRes.data) {
+          const num = v => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v))
+          setProjectRates({
+            override: num(projectRes.data.retention_pct_override),   // fraction (0.03)
+            pct: num(projectRes.data.retention_pct),                 // percent (3)
+            value: num(projectRes.data.value),
+          })
           if (projectRes.data.start_date) setStartDate(prev => prev || projectRes.data.start_date)
           if (projectRes.data.end_date) setEndDate(prev => prev || projectRes.data.end_date)
         }
@@ -367,6 +382,7 @@ export default function CffGeneratorModal({
     async function loadPas() {
       try {
         const paSubKey = selectedBuilding ? selectedBuilding.subfolders.pa : null
+        setPaLoading(true)
         const paResult = await fetchAllProjectPas(supabase, projectId, paSubKey).catch(err => {
           console.warn('PA fetch failed:', err)
           return []
@@ -378,6 +394,7 @@ export default function CffGeneratorModal({
           file_name: p.file_name,
           created_at: p.created_at,
           total_cumulative: p.total_cumulative,
+          retention_pct: p.retention_pct ?? null,
           cumulative_by_group: Object.fromEntries(
             Object.entries(p.groups || {}).map(([k, v]) => [k, v.cumulative])
           ),
@@ -398,6 +415,8 @@ export default function CffGeneratorModal({
           console.warn('PA pre-fetch failed:', err)
           setPaLoadError(err.message || 'Could not load payment applications')
         }
+      } finally {
+        if (!cancelled) setPaLoading(false)
       }
     }
     // Only run after the buildings query has resolved AND we have a default
@@ -410,6 +429,56 @@ export default function CffGeneratorModal({
     // (we set it inside this effect).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, selectedBuilding])
+
+  // Rates on the current CFF for this building (read-only) — used to keep
+  // the release rate the job was set up with.
+  useEffect(() => {
+    if (loadingCsaList) return
+    let cancelled = false
+    const key = selectedBuilding?.subfolders?.cff || CFF_SUBFOLDER
+    const latest = clientCffExistingFiles.find(f => f.subfolder_key === key)
+    if (!latest) { setLastCffRates(null); setLastCffChecked(true); return }
+    setLastCffChecked(false)
+    ;(async () => {
+      try {
+        const { data: signed } = await supabase.storage.from('project-docs').createSignedUrl(latest.storage_path, 600)
+        if (!signed?.signedUrl) throw new Error('no url')
+        const res = await fetch(signed.signedUrl)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const rates = await readCffRates(await res.arrayBuffer())
+        if (!cancelled) setLastCffRates({ ...rates, file_name: latest.file_name })
+      } catch (err) {
+        console.warn('Could not read rates from the last CFF:', err)
+        if (!cancelled) setLastCffRates(null)
+      } finally {
+        if (!cancelled) setLastCffChecked(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [loadingCsaList, clientCffExistingFiles, selectedBuilding])
+
+  const retentionSuggestion = useMemo(() => {
+    const latestPa = [...paList].reverse().find(p => typeof p.retention_pct === 'number' && p.retention_pct > 0)
+    let ret, source
+    if (latestPa) { ret = latestPa.retention_pct; source = `from ${latestPa.pa_label}` }
+    else if (lastCffRates?.retention != null) { ret = lastCffRates.retention; source = 'from the last CFF' }
+    else if (projectRates.override != null) { ret = projectRates.override; source = 'project setting' }
+    else if (projectRates.pct != null) { ret = projectRates.pct / 100; source = 'project setting' }
+    else { ret = 0.03; source = 'standard 3%' }
+    let rel, relSource
+    if (lastCffRates?.release != null && lastCffRates.retention != null
+        && Math.abs(lastCffRates.retention - ret) < 1e-6 && lastCffRates.release <= ret + 1e-9) {
+      rel = lastCffRates.release; relSource = 'as on the last CFF'
+    } else { rel = ret / 2; relSource = 'half the retention' }
+    return { ret, rel, source, relSource, paRate: latestPa ? latestPa.retention_pct : null, paLabel: latestPa?.pa_label || null }
+  }, [paList, lastCffRates, projectRates])
+  const ratesLoading = loadingCsaList || paLoading || !lastCffChecked
+
+  useEffect(() => {
+    if (retTouched) return
+    setRetentionPctInput(pctStr(retentionSuggestion.ret))
+    setReleasePctInput(pctStr(retentionSuggestion.rel))
+  }, [retentionSuggestion, retTouched])
 
   // ─── Parse source when user advances from Step 1 ───────────────────────
   // Despite the name, this handles BOTH source modes — sourceMode='csa'
@@ -594,6 +663,10 @@ export default function CffGeneratorModal({
     const r2 = parsePctInput(releasePctInput)
     if (r1 === 'invalid' || r2 === 'invalid') {
       setError('Retention and release must be numbers between 0 and 100.')
+      return
+    }
+    if (typeof r1 === 'number' && typeof r2 === 'number' && r2 > r1 + 1e-9) {
+      setError('The release at PC can’t be more than the retention held.')
       return
     }
     if (!csaExtract) {
@@ -958,9 +1031,14 @@ export default function CffGeneratorModal({
           buildings={buildings}
           selectedBuilding={selectedBuilding}
           retentionPctInput={retentionPctInput}
-          setRetentionPctInput={setRetentionPctInput}
+          setRetentionPctInput={v => { setRetTouched(true); setRetentionPctInput(v) }}
           releasePctInput={releasePctInput}
-          setReleasePctInput={setReleasePctInput}
+          setReleasePctInput={v => { setRetTouched(true); setReleasePctInput(v) }}
+          retentionSuggestion={retentionSuggestion}
+          ratesLoading={ratesLoading}
+          retTouched={retTouched}
+          resetRates={() => setRetTouched(false)}
+          contractValue={projectRates.value}
         />
       )}
 
@@ -996,6 +1074,11 @@ export default function CffGeneratorModal({
 // Used by retention / release inputs. Accepts "" (empty → undefined, lets
 // generator use defaults), valid 0–100 number → returns decimal (0.08),
 // anything else → 'invalid'. Caller surfaces the validation error.
+// 0.015 → "1.5"
+function pctStr(frac) {
+  return String(Math.round(frac * 100 * 1000) / 1000)
+}
+
 function parsePctInput(input) {
   const trimmed = String(input).trim()
   if (trimmed === '') return undefined
@@ -1026,6 +1109,7 @@ function Step1SourceAndProgramme({
   buildings, selectedBuilding,
   retentionPctInput, setRetentionPctInput,
   releasePctInput, setReleasePctInput,
+  retentionSuggestion, ratesLoading, retTouched, resetRates, contractValue,
 }) {
   function handleFileChange(e) {
     const file = e.target.files?.[0]
@@ -1275,40 +1359,17 @@ function Step1SourceAndProgramme({
       )}
 
       {/* Retention / release — apply in both modes */}
-      <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <Field label="Retention %">
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="100"
-              value={retentionPctInput}
-              onChange={e => setRetentionPctInput(e.target.value)}
-              style={{ width: '100%' }}
-            />
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
-              Deducted from each PA. Default 8% (Merton); use 3% for Bishops-style projects.
-            </div>
-          </Field>
-        </div>
-        <div style={{ flex: 1 }}>
-          <Field label="Release at PC %">
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              max="100"
-              value={releasePctInput}
-              onChange={e => setReleasePctInput(e.target.value)}
-              style={{ width: '100%' }}
-            />
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 4 }}>
-              Released at Practical Completion. Default 6.5% (Merton); use 1.5% for Bishops-style.
-            </div>
-          </Field>
-        </div>
-      </div>
+      <RetentionBlock
+        retentionPctInput={retentionPctInput}
+        setRetentionPctInput={setRetentionPctInput}
+        releasePctInput={releasePctInput}
+        setReleasePctInput={setReleasePctInput}
+        suggestion={retentionSuggestion}
+        loading={ratesLoading}
+        touched={retTouched}
+        onReset={resetRates}
+        contractValue={contractValue}
+      />
 
       {/* Programme dates */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1959,4 +2020,92 @@ function sectionShort(section) {
     'PROVISIONAL SUMS': 'PROV',
   }
   return map[section] || section
+}
+
+// ─── Retention block (Step 1) ──────────────────────────────────────────────
+// Two rates, where they came from, and what they mean in £ on this job.
+const RET_PRESETS = [[3, 1.5], [5, 2.5]]
+function RetentionBlock({
+  retentionPctInput, setRetentionPctInput,
+  releasePctInput, setReleasePctInput,
+  suggestion, loading, touched, onReset, contractValue,
+}) {
+  const ret = parsePctInput(retentionPctInput)
+  const rel = parsePctInput(releasePctInput)
+  const ok = typeof ret === 'number' && typeof rel === 'number'
+  const tooMuch = ok && rel > ret + 1e-9
+  const gbp = n => '£' + Math.round(n).toLocaleString('en-GB')
+  const fmtP = f => pctStr(f) + '%'
+  const offPa = ok && suggestion.paRate != null && Math.abs(ret - suggestion.paRate) > 1e-6
+  const chip = loading ? 'checking PAs…'
+    : touched ? 'entered by you'
+    : suggestion.source
+
+  const inputStyle = { width: 72, textAlign: 'right' }
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: 'var(--surface2, transparent)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>Retention</div>
+        <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 999, background: 'var(--surface3, rgba(0,0,0,.06))', color: 'var(--text2)' }}>{chip}</span>
+        <div style={{ flex: 1 }} />
+        {RET_PRESETS.map(([a, b]) => (
+          <button key={a} type="button" className="btn btn-sm"
+            onClick={() => { setRetentionPctInput(String(a)); setReleasePctInput(String(b)) }}>
+            {a}% / {b}%
+          </button>
+        ))}
+        {touched && !loading && (
+          <button type="button" className="btn btn-sm" onClick={onReset} title="Go back to the rate this job uses">
+            Reset
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', alignItems: 'center', fontSize: 14 }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          Held from each claim
+          <input type="number" step="0.1" min="0" max="100" style={inputStyle}
+            value={retentionPctInput} onChange={e => setRetentionPctInput(e.target.value)} />
+          %
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          Paid back at PC
+          <input type="number" step="0.1" min="0" max="100" style={inputStyle}
+            value={releasePctInput} onChange={e => setReleasePctInput(e.target.value)} />
+          %
+        </label>
+      </div>
+
+      {ok && !tooMuch && contractValue > 0 && (
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 10, lineHeight: 1.5 }}>
+          On the {gbp(contractValue)} contract: <b>{gbp(contractValue * ret)}</b> held across the claims,{' '}
+          <b>{gbp(contractValue * rel)}</b> paid back in the last month (PC)
+          {ret - rel > 1e-9
+            ? <>, <b>{gbp(contractValue * (ret - rel))}</b> still held until the end of the defects period — not in this forecast.</>
+            : <> — all of it.</>}
+        </div>
+      )}
+      {ok && !tooMuch && !(contractValue > 0) && (
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 10 }}>
+          {fmtP(ret)} is deducted from every month; {fmtP(rel)} comes back in the last month (PC)
+          {ret - rel > 1e-9 ? <>, and {fmtP(ret - rel)} stays held until the end of defects — not in this forecast.</> : '.'}
+        </div>
+      )}
+      {tooMuch && (
+        <div style={{ fontSize: 13, color: '#dc2626', marginTop: 10 }}>
+          The release at PC can’t be more than the retention held.
+        </div>
+      )}
+      {offPa && !tooMuch && (
+        <div style={{ fontSize: 13, color: '#b45309', marginTop: 6 }}>
+          Your payment applications deduct {fmtP(suggestion.paRate)} ({suggestion.paLabel}), so this forecast won’t match what’s being claimed.
+        </div>
+      )}
+      {!touched && !loading && (
+        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>
+          Release: {suggestion.relSource}.
+        </div>
+      )}
+    </div>
+  )
 }
