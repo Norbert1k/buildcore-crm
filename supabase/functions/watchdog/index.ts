@@ -64,10 +64,14 @@ async function check(): Promise<Alert[]> {
   const [files, reports, folders] = await Promise.all([
     all(() => sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, created_at, client_visible")
       .in("project_id", ids).in("folder_key", ["02-payment-application", "03-payment-notice", "00-project-information"])),
-    sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref").in("project_id", ids)
+    sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref, ai_sources").in("project_id", ids)
       .then((r: any) => r.error ? sb.from("progress_reports").select("project_id, report_date, created_at").in("project_id", ids).then((x: any) => x.data || []) : (r.data || [])),
     sb.from("project_doc_folders").select("project_id, folder_key, parent_key").in("project_id", ids).then((r: any) => r.data || []),
   ])
+  // Newest site photo per job
+  const lastPhoto = new Map<string, string | null>(await Promise.all(ids.map((id: string) =>
+    sb.from("project_photos").select("taken_at, created_at").eq("project_id", id).order("created_at", { ascending: false }).limit(1)
+      .then((r: any) => [id, r.error ? undefined : (r.data?.[0] ? (r.data[0].taken_at || r.data[0].created_at) : null)] as [string, any], () => [id, undefined] as [string, any]))))
 
   for (const p of jobs as any[]) {
     const docs = `/projects/${p.id}?tab=documents`
@@ -94,6 +98,17 @@ async function check(): Promise<Alert[]> {
       }
     }
 
+    // Site photos gone quiet (job started, not yet finished) — the progress report needs them
+    const ph = lastPhoto.get(p.id)
+    const started = p.start_date && days(p.start_date, now) >= 21
+    const running = !p.end_date || days(now, p.end_date) >= -14
+    if (ph !== undefined && started && running && (ph ? days(ph, now) >= 21 : true)) {
+      out.push({ key: `photos_stale:${p.id}`, project_id: p.id, kind: "photos_stale", severity: "info",
+        title: `No site photos ${ph ? `since ${fmt(ph)}` : "yet"} — ${p.project_name}`,
+        detail: `${ph ? `The newest site photo is ${days(ph, now)} days old.` : "No site photos are on this job."} Ask site to send this week's photos so the next progress report shows current work.`,
+        action_label: "Site photos", action_url: docs })
+    }
+
     if (latest) {
       const age = days(latest.created_at)
       // 2. Progress report due with each new PA (reported at the claimed %)
@@ -105,7 +120,10 @@ async function check(): Promise<Alert[]> {
         if (draft) {
           out.push({ key: `report_draft:${p.id}:${PA(latest.n)}`, project_id: p.id, kind: "report_draft", severity: age > 7 ? "urgent" : "soon",
             title: `Progress report drafted — review & publish — ${p.project_name}`,
-            detail: `The CRM drafted it from ${PA(latest.n)}, the job diary and site photos. Check it, then press Publish to client.`,
+            detail: `The CRM drafted it from ${PA(latest.n)}, the job diary and site photos.`
+              + (draft.ai_sources?.photos_new === 0 ? ` No new site photos this period${draft.ai_sources.latest_photo ? ` (newest ${fmt(draft.ai_sources.latest_photo)})` : ""}.` : "")
+              + (draft.ai_sources?.om ? ` ${draft.ai_sources.closeout ? "Close-out" : "Nearing completion"}: ${draft.ai_sources.om.ok} of ${draft.ai_sources.om.total} handover / O&M items in place — check the Handover tab before the final account goes.` : "")
+              + " Check it, then press Publish to client.",
             action_label: "Open the draft", action_url: docs })
         } else {
           // Single-building jobs: the CRM drafts it (each morning, or "Draft it now")

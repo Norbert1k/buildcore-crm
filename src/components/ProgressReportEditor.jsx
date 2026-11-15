@@ -540,6 +540,16 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
           {report.ai_sources.programme ? ' · programme' : ''}
           {report.ai_sources.period_from ? ` · ${fmtDateUK(report.ai_sources.period_from)} – ${fmtDateUK(report.ai_sources.period_to)}` : ''}.
           {' '}It only uses what the CRM holds — check each tab (anything marked [check: …] needs you), then Save and Publish to client.
+          {report.ai_sources.photos_new === 0 && (
+            <div className="pr-ai-warn">📷 No new site photos this period{report.ai_sources.latest_photo ? ` — the newest were taken ${fmtDateUK(report.ai_sources.latest_photo)}` : ''}. Each photo is captioned with the date it was taken; ask site for fresh ones if you want them in.</div>
+          )}
+          {report.ai_sources.om && (
+            <div className="pr-ai-warn">
+              📁 {report.ai_sources.closeout ? 'Close-out report' : 'Nearing completion'} — handover / O&amp;M: <b>{report.ai_sources.om.ok} of {report.ai_sources.om.total}</b> checklist items in place
+              {report.ai_sources.om.datasheets_missing ? `, ${report.ai_sources.om.datasheets_missing} datasheet${report.ai_sources.om.datasheets_missing === 1 ? '' : 's'} still needed` : ''}.
+              {report.ai_sources.om.missing?.length ? ` Missing: ${report.ai_sources.om.missing.slice(0, 8).join(', ')}${report.ai_sources.om.missing.length > 8 ? ` and ${report.ai_sources.om.missing.length - 8} more` : ''} — see the Handover tab.` : ' All in place.'}
+            </div>
+          )}
         </div>
       )}
 

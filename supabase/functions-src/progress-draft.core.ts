@@ -27,6 +27,7 @@ import * as XLSX from "https://esm.sh/xlsx@0.18.5"
 
 declare function extractFromPa(buf: ArrayBuffer): Promise<any>
 declare function fetchLatestPaForSubfolder(sb: any, projectId: string, sub: string | null): Promise<ArrayBuffer | null>
+declare function autoMatch(label: string, files: any[], job: any): any
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")
 const MODEL = "claude-sonnet-4-5"
@@ -59,6 +60,62 @@ async function nextReportNumber(projectId: string) {
   let n = 1
   while (data.some((r: any) => r.report_number === `${base}-${String(n).padStart(2, "0")}`)) n++
   return `${base}-${String(n).padStart(2, "0")}`
+}
+
+// ─── Handover / O&M position (same checklist + matching rules as the Handover tab) ─
+const OM_SECTIONS: [string, string][] = [
+  ["cs1", "Section 1 | H&S File"], ["cs2", "Section 2 | Project Directory"], ["cs3", "Section 3 | Record Drawings"],
+  ["cs4", "Section 4 | Construction Materials"], ["cs5", "Section 5 | Health and Safety"], ["cs6", "Section 6 | Structural Design"],
+  ["cs7", "Section 7 | Services"], ["cs8", "Section 8 | O&M Manuals"], ["cs9", "Section 9 | Commissioning Documents"],
+  ["cs10", "Section 10 | Operating Documents"], ["cs11", "Section 11 | Certificates"],
+]
+const OM_DEFAULT_CHECKS: Record<string, string[]> = {
+  cs1: ["Construction phase plan (as final)", "Residual risks register", "F10 notification copy", "Asbestos survey / register", "Pre-construction information (archived)"],
+  cs2: ["Contractor directory", "Consultant directory", "Key contacts & emergency numbers"],
+  cs3: ["As-built architectural drawings", "Structural as-builts", "M&E as-builts", "Fire strategy drawings"],
+  cs4: ["External envelope materials & specs", "Internal materials & finishes schedule", "COSHH data sheets"],
+  cs5: ["Fire risk assessment (handover)", "Fire stopping records", "Working-at-height / access strategy for maintenance"],
+  cs6: ["Structural calculations (as-built)", "Structural certificates & warranties"],
+  cs7: ["Mechanical installation records", "Electrical installation certificates (EIC)", "Public health / drainage records"],
+  cs8: ["O&M manuals — mechanical", "O&M manuals — electrical", "O&M manuals — lifts / specialist plant"],
+  cs9: ["HVAC commissioning records", "Water treatment & flushing certificates", "Fire alarm commissioning"],
+  cs10: ["User guides", "Maintenance schedules", "Cleaning regimes"],
+  cs11: ["Building Control completion certificate", "Gas certificates", "Electrical certificates", "Warranties & guarantees schedule"],
+}
+async function allRows(build: () => any, size = 1000) {
+  const out: any[] = []
+  for (let from = 0; from < 20000; from += size) {
+    const { data, error } = await build().range(from, from + size - 1)
+    if (error || !data?.length) break
+    out.push(...data)
+    if (data.length < size) break
+  }
+  return out
+}
+async function omStatus(projectId: string) {
+  const [secs, checks, files, subs, issues, mats] = await Promise.all([
+    sb.from("fitout_handover_sections").select("section_key, enabled, sm_checked_at, lead_signed_at, released").eq("project_id", projectId).then((r: any) => r.data || [], () => []),
+    sb.from("fitout_handover_checks").select("section_key, label, done").eq("project_id", projectId).order("sort").then((r: any) => r.data || [], () => []),
+    allRows(() => sb.from("hs_files").select("id, file_name, folder_key, ai, origin").eq("project_id", projectId)),
+    sb.from("project_subcontractors").select("id, category").eq("project_id", projectId).then((r: any) => r.data || [], () => []),
+    sb.from("om_issues").select("issue_no, kind").eq("project_id", projectId).order("created_at", { ascending: false }).then((r: any) => r.data || [], () => []),
+    sb.from("job_materials").select("product, manufacturer, datasheet_status, purchased").eq("project_id", projectId).then((r: any) => r.data || [], () => []),
+  ])
+  const job = { subs: subs.filter((x: any) => x.category !== "design_team").length, designTeam: subs.filter((x: any) => x.category === "design_team").length,
+    omIssued: issues.find((i: any) => i.kind === "om")?.issue_no || null }
+  const sections = OM_SECTIONS.map(([key, label]) => {
+    const sec = secs.find((x: any) => x.section_key === key)
+    if (sec && sec.enabled === false) return null
+    const items = checks.filter((c: any) => c.section_key === key)
+    const list = items.length ? items : (OM_DEFAULT_CHECKS[key] || []).map(l => ({ label: l, done: false }))
+    const rows: { label: string, ok: boolean }[] = list.map((c: any) => ({ label: c.label, ok: !!c.done || !!autoMatch(c.label, files, job) }))
+    return { key, label, total: rows.length, ok: rows.filter(r => r.ok).length, missing: rows.filter(r => !r.ok).map(r => r.label),
+      state: sec?.released ? "released to client" : sec?.lead_signed_at ? "signed off" : sec?.sm_checked_at ? "site manager checked" : "not signed off" }
+  }).filter(Boolean) as any[]
+  const dsMissing = mats.filter((m: any) => m.purchased && ["needed", "found", "not_found"].includes(m.datasheet_status))
+    .map((m: any) => [m.manufacturer, m.product].filter(Boolean).join(" "))
+  return { sections, items_total: sections.reduce((a, x) => a + x.total, 0), items_ok: sections.reduce((a, x) => a + x.ok, 0),
+    missing: sections.flatMap(x => x.missing), datasheets_missing: dsMissing, files: files.length, om_issued: job.omIssued }
 }
 
 // ─── What the report is written from ─────────────────────────────────────────
@@ -98,10 +155,22 @@ async function gather(projectId: string, prev: any, sub: string | null = null) {
   }
   // Photos from the period (newest first), spread across it
   const inPeriod = (photos as any[]).filter(p => new Date(p.taken_at || p.created_at) >= new Date(sinceIso))
+  // Few or no new photos → top up with the newest ones; every caption carries the date taken
   const pool = inPeriod.length >= 4 ? inPeriod : (photos as any[]).slice(0, 20)
   const step = Math.max(1, Math.floor(pool.length / MAX_PHOTOS_SENT))
   const picked = pool.filter((_, i) => i % step === 0).slice(0, MAX_PHOTOS_SENT)
-  return { project, since, pa, paName, log, openRfis, files, photos: picked, tasks }
+  const latestPhoto = (photos as any[])[0] ? ((photos as any[])[0].taken_at || (photos as any[])[0].created_at) : null
+
+  // Close-out: final account / PC / completion passed / almost all claimed → report the handover & O&M position
+  const claimed = pa?.totals?.total > 0 ? pa.totals.cumulative / pa.totals.total : 0
+  const why = [/final\s*account/i.test(paName || "") && "the latest PA is the final account", project.pc_date && `practical completion ${fmt(project.pc_date)}`,
+    project.end_date && new Date(project.end_date) < new Date() && `completion date ${fmt(project.end_date)} has passed`].filter(Boolean) as string[]
+  // Not closed out yet but nearly there → still a progress report, with the handover position added
+  const daysLeft = project.end_date ? (new Date(project.end_date).getTime() - Date.now()) / 864e5 : Infinity
+  const near = !why.length && (claimed >= 0.95 || daysLeft <= 28)
+    ? [claimed >= 0.95 && `${Math.round(claimed * 100)}% of the original works claimed`, daysLeft <= 28 && `completion due ${fmt(project.end_date)}`].filter(Boolean) as string[] : []
+  const om = why.length || near.length ? await omStatus(projectId).catch(() => null) : null
+  return { project, since, pa, paName, log, openRfis, files, photos: picked, photosNew: inPeriod.length, latestPhoto, tasks, closeout: why, near, om }
 }
 
 async function photoBytes(p: any): Promise<{ bytes: Uint8Array; mime: string } | null> {
@@ -132,6 +201,11 @@ VO TOTALS (use these exact figures): ${(() => { const pr = (pa.variations || [])
     `JOB DIARY THIS PERIOD (from emails and documents):\n${ctx.log.map((l: any) => `- ${fmt(l.happened_at)} [${l.kind}${l.status ? ", " + l.status : ""}] ${l.ref ? l.ref + ": " : ""}${l.title}${l.detail ? " — " + l.detail : ""}${l.source_label ? ` (${l.source_label})` : ""}`).join("\n") || "- nothing recorded"}`,
     ctx.openRfis.length ? `RFIs STILL OPEN FROM BEFORE: ${ctx.openRfis.map((l: any) => `${l.ref || "RFI"} ${l.title} (raised ${fmt(l.happened_at)})`).join("; ")}` : "",
     ctx.files.length ? `DOCUMENTS FILED THIS PERIOD: ${ctx.files.slice(0, 40).map((f: any) => f.file_name).join("; ")}` : "",
+    ctx.photosNew ? `SITE PHOTOS: ${ctx.photosNew} taken this period${ctx.photosNew < 4 ? " (older ones also shown — check each photo's date)" : ""}.` : ctx.latestPhoto ? `SITE PHOTOS: NONE uploaded this period — the newest are from ${fmt(ctx.latestPhoto)}. Don't present them as this period's progress; say in the report that no new photos were received.` : "SITE PHOTOS: none on the job.",
+    ctx.closeout.length || ctx.near.length ? `${ctx.closeout.length ? `CLOSE-OUT: yes — ${ctx.closeout.join("; ")}.` : `NEARING COMPLETION: ${ctx.near.join("; ")}.`}${ctx.om ? `
+HANDOVER / O&M POSITION: ${ctx.om.items_ok} of ${ctx.om.items_total} checklist items in place (${ctx.om.files} handover documents on the job${ctx.om.om_issued ? `, O&M manual issued: ${ctx.om.om_issued}` : ", O&M manual not issued yet"}).
+${ctx.om.sections.map((x: any) => `- ${x.label}: ${x.ok}/${x.total}, ${x.state}${x.missing.length ? ` — missing: ${x.missing.join(", ")}` : ""}`).join("\n")}
+Datasheets still needed for products bought for this job: ${ctx.om.datasheets_missing.length ? ctx.om.datasheets_missing.slice(0, 30).join("; ") : "none"}` : ""}` : "",
     prev ? `PREVIOUS REPORT (${prev.report_number}, ${fmt(prev.report_date)}): phase "${prev.current_phase || ""}"; progress "${prev.overall_progress || ""}"; delays "${prev.delays_text || ""}" ${prev.delays_reason || ""}; open RFIs ${JSON.stringify((prev.rfis || []).filter((r: any) => r.status !== "closed"))}; risks ${JSON.stringify(prev.risks || [])}; statement "${String(prev.pm_statement || "").slice(0, 1500)}"` : "PREVIOUS REPORT: none (first report)",
   ].filter(Boolean).join("\n\n")
 
@@ -161,7 +235,9 @@ Reply with JSON only:
  "risks": [{"description": "", "consequence": "", "risk_rag": "red"|"amber"|"green", "mitigation": ""}],
  "aob": "anything else the client should know, or ''",
  "estimated_completion": "YYYY-MM-DD only if the facts give a revised completion date, else null",
- "photos": [{"id": "photo id", "use": true|false, "caption": "short factual caption: what it shows, where"}]}
+ "photos": [{"id": "photo id", "use": true|false, "caption": "short factual caption: what it shows, where (no date — the CRM adds the date taken)"}]}
+CLOSE-OUT reports (when the facts say CLOSE-OUT): the works are complete or at final account, so write a close-out report — completion / final account position, snagging, and in pm_statement a fourth paragraph "Handover and O&M:" stating how many checklist items are in place and listing every missing document by section, plus the datasheets still needed. Add a risk for an incomplete O&M if anything is missing. Don't invent progress that the PA doesn't show.
+NEARING COMPLETION (when the facts say so): a normal progress report, plus the same "Handover and O&M:" paragraph so the team can see what is still to collect.
 RFIs: every open RFI plus those answered this period (status closed). Risks: carry forward the previous report's risks that still apply, update them from the diary, add new ones only from the facts. Photos: use up to ${MAX_PHOTOS_USED} that best show progress, no near-duplicates, nothing personal.`
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -190,7 +266,7 @@ async function addPhotos(reportId: string, used: any[], picks: any[]) {
     const { error: upErr } = await sb.storage.from(REPORT_PHOTO_BUCKET).upload(path, ph.bytes, { contentType: ph.mime, upsert: false })
     if (upErr) continue
     await sb.from("progress_report_photos").insert({ report_id: reportId, storage_path: path, file_name: `site-photo-${n + 1}.${ext}`, file_size: ph.bytes.length,
-      display_order: order++, caption: pk.caption ? String(pk.caption).slice(0, 160) : null, source_photo_id: ph.id })
+      display_order: order++, caption: `${fmt(ph.taken_at || ph.created_at)}${pk.caption ? " — " + String(pk.caption).slice(0, 150) : ""}`, source_photo_id: ph.id })
     n++
   }
   return n
@@ -202,6 +278,8 @@ function sources(ctx: any, nPhotos: number) {
     period_from: ctx.since, period_to: ymd(new Date()), pa: ctx.paName,
     diary: ctx.log.length, rfis: k("rfi") + ctx.openRfis.length, instructions: k("instruction"), variations: k("variation"),
     issues: k("issue") + k("delay"), documents: ctx.files.length, photos: nPhotos, programme: ctx.tasks.length > 0,
+    photos_new: ctx.photosNew, latest_photo: ctx.latestPhoto, closeout: ctx.closeout.length ? ctx.closeout : null, near_completion: ctx.near.length ? ctx.near : null,
+    om: ctx.om ? { ok: ctx.om.items_ok, total: ctx.om.items_total, missing: ctx.om.missing.slice(0, 40), datasheets_missing: ctx.om.datasheets_missing.length } : null,
     written_at: new Date().toISOString(),
   }
 }
@@ -210,7 +288,10 @@ async function alertDraft(projectId: string, projectName: string, reportId: stri
   const key = `report_draft:${projectId}:${paRef || reportId}`
   const row = { key, project_id: projectId, kind: "report_draft", severity: "soon",
     title: `Progress report drafted — review & publish — ${projectName}`,
-    detail: `Drafted from ${paRef || "the latest PA"}, ${src.diary} diary note${src.diary === 1 ? "" : "s"} and ${src.photos} photo${src.photos === 1 ? "" : "s"}. Check it, then press Publish to client.`,
+    detail: `Drafted from ${paRef || "the latest PA"}, ${src.diary} diary note${src.diary === 1 ? "" : "s"} and ${src.photos} photo${src.photos === 1 ? "" : "s"}.`
+      + (src.photos_new === 0 ? ` No new site photos this period${src.latest_photo ? ` (newest ${fmt(src.latest_photo)})` : ""}.` : "")
+      + (src.om ? ` ${src.closeout ? "Close-out" : "Nearing completion"}: ${src.om.ok} of ${src.om.total} handover / O&M items in place${src.om.datasheets_missing ? `, ${src.om.datasheets_missing} datasheets still needed` : ""} — check the Handover tab before the final account goes.` : "")
+      + " Check it, then press Publish to client.",
     action_label: "Open the draft", action_url: `/projects/${projectId}?tab=documents`, status: "open", last_seen: new Date().toISOString() }
   const { data: e } = await sb.from("crm_alerts").select("id").eq("key", key).maybeSingle()
   if (e) await sb.from("crm_alerts").update(row).eq("id", e.id)
@@ -307,7 +388,7 @@ Deno.serve(async (req) => {
   if (given) {
     const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
     if (!st?.cron_token || given !== st.cron_token) return json({ error: "Bad key" }, 401)
-    if (body.action !== "draft") return json({ error: "Schedule can only draft" }, 403)
+    if (body.action !== "draft" && body.action !== "om_status") return json({ error: "Schedule can only draft" }, 403)
   } else {
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
     const { data: u } = token ? await sb.auth.getUser(token) : { data: { user: null } }
@@ -319,6 +400,11 @@ Deno.serve(async (req) => {
     if (body.action === "draft") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
       return json(await draft(body.project_id, body.pa_ref ? String(body.pa_ref).slice(0, 10) : null, !!body.force))
+    }
+    if (body.action === "om_status") {
+      if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
+      const om = await omStatus(body.project_id)
+      return json({ ok: true, items_ok: om.items_ok, items_total: om.items_total, missing: om.missing, datasheets_missing: om.datasheets_missing, om_issued: om.om_issued })
     }
     if (body.action === "fill") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.report_id || ""))) return json({ error: "Bad report" }, 400)

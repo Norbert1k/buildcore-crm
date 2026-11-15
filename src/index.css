@@ -1825,6 +1825,7 @@ tfoot .proj-total td { font-weight: 700; background: var(--surface2); border-bot
 /* Progress reports drafted by the CRM */
 .pr-ai-chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #FAEEDA; color: #854F0B; }
 .pr-ai-banner { margin: 0; padding: 10px 14px; font-size: 12.5px; line-height: 1.5; color: var(--text2); background: color-mix(in srgb, #FAEEDA 55%, var(--surface)); border-bottom: 1px solid var(--border); }
+.pr-ai-warn { margin-top: 6px; padding: 6px 10px; border-radius: 6px; background: color-mix(in srgb, #FCEBEB 60%, var(--surface)); color: var(--text); }
 .pr-diary { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .pr-diary-row { display: grid; grid-template-columns: 86px 128px 1fr; gap: 10px; padding: 9px 12px; border-bottom: 1px solid var(--border); align-items: start; }
 .pr-diary-row:last-child { border-bottom: none; }

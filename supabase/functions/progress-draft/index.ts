@@ -48,13 +48,11 @@ var PAX = (() => {
   };
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-  // src/lib/paExtractor.js
-  var paExtractor_exports = {};
-  __export(paExtractor_exports, {
-    aggregateFinancials: () => aggregateFinancials,
+  // ../../../../tmp/pax-entry.js
+  var pax_entry_exports = {};
+  __export(pax_entry_exports, {
+    autoMatch: () => autoMatch,
     extractFromPa: () => extractFromPa,
-    fetchAllProjectPas: () => fetchAllProjectPas,
-    fetchLatestPaForProject: () => fetchLatestPaForProject,
     fetchLatestPaForSubfolder: () => fetchLatestPaForSubfolder
   });
 
@@ -568,80 +566,72 @@ var PAX = (() => {
       return null;
     }
   }
-  async function fetchLatestPaForProject(supabase, projectId) {
-    return fetchLatestPaForSubfolder(supabase, projectId, null);
+
+  // src/lib/handoverChecks.js
+  var T = (...types) => ({ types });
+  var K = (re) => ({ res: [re] });
+  var F = (...folders) => ({ folders });
+  var rule = (...parts) => parts.reduce((acc, p) => ({ ...acc, ...p, res: [...acc.res || [], ...p.res || []] }), {});
+  var CHECK_RULES = {
+    "Construction phase plan (as final)": rule(K(/construction phase plan|\bcpp\b/)),
+    "Residual risks register": rule(K(/residual risk/)),
+    "F10 notification copy": rule(K(/\bf10\b/)),
+    "Asbestos survey / register": rule(K(/asbestos/)),
+    "Pre-construction information (archived)": rule(K(/pre-?construction information|\bpci\b/)),
+    "Contractor directory": rule(K(/contractor directory|subcontractor (list|directory)/), { fromJob: "subs" }),
+    "Consultant directory": rule(K(/consultant|design team directory/), { fromJob: "designTeam" }),
+    "Key contacts & emergency numbers": rule(K(/key contacts|emergency (numbers|contacts)/), { fromJob: "omIssued" }),
+    "As-built architectural drawings": rule(T("drawing"), F("s3-1")),
+    "Structural as-builts": rule(T("drawing"), K(/struct|foundation|frame/), F("s6")),
+    "M&E as-builts": rule(T("drawing"), F("s3-3", "s7-1-01")),
+    "Fire strategy drawings": rule(T("fire_strategy", "drawing"), K(/fire/), F("s3-1-04-03")),
+    "External envelope materials & specs": rule(T("product_data", "guarantee", "manual"), K(/roof|window|facade|façade|cladding|brick|render|membrane|curtain wall|glazing/)),
+    "Internal materials & finishes schedule": rule(K(/finishes|internal materials/)),
+    "COSHH data sheets": rule(T("sds")),
+    "Fire risk assessment (handover)": rule(K(/fire risk assessment|\bfra\b/)),
+    "Fire stopping records": rule(K(/fire.?stop/), F("s11-10")),
+    "Working-at-height / access strategy for maintenance": rule(K(/access strategy|working at height|man ?safe|fall arrest|edge protection/)),
+    "Structural calculations (as-built)": rule(T("calculation"), K(/struct/), F("s6")),
+    "Structural certificates & warranties": rule(K(/structural (warranty|certificate)|nhbc|premier guarantee|labc warranty|building warranty/)),
+    "Mechanical installation records": rule(T("manual", "certificate", "test_report"), K(/mechanical|hvac|mvhr|heat pump|boiler|ventilation/)),
+    "Electrical installation certificates (EIC)": rule(K(/\beic\b|electrical installation cert/), F("s11-3")),
+    "Public health / drainage records": rule(K(/drainage|cctv survey|public health|soil|waste pipe/)),
+    "O&M manuals \u2014 mechanical": rule(T("manual"), K(/mechanical|hvac|mvhr|heat pump|boiler|ventilation|plumbing/)),
+    "O&M manuals \u2014 electrical": rule(T("manual"), K(/electric|lighting|fire alarm|door entry|access control/)),
+    "O&M manuals \u2014 lifts / specialist plant": rule(T("manual"), K(/lift|plant|sprinkler|pump|generator/)),
+    "HVAC commissioning records": rule(T("test_report", "certificate"), K(/commission/), K(/hvac|mvhr|ventilat|heating|heat pump/)),
+    "Water treatment & flushing certificates": rule(K(/flush|chlorinat|water treatment|legionella/)),
+    "Fire alarm commissioning": rule(T("certificate", "test_report"), K(/fire alarm/), F("s11-4")),
+    "User guides": rule(T("manual"), K(/user (guide|manual)|home user|resident/)),
+    "Maintenance schedules": rule(K(/maintenance schedule|planned maintenance/), { fromJob: "omIssued" }),
+    "Cleaning regimes": rule(K(/cleaning/)),
+    "Building Control completion certificate": rule(K(/completion certificate|final certificate|building control/)),
+    "Gas certificates": rule(K(/gas safe|gas safety|\bcp12\b|gas cert/)),
+    "Electrical certificates": rule(K(/\beic\b|\beicr\b|electrical (installation )?cert/), F("s11-3")),
+    "Warranties & guarantees schedule": rule(T("guarantee", "warranty"), { fromJob: "omIssued" })
+  };
+  var textOf = (f) => [f.file_name, f.ai?.title, f.ai?.system, f.ai?.issuer, f.ai?.reference, ...f.ai?.key_facts || []].filter(Boolean).join(" ").toLowerCase();
+  var inFolder = (f, prefixes) => prefixes.some((p) => f.folder_key === p || f.folder_key?.startsWith(p + "-"));
+  function autoMatch(label, files, job = {}) {
+    const r = CHECK_RULES[label];
+    if (!r) return null;
+    const live = files.filter((f) => f.origin !== "om_builder" && f.folder_key !== "_inbox" && f.ai?.client_facing !== false);
+    const hit = live.find((f) => {
+      const typeOk = !r.types || r.types.includes(f.ai?.doc_type);
+      const kwOk = r.res.length > 0 && r.res.every((re) => re.test(textOf(f)));
+      const folderOk = !!r.folders && inFolder(f, r.folders);
+      const subjectOk = kwOk || folderOk || !r.res.length && !r.folders;
+      return !!(r.types || r.res.length || r.folders) && typeOk && subjectOk;
+    });
+    if (hit) return { file: hit, reason: hit.file_name };
+    if (r.fromJob === "subs" && job.subs > 0) return { reason: `${job.subs} subcontractor${job.subs === 1 ? "" : "s"} on this job` };
+    if (r.fromJob === "designTeam" && job.designTeam > 0) return { reason: `${job.designTeam} design team contact${job.designTeam === 1 ? "" : "s"}` };
+    if (r.fromJob === "omIssued" && job.omIssued) return { reason: `In the issued O&M manual (${job.omIssued})` };
+    return null;
   }
-  async function fetchAllProjectPas(supabase, projectId) {
-    try {
-      const { data: rows, error } = await supabase.from("project_doc_files").select("storage_path, file_name, subfolder_key, created_at").eq("project_id", projectId).eq("folder_key", "02-payment-application");
-      if (error) throw error;
-      if (!rows || rows.length === 0) return [];
-      const xlsxRows = rows.filter((r) => /\.xlsx$/i.test(r.file_name) && r.subfolder_key !== "superseded");
-      if (xlsxRows.length === 0) return [];
-      const sorted = sortPaRowsByPaNumber(xlsxRows, "desc");
-      const latestPerLocation = /* @__PURE__ */ new Map();
-      for (const row of sorted) {
-        const k = row.subfolder_key == null ? "__root__" : row.subfolder_key;
-        if (!latestPerLocation.has(k)) latestPerLocation.set(k, row);
-      }
-      const subfolderKeys = [...latestPerLocation.keys()].filter((k) => k !== "__root__");
-      let labelMap = {};
-      if (subfolderKeys.length > 0) {
-        const { data: folders } = await supabase.from("project_doc_folders").select("folder_key, label").eq("project_id", projectId).in("folder_key", subfolderKeys);
-        labelMap = Object.fromEntries((folders || []).map((f) => [f.folder_key, f.label]));
-      }
-      const results = [];
-      await Promise.all(
-        [...latestPerLocation.entries()].map(async ([k, row]) => {
-          const subfolderKey = k === "__root__" ? null : k;
-          const buf = await fetchLatestPaForSubfolder(supabase, projectId, subfolderKey);
-          if (!buf) return;
-          const extract = await extractFromPa(buf);
-          if (!extract) return;
-          results.push({
-            subfolder_key: subfolderKey,
-            subfolder_label: subfolderKey ? labelMap[subfolderKey] || subfolderKey : null,
-            file_name: row.file_name,
-            extract
-          });
-        })
-      );
-      const ordinalOf = (label) => {
-        if (!label) return 999;
-        const m = String(label).trim().match(/^(\d{1,3})\s*[.\-)]/);
-        return m ? parseInt(m[1], 10) : 998;
-      };
-      results.sort((a, b) => ordinalOf(a.subfolder_label) - ordinalOf(b.subfolder_label));
-      return results;
-    } catch (err) {
-      console.warn("[paExtractor] fetchAllProjectPas failed:", err);
-      return [];
-    }
-  }
-  function aggregateFinancials(paList) {
-    let original = 0;
-    let variations = 0;
-    let variations_count = 0;
-    for (const pa of paList || []) {
-      const ex = pa?.extract;
-      if (!ex) continue;
-      if (ex.totals?.total) original += ex.totals.total;
-      for (const v of ex.variations || []) {
-        variations_count++;
-        const n = parseFloat(v.cost_impact);
-        if (!Number.isNaN(n)) variations += n;
-      }
-    }
-    return {
-      original,
-      variations_total: variations,
-      variations_count,
-      total_value: original + variations
-    };
-  }
-  return __toCommonJS(paExtractor_exports);
+  return __toCommonJS(pax_entry_exports);
 })();
-const { extractFromPa, fetchLatestPaForSubfolder } = PAX
+const { extractFromPa, fetchLatestPaForSubfolder, autoMatch } = PAX
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")
 const MODEL = "claude-sonnet-4-5"
@@ -674,6 +664,62 @@ async function nextReportNumber(projectId: string) {
   let n = 1
   while (data.some((r: any) => r.report_number === `${base}-${String(n).padStart(2, "0")}`)) n++
   return `${base}-${String(n).padStart(2, "0")}`
+}
+
+// ─── Handover / O&M position (same checklist + matching rules as the Handover tab) ─
+const OM_SECTIONS: [string, string][] = [
+  ["cs1", "Section 1 | H&S File"], ["cs2", "Section 2 | Project Directory"], ["cs3", "Section 3 | Record Drawings"],
+  ["cs4", "Section 4 | Construction Materials"], ["cs5", "Section 5 | Health and Safety"], ["cs6", "Section 6 | Structural Design"],
+  ["cs7", "Section 7 | Services"], ["cs8", "Section 8 | O&M Manuals"], ["cs9", "Section 9 | Commissioning Documents"],
+  ["cs10", "Section 10 | Operating Documents"], ["cs11", "Section 11 | Certificates"],
+]
+const OM_DEFAULT_CHECKS: Record<string, string[]> = {
+  cs1: ["Construction phase plan (as final)", "Residual risks register", "F10 notification copy", "Asbestos survey / register", "Pre-construction information (archived)"],
+  cs2: ["Contractor directory", "Consultant directory", "Key contacts & emergency numbers"],
+  cs3: ["As-built architectural drawings", "Structural as-builts", "M&E as-builts", "Fire strategy drawings"],
+  cs4: ["External envelope materials & specs", "Internal materials & finishes schedule", "COSHH data sheets"],
+  cs5: ["Fire risk assessment (handover)", "Fire stopping records", "Working-at-height / access strategy for maintenance"],
+  cs6: ["Structural calculations (as-built)", "Structural certificates & warranties"],
+  cs7: ["Mechanical installation records", "Electrical installation certificates (EIC)", "Public health / drainage records"],
+  cs8: ["O&M manuals — mechanical", "O&M manuals — electrical", "O&M manuals — lifts / specialist plant"],
+  cs9: ["HVAC commissioning records", "Water treatment & flushing certificates", "Fire alarm commissioning"],
+  cs10: ["User guides", "Maintenance schedules", "Cleaning regimes"],
+  cs11: ["Building Control completion certificate", "Gas certificates", "Electrical certificates", "Warranties & guarantees schedule"],
+}
+async function allRows(build: () => any, size = 1000) {
+  const out: any[] = []
+  for (let from = 0; from < 20000; from += size) {
+    const { data, error } = await build().range(from, from + size - 1)
+    if (error || !data?.length) break
+    out.push(...data)
+    if (data.length < size) break
+  }
+  return out
+}
+async function omStatus(projectId: string) {
+  const [secs, checks, files, subs, issues, mats] = await Promise.all([
+    sb.from("fitout_handover_sections").select("section_key, enabled, sm_checked_at, lead_signed_at, released").eq("project_id", projectId).then((r: any) => r.data || [], () => []),
+    sb.from("fitout_handover_checks").select("section_key, label, done").eq("project_id", projectId).order("sort").then((r: any) => r.data || [], () => []),
+    allRows(() => sb.from("hs_files").select("id, file_name, folder_key, ai, origin").eq("project_id", projectId)),
+    sb.from("project_subcontractors").select("id, category").eq("project_id", projectId).then((r: any) => r.data || [], () => []),
+    sb.from("om_issues").select("issue_no, kind").eq("project_id", projectId).order("created_at", { ascending: false }).then((r: any) => r.data || [], () => []),
+    sb.from("job_materials").select("product, manufacturer, datasheet_status, purchased").eq("project_id", projectId).then((r: any) => r.data || [], () => []),
+  ])
+  const job = { subs: subs.filter((x: any) => x.category !== "design_team").length, designTeam: subs.filter((x: any) => x.category === "design_team").length,
+    omIssued: issues.find((i: any) => i.kind === "om")?.issue_no || null }
+  const sections = OM_SECTIONS.map(([key, label]) => {
+    const sec = secs.find((x: any) => x.section_key === key)
+    if (sec && sec.enabled === false) return null
+    const items = checks.filter((c: any) => c.section_key === key)
+    const list = items.length ? items : (OM_DEFAULT_CHECKS[key] || []).map(l => ({ label: l, done: false }))
+    const rows: { label: string, ok: boolean }[] = list.map((c: any) => ({ label: c.label, ok: !!c.done || !!autoMatch(c.label, files, job) }))
+    return { key, label, total: rows.length, ok: rows.filter(r => r.ok).length, missing: rows.filter(r => !r.ok).map(r => r.label),
+      state: sec?.released ? "released to client" : sec?.lead_signed_at ? "signed off" : sec?.sm_checked_at ? "site manager checked" : "not signed off" }
+  }).filter(Boolean) as any[]
+  const dsMissing = mats.filter((m: any) => m.purchased && ["needed", "found", "not_found"].includes(m.datasheet_status))
+    .map((m: any) => [m.manufacturer, m.product].filter(Boolean).join(" "))
+  return { sections, items_total: sections.reduce((a, x) => a + x.total, 0), items_ok: sections.reduce((a, x) => a + x.ok, 0),
+    missing: sections.flatMap(x => x.missing), datasheets_missing: dsMissing, files: files.length, om_issued: job.omIssued }
 }
 
 // ─── What the report is written from ─────────────────────────────────────────
@@ -713,10 +759,22 @@ async function gather(projectId: string, prev: any, sub: string | null = null) {
   }
   // Photos from the period (newest first), spread across it
   const inPeriod = (photos as any[]).filter(p => new Date(p.taken_at || p.created_at) >= new Date(sinceIso))
+  // Few or no new photos → top up with the newest ones; every caption carries the date taken
   const pool = inPeriod.length >= 4 ? inPeriod : (photos as any[]).slice(0, 20)
   const step = Math.max(1, Math.floor(pool.length / MAX_PHOTOS_SENT))
   const picked = pool.filter((_, i) => i % step === 0).slice(0, MAX_PHOTOS_SENT)
-  return { project, since, pa, paName, log, openRfis, files, photos: picked, tasks }
+  const latestPhoto = (photos as any[])[0] ? ((photos as any[])[0].taken_at || (photos as any[])[0].created_at) : null
+
+  // Close-out: final account / PC / completion passed / almost all claimed → report the handover & O&M position
+  const claimed = pa?.totals?.total > 0 ? pa.totals.cumulative / pa.totals.total : 0
+  const why = [/final\s*account/i.test(paName || "") && "the latest PA is the final account", project.pc_date && `practical completion ${fmt(project.pc_date)}`,
+    project.end_date && new Date(project.end_date) < new Date() && `completion date ${fmt(project.end_date)} has passed`].filter(Boolean) as string[]
+  // Not closed out yet but nearly there → still a progress report, with the handover position added
+  const daysLeft = project.end_date ? (new Date(project.end_date).getTime() - Date.now()) / 864e5 : Infinity
+  const near = !why.length && (claimed >= 0.95 || daysLeft <= 28)
+    ? [claimed >= 0.95 && `${Math.round(claimed * 100)}% of the original works claimed`, daysLeft <= 28 && `completion due ${fmt(project.end_date)}`].filter(Boolean) as string[] : []
+  const om = why.length || near.length ? await omStatus(projectId).catch(() => null) : null
+  return { project, since, pa, paName, log, openRfis, files, photos: picked, photosNew: inPeriod.length, latestPhoto, tasks, closeout: why, near, om }
 }
 
 async function photoBytes(p: any): Promise<{ bytes: Uint8Array; mime: string } | null> {
@@ -747,6 +805,11 @@ VO TOTALS (use these exact figures): ${(() => { const pr = (pa.variations || [])
     `JOB DIARY THIS PERIOD (from emails and documents):\n${ctx.log.map((l: any) => `- ${fmt(l.happened_at)} [${l.kind}${l.status ? ", " + l.status : ""}] ${l.ref ? l.ref + ": " : ""}${l.title}${l.detail ? " — " + l.detail : ""}${l.source_label ? ` (${l.source_label})` : ""}`).join("\n") || "- nothing recorded"}`,
     ctx.openRfis.length ? `RFIs STILL OPEN FROM BEFORE: ${ctx.openRfis.map((l: any) => `${l.ref || "RFI"} ${l.title} (raised ${fmt(l.happened_at)})`).join("; ")}` : "",
     ctx.files.length ? `DOCUMENTS FILED THIS PERIOD: ${ctx.files.slice(0, 40).map((f: any) => f.file_name).join("; ")}` : "",
+    ctx.photosNew ? `SITE PHOTOS: ${ctx.photosNew} taken this period${ctx.photosNew < 4 ? " (older ones also shown — check each photo's date)" : ""}.` : ctx.latestPhoto ? `SITE PHOTOS: NONE uploaded this period — the newest are from ${fmt(ctx.latestPhoto)}. Don't present them as this period's progress; say in the report that no new photos were received.` : "SITE PHOTOS: none on the job.",
+    ctx.closeout.length || ctx.near.length ? `${ctx.closeout.length ? `CLOSE-OUT: yes — ${ctx.closeout.join("; ")}.` : `NEARING COMPLETION: ${ctx.near.join("; ")}.`}${ctx.om ? `
+HANDOVER / O&M POSITION: ${ctx.om.items_ok} of ${ctx.om.items_total} checklist items in place (${ctx.om.files} handover documents on the job${ctx.om.om_issued ? `, O&M manual issued: ${ctx.om.om_issued}` : ", O&M manual not issued yet"}).
+${ctx.om.sections.map((x: any) => `- ${x.label}: ${x.ok}/${x.total}, ${x.state}${x.missing.length ? ` — missing: ${x.missing.join(", ")}` : ""}`).join("\n")}
+Datasheets still needed for products bought for this job: ${ctx.om.datasheets_missing.length ? ctx.om.datasheets_missing.slice(0, 30).join("; ") : "none"}` : ""}` : "",
     prev ? `PREVIOUS REPORT (${prev.report_number}, ${fmt(prev.report_date)}): phase "${prev.current_phase || ""}"; progress "${prev.overall_progress || ""}"; delays "${prev.delays_text || ""}" ${prev.delays_reason || ""}; open RFIs ${JSON.stringify((prev.rfis || []).filter((r: any) => r.status !== "closed"))}; risks ${JSON.stringify(prev.risks || [])}; statement "${String(prev.pm_statement || "").slice(0, 1500)}"` : "PREVIOUS REPORT: none (first report)",
   ].filter(Boolean).join("\n\n")
 
@@ -776,7 +839,9 @@ Reply with JSON only:
  "risks": [{"description": "", "consequence": "", "risk_rag": "red"|"amber"|"green", "mitigation": ""}],
  "aob": "anything else the client should know, or ''",
  "estimated_completion": "YYYY-MM-DD only if the facts give a revised completion date, else null",
- "photos": [{"id": "photo id", "use": true|false, "caption": "short factual caption: what it shows, where"}]}
+ "photos": [{"id": "photo id", "use": true|false, "caption": "short factual caption: what it shows, where (no date — the CRM adds the date taken)"}]}
+CLOSE-OUT reports (when the facts say CLOSE-OUT): the works are complete or at final account, so write a close-out report — completion / final account position, snagging, and in pm_statement a fourth paragraph "Handover and O&M:" stating how many checklist items are in place and listing every missing document by section, plus the datasheets still needed. Add a risk for an incomplete O&M if anything is missing. Don't invent progress that the PA doesn't show.
+NEARING COMPLETION (when the facts say so): a normal progress report, plus the same "Handover and O&M:" paragraph so the team can see what is still to collect.
 RFIs: every open RFI plus those answered this period (status closed). Risks: carry forward the previous report's risks that still apply, update them from the diary, add new ones only from the facts. Photos: use up to ${MAX_PHOTOS_USED} that best show progress, no near-duplicates, nothing personal.`
 
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -805,7 +870,7 @@ async function addPhotos(reportId: string, used: any[], picks: any[]) {
     const { error: upErr } = await sb.storage.from(REPORT_PHOTO_BUCKET).upload(path, ph.bytes, { contentType: ph.mime, upsert: false })
     if (upErr) continue
     await sb.from("progress_report_photos").insert({ report_id: reportId, storage_path: path, file_name: `site-photo-${n + 1}.${ext}`, file_size: ph.bytes.length,
-      display_order: order++, caption: pk.caption ? String(pk.caption).slice(0, 160) : null, source_photo_id: ph.id })
+      display_order: order++, caption: `${fmt(ph.taken_at || ph.created_at)}${pk.caption ? " — " + String(pk.caption).slice(0, 150) : ""}`, source_photo_id: ph.id })
     n++
   }
   return n
@@ -817,6 +882,8 @@ function sources(ctx: any, nPhotos: number) {
     period_from: ctx.since, period_to: ymd(new Date()), pa: ctx.paName,
     diary: ctx.log.length, rfis: k("rfi") + ctx.openRfis.length, instructions: k("instruction"), variations: k("variation"),
     issues: k("issue") + k("delay"), documents: ctx.files.length, photos: nPhotos, programme: ctx.tasks.length > 0,
+    photos_new: ctx.photosNew, latest_photo: ctx.latestPhoto, closeout: ctx.closeout.length ? ctx.closeout : null, near_completion: ctx.near.length ? ctx.near : null,
+    om: ctx.om ? { ok: ctx.om.items_ok, total: ctx.om.items_total, missing: ctx.om.missing.slice(0, 40), datasheets_missing: ctx.om.datasheets_missing.length } : null,
     written_at: new Date().toISOString(),
   }
 }
@@ -825,7 +892,10 @@ async function alertDraft(projectId: string, projectName: string, reportId: stri
   const key = `report_draft:${projectId}:${paRef || reportId}`
   const row = { key, project_id: projectId, kind: "report_draft", severity: "soon",
     title: `Progress report drafted — review & publish — ${projectName}`,
-    detail: `Drafted from ${paRef || "the latest PA"}, ${src.diary} diary note${src.diary === 1 ? "" : "s"} and ${src.photos} photo${src.photos === 1 ? "" : "s"}. Check it, then press Publish to client.`,
+    detail: `Drafted from ${paRef || "the latest PA"}, ${src.diary} diary note${src.diary === 1 ? "" : "s"} and ${src.photos} photo${src.photos === 1 ? "" : "s"}.`
+      + (src.photos_new === 0 ? ` No new site photos this period${src.latest_photo ? ` (newest ${fmt(src.latest_photo)})` : ""}.` : "")
+      + (src.om ? ` ${src.closeout ? "Close-out" : "Nearing completion"}: ${src.om.ok} of ${src.om.total} handover / O&M items in place${src.om.datasheets_missing ? `, ${src.om.datasheets_missing} datasheets still needed` : ""} — check the Handover tab before the final account goes.` : "")
+      + " Check it, then press Publish to client.",
     action_label: "Open the draft", action_url: `/projects/${projectId}?tab=documents`, status: "open", last_seen: new Date().toISOString() }
   const { data: e } = await sb.from("crm_alerts").select("id").eq("key", key).maybeSingle()
   if (e) await sb.from("crm_alerts").update(row).eq("id", e.id)
@@ -922,7 +992,7 @@ Deno.serve(async (req) => {
   if (given) {
     const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
     if (!st?.cron_token || given !== st.cron_token) return json({ error: "Bad key" }, 401)
-    if (body.action !== "draft") return json({ error: "Schedule can only draft" }, 403)
+    if (body.action !== "draft" && body.action !== "om_status") return json({ error: "Schedule can only draft" }, 403)
   } else {
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
     const { data: u } = token ? await sb.auth.getUser(token) : { data: { user: null } }
@@ -934,6 +1004,11 @@ Deno.serve(async (req) => {
     if (body.action === "draft") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
       return json(await draft(body.project_id, body.pa_ref ? String(body.pa_ref).slice(0, 10) : null, !!body.force))
+    }
+    if (body.action === "om_status") {
+      if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
+      const om = await omStatus(body.project_id)
+      return json({ ok: true, items_ok: om.items_ok, items_total: om.items_total, missing: om.missing, datasheets_missing: om.datasheets_missing, om_issued: om.om_issued })
     }
     if (body.action === "fill") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.report_id || ""))) return json({ error: "Bad report" }, 400)
