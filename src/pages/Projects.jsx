@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { Fragment, useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { PROJECT_STATUSES, formatDate, formatCurrency } from '../lib/utils'
@@ -6,6 +6,7 @@ import { Avatar, Pill, Spinner, EmptyState, IconPlus, IconEdit, IconTrash, Confi
 import { useAuth } from '../lib/auth'
 import { useNav } from '../lib/access'
 import ProjectModal from '../components/ProjectModal'
+import { loadProjectVariations } from '../lib/projectVariations'
 
 function calcDuration(start, end) {
   if (!start || !end) return null
@@ -30,6 +31,9 @@ export default function Projects() {
   const { can, role, division, canAccessProject } = useAuth()
   const nav = useNav()
   const isAdmin = role === 'admin'
+  const canValue = can('view_project_value')
+  const [vos, setVos] = useState({})
+  const [openVo, setOpenVo] = useState(null)
 
   function toggleLive() { setLiveOpen(v => { localStorage.setItem('proj_live_open', !v); return !v }) }
   function toggleTender() { setTenderOpen(v => { localStorage.setItem('proj_tender_open', !v); return !v }) }
@@ -68,6 +72,22 @@ export default function Projects() {
   }
 
   const liveProjects = projects.filter(p => p.status !== 'tender')
+
+  // VOs from each live job's latest PA(s) — fills in as each job is read
+  const liveIds = liveProjects.map(p => p.id).join(',')
+  useEffect(() => {
+    if (!canValue || !liveIds) return
+    let alive = true
+    loadProjectVariations(supabase, liveIds.split(','), part => { if (alive) setVos(part) })
+    return () => { alive = false }
+  }, [liveIds, canValue])
+  const orderOf = p => parseFloat(p.value) || 0
+  const voOf = p => vos[p.id]?.total || 0
+  const liveTotals = liveProjects.reduce((t, p) => ({
+    order: t.order + orderOf(p), vo: t.vo + voOf(p), count: t.count + (vos[p.id]?.count || 0),
+  }), { order: 0, vo: 0, count: 0 })
+  const voLoading = canValue && liveProjects.some(p => !vos[p.id])
+  const signed = n => (n < 0 ? '−' : '+') + formatCurrency(Math.abs(n))
   const tenderProjects = projects.filter(p => p.status === 'tender')
 
   const counts = ['active', 'tender', 'on_hold', 'completed', 'cancelled'].reduce((acc, s) => {
@@ -130,14 +150,16 @@ export default function Projects() {
                         <th>End</th>
                         <th>Duration</th>
                         <th>Subcontractors</th>
-                        {can('view_project_value') && <th>Value</th>}
+                        {canValue && <th>Order value</th>}
+                        {canValue && <th>VOs</th>}
+                        {canValue && <th>Total order value</th>}
                         <th>Status</th>
                         <th></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {liveProjects.map(p => (
-                        <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
+                      {liveProjects.map(p => (<Fragment key={p.id}>
+                        <tr style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${p.id}`)}>
                           <td>
                             <div className="proj-cell">
                               {p.project_ref && <span className="ref-chip"><span className="ref-lbl">REF</span><span className="ref-num">{p.project_ref}</span></span>}
@@ -155,7 +177,15 @@ export default function Projects() {
                           <td className="td-muted">{formatDate(p.end_date)}</td>
                           <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
                           <td><Pill cls="pill-blue">{p.project_subcontractors?.length || 0} assigned</Pill></td>
-                          {can('view_project_value') && <td>{formatCurrency(p.value)}</td>}
+                          {canValue && <td>{formatCurrency(p.value)}</td>}
+                          {canValue && <td onClick={e => { if (vos[p.id]?.count) { e.stopPropagation(); setOpenVo(v => v === p.id ? null : p.id) } }}>
+                            {!vos[p.id] ? <span className="td-muted">…</span>
+                              : vos[p.id].count ? <button type="button" className={'vo-chip' + (openVo === p.id ? ' on' : '')} aria-expanded={openVo === p.id} title="Show the VOs">
+                                  {signed(vos[p.id].total)} <span className="vo-n">{vos[p.id].count} VO{vos[p.id].count === 1 ? '' : 's'}</span>
+                                </button>
+                              : <span className="td-muted" title={vos[p.id].has_pa ? 'No priced VOs on the latest PA' : 'No PA uploaded yet'}>—</span>}
+                          </td>}
+                          {canValue && <td style={{ fontWeight: 700 }}>{vos[p.id] ? formatCurrency(orderOf(p) + voOf(p)) : formatCurrency(p.value)}</td>}
                           <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill></td>
                           <td onClick={e => e.stopPropagation()}>
                             {can('manage_projects') && (
@@ -163,8 +193,45 @@ export default function Projects() {
                             )}
                           </td>
                         </tr>
-                      ))}
+                        {canValue && openVo === p.id && vos[p.id]?.count > 0 && (
+                          <tr className="vo-row">
+                            <td colSpan={12}>
+                              <div className="vo-panel">
+                                <div className="vo-head">
+                                  <b>Variations — {p.project_name}</b>
+                                  <span className="td-muted">From the latest PA{(vos[p.id].items.some(v => v.building)) ? ' of each building' : ''}</span>
+                                </div>
+                                <table className="vo-table">
+                                  <thead><tr><th>VO</th><th>Description</th>{vos[p.id].items.some(v => v.building) && <th>Building</th>}<th style={{ textAlign: 'right' }}>Value</th></tr></thead>
+                                  <tbody>
+                                    {vos[p.id].items.map((v, i) => (
+                                      <tr key={i}>
+                                        <td className="td-muted">{v.no || '—'}</td>
+                                        <td>{v.details || '—'}</td>
+                                        {vos[p.id].items.some(x => x.building) && <td className="td-muted">{v.building || '—'}</td>}
+                                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{signed(v.amount)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  <tfoot><tr><td colSpan={vos[p.id].items.some(v => v.building) ? 3 : 2}>Order value {formatCurrency(orderOf(p))} + VOs {signed(voOf(p))}</td><td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{formatCurrency(orderOf(p) + voOf(p))}</td></tr></tfoot>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>))}
                     </tbody>
+                    {canValue && (
+                      <tfoot>
+                        <tr className="proj-total">
+                          <td colSpan={7}>Total — {liveProjects.length} live job{liveProjects.length === 1 ? '' : 's'}{voLoading ? ' · reading PAs…' : ''}</td>
+                          <td>{formatCurrency(liveTotals.order)}</td>
+                          <td>{liveTotals.count ? <>{signed(liveTotals.vo)} <span className="vo-n">{liveTotals.count} VOs</span></> : '—'}</td>
+                          <td>{formatCurrency(liveTotals.order + liveTotals.vo)}</td>
+                          <td colSpan={2}></td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               )

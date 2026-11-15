@@ -368,7 +368,8 @@ export async function fetchAllPasAcrossSubfolders(supabase, projectId) {
     .eq('folder_key', '02-payment-application')
   if (error) throw error
   if (!rows || rows.length === 0) return []
-  const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name))
+  // Replaced PAs are archived in 'superseded' — kept, never counted
+  const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name) && r.subfolder_key !== 'superseded')
   if (xlsxRows.length === 0) return []
 
   // Build a label map so each PA shows a friendly building name in the UI

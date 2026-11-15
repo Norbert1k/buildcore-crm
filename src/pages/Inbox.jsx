@@ -69,7 +69,23 @@ export default function Inbox() {
   const { profile } = useAuth()
   const canFile = FILERS.includes(profile?.role)
   const canSet = SETTINGS_ROLES.includes(profile?.role)
-  const [tab, setTab] = useState('check')
+  // Back from the Xero sign-in (?xero=ok|error&msg=…)
+  const [xeroBack] = useState(() => {
+    const q = new URLSearchParams(window.location.search)
+    return q.get('xero') ? { success: q.get('xero') === 'ok', message: q.get('msg') || '' } : null
+  })
+  const [tab, setTab] = useState(xeroBack ? 'materials' : 'check')
+  useEffect(() => {
+    if (!xeroBack) return
+    window.history.replaceState(null, '', window.location.pathname)
+    // Opened as the sign-in window: tell the CRM page that opened it, then close
+    try {
+      if (window.opener && window.opener !== window) {
+        window.opener.postMessage({ source: 'xero-oauth-callback', ...xeroBack }, window.location.origin)
+        window.close()
+      }
+    } catch { /* stay open and show it here */ }
+  }, [xeroBack])
   const [items, setItems] = useState(null)
   const [settings, setSettings] = useState(null)
   const [missing, setMissing] = useState(false)
@@ -172,7 +188,7 @@ export default function Inbox() {
                 <div key={i.id} className="ib-row"><div className="ib-row-main"><div className="ib-fn">{i.file_name}</div>
                   <div className="ib-meta">{i.status === 'error' ? `Retrying — ${i.last_error || ''}` : 'Waiting to be read'} · {fmtWhen(i.created_at)}</div></div></div>))}</div>
             : <div className="ib-empty">Nothing waiting.</div>)}
-          {tab === 'materials' && <Materials projects={lists.projects} canFile={canFile} isAdmin={profile?.role === 'admin'} />}
+          {tab === 'materials' && <Materials projects={lists.projects} canFile={canFile} isAdmin={profile?.role === 'admin'} xeroBack={xeroBack} />}
           {tab === 'settings' && canSet && <Settings settings={settings} onSaved={load} projects={lists.projects} />}
         </>
       )}
@@ -504,14 +520,15 @@ function Settings({ settings, onSaved, projects = [] }) {
 // To check for approval).
 // Xero, read-only: the robot reads the supplier invoice attached to each bill
 // to see what was bought for which job. Nothing is written to Xero.
-function XeroLink({ isAdmin, canFile, onRead }) {
+function XeroLink({ isAdmin, canFile, onRead, back }) {
   const [st, setSt] = useState(null)
   const [busy, setBusy] = useState('')
-  const [msg, setMsg] = useState('')
+  const backMsg = b => b.success ? 'Connected — bills are read within the hour, or press Read bills now.' : (b.message || 'Xero didn’t connect.')
+  const [msg, setMsg] = useState(() => back ? backMsg(back) : '')
   async function load() { try { setSt(await call({ action: 'xero_status' })) } catch (e) { setSt({ error: e.message }) } }
   useEffect(() => {
     load()
-    const onMsg = e => { if (e?.data?.source === 'xero-oauth-callback') { setMsg(e.data.success ? 'Connected — bills are read within the hour, or press Read bills now.' : (e.data.message || 'Xero didn’t connect.')); setBusy(''); load() } }
+    const onMsg = e => { if (e.origin === window.location.origin && e?.data?.source === 'xero-oauth-callback') { setMsg(backMsg(e.data)); setBusy(''); load() } }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
   }, [])
@@ -554,7 +571,7 @@ function XeroLink({ isAdmin, canFile, onRead }) {
 }
 
 const DS = { needed: ['Needed', 'ib-chip-amber'], found: ['Found — check it', 'ib-chip-amber'], filed: ['In the O&M', 'ib-chip-green'], not_found: ['Not found online', 'ib-chip-grey'], not_needed: ['Not needed', 'ib-chip-grey'] }
-function Materials({ projects, canFile, isAdmin }) {
+function Materials({ projects, canFile, isAdmin, xeroBack }) {
   const [rows, setRows] = useState(null)
   const [job, setJob] = useState('')
   const [form, setForm] = useState({ manufacturer: '', product: '' })
@@ -582,7 +599,7 @@ function Materials({ projects, canFile, isAdmin }) {
   }
   return (
     <div className="ib-card">
-      <XeroLink isAdmin={isAdmin} canFile={canFile} onRead={load} />
+      <XeroLink isAdmin={isAdmin} canFile={canFile} onRead={load} back={xeroBack} />
       <div className="ib-maph">
         <b>Materials bought → datasheets</b>
         {canFile && <button className="btn btn-sm" onClick={findNow} disabled={busy}>{busy ? 'Looking up…' : 'Find datasheets now'}</button>}

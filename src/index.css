@@ -1766,3 +1766,18 @@ html .proj-tabs .filter-tab { font-size: 13.5px; }
 .na-link { background: none; border: none; padding: 0; font-size: 12px; color: var(--text3); cursor: pointer; }
 .na-link:hover { color: var(--text); text-decoration: underline; }
 .na-more { background: none; border: none; color: var(--green); font-size: 13px; cursor: pointer; padding: 8px 0 0; }
+
+/* Projects list — VOs + total order value */
+.vo-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.vo-chip:hover, .vo-chip.on { border-color: var(--accent, #448a40); }
+.vo-n { font-size: 11px; font-weight: 500; color: var(--text3); }
+.vo-row > td { padding: 0 14px 14px; background: var(--surface); }
+.vo-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface2); padding: 10px 12px; }
+.vo-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; font-size: 13px; margin-bottom: 6px; }
+.vo-head .td-muted { font-size: 12px; }
+.vo-table { min-width: 0; width: auto; max-width: 860px; }
+.vo-table td:nth-child(2) { min-width: 260px; }
+.vo-table th { background: transparent; padding: 6px 8px; font-size: 11px; }
+.vo-table td { padding: 6px 8px; font-size: 13px; }
+.vo-table tfoot td { font-weight: 700; border-bottom: none; }
+tfoot .proj-total td { font-weight: 700; background: var(--surface2); border-bottom: none; white-space: nowrap; }

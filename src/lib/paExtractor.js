@@ -388,7 +388,8 @@ export async function fetchAllProjectPas(supabase, projectId) {
     if (!rows || rows.length === 0) return []
 
     // xlsx-only — non-xlsx files (e.g. supporting PDFs) aren't PAs.
-    const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name))
+    // Replaced PAs are archived in 'superseded' — kept, never counted.
+    const xlsxRows = rows.filter(r => /\.xlsx$/i.test(r.file_name) && r.subfolder_key !== 'superseded')
     if (xlsxRows.length === 0) return []
 
     // Sort by parsed PA number DESC (latest first). Reupload-stable.
