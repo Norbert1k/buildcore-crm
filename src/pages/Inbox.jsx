@@ -21,16 +21,20 @@ const FOLDERS = [
   { v: '00-project-information|meetings', label: '11. Meetings', types: ['meeting_minutes'] },
   { v: '00-project-information|csa', label: '03. CSA', types: [] },
   { v: '00-project-information|utilities', label: '10. Utilities', types: [] },
+  { v: '01-project-order|', label: '01. Project Order', types: ['client_order'] },
   { v: '02-payment-application|', label: '02. Payment Application', types: ['our_payment_application'] },
   { v: '03-payment-notice|', label: '03. Payment Notice (Client)', types: ['client_payment_notice'] },
   { v: '04-variations|', label: '04. Variations', types: ['variation'] },
   { v: '06-project-programme|', label: '06. Project Programme', types: ['programme'] },
+  { v: 'top:Subcontractor Applications|', label: 'Subcontractor Applications', types: ['subcontractor_application'] },
+  { v: 'top:Orders & Deliveries|', label: 'Orders & Deliveries', types: ['supplier_order'] },
 ]
 const TYPE_LABEL = {
   drawing: 'Drawing', survey_report: 'Survey / report', rams: 'RAMS', planning: 'Planning', meeting_minutes: 'Minutes',
   our_payment_application: 'Our PA', client_payment_notice: 'Payment notice', variation: 'Variation', programme: 'Programme',
   subcontractor_quote: 'Subcontractor quote', supplier_quote: 'Supplier quote', insurance: 'Insurance',
   certificate: 'Certificate', accreditation: 'Accreditation', invoice: 'Invoice', other: 'Other',
+  client_order: 'Client order / contract', subcontractor_application: 'Subcontractor application', supplier_order: 'Order / delivery note',
 }
 const targetForType = t => (t === 'subcontractor_quote' || t === 'supplier_quote') ? 'quote'
   : (t === 'insurance' || t === 'certificate' || t === 'accreditation') ? 'compliance' : 'project_doc'
@@ -188,8 +192,9 @@ function CheckCard({ item, lists, canFile, onDone }) {
   const [target, setTarget] = useState(plan?.target || targetForType(g.doc_type))
   const [projectId, setProjectId] = useState(plan?.project_id || g.project_id || '')
   const firstFolder = FOLDERS.find(f => f.types.includes(g.doc_type))?.v || FOLDERS[0].v
-  const planBase = plan && FOLDERS.find(f => f.v.startsWith(plan.folder_key + '|') && f.types.includes(g.doc_type))?.v
+  const planBase = plan && (plan.top_folder ? `top:${plan.top_folder}|` : FOLDERS.find(f => f.v.startsWith(plan.folder_key + '|') && f.types.includes(g.doc_type))?.v)
   const [folder, setFolder] = useState(plan ? (FOLDERS.some(f => f.v === `${plan.folder_key}|${plan.subfolder_key || ''}`) ? `${plan.folder_key}|${plan.subfolder_key || ''}` : (planBase || firstFolder)) : firstFolder)
+  const [company, setCompany] = useState(plan?.sub_name || g.vendor?.name || '')
   const [building, setBuilding] = useState('')
   const [buildings, setBuildings] = useState([])
   // Sub-folders inside the chosen section (e.g. 01. Drawings › 14. CIAO …)
@@ -218,7 +223,8 @@ function CheckCard({ item, lists, canFile, onDone }) {
   }, [target, projectId, fk])
 
   // Load the section's sub-folders for this job
-  const [, baseSub] = folder.split('|')
+  const [fk0, baseSub0] = folder.split('|')
+  const baseSub = fk0.startsWith('top:') ? '' : (baseSub0 || (fk0 === '01-project-order' ? fk0 : ''))
   useEffect(() => {
     setSubTree([])
     if (target !== 'project_doc' || !projectId || !baseSub) return
@@ -240,7 +246,9 @@ function CheckCard({ item, lists, canFile, onDone }) {
 
   async function file() {
     let decision
-    if (target === 'project_doc') {
+    if (target === 'project_doc' && folder.startsWith('top:')) {
+      decision = { target, project_id: projectId, top_folder: folder.slice(4, -1), sub_name: company.trim() || null }
+    } else if (target === 'project_doc') {
       const [folder_key, sub] = folder.split('|')
       decision = { target, project_id: projectId, folder_key, subfolder_key: building || (subPick && subPick !== 'new' ? subPick : sub) || null }
       if (subPick === 'new' && newSub.trim()) {
@@ -316,6 +324,7 @@ function CheckCard({ item, lists, canFile, onDone }) {
                   <option value="new">+ New sub-folder…</option>
                 </select>
               ) : null}
+              {folder.startsWith('top:') && <input value={company} onChange={e => setCompany(e.target.value)} placeholder="Company (its own folder)" />}
               {subPick === 'new' && <input value={newSub} onChange={e => setNewSub(e.target.value)} placeholder="e.g. KSA – Structural (number added for you)" />}
               {buildings.length > 0 && (
                 <select value={building} onChange={e => setBuilding(e.target.value)} aria-label="Building">
@@ -358,7 +367,7 @@ function CheckCard({ item, lists, canFile, onDone }) {
 
           <div className="ib-actions">
             <button className="btn btn-sm btn-primary" disabled={!ready || busy} onClick={file}>
-              {busy ? 'Filing…' : target === 'project_doc' && project ? `File to ${project.project_name}` : 'File'}
+              {busy ? 'Filing…' : g.doc_type === 'subcontractor_application' ? 'Checked — file it' : target === 'project_doc' && project ? `File to ${project.project_name}` : 'File'}
             </button>
             <button className="btn btn-sm" disabled={busy} onClick={() => act('ignore')}>Ignore</button>
             {(item.last_error || !item.staged_path) && <button className="btn btn-sm" disabled={busy} onClick={() => act('retry')}>Read again</button>}
@@ -472,6 +481,7 @@ function Settings({ settings, onSaved, projects = [] }) {
           <select value={map[df.name] || ''} onChange={e => setMap(m => ({ ...m, [df.name]: e.target.value }))}>
             <option value="">Let Claude decide</option>
             <option value="skip">Skip — not a job</option>
+            <option value="auto">Read — Claude decides</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.project_ref ? p.project_ref + ' · ' : ''}{p.project_name}</option>)}
           </select>
         </div>

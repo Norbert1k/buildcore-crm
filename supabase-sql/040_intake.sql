@@ -59,6 +59,18 @@ create table if not exists public.intake_items (
   updated_at       timestamptz not null default now(),
   unique (source, source_file_id)
 );
+-- What the team corrected — fed back into every reading (self-learning)
+create table if not exists public.intake_lessons (
+  id         uuid primary key default gen_random_uuid(),
+  item_id    uuid references public.intake_items(id) on delete set null,
+  lesson     text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.intake_lessons enable row level security;
+drop policy if exists intake_lessons_staff_read on public.intake_lessons;
+create policy intake_lessons_staff_read on public.intake_lessons for select
+  using (exists (select 1 from public.profiles p where p.id = auth.uid()));
+
 create index if not exists idx_intake_items_status on public.intake_items(status, created_at desc);
 create index if not exists idx_intake_items_md5 on public.intake_items(md5);
 

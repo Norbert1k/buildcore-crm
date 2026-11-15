@@ -59,6 +59,7 @@ const PROJECT_FOLDERS: Record<string, { folder_key: string; subfolder_key: strin
   rams:                  { folder_key: "00-project-information", subfolder_key: "hs",       label: "Documents › 06. Health & Safety" },
   planning:              { folder_key: "00-project-information", subfolder_key: "planning", label: "Documents › 09. Planning" },
   meeting_minutes:       { folder_key: "00-project-information", subfolder_key: "meetings", label: "Documents › 11. Meetings" },
+  client_order:          { folder_key: "01-project-order",       subfolder_key: null, label: "01. Project Order" },
   our_payment_application: { folder_key: "02-payment-application", subfolder_key: null, label: "02. Payment Application" },
   client_payment_notice: { folder_key: "03-payment-notice",      subfolder_key: null, label: "03. Payment Notice (Client)" },
   variation:             { folder_key: "04-variations",          subfolder_key: null, label: "04. Variations" },
@@ -74,8 +75,14 @@ const DOC_TYPES = [
   "drawing", "survey_report", "rams", "planning", "meeting_minutes",
   "our_payment_application", "client_payment_notice", "variation", "programme",
   "subcontractor_quote", "supplier_quote", "insurance", "certificate", "accreditation",
+  "client_order", "subcontractor_application", "supplier_order",
   "invoice", "other",
 ]
+// Job-level folders the CRM makes on first use (top level of the job's Documents)
+const TOP_FOLDERS: Record<string, string> = {
+  subcontractor_application: "Subcontractor Applications",
+  supplier_order: "Orders & Deliveries",
+}
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
 const safeName = (n: string) => String(n)
@@ -281,7 +288,10 @@ Document types:
 - insurance: insurance certificate/schedule (public liability, employer's liability, professional indemnity)
 - certificate: trade or test certificates, CSCS, Gas Safe, NICEIC, waste carrier licence
 - accreditation: CHAS, Constructionline, ISO certificates
-- invoice: invoices, statements, credit notes, receipts (these are handled in Xero, not filed here)
+- client_order: the client's order, contract, appointment, letter of intent or instruction to proceed for the job
+- subcontractor_application: a subcontractor's payment application / valuation / interim application TO CCG (what they claim from us)
+- supplier_order: a supplier's order confirmation, delivery note or collection note for materials/plant (NOT a purchase order CCG issued — those are already in the CRM, so they're "other")
+- invoice: invoices, statements, credit notes, receipts (these are handled in Xero, never filed here)
 - other: anything else (newsletters, marketing, signatures, unrelated) — including CCG's own internal working files (quote comparisons, cost analyses, summaries, draft BoQs, rate libraries, notes made by CCG or its AI assistant)
 
 File names may start with "date_time - sender email - " (added when the email was saved): that sender is who sent it; @cltd.co.uk senders are CCG staff forwarding or sending our own documents.
@@ -310,6 +320,7 @@ Reply with JSON only, no prose:
  "compliance": {"document_type": compliance value or null, "issue_date": "YYYY-MM-DD" or null, "expiry_date": "YYYY-MM-DD" or null, "reference": string or null, "cover_amount": number or null},
  "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
  "pa_number": number or null,
+ "application": {"number": string or null, "period_to": "YYYY-MM-DD" or null, "gross_to_date": number or null, "amount_due": number or null},
  "reason": "why, in a few words (what in the file told you)"}`
 }
 
@@ -340,7 +351,7 @@ async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint
 // Drawings, reports, H&S, planning and minutes go into the job's existing
 // sub-folders when one fits, or a new one named the CCG way:
 // "NN. Originator – Discipline" (drawings), "NN. Topic" (others), next number.
-const PLACE_IN = new Set(["drawings", "reports", "hs", "planning", "meetings"])
+const PLACE_IN = new Set(["drawings", "reports", "hs", "planning", "meetings", "01-project-order"])
 const PLACEMENT_RULES = `CCG folder rules (keep every job's Documents professional and consistent):
 - Reuse an existing folder whenever one fits by meaning (same consultant/originator + discipline, same plot/block, same element or package). Names don't need to match exactly.
 - Never put new files in folders marked Old, Archive or Superseded.
@@ -351,6 +362,7 @@ const PLACEMENT_RULES = `CCG folder rules (keep every job's Documents profession
   · Health & safety: "RAMS – <Subcontractor>", "Fire Safety", "Inspections".
   · Planning: "Decision Notices", "Conditions Discharge", "Building Control".
   · Meetings: "Progress Meetings", "Design Team Meetings".
+  · Project order: "Contract", "Letters of Intent", "Client Instructions".
 - At most one level of new folder per file. Short, title case, no dates, no file names.`
 
 async function choosePlace(projectId: string, baseKey: string, item: any, g: any) {
@@ -414,14 +426,17 @@ Reply JSON only: {"use": existing folder key or null, "new_name": name for a new
 }
 
 // Make (or reuse) a numbered sub-folder: "NN. Name"
-async function ensureFolder(projectId: string, parentKey: string, name: string) {
-  const { data: sibs } = await sb.from("project_doc_folders").select("folder_key, label").eq("project_id", projectId).eq("parent_key", parentKey)
+async function ensureFolder(projectId: string, parentKey: string | null, name: string) {
+  let q = sb.from("project_doc_folders").select("folder_key, label").eq("project_id", projectId)
+  q = parentKey ? q.eq("parent_key", parentKey) : q.is("parent_key", null)
+  const { data: sibs } = await q
   const bare = (l: string) => String(l).replace(/^\s*\d+\s*[.)-]\s*/, "").trim().toLowerCase()
   const same = (sibs || []).find((f: any) => bare(f.label) === name.toLowerCase())
   if (same) return { key: same.folder_key, label: same.label }
-  const next = Math.max(0, ...(sibs || []).map((f: any) => parseInt(String(f.label).match(/^\s*(\d+)/)?.[1] || "0", 10))) + 1
+  // Top-level job folders sit after the standard 01–06
+  const next = Math.max(parentKey ? 0 : 6, ...(sibs || []).map((f: any) => parseInt(String(f.label).match(/^\s*(\d+)/)?.[1] || "0", 10))) + 1
   const label = `${String(next).padStart(2, "0")}. ${name}`
-  const key = `${parentKey}-sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+  const key = parentKey ? `${parentKey}-sub-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` : `custom-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
   const { error } = await sb.from("project_doc_folders").insert({ project_id: projectId, parent_key: parentKey, folder_key: key, label, client_visible: false })
   if (error) throw new Error("Couldn't create folder: " + error.message)
   return { key, label }
@@ -456,15 +471,30 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
       if (bf?.length) return { status: "to_check", reason: "This job has a folder per building — pick one" }
     }
     const decision: any = { target: "project_doc", project_id: project.id, folder_key: dest.folder_key, subfolder_key: dest.subfolder_key }
-    if (dest.subfolder_key && PLACE_IN.has(dest.subfolder_key)) {
-      const place = await choosePlace(project.id, dest.subfolder_key, item, g)
+    const base = dest.subfolder_key || dest.folder_key
+    if (PLACE_IN.has(base)) {
+      const place = await choosePlace(project.id, base, item, g)
       if (place.new_folder) { decision.subfolder_key = dest.subfolder_key; decision.new_folder = place.new_folder }
-      else decision.subfolder_key = place.subfolder_key || dest.subfolder_key
+      else decision.subfolder_key = (place.subfolder_key && place.subfolder_key !== base) ? place.subfolder_key : dest.subfolder_key
       decision.path_label = `${project.project_name} › ${dest.label.replace(/^Documents › /, "")}${place.path ? " › " + place.path : ""}`
       if (place.confidence < threshold) return { status: "to_check", decision, reason: `Not sure which sub-folder — suggested ${place.path || "the main folder"}` }
     }
     // RAMS from a known subcontractor also goes on their Compliance record
     if (type === "rams" && sub && sure(vc)) decision.also_compliance = { subcontractor_id: sub.id, document_type: "rams" }
+    return { status: "filed", decision, reason: g.reason || "" }
+  }
+
+  if (TOP_FOLDERS[type]) {
+    if (!project) return { status: "to_check", reason: "Couldn't tell which job" }
+    const who = (sub || sup)?.company_name || g.vendor?.name || ""
+    const decision: any = { target: "project_doc", project_id: project.id, top_folder: TOP_FOLDERS[type], sub_name: who || null,
+      path_label: `${project.project_name} › ${TOP_FOLDERS[type]}${who ? " › " + who : ""}` }
+    if (type === "subcontractor_application") {
+      const a = g.application || {}
+      const amt = num(a.amount_due) ?? num(a.gross_to_date)
+      return { status: "to_check", decision, reason: `Subcontractor application${who ? " from " + who : ""}${a.number ? " #" + a.number : ""}${amt != null ? " — £" + Math.round(amt).toLocaleString("en-GB") : ""}: check and approve` }
+    }
+    if (!sure(pc)) return { status: "to_check", decision, reason: `Probably ${project.project_name} — please confirm` }
     return { status: "filed", decision, reason: g.reason || "" }
   }
 
@@ -510,9 +540,17 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
   if (d.target === "project_doc") {
     const { data: p } = await sb.from("projects").select("id, project_name").eq("id", d.project_id).maybeSingle()
     if (!p) throw new Error("Job not found")
-    const folder = String(d.folder_key || "")
+    let folder = String(d.folder_key || "")
     let sub = d.subfolder_key || null
     let madeFolder: string | null = null
+    if (d.top_folder) {
+      const top = await ensureFolder(p.id, null, String(d.top_folder).slice(0, 60))
+      folder = top.key; sub = null; madeFolder = top.label
+      if (d.sub_name) {
+        const f = await ensureFolder(p.id, top.key, String(d.sub_name).replace(/[\/\\:*?"<>|]/g, "-").trim().slice(0, 60))
+        sub = f.key; madeFolder = `${top.label} › ${f.label}`
+      }
+    }
     if (d.new_folder?.name) {
       const name = String(d.new_folder.name).replace(/^\s*\d+\s*[.)-]\s*/, "").replace(/[\/\\:*?"<>|]/g, "-").trim().slice(0, 60)
       if (name) {
@@ -628,14 +666,46 @@ async function fileCompliance(item: any, d: any, actorId: string | null, g: any)
   return { target: "compliance", subcontractor_id: s.id, document_id: data!.id, label: `${s.company_name} › Compliance` }
 }
 
+// Drive folder rules: the longest matching folder path wins, so
+// "13. Company & Admin" can be skipped while
+// "13. Company & Admin / 19 Email Attachments Inbox" is read ("auto").
+function folderRule(map: Record<string, string>, path: string | null) {
+  const p = String(path || "")
+  let best = { key: "", value: "" }
+  for (const [k, v] of Object.entries(map || {})) {
+    if ((p === k || p.startsWith(k + " / ")) && k.length > best.key.length) best = { key: k, value: v }
+  }
+  return best
+}
+
+// ─── Learning from the team ─────────────────────────────────────────────────
+// Every time someone files or ignores an item by hand, the CRM keeps a short
+// note of what Claude thought and what the team decided. The latest notes go
+// into every reading, so the same mistake isn't made twice.
+async function recordLesson(item: any, decision: any, action: "file" | "ignore", res?: any) {
+  try {
+    const g = item.guess || {}
+    const sender = String(item.file_name).match(/-\s*([^\s@]+@[^\s]+)\s*-/)?.[1] || ""
+    const thought = g._plan?.path_label || [g.doc_type, g.project_id ? "job " + g.project_id : null].filter(Boolean).join(", ") || "unsure"
+    const did = action === "ignore" ? "ignored it (not for the CRM)" : `filed it to ${res?.filed_to?.label || decision?.target}`
+    if (action === "file" && g._plan?.path_label && res?.filed_to?.label && res.filed_to.label === g._plan.path_label.replace(/ \(new folder\)/, "")) return // agreed — nothing to learn
+    const lesson = `"${cleanName(item.file_name)}"${sender ? " from " + sender : ""}${item.source_path ? " (Drive: " + item.source_path + ")" : ""} — Claude suggested ${thought}; the team ${did}.`
+    await sb.from("intake_lessons").insert({ item_id: item.id, lesson: lesson.slice(0, 600) })
+  } catch { /* learning is best-effort */ }
+}
+async function loadLessons() {
+  const { data } = await sb.from("intake_lessons").select("lesson").order("created_at", { ascending: false }).limit(60)
+  return (data || []).map((r: any) => "- " + r.lesson).join("\n")
+}
+
 // ─── One file, start to finish ───────────────────────────────────────────────
 const JUNK = /^(image\d{3}\.(png|jpe?g|gif)|winmail\.dat|.*\.(ics|vcf|p7s|htm|html))$/i
 
 async function processItem(item: any, ctx: any, system: string, threshold: number, trial: boolean, folderMap: Record<string, string> = {}) {
   const upd = async (patch: any) => { await sb.from("intake_items").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", item.id) }
   try {
-    const topFolder = String(item.source_path || "").split(" / ")[0]
-    if (folderMap[topFolder] === "skip") return upd({ status: "ignored", reason: `Drive folder "${topFolder}" is set to skip` })
+    const rule = folderRule(folderMap, item.source_path)
+    if (rule.value === "skip") return upd({ status: "ignored", reason: `Drive folder "${rule.key}" is set to skip` })
     if (JUNK.test(cleanName(item.file_name)) || (/^image\//.test(item.mime_type || "") && (item.file_size || 0) < 40_000)) {
       return upd({ status: "ignored", reason: "Email signature / logo / calendar file" })
     }
@@ -659,8 +729,8 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
     item.file_size = item.file_size || bytes.length
 
     // Drive job folder → CRM job (Inbox › Settings): strong evidence for the job
-    const top = String(item.source_path || "").split(" / ")[0]
-    const mapped = folderMap[top]
+    const top = rule.key
+    const mapped = rule.value
     const mappedProject = isUuid(mapped) ? ctx.projects.find((p: any) => p.id === mapped) : null
     const hint = mappedProject
       ? `This Drive folder ("${top}") is filed against CRM job ${mappedProject.id} | ${mappedProject.project_ref || ""} | ${mappedProject.project_name} | ${[mappedProject.site_address, mappedProject.postcode].filter(Boolean).join(", ")}.`
@@ -702,7 +772,8 @@ async function run() {
   try { added = await discover(settings) } catch (e) { note = "Drive: " + String((e as Error).message || e) }
 
   const ctx = await loadContext()
-  const system = systemPrompt(ctx)
+  const lessons = await loadLessons().catch(() => "")
+  const system = systemPrompt(ctx) + (lessons ? `\n\nThe team's past corrections (newest first) — follow the same patterns for similar files:\n${lessons}` : "")
   const threshold = Number(settings.auto_threshold) || 0.85
   const { data: queue } = await sb.from("intake_items").select("*")
     .or("status.eq.pending,and(status.eq.error,attempts.lt.3)")
@@ -789,6 +860,7 @@ Deno.serve(async (req) => {
     }
     if (action === "ignore") {
       await sb.from("intake_items").update({ status: "ignored", reason: "Ignored by hand", filed_by: actorId, updated_at: new Date().toISOString() }).eq("id", item.id)
+      await recordLesson(item, null, "ignore")
       return json({ ok: true })
     }
     if (action === "retry") {
@@ -802,6 +874,7 @@ Deno.serve(async (req) => {
       if (!["project_doc", "compliance", "quote"].includes(d.target)) return json({ error: "Pick where it goes" }, 400)
       for (const k of ["project_id", "subcontractor_id", "supplier_id", "task_id"]) if (d[k] && !isUuid(d[k])) return json({ error: `Bad ${k}` }, 400)
       const res = await fileItem(item, d, actorId)
+      await recordLesson(item, d, "file", res)
       await sb.from("intake_items").update({
         status: res.status, filed_to: res.filed_to, filed_at: new Date().toISOString(), filed_by: actorId,
         reason: "Filed by hand", updated_at: new Date().toISOString(),
