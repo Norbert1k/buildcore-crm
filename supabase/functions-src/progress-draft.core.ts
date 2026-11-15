@@ -62,14 +62,14 @@ async function nextReportNumber(projectId: string) {
 }
 
 // ─── What the report is written from ─────────────────────────────────────────
-async function gather(projectId: string, prev: any) {
+async function gather(projectId: string, prev: any, sub: string | null = null) {
   const { data: project } = await sb.from("projects").select("*").eq("id", projectId).maybeSingle()
   if (!project) throw new Error("Job not found")
   const since = prev?.report_date || prev?.period_to || project.start_date || ymd(new Date(Date.now() - 35 * DAY))
   const sinceIso = new Date(since + "T00:00:00Z").toISOString()
 
   const [paBuf, log, openRfis, files, photos, prog] = await Promise.all([
-    fetchLatestPaForSubfolder(sb, projectId, null),
+    fetchLatestPaForSubfolder(sb, projectId, sub),
     sb.from("project_log").select("kind, ref, title, detail, status, happened_at, source_label").eq("project_id", projectId)
       .gte("happened_at", sinceIso).order("happened_at", { ascending: true }).limit(120).then((r: any) => r.data || []),
     sb.from("project_log").select("kind, ref, title, detail, status, happened_at").eq("project_id", projectId)
@@ -84,8 +84,9 @@ async function gather(projectId: string, prev: any) {
   let pa: any = null, paName: string | null = null
   if (paBuf) pa = await extractFromPa(paBuf).catch(() => null)
   {
-    const { data: paFiles } = await sb.from("project_doc_files").select("file_name, created_at").eq("project_id", projectId)
-      .eq("folder_key", "02-payment-application").is("subfolder_key", null)
+    let q = sb.from("project_doc_files").select("file_name, created_at").eq("project_id", projectId).eq("folder_key", "02-payment-application")
+    q = sub ? q.eq("subfolder_key", sub) : q.is("subfolder_key", null)
+    const { data: paFiles } = await q
     const named = (paFiles || []).filter((f: any) => /\.xlsx$/i.test(f.file_name) && paNo(f.file_name) != null)
       .sort((a: any, b: any) => paNo(b.file_name)! - paNo(a.file_name)!)
     paName = named[0]?.file_name || null
@@ -277,10 +278,12 @@ async function draft(projectId: string, paRefIn: string | null, force = false) {
 async function fill(reportId: string) {
   const { data: rep } = await sb.from("progress_reports").select("*").eq("id", reportId).maybeSingle()
   if (!rep) throw new Error("Report not found")
-  const { data: prevs } = await sb.from("progress_reports").select("*").eq("project_id", rep.project_id)
-    .neq("id", reportId).eq("ai_draft", false).order("created_at", { ascending: false }).limit(1)
+  // Same building as the report (the editor reads the PA the same way)
+  let pq = sb.from("progress_reports").select("*").eq("project_id", rep.project_id).neq("id", reportId).eq("ai_draft", false)
+  pq = rep.subfolder_key ? pq.eq("subfolder_key", rep.subfolder_key) : pq.is("subfolder_key", null)
+  const { data: prevs } = await pq.order("created_at", { ascending: false }).limit(1)
   const prev = prevs?.[0] || null
-  const ctx = await gather(rep.project_id, prev)
+  const ctx = await gather(rep.project_id, prev, rep.subfolder_key || null)
   const { out, used } = await write(ctx, prev)
   const patch: any = { ai_draft: true }
   for (const f of TEXT_FIELDS) if (typeof out[f] === "string" && out[f].trim()) patch[f] = out[f]
