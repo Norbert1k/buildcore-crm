@@ -139,19 +139,17 @@ export default function Projects() {
               liveProjects.length === 0 ? (
                 <div className="card card-pad" style={{ textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>No live projects yet.</div>
               ) : (
-                <div className="table-wrap">
+                <>
+                <div className="table-wrap proj-table">
                   <table>
                     <thead>
                       <tr>
                         <th>Project</th>
-                        <th>Client</th>
-                        <th>Assigned To</th>
-                        <th>Start</th>
-                        <th>End</th>
-                        <th>Duration</th>
-                        <th>Subcontractors</th>
-                        {canValue && <th>Order value</th>}
-                        {canValue && <th>VOs</th>}
+                        <th>Client · lead</th>
+                        <th>Programme</th>
+                        <th className="pc-subs">Subcontractors</th>
+                        {canValue && <th className="pc-split">Order value</th>}
+                        {canValue && <th className="pc-split">VOs</th>}
                         {canValue && <th>Total order value</th>}
                         <th>Status</th>
                         <th></th>
@@ -166,26 +164,17 @@ export default function Projects() {
                               <span style={{ fontWeight: 600 }}>{p.project_name}</span>
                             </div>
                           </td>
-                          <td onClick={e => { if (p.client_id) { e.stopPropagation(); navigate(`/clients/${p.client_id}`) } }}>
-                            {p.client_id
-                              ? <span style={{ color: 'var(--text)', cursor: 'pointer', fontWeight: 700 }}>{p.client_name || '—'}</span>
-                              : (p.client_name || '—')
-                            }
-                          </td>
-                          <td>{p.director?.full_name || p.profiles?.full_name || '—'}</td>
-                          <td className="td-muted">{formatDate(p.start_date)}</td>
-                          <td className="td-muted">{formatDate(p.end_date)}</td>
-                          <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
-                          <td><Pill cls="pill-blue">{p.project_subcontractors?.length || 0} assigned</Pill></td>
-                          {canValue && <td>{formatCurrency(p.value)}</td>}
-                          {canValue && <td onClick={e => { if (vos[p.id]?.count) { e.stopPropagation(); setOpenVo(v => v === p.id ? null : p.id) } }}>
-                            {!vos[p.id] ? <span className="td-muted">…</span>
-                              : vos[p.id].count ? <button type="button" className={'vo-chip' + (openVo === p.id ? ' on' : '')} aria-expanded={openVo === p.id} title="Show the VOs">
-                                  {signed(vos[p.id].total)} <span className="vo-n">{vos[p.id].count} VO{vos[p.id].count === 1 ? '' : 's'}</span>
-                                </button>
-                              : <span className="td-muted" title={vos[p.id].has_pa ? 'No priced VOs on the latest PA' : 'No PA uploaded yet'}>—</span>}
+                          <td><ClientLead p={p} navigate={navigate} /></td>
+                          <td><Programme p={p} /></td>
+                          <td className="pc-subs"><Pill cls="pill-blue">{p.project_subcontractors?.length || 0} assigned</Pill></td>
+                          {canValue && <td className="pc-split pc-num">{formatCurrency(p.value)}</td>}
+                          {canValue && <td className="pc-split" onClick={e => { if (vos[p.id]?.count) { e.stopPropagation(); setOpenVo(v => v === p.id ? null : p.id) } }}>
+                            <VoChip v={vos[p.id]} open={openVo === p.id} signed={signed} />
                           </td>}
-                          {canValue && <td style={{ fontWeight: 700 }}>{vos[p.id] ? formatCurrency(orderOf(p) + voOf(p)) : formatCurrency(p.value)}</td>}
+                          {canValue && <td className="pc-num" onClick={e => { if (vos[p.id]?.count && e.target.closest('.vo-chip')) { e.stopPropagation(); setOpenVo(v => v === p.id ? null : p.id) } }}>
+                            <div style={{ fontWeight: 700 }}>{vos[p.id] ? formatCurrency(orderOf(p) + voOf(p)) : formatCurrency(p.value)}</div>
+                            {vos[p.id]?.count > 0 && <div className="pc-fold">{formatCurrency(p.value)} <VoChip v={vos[p.id]} open={openVo === p.id} signed={signed} small /></div>}
+                          </td>}
                           <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill></td>
                           <td onClick={e => e.stopPropagation()}>
                             {can('manage_projects') && (
@@ -194,46 +183,64 @@ export default function Projects() {
                           </td>
                         </tr>
                         {canValue && openVo === p.id && vos[p.id]?.count > 0 && (
-                          <tr className="vo-row">
-                            <td colSpan={12}>
-                              <div className="vo-panel">
-                                <div className="vo-head">
-                                  <b>Variations — {p.project_name}</b>
-                                  <span className="td-muted">From the latest PA{(vos[p.id].items.some(v => v.building)) ? ' of each building' : ''}</span>
-                                </div>
-                                <table className="vo-table">
-                                  <thead><tr><th>VO</th><th>Description</th>{vos[p.id].items.some(v => v.building) && <th>Building</th>}<th style={{ textAlign: 'right' }}>Value</th></tr></thead>
-                                  <tbody>
-                                    {vos[p.id].items.map((v, i) => (
-                                      <tr key={i}>
-                                        <td className="td-muted">{v.no || '—'}</td>
-                                        <td>{v.details || '—'}</td>
-                                        {vos[p.id].items.some(x => x.building) && <td className="td-muted">{v.building || '—'}</td>}
-                                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{signed(v.amount)}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                  <tfoot><tr><td colSpan={vos[p.id].items.some(v => v.building) ? 3 : 2}>Order value {formatCurrency(orderOf(p))} + VOs {signed(voOf(p))}</td><td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{formatCurrency(orderOf(p) + voOf(p))}</td></tr></tfoot>
-                                </table>
-                              </div>
-                            </td>
-                          </tr>
+                          <tr className="vo-row"><td colSpan={9}><VoPanel p={p} v={vos[p.id]} order={orderOf(p)} signed={signed} /></td></tr>
                         )}
                       </Fragment>))}
                     </tbody>
                     {canValue && (
                       <tfoot>
                         <tr className="proj-total">
-                          <td colSpan={7}>Total — {liveProjects.length} live job{liveProjects.length === 1 ? '' : 's'}{voLoading ? ' · reading PAs…' : ''}</td>
-                          <td>{formatCurrency(liveTotals.order)}</td>
-                          <td>{liveTotals.count ? <>{signed(liveTotals.vo)} <span className="vo-n">{liveTotals.count} VOs</span></> : '—'}</td>
-                          <td>{formatCurrency(liveTotals.order + liveTotals.vo)}</td>
+                          <td colSpan={3}>Total — {liveProjects.length} live job{liveProjects.length === 1 ? '' : 's'}{voLoading ? ' · reading PAs…' : ''}</td>
+                          <td className="pc-subs"></td>
+                          <td className="pc-split pc-num">{formatCurrency(liveTotals.order)}</td>
+                          <td className="pc-split">{liveTotals.count ? <>{signed(liveTotals.vo)} <span className="vo-n">{liveTotals.count} VOs</span></> : '—'}</td>
+                          <td className="pc-num">
+                            <div>{formatCurrency(liveTotals.order + liveTotals.vo)}</div>
+                            {liveTotals.count > 0 && <div className="pc-fold">{formatCurrency(liveTotals.order)} {signed(liveTotals.vo)} VOs</div>}
+                          </td>
                           <td colSpan={2}></td>
                         </tr>
                       </tfoot>
                     )}
                   </table>
                 </div>
+
+                {/* Phones: one card per job */}
+                <div className="proj-cards">
+                  {liveProjects.map(p => (
+                    <div key={p.id} className="pcard" role="button" tabIndex={0} onClick={() => navigate(`/projects/${p.id}`)} onKeyDown={e => { if (e.key === 'Enter') navigate(`/projects/${p.id}`) }}>
+                      <div className="pcard-top">
+                        {p.project_ref && <span className="ref-chip"><span className="ref-lbl">REF</span><span className="ref-num">{p.project_ref}</span></span>}
+                        <span className="pcard-name">{p.project_name}</span>
+                        <Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill>
+                      </div>
+                      <div className="pcard-meta">{p.client_name || '—'} · {p.director?.full_name || p.profiles?.full_name || 'No lead'} · {p.project_subcontractors?.length || 0} subs</div>
+                      <Programme p={p} />
+                      {canValue && (
+                        <div className="pcard-value">
+                          <div>
+                            <div className="pcard-total">{vos[p.id] ? formatCurrency(orderOf(p) + voOf(p)) : formatCurrency(p.value)}</div>
+                            <div className="pcard-sub">{vos[p.id]?.count ? `Order ${formatCurrency(p.value)}` : vos[p.id] ? 'Order value · no priced VOs' : 'Reading PAs…'}</div>
+                          </div>
+                          {vos[p.id]?.count > 0 && <span onClick={e => { e.stopPropagation(); setOpenVo(v => v === p.id ? null : p.id) }}>
+                            <VoChip v={vos[p.id]} open={openVo === p.id} signed={signed} />
+                          </span>}
+                        </div>
+                      )}
+                      {canValue && openVo === p.id && vos[p.id]?.count > 0 && (
+                        <div onClick={e => e.stopPropagation()}><VoPanel p={p} v={vos[p.id]} order={orderOf(p)} signed={signed} compact /></div>
+                      )}
+                    </div>
+                  ))}
+                  {canValue && (
+                    <div className="pcard pcard-sum">
+                      <span>Total — {liveProjects.length} live job{liveProjects.length === 1 ? '' : 's'}</span>
+                      <span className="pcard-total">{formatCurrency(liveTotals.order + liveTotals.vo)}</span>
+                      {liveTotals.count > 0 && <span className="pcard-sub" style={{ width: '100%' }}>Order {formatCurrency(liveTotals.order)} · VOs {signed(liveTotals.vo)} ({liveTotals.count})</span>}
+                    </div>
+                  )}
+                </div>
+                </>
               )
             )}
           </div>
@@ -264,12 +271,9 @@ export default function Projects() {
                     <thead>
                       <tr>
                         <th>Project</th>
-                        <th>Client</th>
-                        <th>Assigned To</th>
-                        <th>Start</th>
-                        <th>End</th>
-                        <th>Duration</th>
-                        {can('view_project_value') && <th>Value</th>}
+                        <th>Client · lead</th>
+                        <th>Programme</th>
+                        {canValue && <th>Value</th>}
                         <th>Status</th>
                         <th></th>
                       </tr>
@@ -283,17 +287,9 @@ export default function Projects() {
                               <span style={{ fontWeight: 600 }}>{p.project_name}</span>
                             </div>
                           </td>
-                          <td onClick={e => { if (p.client_id) { e.stopPropagation(); navigate(`/clients/${p.client_id}`) } }}>
-                            {p.client_id
-                              ? <span style={{ color: 'var(--text)', cursor: 'pointer', fontWeight: 700 }}>{p.client_name || '—'}</span>
-                              : (p.client_name || '—')
-                            }
-                          </td>
-                          <td>{p.director?.full_name || p.profiles?.full_name || '—'}</td>
-                          <td className="td-muted">{formatDate(p.start_date)}</td>
-                          <td className="td-muted">{formatDate(p.end_date)}</td>
-                          <td className="td-muted">{calcDuration(p.start_date, p.end_date) || '—'}</td>
-                          {can('view_project_value') && <td>{formatCurrency(p.value)}</td>}
+                          <td><ClientLead p={p} navigate={navigate} /></td>
+                          <td><Programme p={p} /></td>
+                          {canValue && <td className="pc-num">{formatCurrency(p.value)}</td>}
                           <td><Pill cls={PROJECT_STATUSES[p.status]?.cls || 'pill-gray'}>{PROJECT_STATUSES[p.status]?.label || p.status}</Pill></td>
                           <td onClick={e => e.stopPropagation()}>
                             <div style={{ display: 'flex', gap: 4 }}>
@@ -326,6 +322,79 @@ export default function Projects() {
         message={confirmDelete ? `Delete "${confirmDelete.project_name}"? This cannot be undone.` : ''}
         danger
       />
+    </div>
+  )
+}
+
+// ─── Projects list pieces (one table on wide screens, cards on phones) ─────
+const shortDate = d => { if (!d) return '—'; try { return new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' }) } catch { return d } }
+
+function ClientLead({ p, navigate }) {
+  return (
+    <div className="pc-two">
+      {p.client_id
+        ? <span className="pc-strong pc-link" onClick={e => { e.stopPropagation(); navigate(`/clients/${p.client_id}`) }}>{p.client_name || '—'}</span>
+        : <span className="pc-strong">{p.client_name || '—'}</span>}
+      <span className="td-muted">{p.director?.full_name || p.profiles?.full_name || '—'}</span>
+    </div>
+  )
+}
+
+// Dates, length, and how far through the programme we are today
+function Programme({ p }) {
+  const s = p.start_date ? new Date(p.start_date + 'T00:00:00').getTime() : null
+  const e = p.end_date ? new Date(p.end_date + 'T00:00:00').getTime() : null
+  const pct = s && e && e > s ? Math.max(0, Math.min(1, (Date.now() - s) / (e - s))) : null
+  const late = e && Date.now() > e && p.status === 'active'
+  return (
+    <div className="pc-prog" title={pct != null ? `${Math.round(pct * 100)}% of the programme gone` : undefined}>
+      <span className="pc-dates">{shortDate(p.start_date)} → {shortDate(p.end_date)}<span className="td-muted"> · {calcDuration(p.start_date, p.end_date) || '—'}</span></span>
+      {pct != null && <span className={'pc-bar' + (late ? ' late' : '')}><span style={{ width: `${Math.round(pct * 100)}%` }} /></span>}
+    </div>
+  )
+}
+
+function VoChip({ v, open, signed, small }) {
+  if (!v) return <span className="td-muted">…</span>
+  if (!v.count) return <span className="td-muted" title={v.has_pa ? 'No priced VOs on the latest PA' : 'No PA uploaded yet'}>{small ? '' : '—'}</span>
+  return (
+    <button type="button" className={'vo-chip' + (open ? ' on' : '') + (small ? ' sm' : '')} aria-expanded={open} title="Show the VOs">
+      {signed(v.total)} <span className="vo-n">{v.count} VO{v.count === 1 ? '' : 's'}</span>
+    </button>
+  )
+}
+
+function VoPanel({ p, v, order, signed, compact }) {
+  const bld = v.items.some(x => x.building)
+  return (
+    <div className="vo-panel">
+      <div className="vo-head">
+        <b>Variations — {p.project_name}</b>
+        <span className="td-muted">From the latest PA{bld ? ' of each building' : ''}</span>
+      </div>
+      {compact ? (
+        <div className="vo-list">
+          {v.items.map((x, i) => (
+            <div key={i} className="vo-li"><span className="td-muted">{x.no || '—'}</span><span className="vo-li-d">{x.details || '—'}{x.building ? <span className="td-muted"> · {x.building}</span> : null}</span><b>{signed(x.amount)}</b></div>
+          ))}
+          <div className="vo-li vo-li-total"><span></span><span>Order {formatCurrency(order)} + VOs {signed(v.total)}</span><b>{formatCurrency(order + v.total)}</b></div>
+        </div>
+      ) : (
+        <table className="vo-table">
+          <thead><tr><th>VO</th><th>Description</th>{bld && <th>Building</th>}<th style={{ textAlign: 'right' }}>Value</th></tr></thead>
+          <tbody>
+            {v.items.map((x, i) => (
+              <tr key={i}>
+                <td className="td-muted">{x.no || '—'}</td>
+                <td>{x.details || '—'}</td>
+                {bld && <td className="td-muted">{x.building || '—'}</td>}
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{signed(x.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot><tr><td colSpan={bld ? 3 : 2}>Order value {formatCurrency(order)} + VOs {signed(v.total)}</td><td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>{formatCurrency(order + v.total)}</td></tr></tfoot>
+        </table>
+      )}
     </div>
   )
 }
