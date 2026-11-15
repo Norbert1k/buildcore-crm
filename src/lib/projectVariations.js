@@ -11,7 +11,7 @@
 
 import { fetchAllProjectPas } from './paExtractor'
 
-const PREFIX = 'buildcore:vos:v2:'   // v2: formulas saved without results are now worked out
+const PREFIX = 'buildcore:vos:v3:'   // v3: formulas saved without results are now worked out
 
 function cacheGet(id, sig) {
   try {

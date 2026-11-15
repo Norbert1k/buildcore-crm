@@ -10,7 +10,7 @@
 // Read with XLSX.read(data, { ..., sheetStubs: true }), then
 // fillMissingFormulaValues(wb) works those results out for the formulas a
 // PA / CFF / CSA uses — arithmetic, cell references (incl. other sheets),
-// SUM / ROUND / ABS / MIN / MAX / IF / IFERROR — and writes them into the
+// SUM / ROUND / ABS / MIN / MAX / IF / AND / OR / NOT / ISNUMBER / IFERROR — and writes them into the
 // workbook before it's read. Cells that already have a saved result are
 // never touched. Anything it can't work out is left empty, as before.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -129,6 +129,12 @@ export function fillMissingFormulaValues(wb) {
           case 'MIN': { const v = flat(args); return v.length ? Math.min(...v) : 0 }
           case 'MAX': { const v = flat(args); return v.length ? Math.max(...v) : 0 }
           case 'IF': return num(args[0]) ? (args[1] ?? 1) : (args[2] ?? 0)
+          case 'AND': return args.flat(Infinity).every(x => num(x)) ? 1 : 0
+          case 'OR': return args.flat(Infinity).some(x => num(x)) ? 1 : 0
+          case 'NOT': return num(args[0]) ? 0 : 1
+          case 'ISNUMBER': { const x = Array.isArray(args[0]) ? args[0][0] : args[0]; return typeof x === 'number' ? 1 : 0 }
+          case 'ISTEXT': { const x = Array.isArray(args[0]) ? args[0][0] : args[0]; return typeof x === 'string' && x !== '' ? 1 : 0 }
+          case 'ISBLANK': { const x = Array.isArray(args[0]) ? args[0][0] : args[0]; return x == null || x === '' ? 1 : 0 }
           case 'IFERROR': return args[0] == null ? args[1] : args[0]
           default: throw new Error('fn ' + t.v)
         }
