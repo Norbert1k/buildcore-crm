@@ -114,7 +114,10 @@ const sameTerm = (t: Term, a: any, b: any) => {
   if (a == null || a === "" || b == null || b === "") return false
   if (t.kind === "money" || t.kind === "pct" || t.kind === "int") return Math.abs(Number(a) - Number(b)) < 0.01
   if (t.kind === "date") return String(a).slice(0, 10) === String(b).slice(0, 10)
-  return normCo(a) === normCo(b)
+  // Text: same words, ignoring brackets / abbreviations ("JCT DB 2024" = "JCT Design and Build Contract 2024 (DB 2024)")
+  const clean = (x: any) => String(x).toLowerCase().replace(/\([^)]*\)/g, " ").replace(/\bdesign and build( contract)?\b/g, "db").replace(/\bcontract\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim()
+  const x = clean(a), y = clean(b)
+  return x === y || (Math.min(x.length, y.length) >= 6 && (x.includes(y) || y.includes(x)))
 }
 
 // ─── Procurement tracker (same template as Commercial › Procurement) ─────────
@@ -379,7 +382,24 @@ async function apply(projectId: string, facts: any, src: Src, trial = false) {
       const v = termValue(t, c[k])
       if (v == null) continue
       const cur = t.on === "projects" ? (job.project as any)[t.col] : job.contract?.[t.col]
-      if (sameTerm(t, cur, v)) continue
+      const srcAt = src.date ? new Date(src.date).getTime() : Date.now()
+      if (sameTerm(t, cur, v)) {
+        // A document confirms what the job says → older suggestions for it drop away
+        const { data: olds } = await sb.from("job_fills").select("id, source_date").eq("project_id", projectId).eq("field", k).eq("status", "pending")
+        const stale = (olds || []).filter((o: any) => !o.source_date || new Date(o.source_date).getTime() <= srcAt).map((o: any) => o.id)
+        if (stale.length) await sb.from("job_fills").update({ status: "superseded", why: `Confirmed as it stands by ${src.label || "a newer document"}` }).in("id", stale)
+        continue
+      }
+      // A newer document updates what the CRM itself filled from an older one (never what a person typed, never money)
+      if (!t.money && cur != null && cur !== "") {
+        const { data: mine } = await sb.from("job_fills").select("value, source_date").eq("project_id", projectId).eq("field", k).eq("status", "applied").order("created_at", { ascending: false }).limit(1)
+        const last = mine?.[0]
+        if (last && sameTerm(t, last.value?.v, cur) && (!last.source_date || new Date(last.source_date).getTime() <= srcAt)) {
+          const value = { v }
+          await note({ kind: "contract", field: k, label: t.label, value, display: showTerm(t, v, null), previous: cur, status: "applied", run: () => setTerm(projectId, k, value, null) })
+          continue
+        }
+      }
       const per = k === "lads_amount" ? (c.lads_per === "day" ? "day" : "week") : null
       const value = per ? { v, per } : { v }
       const display = showTerm(t, v, per)
