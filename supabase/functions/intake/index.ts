@@ -25,7 +25,8 @@
 //   { action: 'url', item_id }                staff — signed link to the file
 //
 // Deploy:  supabase functions deploy intake --no-verify-jwt
-// Secrets: ANTHROPIC_API_KEY (already set), GOOGLE_SERVICE_ACCOUNT_JSON, INTAKE_CRON_KEY
+// Secrets: ANTHROPIC_API_KEY (already set), GOOGLE_SERVICE_ACCOUNT_JSON
+// The 5-minute schedule proves itself with intake_settings.cron_token (made by the database).
 //          (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided by Supabase)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4"
 import { PDFDocument } from "https://esm.sh/pdf-lib@1.17.1"
@@ -592,7 +593,12 @@ Deno.serve(async (req) => {
 
   // Who's calling: the 5-minute schedule, or a signed-in CRM user
   let actorId: string | null = null
-  const cron = CRON_KEY && req.headers.get("x-intake-key") === CRON_KEY
+  const given = req.headers.get("x-intake-key") || ""
+  let cron = false
+  if (given) {
+    const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
+    cron = (!!st?.cron_token && given === st.cron_token) || (!!CRON_KEY && given === CRON_KEY)
+  }
   if (!cron) {
     const token = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "")
     const { data: u } = token ? await sb.auth.getUser(token) : { data: { user: null } }

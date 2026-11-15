@@ -43,7 +43,6 @@ these two:
 | Name | Value |
 |---|---|
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Open the downloaded `.json` file in Notepad/TextEdit and paste **all** of it |
-| `INTAKE_CRON_KEY` | Any long random text, e.g. 40 random letters and numbers. Keep a copy for step 5 |
 
 (`ANTHROPIC_API_KEY` is already there from the other CRM functions.)
 
@@ -61,14 +60,7 @@ these two:
 supabase functions deploy intake --no-verify-jwt --project-ref tjelbvoeciklpfvapxvn
 ```
 
-## 5. Supabase: store the schedule key
-
-**SQL Editor › New query**: paste this, replace `PASTE_INTAKE_CRON_KEY` with the same
-value as step 3, then **Run**:
-```sql
-select vault.create_secret('PASTE_INTAKE_CRON_KEY', 'intake_cron_key')
-where not exists (select 1 from vault.secrets where name = 'intake_cron_key');
-```
+## 5. (no longer needed: the schedule's pass is made by the database)
 
 ## 6. Supabase: create the tables and the 5-minute schedule
 

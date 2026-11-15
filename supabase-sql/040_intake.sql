@@ -25,6 +25,9 @@ create table if not exists public.intake_settings (
   updated_at       timestamptz not null default now()
 );
 alter table public.intake_settings add column if not exists trial boolean not null default true;
+-- The schedule's pass for calling the function — made here, never typed by anyone
+alter table public.intake_settings add column if not exists cron_token text not null
+  default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
 insert into public.intake_settings (id) values (1) on conflict (id) do nothing;
 
 create table if not exists public.intake_items (
@@ -76,10 +79,8 @@ create policy intake_settings_admin_write on public.intake_settings for update
 notify pgrst, 'reload schema';
 
 -- ─── Schedule: every 5 minutes ───────────────────────────────────────────────
--- 1. Database → Extensions: enable pg_cron and pg_net (already on if 032 ran).
--- 2. Project Settings → Vault: add a secret named  intake_cron_key  with the
---    same random value you set as the function secret INTAKE_CRON_KEY.
--- 3. Run this block (it does nothing until Inbox › Settings is switched on).
+-- Needs pg_cron and pg_net (Database → Extensions; already on if 032 ran).
+-- Does nothing until Inbox › Settings is switched on.
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
 
@@ -94,7 +95,7 @@ select cron.schedule(
     url     := 'https://tjelbvoeciklpfvapxvn.supabase.co/functions/v1/intake',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'x-intake-key', (select decrypted_secret from vault.decrypted_secrets where name = 'intake_cron_key')
+      'x-intake-key', (select cron_token from public.intake_settings where id = 1)
     ),
     body    := '{"action":"run"}'::jsonb,
     timeout_milliseconds := 150000
