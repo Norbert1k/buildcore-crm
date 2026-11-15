@@ -2529,10 +2529,12 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
   useEffect(() => { if (treeVersion) loadFileCounts() }, [treeVersion])
 
   async function loadFileCounts() {
-    const { data } = await fetchAll(() => supabase.from('project_doc_files').select('id, folder_key').eq('project_id', projectId))
+    const { data } = await fetchAll(() => supabase.from('project_doc_files').select('id, folder_key, subfolder_key').eq('project_id', projectId))
     if (data) {
       const counts = {}
-      data.forEach(f => { counts[f.folder_key] = (counts[f.folder_key] || 0) + 1 })
+      // Archived versions (superseded PAs, old CFFs) are kept but not shown, so not counted
+      data.filter(f => f.subfolder_key !== 'superseded' && f.subfolder_key !== 'cff-archive')
+        .forEach(f => { counts[f.folder_key] = (counts[f.folder_key] || 0) + 1 })
       setFileCounts(counts)
     }
   }

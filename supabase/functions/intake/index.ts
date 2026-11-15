@@ -92,6 +92,12 @@ const safeName = (n: string) => String(n)
 // Quant saves attachments as "2026-11-15_1117 - sender@x.co.uk - Original name.pdf":
 // the CRM keeps the original name (and uses it to spot files already filed)
 const cleanName = (n: string) => String(n).replace(/^\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*[^\s@]+@[^\s]+\s*-\s*/, "").trim() || String(n)
+const paNumberOf = (n: string) => { const m = cleanName(n).match(/\bPA\s*[-_ ]?0*(\d{1,3})\b/i); return m ? parseInt(m[1], 10) : null }
+const senderOf = (n: string) => String(n).match(/^\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*([^\s@]+@[^\s]+)\s*-/)?.[1] || ""
+// Watchdog alerts (table from 041_watchdog.sql) — best-effort if not there yet
+async function raiseAlert(a: Record<string, unknown>) {
+  try { await sb.from("crm_alerts").upsert({ ...a, status: "open", last_seen: new Date().toISOString() }, { onConflict: "key", ignoreDuplicates: true }) } catch { /* optional */ }
+}
 const extOf = (n: string) => (n.match(/\.([a-z0-9]{1,6})$/i)?.[1] || "").toLowerCase()
 const b64url = (bytes: Uint8Array) => {
   let s = ""; for (const b of bytes) s += String.fromCharCode(b)
@@ -320,6 +326,7 @@ Reply with JSON only, no prose:
  "compliance": {"document_type": compliance value or null, "issue_date": "YYYY-MM-DD" or null, "expiry_date": "YYYY-MM-DD" or null, "reference": string or null, "cover_amount": number or null},
  "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
  "pa_number": number or null,
+ "pa_revision_by": for a payment application that the client / employer's agent has marked up or revised: "client"; CCG's own (re)issued version: "ccg"; otherwise null,
  "application": {"number": string or null, "period_to": "YYYY-MM-DD" or null, "gross_to_date": number or null, "amount_due": number or null},
  "reason": "why, in a few words (what in the file told you)"}`
 }
@@ -471,6 +478,34 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
       if (bf?.length) return { status: "to_check", reason: "This job has a folder per building — pick one" }
     }
     const decision: any = { target: "project_doc", project_id: project.id, folder_key: dest.folder_key, subfolder_key: dest.subfolder_key }
+    // PAs get re-issued: CCG keeps ONE version of each PA. A client's marked-up
+    // revision is never filed (the team updates our own version instead); our
+    // updated version replaces the old one, which is archived (hidden, kept).
+    if (type === "our_payment_application") {
+      const n = num(g.pa_number) ?? paNumberOf(item.file_name)
+      if (n != null) {
+        const { data: existing } = await sb.from("project_doc_files").select("id, file_name, file_size")
+          .eq("project_id", project.id).eq("folder_key", dest.folder_key).is("subfolder_key", null)
+        const same = (existing || []).filter((f: any) => paNumberOf(f.file_name) === n)
+        if (same.some((f: any) => f.file_name === cleanName(item.file_name) && (!item.file_size || !f.file_size || Number(f.file_size) === Number(item.file_size))))
+          return { status: "ignored", reason: `This ${"PA" + String(n).padStart(2, "0")} is already in the CRM` }
+        const label = "PA" + String(n).padStart(2, "0")
+        const sender = senderOf(item.file_name)
+        const fromClient = g.pa_revision_by === "client" || (!!sender && !/@cltd\.co\.uk$/i.test(sender))
+        if (fromClient) {
+          await raiseAlert({ key: `pa_client_rev:${project.id}:${n}:${item.id}`, project_id: project.id, kind: "pa_client_revision", severity: "soon",
+            title: `Client revised ${label} — ${project.project_name}`,
+            detail: `${sender || "The client"} sent back a revised ${label} ("${cleanName(item.file_name)}"). It isn't filed: update our ${label}, then upload it — the old one is archived automatically.`,
+            action_label: "Open payment applications", action_url: `/projects/${project.id}?tab=documents` })
+          return { status: "ignored", reason: `Client's revision of ${label} — not filed; flagged so the team updates our ${label}` }
+        }
+        if (same.length) {
+          decision.replace_file_ids = same.map((f: any) => f.id)
+          decision.path_label = `${project.project_name} › 02. Payment Application (replaces ${same.map((f: any) => f.file_name).join(", ")})`
+          return { status: "to_check", decision, reason: `Updated ${label} — will replace the one already in the CRM (old one archived, not deleted)` }
+        }
+      }
+    }
     const base = dest.subfolder_key || dest.folder_key
     if (PLACE_IN.has(base)) {
       const place = await choosePlace(project.id, base, item, g)
@@ -560,7 +595,8 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
     }
     // Same file already in that folder → don't add it twice
     // Same name anywhere in this section of the job (e.g. PA07 already uploaded by hand)
-    const { data: dup } = await sb.from("project_doc_files").select("id").eq("project_id", p.id).eq("folder_key", folder).eq("file_name", item.file_name).limit(1)
+    const replacing = Array.isArray(d.replace_file_ids) && d.replace_file_ids.length > 0
+    const { data: dup } = replacing ? { data: [] } : await sb.from("project_doc_files").select("id").eq("project_id", p.id).eq("folder_key", folder).eq("file_name", item.file_name).limit(1)
     if (dup?.length) return { status: "duplicate", filed_to: { ...out, project_id: p.id, label: `Already in ${p.project_name}` } }
     const path = sub ? `projects/${p.id}/${folder}/${sub}/${stamp}` : `projects/${p.id}/${folder}/${stamp}`
     await copyStaged(item, path)
@@ -569,6 +605,12 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
       file_size: item.file_size, storage_path: path, client_visible: false,
     }).select("id").single()
     if (error) throw new Error(error.message)
+    if (replacing) {
+      // Old version → hidden archive (kept, recoverable; out of the CRM list, portal and figures)
+      const ids = d.replace_file_ids.filter((x: unknown) => isUuid(x))
+      if (ids.length) await sb.from("project_doc_files").update({ subfolder_key: "superseded", client_visible: false })
+        .in("id", ids).eq("project_id", p.id).eq("folder_key", folder)
+    }
     let lbl = Object.values(PROJECT_FOLDERS).find(f => f.folder_key === folder && f.subfolder_key === sub)?.label
     if (!lbl) {
       const { data: cf } = sub ? await sb.from("project_doc_folders").select("label").eq("project_id", p.id).eq("folder_key", sub).limit(1) : { data: null }

@@ -5,6 +5,7 @@ import { formatCurrency, daysUntilExpiry, DOCUMENT_TYPES, ROLE_PERMISSIONS } fro
 import { Spinner, Avatar, IconPlus } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { useAllowedSubIds } from '../lib/access'
+import NeedsAttention from '../components/NeedsAttention'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Home — "what needs me today": live projects with their programme position,
@@ -79,6 +80,8 @@ export default function Dashboard() {
           {can('manage_projects') && <button className="btn btn-primary" onClick={() => navigate('/projects')}><IconPlus size={13} /> New project</button>}
         </div>
       </div>
+
+      {['admin', 'project_manager', 'operations_manager', 'project_director', 'document_controller', 'accountant', 'director_viewer'].includes(profile?.role) && <NeedsAttention />}
 
       <div className={`home-kpis${[seeSubs, seeCompliance].filter(Boolean).length < 2 ? ' few' : ''}`}>
         <button className="home-kpi" onClick={() => navigate('/projects')}>
