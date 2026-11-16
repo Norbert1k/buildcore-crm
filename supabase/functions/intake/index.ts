@@ -191,6 +191,22 @@ async function pathInside(parents: string[] | undefined, rootId: string): Promis
   return null
 }
 
+// Never read into the CRM — they stay in Quant's Drive:
+//   photos (site / survey photos, scans), archives, Quant's own working files
+//   (scripts, data, digests, backups) and anything in Quant's "_" working folders
+const NOT_FOR_CRM_EXT = /\.(jpe?g|png|gif|heic|heif|webp|bmp|tiff?|zip|rar|7z|tar|gz|py|js|ts|json|csv|bak|md|log|tmp|xml|mp4|mov|avi|m4a|mp3|wav)$/i
+const WORK_FOLDER = /(^|\/)\s*_(generator|superseded|patch|archive|old|tmp|temp|working|scripts?)/i
+function notForCrm(name: string, path: string | null, folderMap: Record<string, string> = {}) {
+  const ext = (String(name).match(/\.([a-z0-9]{1,5})$/i)?.[1] || "").toLowerCase()
+  if (/^(jpe?g|png|gif|heic|heif|webp|bmp|tiff?)$/.test(ext)) return "Photo — not filed (stays in Quant's Drive)"
+  if (/^(zip|rar|7z|tar|gz)$/.test(ext)) return "Zip / archive — not filed (stays in Quant's Drive)"
+  if (NOT_FOR_CRM_EXT.test(name)) return "Working / data file — not for the CRM"
+  if (WORK_FOLDER.test(String(path || "").replace(/ \/ /g, "/"))) return "Quant's working folder — not for the CRM"
+  const rule = folderRule(folderMap, path)
+  if (rule.value === "skip") return `Drive folder "${rule.key}" is set to skip`
+  return null
+}
+
 async function discover(settings: any) {
   // Look back a little before the newest file already seen, so nothing slips
   // through; the unique (source, source_file_id) key stops double entries.
@@ -213,6 +229,8 @@ async function discover(settings: any) {
     for (const f of d.files || []) {
       const path = await pathInside(f.parents, settings.drive_folder_id)
       if (path == null) continue
+      // Photos, zips, working files and skipped folders never enter the Inbox at all
+      if (notForCrm(f.name, path, settings.folder_map || {})) continue
       rows.push({
         source: "gdrive", source_file_id: f.id, file_name: f.name, mime_type: f.mimeType,
         file_size: f.size ? Number(f.size) : null, md5: f.md5Checksum || null,
@@ -1161,6 +1179,8 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
   try {
     const rule = folderRule(folderMap, item.source_path)
     if (rule.value === "skip") return upd({ status: "ignored", reason: `Drive folder "${rule.key}" is set to skip` })
+    const why = notForCrm(item.file_name, item.source_path, folderMap)
+    if (why) return upd({ status: "ignored", reason: why })
     if (JUNK.test(cleanName(item.file_name)) || (/^image\//.test(item.mime_type || "") && (item.file_size || 0) < 40_000)) {
       return upd({ status: "ignored", reason: "Email signature / logo / calendar file" })
     }
