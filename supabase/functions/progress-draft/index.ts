@@ -715,10 +715,12 @@ const ymd = (d: Date) => d.toISOString().slice(0, 10)
 const fmt = (d: string | null | undefined) => d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"
 const paNo = (n: string) => { const m = String(n).match(/\bPA\s*-?\s*0*(\d{1,3})\b/i); return m ? Number(m[1]) : null }
 const PA = (n: number) => "PA" + String(n).padStart(2, "0")
+// Reports go out on the last day of each month (PAs are prepared ahead and can still change)
+const monthEndOf = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))
 const b64 = (u: Uint8Array) => { let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return btoa(s) }
 
-async function nextReportNumber(projectId: string) {
-  const now = new Date()
+async function nextReportNumber(projectId: string, at: Date = new Date()) {
+  const now = at
   const base = `PPR-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
   const { data } = await sb.from("progress_reports").select("report_number").eq("project_id", projectId).ilike("report_number", `${base}%`)
   if (!data?.length) return base
@@ -950,8 +952,8 @@ function sources(ctx: any, nPhotos: number) {
   }
 }
 
-async function alertDraft(projectId: string, projectName: string, reportId: string, paRef: string | null, src: any) {
-  const key = `report_draft:${projectId}:${paRef || reportId}`
+async function alertDraft(projectId: string, projectName: string, reportId: string, paRef: string | null, src: any, month: string | null = null) {
+  const key = `report_draft:${projectId}:${month || paRef || reportId}`
   const row = { key, project_id: projectId, kind: "report_draft", severity: "soon",
     title: `Progress report drafted — review & publish — ${projectName}`,
     detail: `Drafted from ${paRef || "the latest PA"}, ${src.diary} diary note${src.diary === 1 ? "" : "s"} and ${src.photos} photo${src.photos === 1 ? "" : "s"}.`
@@ -965,16 +967,19 @@ async function alertDraft(projectId: string, projectName: string, reportId: stri
 }
 
 // ─── New draft after a PA ────────────────────────────────────────────────────
-async function draft(projectId: string, paRefIn: string | null, force = false) {
+async function draft(projectId: string, paRefIn: string | null, force = false, month: string | null = null) {
   const { data: prevs } = await sb.from("progress_reports").select("*").eq("project_id", projectId).is("subfolder_key", null)
     .order("created_at", { ascending: false }).limit(5)
   const prev = (prevs || []).find((r: any) => !r.ai_draft) || null
-  const ctx = await gather(projectId, prev)
-  const paRef = paRefIn || (ctx.paName && paNo(ctx.paName) != null ? PA(paNo(ctx.paName)!) : null)
-  if (!force && paRef) {
-    const dup = (prevs || []).find((r: any) => r.ai_draft && r.ai_pa_ref === paRef)
+  // The month this report is for, dated its last day
+  const periodEnd = month && /^\d{4}-\d{2}$/.test(month) ? monthEndOf(new Date(month + "-01T00:00:00Z")) : monthEndOf(new Date())
+  const monthKey = ymd(periodEnd).slice(0, 7)
+  if (!force) {
+    const dup = (prevs || []).find((r: any) => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
     if (dup) return { report_id: dup.id, existing: true }
   }
+  const ctx = await gather(projectId, prev)
+  const paRef = paRefIn || (ctx.paName && paNo(ctx.paName) != null ? PA(paNo(ctx.paName)!) : null)
   const [team, eas] = await Promise.all([
     sb.from("project_team_members").select("name, role, position_order, created_at").eq("project_id", projectId).in("role", ["Project Manager", "Site Manager"]).order("position_order").then((r: any) => r.data || []),
     sb.from("project_employer_agents").select("employer_agents(company_name)").eq("project_id", projectId).then((r: any) => r.data || []),
@@ -987,8 +992,8 @@ async function draft(projectId: string, paRefIn: string | null, force = false) {
 
   const { out, used } = await write(ctx, prev)
   const report: any = {
-    project_id: projectId, subfolder_key: null, report_number: await nextReportNumber(projectId), report_date: ymd(new Date()),
-    period_from: ctx.since, period_to: ymd(new Date()),
+    project_id: projectId, subfolder_key: null, report_number: await nextReportNumber(projectId, periodEnd), report_date: ymd(periodEnd),
+    period_from: ctx.since, period_to: ymd(periodEnd),
     job_no: p.project_ref || p.project_name, client_pm: p.project_name,
     employer: prev?.employer || p.client_name || "", contract_administrator: prev?.contract_administrator || eaNames || "",
     surveyor: prev?.surveyor || "", main_contractor: prev?.main_contractor || "City Construction Group",
@@ -1010,7 +1015,7 @@ async function draft(projectId: string, paRefIn: string | null, force = false) {
   const nPhotos = await addPhotos(row.id, used, out.photos)
   const src = sources(ctx, nPhotos)
   await sb.from("progress_reports").update({ ai_sources: src }).eq("id", row.id)
-  await alertDraft(projectId, p.project_name, row.id, paRef, src)
+  await alertDraft(projectId, p.project_name, row.id, paRef, src, monthKey)
   return { report_id: row.id, sources: src }
 }
 
@@ -1058,7 +1063,7 @@ Deno.serve(async (req) => {
   try {
     if (body.action === "draft") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
-      return json(await draft(body.project_id, body.pa_ref ? String(body.pa_ref).slice(0, 10) : null, !!body.force))
+      return json(await draft(body.project_id, body.pa_ref ? String(body.pa_ref).slice(0, 10) : null, !!body.force, typeof body.month === "string" ? body.month.slice(0, 7) : null))
     }
     if (body.action === "pa_totals") {
       // For cross-checking figures read from emails: the job's latest PA(s), every building

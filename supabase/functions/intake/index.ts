@@ -106,6 +106,16 @@ const safeName = (n: string) => String(n)
 // the CRM keeps the original name (and uses it to spot files already filed)
 const cleanName = (n: string) => String(n).replace(/^\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*[^\s@]+@[^\s]+\s*-\s*/, "").trim() || String(n)
 const paNumberOf = (n: string) => { const m = cleanName(n).match(/\bPA\s*[-_ ]?0*(\d{1,3})\b/i); return m ? parseInt(m[1], 10) : null }
+// When the email was actually sent: Quant's file names start "YYYY-MM-DD_HHmm" in UTC.
+// Never the Drive date — backfilled emails are saved into Drive months later.
+const sentAt = (item: any): string | null => {
+  const m = String(item?.file_name || "").match(/^(\d{4})-(\d{2})-(\d{2})[_ ](\d{2})(\d{2})\b/)
+  if (m) { const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])); if (!isNaN(+d)) return d.toISOString() }
+  return item?.source_created_at || null
+}
+// Automatic senders (noreply, notifications…) and calendar replies aren't job correspondence
+const AUTO_SENDER = /(no-?reply|donotreply|do-not-reply|newsletter|mailchimp|notification|notifications|mailer-daemon|postmaster|linkedin|barclays|americanexpress|hmrc)/i
+const CALENDAR_REPLY = / - EMAIL - (Accepted|Declined|Tentative|Tentatively accepted|Canceled|Cancelled|Updated invitation|Invitation)\b/i
 const senderOf = (n: string) => String(n).match(/^\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*([^\s@]+@[^\s]+)\s*-/)?.[1] || ""
 // Watchdog alerts (table from 041_watchdog.sql) — best-effort if not there yet
 async function raiseAlert(a: Record<string, unknown>) {
@@ -364,7 +374,7 @@ Reply with JSON only, no prose:
 async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint = "") {
   const content = [
     ...(await contentFor(item.file_name, item.mime_type || "", bytes)),
-    { type: "text", text: `File name: ${item.file_name}\nDrive folder: ${item.source_path || "(top level)"}${hint ? "\n" + hint : ""}\nSize: ${item.file_size || bytes.length} bytes\nSaved: ${item.source_created_at || ""}\n\nWhat is this file? JSON only.` },
+    { type: "text", text: `File name: ${item.file_name}\nDrive folder: ${item.source_path || "(top level)"}${hint ? "\n" + hint : ""}\nSize: ${item.file_size || bytes.length} bytes\nSent: ${sentAt(item) || ""} (UTC)\n\nWhat is this file? JSON only.` },
   ]
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -486,7 +496,7 @@ const normKey = (mf: unknown, pr: unknown) => [...toks(mf), ...toks(pr)].sort().
 
 async function recordPurchases(projectId: string, g: any, item: any, source: "invoice" | "delivery" | "order" | "xero", label = "") {
   const supplier = g.vendor?.name || item.supplier || null
-  const when = item.source_created_at ? new Date(item.source_created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""
+  const when = sentAt(item) ? new Date(sentAt(item)!).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : ""
   const evidence = label || `${supplier || "Supplier"} ${source === "invoice" ? "invoice" : source === "delivery" ? "delivery note" : "order"}${when ? " " + when : ""}`
   let n = 0
   for (const p of (g.products || []).slice(0, 60)) {
@@ -749,7 +759,7 @@ async function xeroRun(limit = XERO_PER_RUN) {
 async function writeLog(projectId: string, g: any, item: any) {
   const entries = (Array.isArray(g.log) ? g.log : []).filter((e: any) => e && LOG_KINDS.has(e.kind) && e.title).slice(0, 12)
   const sender = senderOf(item.file_name)
-  const when = (d: any) => (/^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? new Date(d + "T12:00:00Z") : new Date(item.source_created_at || Date.now())).toISOString()
+  const when = (d: any) => (/^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? new Date(d + "T12:00:00Z") : new Date(sentAt(item) || Date.now())).toISOString()
   const label = isEmailText(item) ? `Email${sender ? " from " + sender : ""}` : cleanName(item.file_name)
   for (const e of entries) {
     const ref = e.ref ? String(e.ref).slice(0, 60) : null
@@ -778,7 +788,7 @@ async function sendFacts(projectId: string, g: any, item: any, trial: boolean) {
   const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/job-facts`, {
     method: "POST", headers: { "Content-Type": "application/json", "x-intake-key": factsKey },
     body: JSON.stringify({ action: "apply", project_id: projectId, facts, trial,
-      source: { item_id: item.id, label: isEmailText(item) ? `Email${sender ? " from " + sender : ""}` : cleanName(item.file_name), date: item.source_created_at || null, doc_type: g.doc_type || null } }),
+      source: { item_id: item.id, label: isEmailText(item) ? `Email${sender ? " from " + sender : ""}` : cleanName(item.file_name), date: sentAt(item), doc_type: g.doc_type || null } }),
   })
   if (!r.ok) console.warn("[intake] job-facts", r.status, (await r.text()).slice(0, 200))
 }
@@ -861,8 +871,9 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
       decision.path_label = `${project.project_name} › ${dest.label.replace(/^Documents › /, "")}${place.path ? " › " + place.path : ""}`
       if (place.confidence < threshold) return { status: "to_check", decision, reason: `Not sure which sub-folder — suggested ${place.path || "the main folder"}` }
     }
-    // RAMS from a known subcontractor also goes on their Compliance record
-    if (type === "rams" && sub && sure(vc)) decision.also_compliance = { subcontractor_id: sub.id, document_type: "rams" }
+    // RAMS from a known subcontractor also go into that subcontractor's files on this job
+    // (never on their Compliance record — RAMS don't expire)
+    if (type === "rams" && sub && sure(vc)) { decision.rams_sub_id = sub.id; decision.path_label += ` + ${sub.company_name} › 05. RAMS` }
     return { status: "filed", decision, reason: g.reason || "" }
   }
 
@@ -966,7 +977,7 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
     // What the Inbox read from it (the drawing's title block, who sent it, when) stays with the file
     const dr = g?.drawing && (g.drawing.number || g.drawing.title) ? Object.fromEntries(Object.entries(g.drawing).filter(([, v]) => v != null && v !== "")) : null
     const meta = Object.fromEntries(Object.entries({ drawing: dr, doc_type: g?.doc_type || null, summary: g?.summary || item.summary || null,
-      sender: senderOf(item0.file_name) || null, received_at: item.source_created_at || null, intake_item_id: isUuid(item.id) ? item.id : null }).filter(([, v]) => v != null))
+      sender: senderOf(item0.file_name) || null, received_at: sentAt(item0), intake_item_id: isUuid(item.id) ? item.id : null }).filter(([, v]) => v != null))
     let ins = await sb.from("project_doc_files").insert({
       project_id: p.id, folder_key: folder, subfolder_key: sub, file_name: item.file_name,
       file_size: item.file_size, storage_path: path, client_visible: false, meta,
@@ -990,7 +1001,14 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
       lbl = `Documents › ${cf?.[0]?.label || sub || folder}`
     }
     Object.assign(out, { project_id: p.id, folder_key: folder, subfolder_key: sub, file_id: row.id, label: d.path_label ? d.path_label.replace(/ \(new folder\)/, "") : `${p.project_name} › ${lbl}`, ...(madeFolder ? { new_folder: madeFolder } : {}) })
-    if (d.also_compliance?.subcontractor_id) {
+    // RAMS → the appointed subcontractor's 05. RAMS & Method Statements on this job
+    const ramsSub = (g.doc_type === "rams" || folder === "00-project-information" && sub === "hs")
+      ? (isUuid(d.rams_sub_id) ? d.rams_sub_id : (g.doc_type === "rams" && g.vendor?.kind === "subcontractor" && isUuid(g.vendor?.id) && (num(g.vendor?.confidence) ?? 0) >= 0.85 ? g.vendor.id : null))
+      : null
+    if (ramsSub) {
+      try { out.sub_file = await fileSubRams(p.id, ramsSub, item, actorId) } catch (e) { out.sub_file_error = String((e as Error).message || e) }
+    }
+    if (d.also_compliance?.subcontractor_id && !["rams", "method_statement", "risk_assessment"].includes(d.also_compliance.document_type)) {
       try {
         const c = await fileCompliance(item, { ...d.also_compliance }, actorId, g)
         out.also = c
@@ -1054,6 +1072,27 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
     return { status: "filed", filed_to: out }
   }
   throw new Error("Unknown destination")
+}
+
+// A subcontractor's RAMS for a job: onto the job's appointed subcontractors (added if
+// they aren't yet) and into their 05. RAMS & Method Statements folder
+async function fileSubRams(projectId: string, subId: string, item: any, actorId: string | null) {
+  const { data: s } = await sb.from("subcontractors").select("id, company_name, trade").eq("id", subId).maybeSingle()
+  if (!s) throw new Error("Subcontractor not found")
+  let { data: ps } = await sb.from("project_subcontractors").select("id, status").eq("project_id", projectId).eq("subcontractor_id", subId).maybeSingle()
+  if (!ps) {
+    const ins = await sb.from("project_subcontractors").insert({ project_id: projectId, subcontractor_id: subId, category: "contractual_work", trade_on_project: s.trade || null, status: "active", assigned_by: actorId }).select("id, status").single()
+    if (ins.error) throw new Error(ins.error.message)
+    ps = ins.data
+  }
+  const { data: dup } = await sb.from("project_sub_files").select("id").eq("project_sub_id", ps!.id).eq("folder_key", "rams").eq("file_name", item.file_name).limit(1)
+  if (dup?.length) return { project_sub_id: ps!.id, label: `${s.company_name} › 05. RAMS (already there)` }
+  const path = `projects/${projectId}/subs/${ps!.id}/rams/${Date.now()}-${safeName(item.file_name)}`
+  await copyStaged(item, path)
+  const { error } = await sb.from("project_sub_files").insert({ project_id: projectId, project_sub_id: ps!.id, folder_key: "rams", file_name: item.file_name,
+    file_size: item.file_size, storage_path: path, direction: "received", notes: "Filed from email (Inbox)", uploaded_by: actorId })
+  if (error) throw new Error(error.message)
+  return { project_sub_id: ps!.id, label: `${s.company_name} › 05. RAMS & Method Statements` }
 }
 
 async function fileCompliance(item: any, d: any, actorId: string | null, g: any) {
@@ -1124,6 +1163,10 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
     if (rule.value === "skip") return upd({ status: "ignored", reason: `Drive folder "${rule.key}" is set to skip` })
     if (JUNK.test(cleanName(item.file_name)) || (/^image\//.test(item.mime_type || "") && (item.file_size || 0) < 40_000)) {
       return upd({ status: "ignored", reason: "Email signature / logo / calendar file" })
+    }
+    // Automatic emails (noreply, notifications) and calendar replies: not job correspondence
+    if (isEmailText(item) && (AUTO_SENDER.test(senderOf(item.file_name)) || CALENDAR_REPLY.test(item.file_name))) {
+      return upd({ status: "ignored", reason: CALENDAR_REPLY.test(item.file_name) ? "Calendar reply" : "Automatic email (no-reply / notification)" })
     }
     if (String(item.mime_type || "").startsWith("application/vnd.google-apps.")) {
       return upd({ status: "to_check", reason: "Google Docs/Sheets file — file it by hand" })

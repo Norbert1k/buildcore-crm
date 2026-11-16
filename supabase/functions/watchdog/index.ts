@@ -64,7 +64,7 @@ async function check(): Promise<Alert[]> {
   const [files, reports, folders] = await Promise.all([
     all(() => sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, created_at, client_visible")
       .in("project_id", ids).in("folder_key", ["02-payment-application", "03-payment-notice", "00-project-information"])),
-    sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref, ai_sources").in("project_id", ids)
+    sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref, ai_sources, period_to").in("project_id", ids)
       .then((r: any) => r.error ? sb.from("progress_reports").select("project_id, report_date, created_at").in("project_id", ids).then((x: any) => x.data || []) : (r.data || [])),
     sb.from("project_doc_folders").select("project_id, folder_key, parent_key").in("project_id", ids).then((r: any) => r.data || []),
   ])
@@ -111,26 +111,38 @@ async function check(): Promise<Alert[]> {
 
     if (latest) {
       const age = days(latest.created_at)
-      // 2. Progress report due with each new PA (reported at the claimed %)
-      // Drafts written by the CRM don't count until a person publishes them
+      // 2. Progress report — goes out on the last day of each month, at the claimed % of the
+      //    latest PA (PAs are prepared ahead and can still change, so nothing is drafted or
+      //    chased before month end). Drafts by the CRM count once a person publishes them.
+      const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0))
+      const isMonthEnd = now.getUTCDate() === monthEnd.getUTCDate()
+      const periodEnd = isMonthEnd ? monthEnd : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0))
+      const monthKey = periodEnd.toISOString().slice(0, 7)
+      const monthName = periodEnd.toLocaleDateString("en-GB", { month: "long" })
       const mineReports = (reports as any[]).filter(r => r.project_id === p.id)
-      const lastReport = mineReports.filter(r => !r.ai_draft).map(r => r.report_date || r.created_at).sort().slice(-1)[0]
-      if (!lastReport || new Date(lastReport) < new Date(latest.created_at)) {
-        const draft = mineReports.find(r => r.ai_draft && r.ai_pa_ref === PA(latest.n))
+      // Issued within the last 10 days of that month (or after) counts for it
+      const issued = mineReports.some(r => !r.ai_draft && new Date(r.report_date || r.created_at) >= new Date(periodEnd.getTime() - 10 * DAY))
+      const hadPa = new Date(pas.map((f: any) => f.created_at).sort()[0]) <= new Date(periodEnd.getTime() + DAY)
+      const started = !p.start_date || new Date(p.start_date) <= periodEnd
+      // The month-end rule starts with November 2026 — earlier months were issued with each PA
+      if (!issued && hadPa && started && periodEnd >= new Date("2026-11-30T00:00:00Z")) {
+        const draft = mineReports.find(r => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
         if (draft) {
-          out.push({ key: `report_draft:${p.id}:${PA(latest.n)}`, project_id: p.id, kind: "report_draft", severity: age > 7 ? "urgent" : "soon",
-            title: `Progress report drafted — review & publish — ${p.project_name}`,
-            detail: `The CRM drafted it from ${PA(latest.n)}, the job diary and site photos.`
+          out.push({ key: `report_draft:${p.id}:${monthKey}`, project_id: p.id, kind: "report_draft", severity: isMonthEnd ? "soon" : "urgent",
+            title: `${monthName} progress report drafted — review & publish — ${p.project_name}`,
+            detail: `The CRM drafted it from ${draft.ai_pa_ref || PA(latest.n)}, the job diary and site photos.`
               + (draft.ai_sources?.photos_new === 0 ? ` No new site photos this period${draft.ai_sources.latest_photo ? ` (newest ${fmt(draft.ai_sources.latest_photo)})` : ""}.` : "")
               + (draft.ai_sources?.om ? ` ${draft.ai_sources.closeout ? "Close-out" : "Nearing completion"}: ${draft.ai_sources.om.ok} of ${draft.ai_sources.om.total} handover / O&M items in place — check the Handover tab before the final account goes.` : "")
               + " Check it, then press Publish to client.",
             action_label: "Open the draft", action_url: docs })
         } else {
-          // Single-building jobs: the CRM drafts it (each morning, or "Draft it now")
-          const canDraft = !latest.subfolder_key
-          out.push({ key: `report_due:${p.id}:${latest.n}`, project_id: p.id, kind: "report_due", severity: age > 7 ? "urgent" : "soon",
-            title: `Progress report due — ${p.project_name}`,
-            detail: `${PA(latest.n)} went in on ${fmt(latest.created_at)}; the progress report should follow at the claimed % from ${PA(latest.n)}.${canDraft ? " The CRM drafts it each morning — or press Draft it now." : ""}`,
+          // Single-building jobs: the CRM drafts it on the last day of the month (or "Draft it now")
+          const canDraft = !latest.subfolder_key && isMonthEnd
+          out.push({ key: `report_due:${p.id}:${monthKey}`, project_id: p.id, kind: "report_due", severity: isMonthEnd ? "soon" : "urgent",
+            title: isMonthEnd ? `${monthName} progress report due today — ${p.project_name}` : `${monthName} progress report not issued — ${p.project_name}`,
+            detail: isMonthEnd
+              ? `Month end: the report goes out today at the claimed % from the latest PA (${PA(latest.n)}).${canDraft ? " The CRM drafts it this morning — or press Draft it now once the PA is final." : ""}`
+              : `${monthName}'s report wasn't published. Issue it from Documents › 05. Project Progress Report.`,
             action_label: "New progress report", action_url: docs, ...(canDraft ? { fix: "draft_report" } : {}) })
         }
       }
@@ -335,12 +347,12 @@ const esc = (s: string) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<
 
 // Ask progress-draft to write the report for report_due:<job>:<PA no>
 async function draftReport(key: string) {
-  const [, projectId, n] = key.split(":")
+  const [, projectId, month] = key.split(":")
   const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
   const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/progress-draft`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`, "x-intake-key": st?.cron_token || "" },
-    body: JSON.stringify({ action: "draft", project_id: projectId, pa_ref: PA(Number(n)) }),
+    body: JSON.stringify({ action: "draft", project_id: projectId, month: /^\d{4}-\d{2}$/.test(month) ? month : undefined }),
   })
   const out = await r.json().catch(() => ({}))
   if (!r.ok || out.error) throw new Error(out.error || `progress-draft ${r.status}`)
