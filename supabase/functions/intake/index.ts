@@ -40,8 +40,9 @@ const BUCKET = "project-docs"
 const TASK_BUCKET = "task-files"
 const FILERS = ["admin", "project_manager", "operations_manager", "project_director", "document_controller"]
 const MAX_BYTES = 40_000_000               // bigger files wait in To check
-const BATCH = 6                            // files read per run
-const TIME_BUDGET_MS = 110_000
+const BATCH = 15                           // files read per run (3 at a time, within the time budget)
+const WORKERS = 3
+const TIME_BUDGET_MS = 95_000              // no new file is started after this (each read takes up to ~40s)
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -200,6 +201,7 @@ function notForCrm(name: string, path: string | null, folderMap: Record<string, 
   const ext = (String(name).match(/\.([a-z0-9]{1,5})$/i)?.[1] || "").toLowerCase()
   if (/^(jpe?g|png|gif|heic|heif|webp|bmp|tiff?)$/.test(ext)) return "Photo — not filed (stays in Quant's Drive)"
   if (/^(zip|rar|7z|tar|gz)$/.test(ext)) return "Zip / archive — not filed (stays in Quant's Drive)"
+  if (/^(dwg|dxf|dwf|rvt|rfa|ifc|nwd|nwc|skp|pln|3dm)$/.test(ext)) return "CAD file — drawings are kept in the Design portal"
   if (NOT_FOR_CRM_EXT.test(name)) return "Working / data file — not for the CRM"
   if (WORK_FOLDER.test(String(path || "").replace(/ \/ /g, "/"))) return "Quant's working folder — not for the CRM"
   const rule = folderRule(folderMap, path)
@@ -1260,15 +1262,26 @@ async function run() {
   const lessons = await loadLessons().catch(() => "")
   const system = systemPrompt(ctx) + (lessons ? `\n\nThe team's past corrections (newest first) — follow the same patterns for similar files:\n${lessons}` : "")
   const threshold = Number(settings.auto_threshold) || 0.85
-  const { data: queue } = await sb.from("intake_items").select("*")
-    .or("status.eq.pending,and(status.eq.error,attempts.lt.3)")
-    .order("source_created_at", { ascending: true }).limit(BATCH)
-  let done = 0
-  for (const item of queue || []) {
-    if (Date.now() - started > TIME_BUDGET_MS) break
-    await processItem(item, ctx, system, threshold, settings.trial !== false, settings.folder_map || {})
-    done++
+  // Today's and yesterday's emails first (file names start with the date sent), then the
+  // backlog oldest first — so a big backfill never holds up what came in this morning
+  const recent = new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10)
+  const waiting = () => sb.from("intake_items").select("*").or("status.eq.pending,and(status.eq.error,attempts.lt.3)")
+  const { data: fresh } = await waiting().gte("file_name", recent).lt("file_name", "2100").order("file_name", { ascending: false }).limit(BATCH)
+  const { data: older } = await waiting().order("source_created_at", { ascending: true }).limit(BATCH)
+  const queue = [...(fresh || []), ...(older || []).filter((o: any) => !(fresh || []).some((f: any) => f.id === o.id))].slice(0, BATCH)
+  let done = 0, next = 0
+  // A few at a time; each item is claimed first so an overlapping "Check now" can't read it twice
+  async function worker() {
+    while (next < queue.length && Date.now() - started < TIME_BUDGET_MS) {
+      const item = queue[next++]
+      const { data: claimed } = await sb.from("intake_items").update({ updated_at: new Date().toISOString() })
+        .eq("id", item.id).eq("status", item.status).eq("updated_at", item.updated_at).select("id")
+      if (!claimed?.length) continue
+      await processItem(item, ctx, system, threshold, settings.trial !== false, settings.folder_map || {})
+      done++
+    }
   }
+  await Promise.all(Array.from({ length: WORKERS }, worker))
   const { count: left } = await sb.from("intake_items").select("id", { count: "exact", head: true }).eq("status", "pending")
   const summary = `${added} new · ${done} read · ${left || 0} waiting${note ? " · " + note : ""}`
   await sb.from("intake_settings").update({ last_run_at: new Date().toISOString(), last_run_note: summary }).eq("id", 1)
