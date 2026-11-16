@@ -126,7 +126,10 @@ async function check(): Promise<Alert[]> {
       const started = !p.start_date || new Date(p.start_date) <= periodEnd
       // The month-end rule starts with November 2026 — earlier months were issued with each PA
       if (!issued && hadPa && started && periodEnd >= new Date("2026-11-30T00:00:00Z")) {
-        const draft = mineReports.find(r => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
+        const monthDraft = mineReports.find(r => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
+        // On the day, a draft made earlier in the month is redone from the final PA (if untouched)
+        const early = isMonthEnd && monthDraft && String(monthDraft.period_to || "") < monthEnd.toISOString().slice(0, 10)
+        const draft = early ? null : monthDraft
         if (draft) {
           out.push({ key: `report_draft:${p.id}:${monthKey}`, project_id: p.id, kind: "report_draft", severity: isMonthEnd ? "soon" : "urgent",
             title: `${monthName} progress report drafted — review & publish — ${p.project_name}`,
@@ -141,7 +144,7 @@ async function check(): Promise<Alert[]> {
           out.push({ key: `report_due:${p.id}:${monthKey}`, project_id: p.id, kind: "report_due", severity: isMonthEnd ? "soon" : "urgent",
             title: isMonthEnd ? `${monthName} progress report due today — ${p.project_name}` : `${monthName} progress report not issued — ${p.project_name}`,
             detail: isMonthEnd
-              ? `Month end: the report goes out today at the claimed % from the latest PA (${PA(latest.n)}).${canDraft ? " The CRM drafts it this morning — or press Draft it now once the PA is final." : ""}`
+              ? `Month end: the report goes out today at the claimed % from the latest PA (${PA(latest.n)}).${canDraft ? (early ? ` The draft from ${fmt(monthDraft.period_to)} is redone this morning from the final PA (unless someone has edited it) — or press Draft it now.` : " The CRM drafts it this morning — or press Draft it now once the PA is final.") : ""}`
               : `${monthName}'s report wasn't published. Issue it from Documents › 05. Project Progress Report.`,
             action_label: "New progress report", action_url: docs, ...(canDraft ? { fix: "draft_report" } : {}) })
         }

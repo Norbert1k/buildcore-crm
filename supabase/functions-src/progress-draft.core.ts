@@ -311,9 +311,16 @@ async function draft(projectId: string, paRefIn: string | null, force = false, m
   // The month this report is for, dated its last day
   const periodEnd = month && /^\d{4}-\d{2}$/.test(month) ? monthEndOf(new Date(month + "-01T00:00:00Z")) : monthEndOf(new Date())
   const monthKey = ymd(periodEnd).slice(0, 7)
-  if (!force) {
-    const dup = (prevs || []).find((r: any) => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
-    if (dup) return { report_id: dup.id, existing: true }
+  // A draft for this month already: keep it — unless it was drafted before the month
+  // end and nobody has touched it since, then it's redone in place from the final PA
+  let refresh: any = null
+  const dup = (prevs || []).find((r: any) => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
+  if (dup && !force) {
+    const early = String(dup.period_to || "") < ymd(periodEnd)
+    const untouched = !dup.updated_at || Math.abs(new Date(dup.updated_at).getTime() - new Date(dup.created_at).getTime()) < 5 * 60_000
+      || (dup.ai_sources?.written_at && new Date(dup.updated_at).getTime() - new Date(dup.ai_sources.written_at).getTime() < 5 * 60_000)
+    if (!(early && untouched && monthEndOf(new Date()).getTime() === periodEnd.getTime() && new Date().getUTCDate() === periodEnd.getUTCDate())) return { report_id: dup.id, existing: true }
+    refresh = dup
   }
   const ctx = await gather(projectId, prev)
   const paRef = paRefIn || (ctx.paName && paNo(ctx.paName) != null ? PA(paNo(ctx.paName)!) : null)
@@ -347,7 +354,12 @@ async function draft(projectId: string, paRefIn: string | null, force = false, m
   }
   for (const f of TEXT_FIELDS) report[f] = typeof out[f] === "string" ? out[f] : (prev?.[f] || "")
   if (!report.hs_text) report.hs_text = "No health and safety incidents were reported during this period."
-  const { data: row, error } = await sb.from("progress_reports").insert(report).select("id").single()
+  let row: any, error: any
+  if (refresh) {
+    // Same draft, same number — figures and text redone at month end
+    delete report.report_number
+    ;({ data: row, error } = await sb.from("progress_reports").update(report).eq("id", refresh.id).select("id").single())
+  } else ({ data: row, error } = await sb.from("progress_reports").insert(report).select("id").single())
   if (error) throw new Error("Couldn't save the draft: " + error.message)
   const nPhotos = await addPhotos(row.id, used, out.photos)
   const src = sources(ctx, nPhotos)
