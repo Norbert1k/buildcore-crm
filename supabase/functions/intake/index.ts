@@ -948,6 +948,12 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
       if (!sure(tc)) return { status: "to_check", decision, reason: "CCG's own document? Please confirm" }
       return { status: "filed", decision, reason: g.reason || "CCG company document" }
     }
+    // A certificate that names one of our jobs is that job's test / completion certificate → its handover
+    if (type === "certificate" && project && pc >= 0.7 && !ccg) {
+      const decision = { target: "handover", project_id: project.id, path_label: `${project.project_name} › Handover (H&S File / O&M)` }
+      return sure(pc) ? { status: "filed", decision, reason: g.reason || "Certificate for this job" }
+        : { status: "to_check", decision, reason: `Certificate for ${project.project_name}? File it to the job's handover` }
+    }
     // ISO / CHAS / trade certificates: kept only for a subcontractor appointed on one of our jobs
     if (type !== "insurance") {
       if (!sub || !sure(vc)) return { status: "ignored", reason: `${vendor.name || "Firm"} isn't an appointed subcontractor — certificate not kept` }
