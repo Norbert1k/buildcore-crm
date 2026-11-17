@@ -436,9 +436,21 @@ const PLACEMENT_RULES = `CCG folder rules (keep every job's Documents profession
 - At most two levels of new folder per file (e.g. "Integration – MEP" then "Schematics"). Short, title case, no dates, no file names.
 - Not sure which building or which type? Give a confidence below 0.8 so a person decides — never park a file in a parent folder to be safe.`
 
+// Supabase returns at most 1,000 rows a call — big jobs (Merton has 1,000+
+// files) need paging, or files and folders past the first page go unseen.
+async function allRows(make: () => any, cap = 20000) {
+  const out: any[] = []
+  for (let from = 0; from < cap; from += 1000) {
+    const { data, error } = await make().range(from, from + 999)
+    if (error) throw new Error(error.message)
+    out.push(...(data || []))
+    if (!data || data.length < 1000) break
+  }
+  return out
+}
+
 async function choosePlace(projectId: string, baseKey: string, item: any, g: any) {
-  const { data: rows } = await sb.from("project_doc_folders").select("folder_key, parent_key, label").eq("project_id", projectId)
-  const all = rows || []
+  const all = await allRows(() => sb.from("project_doc_folders").select("folder_key, parent_key, label").eq("project_id", projectId).order("folder_key"))
   // Folders under the base, with their paths
   const tree: { key: string; path: string; label: string }[] = []
   const walk = (parent: string, prefix: string, depth: number) => {
@@ -453,9 +465,9 @@ async function choosePlace(projectId: string, baseKey: string, item: any, g: any
   // A few file names from each folder show how the team organised it
   const samples: Record<string, string[]> = {}
   if (tree.length) {
-    const { data: files } = await sb.from("project_doc_files").select("subfolder_key, file_name")
-      .eq("project_id", projectId).in("subfolder_key", tree.map(t => t.key).slice(0, 400)).limit(4000)
-    for (const f of files || []) (samples[f.subfolder_key] ||= []).length < 3 && samples[f.subfolder_key].push(f.file_name)
+    const inTree = new Set(tree.map(t => t.key))
+    const files = await allRows(() => sb.from("project_doc_files").select("subfolder_key, file_name").eq("project_id", projectId).order("created_at", { ascending: false }), 6000).catch(() => [])
+    for (const f of files) if (inTree.has(f.subfolder_key)) (samples[f.subfolder_key] ||= []).length < 3 && samples[f.subfolder_key].push(f.file_name)
   }
   const listing = tree.length
     ? tree.map(t => `${t.key} | ${t.path}${samples[t.key]?.length ? "  — e.g. " + samples[t.key].join("; ") : ""}`).join("\n")
@@ -511,13 +523,13 @@ const drawingStem = (f: any) => String(f.meta?.drawing?.number || f.file_name ||
   .replace(/[-_ ]+(rev\.?\s*)?[A-Z]{0,2}\d{1,3}$/i, "").replace(/[^a-z0-9]/gi, "").toLowerCase()
 async function resortLoose(projectId: string | null, dry: boolean, max = 30) {
   const t0 = Date.now()
-  let q = sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, meta")
-    .not("subfolder_key", "is", null).neq("subfolder_key", "superseded")
-  if (projectId) q = q.eq("project_id", projectId)
-  const { data: files, error } = await q.limit(20000)
-  if (error) throw new Error(error.message)
+  const files = await allRows(() => {
+    let q = sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, meta")
+      .not("subfolder_key", "is", null).neq("subfolder_key", "superseded").order("id")
+    return projectId ? q.eq("project_id", projectId) : q
+  }, 100000)
   const pids = [...new Set((files || []).map((f: any) => f.project_id))]
-  const { data: folders } = pids.length ? await sb.from("project_doc_folders").select("project_id, folder_key, parent_key, label").in("project_id", pids).limit(20000) : { data: [] }
+  const folders = pids.length ? await allRows(() => sb.from("project_doc_folders").select("project_id, folder_key, parent_key, label").in("project_id", pids).order("folder_key"), 100000) : []
   const kids = new Set((folders || []).filter((f: any) => f.parent_key).map((f: any) => `${f.project_id}|${f.parent_key}`))
   const label = new Map((folders || []).map((f: any) => [`${f.project_id}|${f.folder_key}`, f.label]))
   const loose = (files || []).filter((f: any) => kids.has(`${f.project_id}|${f.subfolder_key}`))
