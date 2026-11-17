@@ -201,7 +201,6 @@ function notForCrm(name: string, path: string | null, folderMap: Record<string, 
   const ext = (String(name).match(/\.([a-z0-9]{1,5})$/i)?.[1] || "").toLowerCase()
   if (/^(jpe?g|png|gif|heic|heif|webp|bmp|tiff?)$/.test(ext)) return "Photo — not filed (stays in Quant's Drive)"
   if (/^(zip|rar|7z|tar|gz)$/.test(ext)) return "Zip / archive — not filed (stays in Quant's Drive)"
-  if (/^(dwg|dxf|dwf|rvt|rfa|ifc|nwd|nwc|skp|pln|3dm)$/.test(ext)) return "CAD file — drawings are kept in the Design portal"
   if (NOT_FOR_CRM_EXT.test(name)) return "Working / data file — not for the CRM"
   if (WORK_FOLDER.test(String(path || "").replace(/ \/ /g, "/"))) return "Quant's working folder — not for the CRM"
   const rule = folderRule(folderMap, path)
