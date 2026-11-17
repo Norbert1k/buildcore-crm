@@ -1273,6 +1273,19 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
         g.project_confidence = 0.5
       } else { g.project_id = mappedProject.id; g.project_confidence = 0.9 }
     }
+    // Attachments of the same email belong to the same job: if this one couldn't be matched
+    // but its siblings (same "date_time - sender" prefix) were, confidently and all to one job, use it
+    if (!g._conflict && (!g.project_id || (num(g.project_confidence) ?? 0) < 0.7)) {
+      const pre = String(item.file_name).match(/^(\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*[^\s@]+@[^\s]+\s*-)/)?.[1]
+      if (pre && !/@cltd\.co\.uk/i.test(pre)) {
+        const { data: sib } = await sb.from("intake_items").select("guess").like("file_name", pre.replace(/[%_]/g, "\\$&") + "%").neq("id", item.id).limit(20)
+        const jobs = [...new Set((sib || []).map((x: any) => x.guess).filter((x: any) => x?.project_id && (num(x.project_confidence) ?? 0) >= 0.85).map((x: any) => x.project_id))]
+        if (jobs.length === 1 && ctx.projects.some((p: any) => p.id === jobs[0])) {
+          g.project_id = jobs[0]; g.project_confidence = 0.86
+          g.reason = `${g.reason ? g.reason + " — " : ""}same email as other files matched to this job`
+        }
+      }
+    }
     const plan: Plan = g._conflict ? { status: "to_check", reason: g._conflict } : await planFor(g, item, ctx, threshold)
     // Job diary — whatever the file says happened, when we know the job
     if (!g._conflict && g.project_id && (num(g.project_confidence) ?? 0) >= 0.7) {
