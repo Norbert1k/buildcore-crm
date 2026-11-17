@@ -948,7 +948,13 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
       if (!sure(tc)) return { status: "to_check", decision, reason: "CCG's own document? Please confirm" }
       return { status: "filed", decision, reason: g.reason || "CCG company document" }
     }
-    if (!sub) return { status: "to_check", reason: vendor.name ? `Subcontractor “${vendor.name}” isn't in the CRM` : "Couldn't tell whose certificate this is" }
+    // ISO / CHAS / trade certificates: kept only for a subcontractor appointed on one of our jobs
+    if (type !== "insurance") {
+      if (!sub || !sure(vc)) return { status: "ignored", reason: `${vendor.name || "Firm"} isn't an appointed subcontractor — certificate not kept` }
+      const { data: onJob } = await sb.from("project_subcontractors").select("id").eq("subcontractor_id", sub.id).neq("status", "removed").limit(1)
+      if (!onJob?.length) return { status: "ignored", reason: `${sub.company_name} isn't appointed on a job — certificate not kept` }
+    }
+    if (!sub) return { status: "to_check", reason: vendor.name ? `Insurance from “${vendor.name}” — not in Subcontractors yet; add them to file it` : "Couldn't tell whose insurance this is" }
     if (!sure(vc)) return { status: "to_check", reason: `Probably ${sub.company_name} — please confirm` }
     if (!dt || dt === "other") return { status: "to_check", reason: "Couldn't tell which compliance document this is" }
     return { status: "filed", decision: { target: "compliance", subcontractor_id: sub.id, document_type: dt }, reason: g.reason || "" }
