@@ -317,7 +317,16 @@ function toTitleCase(s) {
 // Returns the raw bytes for extractFromPa to parse, or null if no PA exists
 // in that location. Caller falls back to default empty groups.
 // ─────────────────────────────────────────────────────────────────────────────
-export async function fetchLatestPaForSubfolder(supabase, projectId, paSubfolderKey) {
+// A building's report folder and its PA folder share the same suffix:
+//   05-progress-report-custom-1776009467212-5mti ↔ 02-payment-application-custom-1776009467212-5mti
+// Report-side keys are turned into the PA folder they belong to.
+export function paSubfolderFor(key) {
+  if (key == null) return null
+  return String(key).replace(/^05-progress-report(?=-custom-)/, '02-payment-application')
+}
+
+export async function fetchLatestPaForSubfolder(supabase, projectId, paSubfolderKey0) {
+  const paSubfolderKey = paSubfolderFor(paSubfolderKey0)
   try {
     let q = supabase
       .from('project_doc_files')

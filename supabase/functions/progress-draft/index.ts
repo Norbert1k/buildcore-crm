@@ -54,6 +54,7 @@ var PAX = (() => {
     autoMatch: () => autoMatch,
     extractFromPa: () => extractFromPa,
     fetchLatestPaForSubfolder: () => fetchLatestPaForSubfolder,
+    paSubfolderFor: () => paSubfolderFor,
     valuationsWithPa: () => valuationsWithPa,
     variationsFromPa: () => variationsFromPa
   });
@@ -546,7 +547,12 @@ var PAX = (() => {
   function toTitleCase(s) {
     return s.toLowerCase().replace(/(^|[\s,&\-/])(\w)/g, (_, sep, c) => sep + c.toUpperCase());
   }
-  async function fetchLatestPaForSubfolder(supabase, projectId, paSubfolderKey) {
+  function paSubfolderFor(key) {
+    if (key == null) return null;
+    return String(key).replace(/^05-progress-report(?=-custom-)/, "02-payment-application");
+  }
+  async function fetchLatestPaForSubfolder(supabase, projectId, paSubfolderKey0) {
+    const paSubfolderKey = paSubfolderFor(paSubfolderKey0);
     try {
       let q = supabase.from("project_doc_files").select("storage_path, file_name, created_at").eq("project_id", projectId).eq("folder_key", "02-payment-application");
       if (paSubfolderKey == null) q = q.is("subfolder_key", null);
@@ -692,7 +698,7 @@ var PAX = (() => {
   }
   return __toCommonJS(pax_entry_exports);
 })();
-const { extractFromPa, fetchLatestPaForSubfolder, autoMatch, valuationsWithPa, variationsFromPa } = PAX
+const { extractFromPa, fetchLatestPaForSubfolder, paSubfolderFor, autoMatch, valuationsWithPa, variationsFromPa } = PAX
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")
 const MODEL = "claude-sonnet-4-5"
@@ -809,7 +815,7 @@ async function gather(projectId: string, prev: any, sub: string | null = null) {
   if (paBuf) pa = await extractFromPa(paBuf).catch(() => null)
   {
     let q = sb.from("project_doc_files").select("file_name, created_at").eq("project_id", projectId).eq("folder_key", "02-payment-application")
-    q = sub ? q.eq("subfolder_key", sub) : q.is("subfolder_key", null)
+    q = sub ? q.eq("subfolder_key", paSubfolderFor(sub)) : q.is("subfolder_key", null)
     const { data: paFiles } = await q
     const named = (paFiles || []).filter((f: any) => /\.xlsx$/i.test(f.file_name) && paNo(f.file_name) != null)
       .sort((a: any, b: any) => paNo(b.file_name)! - paNo(a.file_name)!)
@@ -967,9 +973,11 @@ async function alertDraft(projectId: string, projectName: string, reportId: stri
 }
 
 // ─── New draft after a PA ────────────────────────────────────────────────────
-async function draft(projectId: string, paRefIn: string | null, force = false, month: string | null = null) {
-  const { data: prevs } = await sb.from("progress_reports").select("*").eq("project_id", projectId).is("subfolder_key", null)
-    .order("created_at", { ascending: false }).limit(5)
+// sub: a building's report folder (05-progress-report-custom-…) on jobs with several buildings
+async function draft(projectId: string, paRefIn: string | null, force = false, month: string | null = null, sub: string | null = null) {
+  let pq = sb.from("progress_reports").select("*").eq("project_id", projectId)
+  pq = sub ? pq.eq("subfolder_key", sub) : pq.is("subfolder_key", null)
+  const { data: prevs } = await pq.order("created_at", { ascending: false }).limit(5)
   const prev = (prevs || []).find((r: any) => !r.ai_draft) || null
   // The month this report is for, dated its last day
   const periodEnd = month && /^\d{4}-\d{2}$/.test(month) ? monthEndOf(new Date(month + "-01T00:00:00Z")) : monthEndOf(new Date())
@@ -985,7 +993,7 @@ async function draft(projectId: string, paRefIn: string | null, force = false, m
     if (!(early && untouched && monthEndOf(new Date()).getTime() === periodEnd.getTime() && new Date().getUTCDate() === periodEnd.getUTCDate())) return { report_id: dup.id, existing: true }
     refresh = dup
   }
-  const ctx = await gather(projectId, prev)
+  const ctx = await gather(projectId, prev, sub)
   const paRef = paRefIn || (ctx.paName && paNo(ctx.paName) != null ? PA(paNo(ctx.paName)!) : null)
   const [team, eas] = await Promise.all([
     sb.from("project_team_members").select("name, role, position_order, created_at").eq("project_id", projectId).in("role", ["Project Manager", "Site Manager"]).order("position_order").then((r: any) => r.data || []),
@@ -999,7 +1007,7 @@ async function draft(projectId: string, paRefIn: string | null, force = false, m
 
   const { out, used } = await write(ctx, prev)
   const report: any = {
-    project_id: projectId, subfolder_key: null, report_number: await nextReportNumber(projectId, periodEnd), report_date: ymd(periodEnd),
+    project_id: projectId, subfolder_key: sub, report_number: await nextReportNumber(projectId, periodEnd), report_date: ymd(periodEnd),
     period_from: ctx.since, period_to: ymd(periodEnd),
     job_no: p.project_ref || p.project_name, client_pm: p.project_name,
     employer: prev?.employer || p.client_name || "", contract_administrator: prev?.contract_administrator || eaNames || "",
@@ -1027,7 +1035,9 @@ async function draft(projectId: string, paRefIn: string | null, force = false, m
   const nPhotos = await addPhotos(row.id, used, out.photos)
   const src = sources(ctx, nPhotos)
   await sb.from("progress_reports").update({ ai_sources: src }).eq("id", row.id)
-  await alertDraft(projectId, p.project_name, row.id, paRef, src, monthKey)
+  let building: string | null = null
+  if (sub) building = (await sb.from("project_doc_folders").select("label").eq("project_id", projectId).eq("folder_key", sub).maybeSingle()).data?.label || null
+  await alertDraft(projectId, building ? `${p.project_name} — ${building}` : p.project_name, row.id, paRef, src, sub ? `${monthKey}:${sub.split("-custom-")[1] || sub}` : monthKey)
   return { report_id: row.id, sources: src }
 }
 
@@ -1075,7 +1085,8 @@ Deno.serve(async (req) => {
   try {
     if (body.action === "draft") {
       if (!/^[0-9a-f-]{36}$/i.test(String(body.project_id || ""))) return json({ error: "Bad project" }, 400)
-      return json(await draft(body.project_id, body.pa_ref ? String(body.pa_ref).slice(0, 10) : null, !!body.force, typeof body.month === "string" ? body.month.slice(0, 7) : null))
+      const sub = typeof body.subfolder_key === "string" && /^05-progress-report-custom-[\w-]+$/.test(body.subfolder_key) ? body.subfolder_key : null
+      return json(await draft(body.project_id, body.pa_ref ? String(body.pa_ref).slice(0, 10) : null, !!body.force, typeof body.month === "string" ? body.month.slice(0, 7) : null, sub))
     }
     if (body.action === "pa_totals") {
       // For cross-checking figures read from emails: the job's latest PA(s), every building

@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p supabase/functions/progress-draft
-printf "export { extractFromPa, fetchLatestPaForSubfolder } from '%s/src/lib/paExtractor.js'\nexport { autoMatch } from '%s/src/lib/handoverChecks.js'\nexport { valuationsWithPa, variationsFromPa } from '%s/src/lib/reportValuation.js'\n" "$PWD" "$PWD" "$PWD" > /tmp/pax-entry.js
+printf "export { extractFromPa, fetchLatestPaForSubfolder, paSubfolderFor } from '%s/src/lib/paExtractor.js'\nexport { autoMatch } from '%s/src/lib/handoverChecks.js'\nexport { valuationsWithPa, variationsFromPa } from '%s/src/lib/reportValuation.js'\n" "$PWD" "$PWD" "$PWD" > /tmp/pax-entry.js
 npx -y esbuild@0.21.5 /tmp/pax-entry.js --bundle --format=iife --global-name=PAX --log-level=error --outfile=/tmp/pax.js
 {
   echo "// @ts-nocheck"
@@ -14,7 +14,7 @@ npx -y esbuild@0.21.5 /tmp/pax-entry.js --bundle --format=iife --global-name=PAX
   echo ""
   echo "// ─── The CRM's PA reader (src/lib/paExtractor.js + xlsxFormulas.js), bundled ───"
   cat /tmp/pax.js
-  echo "const { extractFromPa, fetchLatestPaForSubfolder, autoMatch, valuationsWithPa, variationsFromPa } = PAX"
+  echo "const { extractFromPa, fetchLatestPaForSubfolder, paSubfolderFor, autoMatch, valuationsWithPa, variationsFromPa } = PAX"
   sed -n '/^declare function variationsFromPa/,$p' supabase/functions-src/progress-draft.core.ts | sed '1d'
 } > supabase/functions/progress-draft/index.ts
 echo "built $(wc -c < supabase/functions/progress-draft/index.ts) bytes"

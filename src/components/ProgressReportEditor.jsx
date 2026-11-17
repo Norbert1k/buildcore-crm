@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { Spinner, Field, IconPlus, IconTrash, ConfirmDialog } from './ui'
-import { extractFromPa, fetchLatestPaForSubfolder } from '../lib/paExtractor'
+import { extractFromPa, fetchLatestPaForSubfolder, paSubfolderFor } from '../lib/paExtractor'
 import { parseMoney, tidyMoney, paNumber, valuationsWithPa, variationsFromPa } from '../lib/reportValuation'
 
 // Default % groups so first-time users have a sensible starting point — based on a typical CCG report
@@ -180,7 +180,7 @@ export default function ProgressReportEditor({ projectId, projectName, reportId,
             .in('role', ['Project Manager', 'Site Manager'])
             .order('position_order').order('created_at'),
           supabase.from('projects').select('retention_pct').eq('id', projectId).maybeSingle(),
-          subfolderKey == null ? paListQ.is('subfolder_key', null) : paListQ.eq('subfolder_key', subfolderKey),
+          subfolderKey == null ? paListQ.is('subfolder_key', null) : paListQ.eq('subfolder_key', paSubfolderFor(subfolderKey)),
         ])
         // The PA the figures come from: its name (number, date) and upload date
         const paFile = (paListRes.data || []).filter(f => /\.xlsx$/i.test(f.file_name) && paNumber(f.file_name) != null)

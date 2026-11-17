@@ -64,9 +64,9 @@ async function check(): Promise<Alert[]> {
   const [files, reports, folders] = await Promise.all([
     all(() => sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, created_at, client_visible")
       .in("project_id", ids).in("folder_key", ["02-payment-application", "03-payment-notice", "00-project-information"])),
-    sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref, ai_sources, period_to").in("project_id", ids)
+    sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref, ai_sources, period_to, subfolder_key, valuations").in("project_id", ids)
       .then((r: any) => r.error ? sb.from("progress_reports").select("project_id, report_date, created_at").in("project_id", ids).then((x: any) => x.data || []) : (r.data || [])),
-    sb.from("project_doc_folders").select("project_id, folder_key, parent_key").in("project_id", ids).then((r: any) => r.data || []),
+    sb.from("project_doc_folders").select("project_id, folder_key, parent_key, label").in("project_id", ids).then((r: any) => r.data || []),
   ])
   // Newest site photo per job
   const lastPhoto = new Map<string, string | null>(await Promise.all(ids.map((id: string) =>
@@ -114,41 +114,69 @@ async function check(): Promise<Alert[]> {
       // 2. Progress report — goes out on the last day of each month, at the claimed % of the
       //    latest PA (PAs are prepared ahead and can still change, so nothing is drafted or
       //    chased before month end). Drafts by the CRM count once a person publishes them.
+      //    Jobs with several buildings (Merton) get one report per building, from that
+      //    building's PAs (02-…-custom-X ↔ 05-progress-report-custom-X).
       const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0))
       const isMonthEnd = now.getUTCDate() === monthEnd.getUTCDate()
       const periodEnd = isMonthEnd ? monthEnd : new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0))
       const monthKey = periodEnd.toISOString().slice(0, 7)
       const monthName = periodEnd.toLocaleDateString("en-GB", { month: "long" })
-      const mineReports = (reports as any[]).filter(r => r.project_id === p.id)
-      // Issued within the last 10 days of that month (or after) counts for it
-      const issued = mineReports.some(r => !r.ai_draft && new Date(r.report_date || r.created_at) >= new Date(periodEnd.getTime() - 10 * DAY))
-      const hadPa = new Date(pas.map((f: any) => f.created_at).sort()[0]) <= new Date(periodEnd.getTime() + DAY)
-      const started = !p.start_date || new Date(p.start_date) <= periodEnd
-      // The month-end rule starts with November 2026 — earlier months were issued with each PA
-      if (!issued && hadPa && started && periodEnd >= new Date("2026-11-30T00:00:00Z")) {
-        const monthDraft = mineReports.find(r => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
-        // On the day, a draft made earlier in the month is redone from the final PA (if untouched)
-        const early = isMonthEnd && monthDraft && String(monthDraft.period_to || "") < monthEnd.toISOString().slice(0, 10)
-        const draft = early ? null : monthDraft
-        if (draft) {
-          out.push({ key: `report_draft:${p.id}:${monthKey}`, project_id: p.id, kind: "report_draft", severity: isMonthEnd ? "soon" : "urgent",
-            title: `${monthName} progress report drafted — review & publish — ${p.project_name}`,
-            detail: `The CRM drafted it from ${draft.ai_pa_ref || PA(latest.n)}, the job diary and site photos.`
-              + (draft.ai_sources?.photos_new === 0 ? ` No new site photos this period${draft.ai_sources.latest_photo ? ` (newest ${fmt(draft.ai_sources.latest_photo)})` : ""}.` : "")
-              + (draft.ai_sources?.om ? ` ${draft.ai_sources.closeout ? "Close-out" : "Nearing completion"}: ${draft.ai_sources.om.ok} of ${draft.ai_sources.om.total} handover / O&M items in place — check the Handover tab before the final account goes.` : "")
-              + " Check it, then press Publish to client.",
-            action_label: "Open the draft", action_url: docs })
-        } else {
-          // Single-building jobs: the CRM drafts it on the last day of the month (or "Draft it now")
-          const canDraft = !latest.subfolder_key && isMonthEnd
-          out.push({ key: `report_due:${p.id}:${monthKey}`, project_id: p.id, kind: "report_due", severity: isMonthEnd ? "soon" : "urgent",
-            title: isMonthEnd ? `${monthName} progress report due today — ${p.project_name}` : `${monthName} progress report not issued — ${p.project_name}`,
-            detail: isMonthEnd
-              ? `Month end: the report goes out today at the claimed % from the latest PA (${PA(latest.n)}).${canDraft ? (early ? ` The draft from ${fmt(monthDraft.period_to)} is redone this morning from the final PA (unless someone has edited it) — or press Draft it now.` : " The CRM drafts it this morning — or press Draft it now once the PA is final.") : ""}`
-              : `${monthName}'s report wasn't published. Issue it from Documents › 05. Project Progress Report.`,
-            action_label: "New progress report", action_url: docs, ...(canDraft ? { fix: "draft_report" } : {}) })
+      const jobFolders = (folders as any[]).filter(f => f.project_id === p.id)
+      const buildingKeys = [...new Set(pas.map((f: any) => f.subfolder_key).filter((k: any) => typeof k === "string" && k.startsWith("02-payment-application-custom-")))]
+      const locations: (string | null)[] = buildingKeys.length ? buildingKeys as string[] : [null]
+      for (const loc of locations) {
+        const locPas = pas.filter((f: any) => (f.subfolder_key ?? null) === loc)
+        const locLatest = locPas.slice().sort((a: any, b: any) => b.n - a.n || +new Date(b.created_at) - +new Date(a.created_at))[0]
+        if (!locLatest) continue
+        const reportSub = loc ? loc.replace(/^02-payment-application/, "05-progress-report") : null
+        const building = loc ? (jobFolders.find(f => f.folder_key === loc)?.label || "").replace(/^\d+\.\s*/, "") : ""
+        const where = building ? `${p.project_name} — ${building}` : p.project_name
+        const suffix = loc ? ":" + loc.split("-custom-")[1] : ""
+        const locReports = (reports as any[]).filter(r => r.project_id === p.id && (r.subfolder_key ?? null) === reportSub)
+        const issued = locReports.some(r => !r.ai_draft && new Date(r.report_date || r.created_at) >= new Date(periodEnd.getTime() - 10 * DAY))
+        const hadPa = new Date(locPas.map((f: any) => f.created_at).sort()[0]) <= new Date(periodEnd.getTime() + DAY)
+        const started = !p.start_date || new Date(p.start_date) <= periodEnd
+        // The month-end rule starts with November 2026 — earlier months were issued with each PA
+        if (!issued && hadPa && started && periodEnd >= new Date("2026-11-30T00:00:00Z")) {
+          const monthDraft = locReports.find(r => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
+          // On the day, a draft made earlier in the month is redone from the final PA (if untouched)
+          const early = isMonthEnd && monthDraft && String(monthDraft.period_to || "") < monthEnd.toISOString().slice(0, 10)
+          const draft = early ? null : monthDraft
+          if (draft) {
+            out.push({ key: `report_draft:${p.id}:${monthKey}${suffix}`, project_id: p.id, kind: "report_draft", severity: isMonthEnd ? "soon" : "urgent",
+              title: `${monthName} progress report drafted — review & publish — ${where}`,
+              detail: `The CRM drafted it from ${draft.ai_pa_ref || PA(locLatest.n)}, the job diary and site photos.`
+                + (draft.ai_sources?.photos_new === 0 ? ` No new site photos this period${draft.ai_sources.latest_photo ? ` (newest ${fmt(draft.ai_sources.latest_photo)})` : ""}.` : "")
+                + (draft.ai_sources?.om ? ` ${draft.ai_sources.closeout ? "Close-out" : "Nearing completion"}: ${draft.ai_sources.om.ok} of ${draft.ai_sources.om.total} handover / O&M items in place — check the Handover tab before the final account goes.` : "")
+                + " Check it, then press Publish to client.",
+              action_label: "Open the draft", action_url: docs })
+          } else {
+            // The CRM drafts it on the last day of the month (or "Draft it now") — per building where
+            // the building has its own report folder
+            const canDraft = isMonthEnd && (!loc || jobFolders.some(f => f.folder_key === reportSub))
+            out.push({ key: `report_due:${p.id}:${monthKey}${suffix}`, project_id: p.id, kind: "report_due", severity: isMonthEnd ? "soon" : "urgent",
+              title: isMonthEnd ? `${monthName} progress report due today — ${where}` : `${monthName} progress report not issued — ${where}`,
+              detail: isMonthEnd
+                ? `Month end: the report goes out today at the claimed % from the latest PA (${PA(locLatest.n)}).${canDraft ? (early ? ` The draft from ${fmt(monthDraft.period_to)} is redone this morning from the final PA (unless someone has edited it) — or press Draft it now.` : " The CRM drafts it this morning — or press Draft it now once the PA is final.") : ""}`
+                : `${monthName}'s report wasn't published. Issue it from Documents › 05. Project Progress Report.`,
+              action_label: "New progress report", action_url: docs, ...(canDraft ? { fix: "draft_report" } : {}) })
+          }
+        }
+        // PA revised after its report went out (client revised theirs → we re-issue ours):
+        // the published report may now show old figures
+        const lastPub = locReports.filter(r => !r.ai_draft).sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))[0]
+        if (lastPub) {
+          const vals = Array.isArray(lastPub.valuations) ? lastPub.valuations : []
+          const usedNo = lastPub.ai_pa_ref ? paNo(lastPub.ai_pa_ref) : (vals.length ? parseInt(String(vals[vals.length - 1]?.no || ""), 10) : null)
+          if (usedNo === locLatest.n && new Date(locLatest.created_at).getTime() > new Date(lastPub.created_at).getTime() + 3600_000) {
+            out.push({ key: `pa_revised:${p.id}:${locLatest.id}`, project_id: p.id, kind: "pa_revised", severity: "soon",
+              title: `${PA(locLatest.n)} revised after the progress report — ${where}`,
+              detail: `${PA(locLatest.n)} was replaced on ${fmt(locLatest.created_at)}, after report ${lastPub.report_date ? fmt(lastPub.report_date) : ""} went out. Check the report's figures (valuation, VOs, progress %) and re-issue it if they changed.`,
+              action_label: "Progress reports", action_url: docs })
+          }
         }
       }
+
       // 3. Latest PA hidden from the client
       if (latest.client_visible === false && age >= 1) {
         out.push({ key: `pa_hidden:${latest.id}`, project_id: p.id, kind: "pa_hidden", severity: "soon",
@@ -308,10 +336,10 @@ async function run(digest: boolean) {
   // Each morning: draft the progress reports that are due (single-building jobs, 2 a run)
   let drafted = 0
   if (digest) {
-    for (const a of found.filter(x => x.kind === "report_due" && x.fix === "draft_report").slice(0, 2)) {
-      const ok = await draftReport(a.key).catch(e => { console.warn("[watchdog] draft", e); return false })
-      if (ok) drafted++
-    }
+    // Month end: every due report at once (each takes about a minute), up to 8
+    const due = found.filter(x => x.kind === "report_due" && x.fix === "draft_report").slice(0, 8)
+    const res = await Promise.all(due.map(a => draftReport(a.key).catch(e => { console.warn("[watchdog] draft", e); return false })))
+    drafted = res.filter(Boolean).length
   }
 
   // Morning email to admins
@@ -350,12 +378,13 @@ const esc = (s: string) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<
 
 // Ask progress-draft to write the report for report_due:<job>:<PA no>
 async function draftReport(key: string) {
-  const [, projectId, month] = key.split(":")
+  const [, projectId, month, suffix] = key.split(":")
   const { data: st } = await sb.from("intake_settings").select("cron_token").eq("id", 1).maybeSingle()
   const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/progress-draft`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`, "x-intake-key": st?.cron_token || "" },
-    body: JSON.stringify({ action: "draft", project_id: projectId, month: /^\d{4}-\d{2}$/.test(month) ? month : undefined }),
+    body: JSON.stringify({ action: "draft", project_id: projectId, month: /^\d{4}-\d{2}$/.test(month) ? month : undefined,
+      subfolder_key: suffix ? `05-progress-report-custom-${suffix}` : undefined }),
   })
   const out = await r.json().catch(() => ({}))
   if (!r.ok || out.error) throw new Error(out.error || `progress-draft ${r.status}`)
