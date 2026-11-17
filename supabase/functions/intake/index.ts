@@ -298,7 +298,8 @@ async function contentFor(name: string, mime: string, bytes: Uint8Array) {
 
 async function loadContext() {
   const [proj, subs, sups, reqs] = await Promise.all([
-    sb.from("projects").select("id, project_ref, project_name, site_address, city, postcode, client_name, status").neq("status", "cancelled"),
+    sb.from("projects").select("id, project_ref, project_name, site_address, city, postcode, client_name, status, doc_notes").neq("status", "cancelled")
+      .then((r: any) => r.error && /doc_notes/.test(r.error.message) ? sb.from("projects").select("id, project_ref, project_name, site_address, city, postcode, client_name, status").neq("status", "cancelled") : r),
     sb.from("subcontractors").select("id, company_name, trade, email, category"),
     sb.from("suppliers").select("id, company_name"),
     sb.from("tasks").select("id, project_id, title, status").eq("is_quote", true).neq("status", "closed").limit(600),
@@ -311,7 +312,7 @@ async function loadContext() {
 }
 
 function systemPrompt(ctx: Awaited<ReturnType<typeof loadContext>>) {
-  const P = ctx.projects.map((p: any) => `${p.id} | ${p.project_ref || ""} | ${p.project_name || ""} | ${[p.site_address, p.city, p.postcode].filter(Boolean).join(", ")} | client: ${p.client_name || ""} | ${p.status}`).join("\n")
+  const P = ctx.projects.map((p: any) => `${p.id} | ${p.project_ref || ""} | ${p.project_name || ""} | ${[p.site_address, p.city, p.postcode].filter(Boolean).join(", ")} | client: ${p.client_name || ""} | ${p.status}${p.doc_notes ? ` | filing notes: ${String(p.doc_notes).replace(/\s+/g, " ").slice(0, 400)}` : ""}`).join("\n")
   const S = ctx.subcontractors.map((s: any) => `${s.id} | ${s.company_name} | ${s.trade || ""}${s.category ? " (" + s.category + ")" : ""} | ${s.email || ""}`).join("\n")
   const U = ctx.suppliers.map((s: any) => `${s.id} | ${s.company_name}`).join("\n")
   const R = ctx.requests.map((t: any) => `${t.id} | project ${t.project_id} | ${t.title}`).join("\n")
@@ -378,7 +379,7 @@ Reply with JSON only, no prose:
  "vendor": {"kind": "subcontractor"|"supplier"|"none", "id": id or null, "name": "company name as written or null", "confidence": 0-1},
  "quote": {"request_id": open quote request id for this job and trade, or null, "trade": "e.g. Groundworks", "amount": total price as a number or null, "vat": "net"|"gross"|"unknown", "date": "YYYY-MM-DD" or null, "reference": string or null},
  "compliance": {"document_type": compliance value or null, "issue_date": "YYYY-MM-DD" or null, "expiry_date": "YYYY-MM-DD" or null, "reference": string or null, "cover_amount": number or null, "insured": "who the policy / certificate is for, as written, or null", "scope": for insurance, certificates and accreditations: "ccg_company" (City Construction Group's own company-wide cover or accreditation — annual PL / EL / PI / contractor's all risks, CHAS, ISO, Constructionline) | "ccg_job" (cover for ONE job / site / contract — contract works or all-risks for a named site, a project-specific policy, the employer's or CCG's insurance evidence for one contract; give that job in project_id) | "subcontractor" (a subcontractor's or supplier's own) | null},
- "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
+ "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"electrical"|"mechanical"|"public_health"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "stage": "RIBA / design stage if shown, e.g. Stage 4, or null", "kind": "layout"|"schematic"|"combined services"|"GA plan"|"section"|"elevation"|"detail"|"schedule"|"model"|"specification"|"report"|"other"|null — read it from the title block / title (e.g. "… Schematic" = schematic, "… Layout" / "… Plant Room" plan = layout), "building": "which building / block it covers — as the title block says or as the job's filing notes decode its number (e.g. a building code in the drawing number); 'site-wide' if it covers the whole site; or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
  "pa_number": number or null,
  "pa_revision_by": for a payment application that the client / employer's agent has marked up or revised: "client"; CCG's own (re)issued version: "ccg"; otherwise null,
  "products": [{"manufacturer": string or null, "product": "product name as written", "code": "product code or null", "qty": "e.g. 24 sheets, or null", "installed": true when it's a material/product built into the works that the O&M needs a datasheet for (insulation, boards, membranes, roofing, sanitaryware, fittings, equipment…); false for tools, drill bits, blades, consumables, fixings packs, stationery, PPE, cleaning, fuel, hire, welfare, delivery charges}] — the materials/products on an invoice, delivery note, order confirmation, or the product a datasheet / manual / warranty is about; [] if none,
@@ -422,6 +423,9 @@ const PLACEMENT_RULES = `CCG folder rules (keep every job's Documents profession
 - Reuse an existing folder whenever one fits by meaning (same consultant/originator + discipline, same plot/block, same element or package). Names don't need to match exactly.
 - Never put new files in folders marked Old, Archive or Superseded.
 - Keep all revisions of a drawing together in one folder — never make a folder per revision or per date.
+- Go as deep as the job's structure goes. Follow it level by level: building / block → section (Drawings, Documents…) → consultant / originator → stage → drawing type. When the folder you'd pick has sub-folders by type (e.g. Layouts, Schematics, Combined Services, Model, Documents, Details, Sections) the file goes into the matching sub-folder — never loose in the parent.
+- Match the drawing type from its title: "… Schematic" → Schematics; plans and plant-room / services layouts → Layouts; coordinated multi-service drawings → Combined Services; BIM / 3D models → Model; reports, specifications, schedules and other non-drawing files → Documents. A CAD file (.dwg / .dxf) goes in the same folder as the PDF of the same drawing.
+- Pick the building first: on a job with several buildings, the drawing goes under the building it covers (use the title block, the drawing-number code and the job's filing notes — a building can have more than one name). Site-wide drawings go where the job keeps site-wide drawings; if there's no such place and you can't tell the building, give a low confidence.
 - Only make a new folder when nothing fits. Name it without a number (it's added for you):
   · Drawings: "<Originator> – <Discipline>", e.g. "KSA – Structural", "CIAO – Architectural", "Integration – MEP". If the job is organised by plot/block and the drawing is for one plot, use or make that plot's folder ("Plot 3").
   · Surveys & reports: the kind, e.g. "Ground Investigation", "Topographical Survey", "Fire Strategy", "Acoustic", "Structural Calculations".
@@ -429,7 +433,8 @@ const PLACEMENT_RULES = `CCG folder rules (keep every job's Documents profession
   · Planning: "Decision Notices", "Conditions Discharge", "Building Control".
   · Meetings: "Progress Meetings", "Design Team Meetings".
   · Project order: "Contract", "Letters of Intent", "Client Instructions".
-- At most one level of new folder per file. Short, title case, no dates, no file names.`
+- At most two levels of new folder per file (e.g. "Integration – MEP" then "Schematics"). Short, title case, no dates, no file names.
+- Not sure which building or which type? Give a confidence below 0.8 so a person decides — never park a file in a parent folder to be safe.`
 
 async function choosePlace(projectId: string, baseKey: string, item: any, g: any) {
   const { data: rows } = await sb.from("project_doc_folders").select("folder_key, parent_key, label").eq("project_id", projectId)
@@ -437,7 +442,7 @@ async function choosePlace(projectId: string, baseKey: string, item: any, g: any
   // Folders under the base, with their paths
   const tree: { key: string; path: string; label: string }[] = []
   const walk = (parent: string, prefix: string, depth: number) => {
-    if (depth > 4) return
+    if (depth > 8) return
     for (const f of all.filter((r: any) => r.parent_key === parent).sort((a: any, b: any) => String(a.label).localeCompare(String(b.label), undefined, { numeric: true }))) {
       const path = prefix ? `${prefix} / ${f.label}` : f.label
       tree.push({ key: f.folder_key, path, label: f.label })
@@ -449,7 +454,7 @@ async function choosePlace(projectId: string, baseKey: string, item: any, g: any
   const samples: Record<string, string[]> = {}
   if (tree.length) {
     const { data: files } = await sb.from("project_doc_files").select("subfolder_key, file_name")
-      .eq("project_id", projectId).in("subfolder_key", tree.map(t => t.key).slice(0, 150)).limit(1000)
+      .eq("project_id", projectId).in("subfolder_key", tree.map(t => t.key).slice(0, 400)).limit(4000)
     for (const f of files || []) (samples[f.subfolder_key] ||= []).length < 3 && samples[f.subfolder_key].push(f.file_name)
   }
   const listing = tree.length
@@ -460,20 +465,22 @@ async function choosePlace(projectId: string, baseKey: string, item: any, g: any
     d.number && `Drawing ${d.number}${d.revision ? " rev " + d.revision : ""}${d.title ? " – " + d.title : ""}`,
     d.discipline && `Discipline: ${d.discipline}`, d.originator && `Produced by: ${d.originator}`,
     d.plot_or_block && `Plot/block: ${d.plot_or_block}`, d.status && `Status: ${d.status}`,
+    d.kind && `Drawing type: ${d.kind}`, d.building && `Building: ${d.building}`, d.stage && `Stage: ${d.stage}`,
     g.vendor?.name && `From: ${g.vendor.name}`, item.source_path && `Drive folder: ${item.source_path}`].filter(Boolean).join("\n")
+  const { data: pj } = await sb.from("projects").select("project_name, doc_notes").eq("id", projectId).maybeSingle().then((r: any) => r, () => ({ data: null }))
   const prompt = `${PLACEMENT_RULES}
-
+${pj?.doc_notes ? `\nThis job's filing notes (from the team): ${pj.doc_notes}\n` : ""}
 The job's existing folders inside this section (key | path — e.g. sample files):
 ${listing}
 
 The new file:
 ${about}
 
-Reply JSON only: {"use": existing folder key or null, "new_name": name for a new folder or null, "new_parent": existing folder key to make it inside, or null for the top of this section, "confidence": 0-1, "reason": "few words"}`
+Reply JSON only: {"use": existing folder key or null, "new_name": name for a new folder or null, "new_sub": name of a second new folder inside new_name, or null, "new_parent": existing folder key to make it inside, or null for the top of this section, "confidence": 0-1, "reason": "few words"}`
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 300, messages: [{ role: "user", content: prompt }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
   })
   if (!r.ok) throw new Error(`Claude ${r.status} (folders)`)
   const out = JSON.parse(((await r.json()).content || []).map((c: any) => c.text || "").join("").match(/\{[\s\S]*\}/)?.[0] || "{}")
@@ -485,10 +492,79 @@ Reply JSON only: {"use": existing folder key or null, "new_name": name for a new
   const name = String(out.new_name || "").replace(/^\s*\d+\s*[.)-]\s*/, "").replace(/[\/\\:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60)
   if (name) {
     const parent = tree.find(t => t.key === out.new_parent && !isOld(t.path))
-    return { subfolder_key: null, new_folder: { parent_key: parent ? parent.key : baseKey, name },
-      path: (parent ? parent.path + " / " : "") + name + " (new folder)", confidence: num(out.confidence) ?? 0.8, reason: out.reason || "" }
+    const sub2 = String(out.new_sub || "").replace(/^\s*\d+\s*[.)-]\s*/, "").replace(/[\/\\:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60)
+    return { subfolder_key: null, new_folder: { parent_key: parent ? parent.key : baseKey, name, ...(sub2 ? { sub: sub2 } : {}) },
+      path: (parent ? parent.path + " / " : "") + name + (sub2 ? " / " + sub2 : "") + " (new folder)", confidence: num(out.confidence) ?? 0.8, reason: out.reason || "" }
   }
   return { subfolder_key: baseKey, path: "", confidence: 0.5, reason: "No sub-folder chosen" }
+}
+
+// ─── Re-sorting files the CRM left loose in a parent folder ─────────────────
+// A file filed by the Inbox (it has meta) that sits directly in a folder that
+// has its own sub-folders (e.g. Integration › 02. Drawings - Stage 4, with
+// Layouts / Schematics / …) is placed again, looking only inside that folder.
+// Moves only when sure (≥ 0.8); a CAD file follows the PDF of the same drawing.
+// Nothing is deleted — the file's row just points at the deeper folder, and
+// meta.moved_from keeps where it was.
+const CAD = /\.(dwg|dxf|rvt|ifc|nwc|nwd)$/i
+const drawingStem = (f: any) => String(f.meta?.drawing?.number || f.file_name || "").replace(/\.[^.]+$/, "")
+  .replace(/[-_ ]+(rev\.?\s*)?[A-Z]{0,2}\d{1,3}$/i, "").replace(/[^a-z0-9]/gi, "").toLowerCase()
+async function resortLoose(projectId: string | null, dry: boolean, max = 30) {
+  const t0 = Date.now()
+  let q = sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, meta")
+    .not("subfolder_key", "is", null).neq("subfolder_key", "superseded")
+  if (projectId) q = q.eq("project_id", projectId)
+  const { data: files, error } = await q.limit(20000)
+  if (error) throw new Error(error.message)
+  const pids = [...new Set((files || []).map((f: any) => f.project_id))]
+  const { data: folders } = pids.length ? await sb.from("project_doc_folders").select("project_id, folder_key, parent_key, label").in("project_id", pids).limit(20000) : { data: [] }
+  const kids = new Set((folders || []).filter((f: any) => f.parent_key).map((f: any) => `${f.project_id}|${f.parent_key}`))
+  const label = new Map((folders || []).map((f: any) => [`${f.project_id}|${f.folder_key}`, f.label]))
+  const loose = (files || []).filter((f: any) => kids.has(`${f.project_id}|${f.subfolder_key}`))
+  const todo = loose.filter((f: any) => f.meta && !f.meta.resort_stay && !CAD.test(f.file_name)).slice(0, max)
+  const out: any[] = []
+  const moved = new Map<string, string>() // project|folder|stem → new key
+  let folderLock: Promise<any> = Promise.resolve()
+  let i = 0
+  const worker = async () => {
+    while (i < todo.length && Date.now() - t0 < 100_000) {
+      const f = todo[i++]
+      const g = { drawing: f.meta?.drawing || {}, summary: f.meta?.summary, doc_type: f.meta?.doc_type }
+      try {
+        const pl: any = await choosePlace(f.project_id, f.subfolder_key, { file_name: f.file_name }, g)
+        const from = label.get(`${f.project_id}|${f.subfolder_key}`) || f.subfolder_key
+        if ((pl.confidence ?? 0) < 0.8 || (!pl.new_folder && (!pl.subfolder_key || pl.subfolder_key === f.subfolder_key))) {
+          // Checked once and it belongs here — not asked again
+          if (!dry) await sb.from("project_doc_files").update({ meta: { ...f.meta, resort_stay: true } }).eq("id", f.id)
+          out.push({ file: f.file_name, from, stays: true, to: pl.path || null, confidence: pl.confidence, reason: pl.reason }); continue
+        }
+        let to = pl.subfolder_key, path = pl.path
+        if (!dry && pl.new_folder) {
+          // One at a time, so two files wanting the same new folder share it
+          const made = await (folderLock = folderLock.then(async () => {
+            const a = await ensureFolder(f.project_id, pl.new_folder.parent_key, pl.new_folder.name)
+            if (!pl.new_folder.sub) return { key: a.key, label: a.label }
+            const b = await ensureFolder(f.project_id, a.key, pl.new_folder.sub)
+            return { key: b.key, label: `${a.label} › ${b.label}` }
+          }, () => ({ key: "", label: "" })))
+          if (!made.key) throw new Error("Couldn't make the folder")
+          to = made.key; path = made.label; label.set(`${f.project_id}|${to}`, made.label)
+        }
+        if (!dry) await sb.from("project_doc_files").update({ subfolder_key: to, meta: { ...f.meta, moved_from: { subfolder_key: f.subfolder_key, at: new Date().toISOString(), by: "resort" } } }).eq("id", f.id)
+        moved.set(`${f.project_id}|${f.subfolder_key}|${drawingStem(f)}`, to || "(new)")
+        out.push({ file: f.file_name, from, to: path, confidence: pl.confidence, reason: pl.reason, ...(dry ? { dry: true } : {}) })
+      } catch (e) { out.push({ file: f.file_name, error: String((e as Error).message || e) }) }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()])
+  // CAD files go with the PDF of the same drawing
+  for (const f of loose.filter((f: any) => CAD.test(f.file_name))) {
+    const to = moved.get(`${f.project_id}|${f.subfolder_key}|${drawingStem(f)}`)
+    if (!to) continue
+    if (!dry && to !== "(new)") await sb.from("project_doc_files").update({ subfolder_key: to, meta: { ...(f.meta || {}), moved_from: { subfolder_key: f.subfolder_key, at: new Date().toISOString(), by: "resort" } } }).eq("id", f.id)
+    out.push({ file: f.file_name, to: label.get(`${f.project_id}|${to}`) || to, with_pdf: true, ...(dry ? { dry: true } : {}) })
+  }
+  return { loose: loose.length, checked: i, left: Math.max(0, loose.filter((f: any) => f.meta && !f.meta.resort_stay && !CAD.test(f.file_name)).length - i), results: out }
 }
 
 // Make (or reuse) a numbered sub-folder: "NN. Name"
@@ -1016,6 +1092,8 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
       if (name) {
         const f = await ensureFolder(p.id, String(d.new_folder.parent_key || sub || folder), name)
         sub = f.key; madeFolder = f.label
+        const name2 = String(d.new_folder.sub || "").replace(/^\s*\d+\s*[.)-]\s*/, "").replace(/[\/\\:*?"<>|]/g, "-").trim().slice(0, 60)
+        if (name2) { const f2 = await ensureFolder(p.id, f.key, name2); sub = f2.key; madeFolder = `${f.label} › ${f2.label}` }
       }
     }
     // Same file already in that folder → don't add it twice
@@ -1371,7 +1449,7 @@ Deno.serve(async (req) => {
     const { data: prof } = await sb.from("profiles").select("id, role").eq("id", u.user.id).maybeSingle()
     if (!prof || !FILERS.includes(prof.role)) return json({ error: "Your role can't file documents" }, 403)
     actorId = prof.id
-  } else if (action !== "run" && action !== "datasheets" && action !== "xero") {
+  } else if (action !== "run" && action !== "datasheets" && action !== "xero" && action !== "resort") {
     return json({ error: "Schedule can only run" }, 403)
   }
 
@@ -1385,6 +1463,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === "datasheets") return json(await findDatasheets(cron ? 4 : 3))
+    if (action === "resort") return json(await resortLoose(isUuid(body.project_id) ? body.project_id : null, body.dry_run !== false, Math.min(60, Number(body.max) || 30)))
     if (action === "xero") return json(await xeroRun(cron ? XERO_PER_RUN : 3))
     if (action === "xero_status") {
       const st = await (await xeroCall({ mode: "status" })).json().catch(() => ({}))

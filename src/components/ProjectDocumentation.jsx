@@ -2658,6 +2658,7 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
       <ZipProgressOverlay progress={zipProgress} />
       {/* Explorer (beta) view removed — the folder view is the one Documents view. */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: 12, gap: 10, flexWrap: 'wrap' }}>
+        {canManage && <FilingNotes projectId={projectId} onMoved={refreshTree} />}
         <button className="btn btn-sm" onClick={zipAll} disabled={zippingAll}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/></svg>
           {zippingAll ? 'Zipping…' : 'Zip all documents'}
@@ -2683,6 +2684,67 @@ export default function ProjectDocumentation({ projectId, projectName, projectSt
         ))}
       </div>
       {canAddFolders && <AddTopFolderButton onAdd={addTopFolder} />}
+    </div>
+  )
+}
+
+// ─── Filing notes + sorting loose files ─────────────────────────────
+// Notes the Inbox reads before it places a file on this job (building names,
+// what drawing codes mean, where things go). "Sort loose files" re-places
+// files the CRM left directly in a folder that has sub-folders — shows the
+// moves first, nothing moves until you say so, and nothing is deleted.
+function FilingNotes({ projectId, onMoved }) {
+  const [open, setOpen] = useState(false)
+  const [notes, setNotes] = useState('')
+  const [saved, setSaved] = useState('')
+  const [busy, setBusy] = useState('')
+  const [plan, setPlan] = useState(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    if (!open) return
+    supabase.from('projects').select('doc_notes').eq('id', projectId).maybeSingle()
+      .then(({ data, error }) => { if (!error) { setNotes(data?.doc_notes || ''); setSaved(data?.doc_notes || '') } })
+  }, [open, projectId])
+  async function save() {
+    setBusy('save'); setErr('')
+    const { error } = await supabase.from('projects').update({ doc_notes: notes.trim() || null }).eq('id', projectId)
+    if (error) setErr(error.message); else setSaved(notes)
+    setBusy('')
+  }
+  async function sort(dry) {
+    setBusy(dry ? 'check' : 'move'); setErr('')
+    const { data, error } = await supabase.functions.invoke('intake', { body: { action: 'resort', project_id: projectId, dry_run: dry } })
+    if (error || data?.error) setErr(data?.error || error.message)
+    else { setPlan({ ...data, dry }); if (!dry) onMoved?.() }
+    setBusy('')
+  }
+  if (!open) return <button className="btn btn-sm" onClick={() => setOpen(true)} title="How the CRM files documents on this job">Filing notes</button>
+  const moves = (plan?.results || []).filter(r => !r.stays && !r.error)
+  const stays = (plan?.results || []).filter(r => r.stays)
+  return (
+    <div style={{ flexBasis: '100%', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 12, background: 'var(--surface2)', fontSize: 13 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Filing notes for the CRM</div>
+      <div style={{ color: 'var(--text3)', marginBottom: 6 }}>Read before it files anything on this job — building names, what drawing codes mean, where things go.</div>
+      <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 13 }}
+        placeholder="e.g. Three buildings: Residential Block; Sports Hall; Changing Room = Education Block. Drawings go under their building › consultant › stage › type." />
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button className="btn btn-sm btn-primary" onClick={save} disabled={!!busy || notes === saved}>{busy === 'save' ? 'Saving…' : 'Save notes'}</button>
+        <button className="btn btn-sm" onClick={() => sort(true)} disabled={!!busy}>{busy === 'check' ? 'Checking…' : 'Sort loose files'}</button>
+        <button className="btn btn-sm" onClick={() => { setOpen(false); setPlan(null) }}>Close</button>
+        {err && <span style={{ color: 'var(--red, #b42318)' }}>{err}</span>}
+      </div>
+      {plan && (
+        <div style={{ marginTop: 10 }}>
+          {!moves.length && !stays.length && <div style={{ color: 'var(--text3)' }}>Nothing loose — every file the CRM filed is in its deepest folder.</div>}
+          {moves.length > 0 && <>
+            <div style={{ fontWeight: 600, margin: '4px 0' }}>{plan.dry ? `Would move ${moves.length}` : `Moved ${moves.length}`}</div>
+            {moves.map((r, i) => <div key={i} style={{ padding: '2px 0' }}>{r.file} <span style={{ color: 'var(--text3)' }}>→ {r.to}{r.reason ? ` · ${r.reason}` : ''}</span></div>)}
+          </>}
+          {stays.length > 0 && <div style={{ marginTop: 6, color: 'var(--text3)' }}>Left where they are (not sure enough): {stays.map(r => r.file).join(', ')}</div>}
+          {plan.left > 0 && <div style={{ marginTop: 6, color: 'var(--text3)' }}>{plan.left} more to check — run again after.</div>}
+          {plan.dry && moves.length > 0 && <button className="btn btn-sm btn-primary" style={{ marginTop: 8 }} onClick={() => sort(false)} disabled={!!busy}>{busy === 'move' ? 'Moving…' : 'Move them'}</button>}
+        </div>
+      )}
     </div>
   )
 }
