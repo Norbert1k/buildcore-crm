@@ -424,7 +424,7 @@ const PLACEMENT_RULES = `CCG folder rules (keep every job's Documents profession
 - Never put new files in folders marked Old, Archive or Superseded.
 - Keep all revisions of a drawing together in one folder — never make a folder per revision or per date.
 - Go as deep as the job's structure goes. Follow it level by level: building / block → section (Drawings, Documents…) → consultant / originator → stage → drawing type. When the folder you'd pick has sub-folders by type (e.g. Layouts, Schematics, Combined Services, Model, Documents, Details, Sections) the file goes into the matching sub-folder — never loose in the parent.
-- Match the drawing type from its title: "… Schematic" → Schematics; plans and plant-room / services layouts → Layouts; coordinated multi-service drawings → Combined Services; BIM / 3D models → Model; reports, specifications, schedules and other non-drawing files → Documents. A CAD file (.dwg / .dxf) goes in the same folder as the PDF of the same drawing.
+- Match the drawing type from its title: "… Schematic" → Schematics; plans and plant-room / services layouts → Layouts; coordinated multi-service drawings → Combined Services; BIM / 3D models → Model; reports, specifications, schedules and other non-drawing files → Documents. A CAD file (.dwg / .dxf) goes in the same folder as the PDF of the same drawing — or that folder's DWG / CAD sub-folder if it has one. A PDF never goes into a DWG / CAD / Native folder.
 - Pick the building first: on a job with several buildings, the drawing goes under the building it covers (use the title block, the drawing-number code and the job's filing notes — a building can have more than one name). Site-wide drawings go where the job keeps site-wide drawings; if there's no such place and you can't tell the building, give a low confidence.
 - Only make a new folder when nothing fits. Name it without a number (it's added for you):
   · Drawings: "<Originator> – <Discipline>", e.g. "KSA – Structural", "CIAO – Architectural", "Integration – MEP". If the job is organised by plot/block and the drawing is for one plot, use or make that plot's folder ("Plot 3").
@@ -449,7 +449,7 @@ async function allRows(make: () => any, cap = 20000) {
   return out
 }
 
-async function choosePlace(projectId: string, baseKey: string, item: any, g: any) {
+async function choosePlace(projectId: string, baseKey: string, item: any, g: any, opts: { within?: string; noNew?: boolean } = {}) {
   const all = await allRows(() => sb.from("project_doc_folders").select("folder_key, parent_key, label").eq("project_id", projectId).order("folder_key"))
   // Folders under the base, with their paths
   const tree: { key: string; path: string; label: string }[] = []
@@ -482,7 +482,10 @@ async function choosePlace(projectId: string, baseKey: string, item: any, g: any
   const { data: pj } = await sb.from("projects").select("project_name, doc_notes").eq("id", projectId).maybeSingle().then((r: any) => r, () => ({ data: null }))
   const prompt = `${PLACEMENT_RULES}
 ${pj?.doc_notes ? `\nThis job's filing notes (from the team): ${pj.doc_notes}\n` : ""}
-The job's existing folders inside this section (key | path — e.g. sample files):
+${opts.within ? `The file is now loose in: ${opts.within}
+That path already fixes the building, consultant and stage. Choose only among the sub-folders below — the one that matches this file's type. ${opts.noNew ? "Don't make new folders (new_name null). " : ""}If none clearly fits, or the file is the kind that sits in this folder itself (e.g. PDFs beside a DWG sub-folder), reply use null with confidence below 0.8.
+
+The sub-folders (key | path — e.g. sample files):` : "The job's existing folders inside this section (key | path — e.g. sample files):"}
 ${listing}
 
 The new file:
@@ -501,7 +504,7 @@ Reply JSON only: {"use": existing folder key or null, "new_name": name for a new
   if (chosen && !isOld(chosen.path)) {
     return { subfolder_key: chosen.key, path: chosen.path, confidence: num(out.confidence) ?? 0.8, reason: out.reason || "" }
   }
-  const name = String(out.new_name || "").replace(/^\s*\d+\s*[.)-]\s*/, "").replace(/[\/\\:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60)
+  const name = opts.noNew ? "" : String(out.new_name || "").replace(/^\s*\d+\s*[.)-]\s*/, "").replace(/[\/\\:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60)
   if (name) {
     const parent = tree.find(t => t.key === out.new_parent && !isOld(t.path))
     const sub2 = String(out.new_sub || "").replace(/^\s*\d+\s*[.)-]\s*/, "").replace(/[\/\\:*?"<>|]/g, "-").replace(/\s+/g, " ").trim().slice(0, 60)
@@ -532,6 +535,12 @@ async function resortLoose(projectId: string | null, dry: boolean, max = 30) {
   const folders = pids.length ? await allRows(() => sb.from("project_doc_folders").select("project_id, folder_key, parent_key, label").in("project_id", pids).order("folder_key"), 100000) : []
   const kids = new Set((folders || []).filter((f: any) => f.parent_key).map((f: any) => `${f.project_id}|${f.parent_key}`))
   const label = new Map((folders || []).map((f: any) => [`${f.project_id}|${f.folder_key}`, f.label]))
+  const parent = new Map((folders || []).map((f: any) => [`${f.project_id}|${f.folder_key}`, f.parent_key]))
+  const fullPath = (pid: string, key: string) => {
+    const parts: string[] = []
+    for (let k: any = key, n = 0; k && n < 14; k = parent.get(`${pid}|${k}`), n++) { const l = label.get(`${pid}|${k}`); if (!l) break; parts.unshift(l) }
+    return parts.join(" › ")
+  }
   const loose = (files || []).filter((f: any) => kids.has(`${f.project_id}|${f.subfolder_key}`))
   const todo = loose.filter((f: any) => f.meta && !f.meta.resort_stay && !CAD.test(f.file_name)).slice(0, max)
   const out: any[] = []
@@ -543,7 +552,8 @@ async function resortLoose(projectId: string | null, dry: boolean, max = 30) {
       const f = todo[i++]
       const g = { drawing: f.meta?.drawing || {}, summary: f.meta?.summary, doc_type: f.meta?.doc_type }
       try {
-        const pl: any = await choosePlace(f.project_id, f.subfolder_key, { file_name: f.file_name }, g)
+        const pl: any = await choosePlace(f.project_id, f.subfolder_key, { file_name: f.file_name }, g, { within: fullPath(f.project_id, f.subfolder_key), noNew: true })
+        if (pl.subfolder_key && /\b(dwg|cad|native|autocad)\b/i.test(pl.path || "")) { pl.confidence = 0; pl.reason = "Not into a CAD folder" }
         const from = label.get(`${f.project_id}|${f.subfolder_key}`) || f.subfolder_key
         if ((pl.confidence ?? 0) < 0.8 || (!pl.new_folder && (!pl.subfolder_key || pl.subfolder_key === f.subfolder_key))) {
           // Checked once and it belongs here — not asked again
