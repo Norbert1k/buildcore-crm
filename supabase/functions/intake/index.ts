@@ -377,7 +377,7 @@ Reply with JSON only, no prose:
  "project_id": job id or null, "project_confidence": 0-1,
  "vendor": {"kind": "subcontractor"|"supplier"|"none", "id": id or null, "name": "company name as written or null", "confidence": 0-1},
  "quote": {"request_id": open quote request id for this job and trade, or null, "trade": "e.g. Groundworks", "amount": total price as a number or null, "vat": "net"|"gross"|"unknown", "date": "YYYY-MM-DD" or null, "reference": string or null},
- "compliance": {"document_type": compliance value or null, "issue_date": "YYYY-MM-DD" or null, "expiry_date": "YYYY-MM-DD" or null, "reference": string or null, "cover_amount": number or null},
+ "compliance": {"document_type": compliance value or null, "issue_date": "YYYY-MM-DD" or null, "expiry_date": "YYYY-MM-DD" or null, "reference": string or null, "cover_amount": number or null, "insured": "who the policy / certificate is for, as written, or null", "scope": for insurance, certificates and accreditations: "ccg_company" (City Construction Group's own company-wide cover or accreditation — annual PL / EL / PI / contractor's all risks, CHAS, ISO, Constructionline) | "ccg_job" (cover for ONE job / site / contract — contract works or all-risks for a named site, a project-specific policy, the employer's or CCG's insurance evidence for one contract; give that job in project_id) | "subcontractor" (a subcontractor's or supplier's own) | null},
  "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
  "pa_number": number or null,
  "pa_revision_by": for a payment application that the client / employer's agent has marked up or revised: "client"; CCG's own (re)issued version: "ccg"; otherwise null,
@@ -928,6 +928,26 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
 
   if (type === "insurance" || type === "certificate" || type === "accreditation") {
     const dt = COMPLIANCE_TYPES.includes(g.compliance?.document_type) ? g.compliance.document_type : null
+    const scope = g.compliance?.scope
+    const ccg = scope === "ccg_company" || scope === "ccg_job" || /city construction|\bcltd\b|\bccg\b/i.test(String(g.compliance?.insured || ""))
+    // CCG's own cover for one job → that job's 01. Project Order › Insurance
+    if (ccg && scope === "ccg_job") {
+      if (!project) return { status: "to_check", reason: "Job insurance — couldn't tell which job" }
+      const decision: any = { target: "project_doc", project_id: project.id, folder_key: "01-project-order", subfolder_key: null,
+        new_folder: { parent_key: "01-project-order", name: "Insurance" }, path_label: `${project.project_name} › 01. Project Order › Insurance` }
+      const { data: ins } = await sb.from("project_doc_folders").select("folder_key, label").eq("project_id", project.id).eq("parent_key", "01-project-order")
+      const have = (ins || []).find((f: any) => /insurance/i.test(f.label))
+      if (have) { delete decision.new_folder; decision.subfolder_key = have.folder_key }
+      if (!sure(pc) || !sure(tc)) return { status: "to_check", decision, reason: `Job insurance for ${project.project_name}? Please confirm` }
+      return { status: "filed", decision, reason: g.reason || "Insurance for this job" }
+    }
+    // CCG's own company-wide cover / accreditation → Company Docs
+    if (ccg) {
+      const category = type === "insurance" ? "insurance" : "certifications"
+      const decision = { target: "company_doc", category, path_label: `Company Docs › ${category === "insurance" ? "Insurance" : "Certifications"}` }
+      if (!sure(tc)) return { status: "to_check", decision, reason: "CCG's own document? Please confirm" }
+      return { status: "filed", decision, reason: g.reason || "CCG company document" }
+    }
     if (!sub) return { status: "to_check", reason: vendor.name ? `Subcontractor “${vendor.name}” isn't in the CRM` : "Couldn't tell whose certificate this is" }
     if (!sure(vc)) return { status: "to_check", reason: `Probably ${sub.company_name} — please confirm` }
     if (!dt || dt === "other") return { status: "to_check", reason: "Couldn't tell which compliance document this is" }
@@ -1037,6 +1057,7 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
   }
 
   if (d.target === "compliance") return { status: "filed", filed_to: await fileCompliance(item, d, actorId, g) }
+  if (d.target === "company_doc") return { status: "filed", filed_to: await fileCompanyDoc(item, d, g) }
   if (d.target === "handover") return await fileToHandover(item, d)
 
   if (d.target === "quote") {
@@ -1112,6 +1133,21 @@ async function fileSubRams(projectId: string, subId: string, item: any, actorId:
     file_size: item.file_size, storage_path: path, direction: "received", notes: "Filed from email (Inbox)", uploaded_by: actorId })
   if (error) throw new Error(error.message)
   return { project_sub_id: ps!.id, label: `${s.company_name} › 05. RAMS & Method Statements` }
+}
+
+// CCG's own company documents (insurance, accreditations) → Company Docs
+const COMPANY_CATEGORIES = ["insurance", "certifications", "policies", "other"]
+async function fileCompanyDoc(item: any, d: any, g: any) {
+  const category = COMPANY_CATEGORIES.includes(d.category) ? d.category : "other"
+  const { data: dup } = await sb.from("company_documents").select("id").eq("category", category).eq("file_name", item.file_name).limit(1)
+  if (dup?.length) return { target: "company_doc", category, label: `Already in Company Docs › ${category}` }
+  const path = `company/${category}/${Date.now()}-${safeName(item.file_name)}`
+  await copyStaged(item, path, "company-docs")
+  const { data, error } = await sb.from("company_documents").insert({ category, file_name: item.file_name, file_type: item.mime_type || null,
+    file_size: item.file_size || null, storage_path: path }).select("id").single()
+  if (error) throw new Error(error.message)
+  const label = ({ insurance: "Insurance", certifications: "Certifications", policies: "Policies", other: "Other Documents" } as Record<string, string>)[category]
+  return { target: "company_doc", category, company_document_id: data.id, label: `Company Docs › ${label}${g?.compliance?.expiry_date ? ` (expires ${g.compliance.expiry_date})` : ""}` }
 }
 
 async function fileCompliance(item: any, d: any, actorId: string | null, g: any) {
@@ -1377,7 +1413,7 @@ Deno.serve(async (req) => {
       if (item.status === "filed") return json({ error: "Already filed", filed_to: item.filed_to }, 409)
       if (!item.staged_path) return json({ error: "The file hasn't been downloaded yet — press Retry first" }, 409)
       const d = body.decision || {}
-      if (!["project_doc", "compliance", "quote", "handover"].includes(d.target)) return json({ error: "Pick where it goes" }, 400)
+      if (!["project_doc", "compliance", "quote", "handover", "company_doc"].includes(d.target)) return json({ error: "Pick where it goes" }, 400)
       for (const k of ["project_id", "subcontractor_id", "supplier_id", "task_id"]) if (d[k] && !isUuid(d[k])) return json({ error: `Bad ${k}` }, 400)
       const res = await fileItem(item, d, actorId)
       await recordLesson(item, d, "file", res)

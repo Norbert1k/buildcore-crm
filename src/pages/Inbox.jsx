@@ -231,6 +231,7 @@ function CheckCard({ item, lists, canFile, onDone }) {
   const [newTitle, setNewTitle] = useState(g.quote?.trade || '')
   const [amount, setAmount] = useState(g.quote?.amount != null ? String(g.quote.amount) : '')
   const [busy, setBusy] = useState(false)
+  const [companyCat, setCompanyCat] = useState(plan?.category || (g.doc_type === 'insurance' ? 'insurance' : 'certifications'))
 
   // Jobs with a folder per building (PAs / notices)
   const [fk] = folder.split('|')
@@ -278,6 +279,8 @@ function CheckCard({ item, lists, canFile, onDone }) {
       }
     } else if (target === 'compliance') {
       decision = { target, subcontractor_id: subId, document_type: docType, expiry_date: expiry || null }
+    } else if (target === 'company_doc') {
+      decision = { target, category: companyCat }
     } else {
       const [k, id] = vendor.split(':')
       decision = { target, project_id: projectId, task_id: reqId && reqId !== 'new' ? reqId : null,
@@ -298,6 +301,7 @@ function CheckCard({ item, lists, canFile, onDone }) {
 
   const ready = target === 'handover' ? !!projectId : target === 'project_doc' ? !!projectId && (!buildings.length || !!building)
     : target === 'compliance' ? !!subId && !!docType
+    : target === 'company_doc' ? !!companyCat
     : !!projectId && !!vendor && (reqId === 'new' ? !!newTitle.trim() : !!reqId)
 
   return (
@@ -320,9 +324,10 @@ function CheckCard({ item, lists, canFile, onDone }) {
             <option value="quote">Quote for a job</option>
             <option value="compliance">Subcontractor compliance</option>
             <option value="handover">Job handover (H&S File / O&M)</option>
+            <option value="company_doc">Company Docs (CCG's own)</option>
           </select>
 
-          {target !== 'compliance' && (
+          {target !== 'compliance' && target !== 'company_doc' && (
             <select value={projectId} onChange={e => { setProjectId(e.target.value); setReqId('') }} aria-label="Job">
               <option value="">Job…</option>
               {lists.projects.map(p => <option key={p.id} value={p.id}>{p.project_ref ? p.project_ref + ' · ' : ''}{p.project_name}</option>)}
@@ -370,6 +375,15 @@ function CheckCard({ item, lists, canFile, onDone }) {
             </>
           )}
 
+          {target === 'company_doc' && (
+            <select value={companyCat} onChange={e => setCompanyCat(e.target.value)} aria-label="Company Docs folder">
+              <option value="insurance">Insurance</option>
+              <option value="certifications">Certifications</option>
+              <option value="policies">Policies</option>
+              <option value="other">Other Documents</option>
+            </select>
+          )}
+
           {target === 'quote' && (
             <>
               <select value={reqId} onChange={e => setReqId(e.target.value)} aria-label="Quote request" disabled={!projectId}>
@@ -407,6 +421,7 @@ function linkFor(f) {
   if (!f) return null
   if (f.task_id) return `/tasks/${f.task_id}`
   if (f.target === 'compliance' && f.subcontractor_id) return `/subcontractors/${f.subcontractor_id}`
+  if (f.target === 'company_doc') return '/company-documents'
   if (f.project_id) return `/projects/${f.project_id}?tab=documents`
   return null
 }
