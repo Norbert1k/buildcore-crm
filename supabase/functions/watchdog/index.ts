@@ -33,6 +33,13 @@ const DAY = 864e5
 const today = () => new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z")
 const days = (a: Date | string, b: Date | string = today()) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY)
 const fmt = (d: Date | string) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+// A payment notice's own number: "Interim Payment Notice 07", "IPN 07", "PN07", "Payment Notice No. 7"
+// (not a date like "Notice 05.11.26"). A notice that names the PA ("PA07 Payment Notice") counts too.
+const noticeNo = (n: string) => {
+  const s = String(n).replace(/^\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*\S+@\S+\s*-\s*/, "")
+  const m = s.match(/\b(?:payment\s*notice|IPN|PN)\s*(?:no\.?|number|#)?\s*[-_ ]?0*(\d{1,3})\b(?![.\/-]\d)/i)
+  return m ? parseInt(m[1], 10) : paNo(s)
+}
 const paNo = (n: string) => { const m = String(n).replace(/^\d{4}-\d{2}-\d{2}[_ ]\d{3,4}\s*-\s*\S+@\S+\s*-\s*/, "").match(/\bPA\s*[-_ ]?0*(\d{1,3})\b/i); return m ? parseInt(m[1], 10) : null }
 const PA = (n: number) => "PA" + String(n).padStart(2, "0")
 
@@ -192,7 +199,9 @@ async function check(): Promise<Alert[]> {
           action_label: "Update CFF", action_url: docs })
       }
       // 5. No payment notice since the PA
-      const notice = mine.filter((f: any) => f.folder_key === "03-payment-notice" && new Date(f.created_at) >= new Date(latest.created_at))
+      // Counts if its own number is this PA's (or later), whenever it was saved — or, with no number, if saved after the PA
+      const notice = mine.filter((f: any) => f.folder_key === "03-payment-notice" &&
+        ((noticeNo(f.file_name) ?? -1) >= latest.n || new Date(f.created_at) >= new Date(latest.created_at)))
       if (!notice.length && age >= 12) {
         out.push({ key: `notice_missing:${p.id}:${latest.n}`, project_id: p.id, kind: "notice_missing", severity: age >= 21 ? "urgent" : "soon",
           title: `No payment notice for ${PA(latest.n)} — ${p.project_name}`,
