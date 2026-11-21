@@ -391,6 +391,14 @@ Reply with JSON only, no prose:
  "reason": "why, in a few words (what in the file told you)"}`
 }
 
+// Prompt caching: what each run reused vs paid for in full (shown in the run result)
+const CACHE = { read: 0, written: 0, uncached: 0 }
+const tally = (u: any) => { if (!u) return; CACHE.read += u.cache_read_input_tokens || 0; CACHE.written += u.cache_creation_input_tokens || 0; CACHE.uncached += u.input_tokens || 0 }
+const cacheNote = () => {
+  const all = CACHE.read + CACHE.written + CACHE.uncached
+  return all ? { cache: { ...CACHE, reused_pct: Math.round(100 * CACHE.read / all) } } : {}
+}
+
 async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint = "") {
   const content = [
     ...(await contentFor(item.file_name, item.mime_type || "", bytes)),
@@ -408,6 +416,7 @@ async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint
   })
   if (!r.ok) throw new Error(`Claude ${r.status}: ${(await r.text()).slice(0, 200)}`)
   const d = await r.json()
+  tally(d.usage)
   const text = (d.content || []).map((c: any) => c.text || "").join("").trim()
   const m = text.match(/\{[\s\S]*\}/)
   if (!m) throw new Error("Claude didn't return JSON")
@@ -480,25 +489,31 @@ async function choosePlace(projectId: string, baseKey: string, item: any, g: any
     d.kind && `Drawing type: ${d.kind}`, d.building && `Building: ${d.building}`, d.stage && `Stage: ${d.stage}`,
     g.vendor?.name && `From: ${g.vendor.name}`, item.source_path && `Drive folder: ${item.source_path}`].filter(Boolean).join("\n")
   const { data: pj } = await sb.from("projects").select("project_name, doc_notes").eq("id", projectId).maybeSingle().then((r: any) => r, () => ({ data: null }))
-  const prompt = `${PLACEMENT_RULES}
+  // The rules, filing notes and folder list are the same for every file on this
+  // job, so they go first and are cached (5 min); only the file's details change.
+  const fixed = `${PLACEMENT_RULES}
 ${pj?.doc_notes ? `\nThis job's filing notes (from the team): ${pj.doc_notes}\n` : ""}
-${opts.within ? `The file is now loose in: ${opts.within}
-That path already fixes the building, consultant and stage. Choose only among the sub-folders below — the one that matches this file's type. ${opts.noNew ? "Don't make new folders (new_name null). " : ""}If none clearly fits, or the file is the kind that sits in this folder itself (e.g. PDFs beside a DWG sub-folder), reply use null with confidence below 0.8.
+${opts.within ? "The folders to choose from" : "The job's existing folders inside this section"} (key | path — e.g. sample files):
+${listing}`
+  const ask = `${opts.within ? `The file is now loose in: ${opts.within}
+That path already fixes the building, consultant and stage. Choose only among the folders listed above — the one that matches this file's type. ${opts.noNew ? "Don't make new folders (new_name null). " : ""}If none clearly fits, or the file is the kind that sits in this folder itself (e.g. PDFs beside a DWG sub-folder), reply use null with confidence below 0.8.
 
-The sub-folders (key | path — e.g. sample files):` : "The job's existing folders inside this section (key | path — e.g. sample files):"}
-${listing}
-
-The new file:
+` : ""}The new file:
 ${about}
 
 Reply JSON only: {"use": existing folder key or null, "new_name": name for a new folder or null, "new_sub": name of a second new folder inside new_name, or null, "new_parent": existing folder key to make it inside, or null for the top of this section, "confidence": 0-1, "reason": "few words"}`
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL, max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
+    body: JSON.stringify({ model: MODEL, max_tokens: 500, messages: [{ role: "user", content: [
+      { type: "text", text: fixed, cache_control: { type: "ephemeral" } },
+      { type: "text", text: ask },
+    ] }] }),
   })
   if (!r.ok) throw new Error(`Claude ${r.status} (folders)`)
-  const out = JSON.parse(((await r.json()).content || []).map((c: any) => c.text || "").join("").match(/\{[\s\S]*\}/)?.[0] || "{}")
+  const resp = await r.json()
+  tally(resp.usage)
+  const out = JSON.parse((resp.content || []).map((c: any) => c.text || "").join("").match(/\{[\s\S]*\}/)?.[0] || "{}")
   const isOld = (lbl: string) => /(^|[\s.\-–])(old|archive|archived|superseded)\b/i.test(lbl)
   const chosen = tree.find(t => t.key === out.use)
   if (chosen && !isOld(chosen.path)) {
@@ -526,6 +541,7 @@ const drawingStem = (f: any) => String(f.meta?.drawing?.number || f.file_name ||
   .replace(/[-_ ]+(rev\.?\s*)?[A-Z]{0,2}\d{1,3}$/i, "").replace(/[^a-z0-9]/gi, "").toLowerCase()
 async function resortLoose(projectId: string | null, dry: boolean, max = 30) {
   const t0 = Date.now()
+  Object.assign(CACHE, { read: 0, written: 0, uncached: 0 })
   const files = await allRows(() => {
     let q = sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, meta")
       .not("subfolder_key", "is", null).neq("subfolder_key", "superseded").order("id")
@@ -586,7 +602,7 @@ async function resortLoose(projectId: string | null, dry: boolean, max = 30) {
     if (!dry && to !== "(new)") await sb.from("project_doc_files").update({ subfolder_key: to, meta: { ...(f.meta || {}), moved_from: { subfolder_key: f.subfolder_key, at: new Date().toISOString(), by: "resort" } } }).eq("id", f.id)
     out.push({ file: f.file_name, to: label.get(`${f.project_id}|${to}`) || to, with_pdf: true, ...(dry ? { dry: true } : {}) })
   }
-  return { loose: loose.length, checked: i, left: Math.max(0, loose.filter((f: any) => f.meta && !f.meta.resort_stay && !CAD.test(f.file_name)).length - i), results: out }
+  return { ...cacheNote(), loose: loose.length, checked: i, left: Math.max(0, loose.filter((f: any) => f.meta && !f.meta.resort_stay && !CAD.test(f.file_name)).length - i), results: out }
 }
 
 // Make (or reuse) a numbered sub-folder: "NN. Name"
@@ -1413,6 +1429,7 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
 
 async function run() {
   const started = Date.now()
+  Object.assign(CACHE, { read: 0, written: 0, uncached: 0 })
   const { data: settings } = await sb.from("intake_settings").select("*").eq("id", 1).maybeSingle()
   if (!settings?.drive_folder_id) return { ok: false, note: "No Google Drive folder set (Inbox › Settings)" }
   let added = 0, note = ""
@@ -1445,7 +1462,7 @@ async function run() {
   const { count: left } = await sb.from("intake_items").select("id", { count: "exact", head: true }).eq("status", "pending")
   const summary = `${added} new · ${done} read · ${left || 0} waiting${note ? " · " + note : ""}`
   await sb.from("intake_settings").update({ last_run_at: new Date().toISOString(), last_run_note: summary }).eq("id", 1)
-  return { ok: !note, added, read: done, waiting: left || 0, note: summary }
+  return { ok: !note, added, read: done, waiting: left || 0, note: summary, ...cacheNote() }
 }
 
 // ─── HTTP ────────────────────────────────────────────────────────────────────
