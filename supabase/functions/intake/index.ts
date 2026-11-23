@@ -1504,13 +1504,26 @@ async function run() {
   const queue = [...(fresh || []), ...(older || []).filter((o: any) => !(fresh || []).some((f: any) => f.id === o.id))].slice(0, BATCH)
   let done = 0, next = 0
   // A few at a time; each item is claimed first so an overlapping "Check now" can't read it twice
+  // Big files (> 3 MB) are read on their own, with nothing else in memory: three big
+  // ones at once ran the function out of memory and the run died every time
+  let inFlight = 0, exclusive = false, wantBig = 0
+  const nap = () => new Promise(r => setTimeout(r, 150))
   async function worker() {
     while (next < queue.length && Date.now() - started < TIME_BUDGET_MS) {
       const item = queue[next++]
+      const big = (item.file_size || 0) > 3_000_000
+      if (big) { wantBig++; while (exclusive || inFlight > 0) await nap(); wantBig--; exclusive = true }
+      else while (exclusive || wantBig > 0) await nap()
+      inFlight++
+      try { await runOne(item) } finally { inFlight--; if (big) exclusive = false }
+    }
+  }
+  async function runOne(item: any) {
+    {
       // Claiming counts as a try, so a file that kills the run isn't picked first forever
       const { data: claimed } = await sb.from("intake_items").update({ updated_at: new Date().toISOString(), attempts: (item.attempts || 0) + (item.status === "pending" ? 1 : 0) })
         .eq("id", item.id).eq("status", item.status).eq("updated_at", item.updated_at).select("id")
-      if (!claimed?.length) continue
+      if (!claimed?.length) return
       await processItem(item, ctx, system, threshold, settings.trial !== false, settings.folder_map || {})
       done++
     }
