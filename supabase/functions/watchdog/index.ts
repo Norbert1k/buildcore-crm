@@ -70,7 +70,7 @@ async function check(): Promise<Alert[]> {
 
   const [files, reports, folders] = await Promise.all([
     all(() => sb.from("project_doc_files").select("id, project_id, folder_key, subfolder_key, file_name, created_at, client_visible")
-      .in("project_id", ids).in("folder_key", ["02-payment-application", "03-payment-notice", "00-project-information"])),
+      .in("project_id", ids).in("folder_key", ["02-payment-application", "03-payment-notice", "00-project-information", "05-progress-report"])),
     sb.from("progress_reports").select("id, project_id, report_date, created_at, ai_draft, ai_pa_ref, ai_sources, period_to, subfolder_key, valuations").in("project_id", ids)
       .then((r: any) => r.error ? sb.from("progress_reports").select("project_id, report_date, created_at").in("project_id", ids).then((x: any) => x.data || []) : (r.data || [])),
     sb.from("project_doc_folders").select("project_id, folder_key, parent_key, label").in("project_id", ids).then((r: any) => r.data || []),
@@ -140,7 +140,11 @@ async function check(): Promise<Alert[]> {
         const where = building ? `${p.project_name} — ${building}` : p.project_name
         const suffix = loc ? ":" + loc.split("-custom-")[1] : ""
         const locReports = (reports as any[]).filter(r => r.project_id === p.id && (r.subfolder_key ?? null) === reportSub)
-        const issued = locReports.some(r => !r.ai_draft && new Date(r.report_date || r.created_at) >= new Date(periodEnd.getTime() - 10 * DAY))
+        // Issued = published in the CRM, or a report a person sent (e.g. emailed with the PA)
+        // and the Inbox filed into this report folder — then nothing automatic goes out
+        const sentFile = (files as any[]).some((f: any) => f.project_id === p.id && f.folder_key === "05-progress-report" && (f.subfolder_key ?? null) === reportSub &&
+          (/PPR-\d{4}-\d{2}/i.test(f.file_name) ? f.file_name.toUpperCase().includes(`PPR-${monthKey}`) : new Date(f.created_at) >= new Date(periodEnd.getTime() - 10 * DAY)))
+        const issued = sentFile || locReports.some(r => !r.ai_draft && new Date(r.report_date || r.created_at) >= new Date(periodEnd.getTime() - 10 * DAY))
         const hadPa = new Date(locPas.map((f: any) => f.created_at).sort()[0]) <= new Date(periodEnd.getTime() + DAY)
         const started = !p.start_date || new Date(p.start_date) <= periodEnd
         // The month-end rule starts with November 2026 — earlier months were issued with each PA

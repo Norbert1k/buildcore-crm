@@ -62,6 +62,7 @@ const PROJECT_FOLDERS: Record<string, { folder_key: string; subfolder_key: strin
   meeting_minutes:       { folder_key: "00-project-information", subfolder_key: "meetings", label: "Documents › 11. Meetings" },
   client_order:          { folder_key: "01-project-order",       subfolder_key: null, label: "01. Project Order" },
   our_payment_application: { folder_key: "02-payment-application", subfolder_key: null, label: "02. Payment Application" },
+  our_progress_report:   { folder_key: "05-progress-report",     subfolder_key: null, label: "05. Project Progress Report" },
   client_payment_notice: { folder_key: "03-payment-notice",      subfolder_key: null, label: "03. Payment Notice (Client)" },
   variation:             { folder_key: "04-variations",          subfolder_key: null, label: "04. Variations" },
   programme:             { folder_key: "06-project-programme",   subfolder_key: null, label: "06. Project Programme" },
@@ -74,7 +75,7 @@ const COMPLIANCE_TYPES = [
 const INSURANCE_TYPES = ["public_liability", "employers_liability", "professional_indemnity"]
 const DOC_TYPES = [
   "drawing", "survey_report", "rams", "planning", "meeting_minutes",
-  "our_payment_application", "client_payment_notice", "variation", "programme",
+  "our_payment_application", "our_progress_report", "client_payment_notice", "variation", "programme",
   "subcontractor_quote", "supplier_quote", "insurance", "certificate", "accreditation",
   "client_order", "subcontractor_application", "supplier_order",
   "product_datasheet", "om_manual", "warranty", "test_certificate", "as_built_drawing",
@@ -333,6 +334,7 @@ Document types:
 - planning: planning decisions, conditions, discharge documents
 - meeting_minutes: minutes, site meeting notes
 - our_payment_application: CCG's own payment application/valuation to the client (PA01, PA02…)
+- our_progress_report: CCG's own monthly progress report to the client ("Project Progress Report", numbered like PPR-2026-11) — CCG staff send it to the client, usually with the PA
 - client_payment_notice: the client's or employer's agent's payment notice / certificate to CCG
 - variation: variation orders, instructions, change requests, VO schedules
 - programme: construction programmes / Gantt charts
@@ -381,6 +383,7 @@ Reply with JSON only, no prose:
  "compliance": {"document_type": compliance value or null, "issue_date": "YYYY-MM-DD" or null, "expiry_date": "YYYY-MM-DD" or null, "reference": string or null, "cover_amount": number or null, "insured": "who the policy / certificate is for, as written, or null", "scope": for insurance, certificates and accreditations: "ccg_company" (City Construction Group's own company-wide cover or accreditation — annual PL / EL / PI / contractor's all risks, CHAS, ISO, Constructionline) | "ccg_job" (cover for ONE job / site / contract — contract works or all-risks for a named site, a project-specific policy, the employer's or CCG's insurance evidence for one contract; give that job in project_id) | "subcontractor" (a subcontractor's or supplier's own) | null},
  "drawing": {"number": string or null, "revision": string or null, "title": string or null, "discipline": "architectural"|"structural"|"civils"|"mep"|"electrical"|"mechanical"|"public_health"|"landscape"|"fire"|"specialist"|null, "originator": "consultant/company that produced it, or null", "status": "e.g. Construction / Tender / Planning / Preliminary, or null", "stage": "RIBA / design stage if shown, e.g. Stage 4, or null", "kind": "layout"|"schematic"|"combined services"|"GA plan"|"section"|"elevation"|"detail"|"schedule"|"model"|"specification"|"report"|"other"|null — read it from the title block / title (e.g. "… Schematic" = schematic, "… Layout" / "… Plant Room" plan = layout), "building": "which building / block it covers — as the title block says or as the job's filing notes decode its number (e.g. a building code in the drawing number); 'site-wide' if it covers the whole site; or null", "plot_or_block": "e.g. Plot 3 / Block A, or null"},
  "pa_number": number or null,
+ "report": for our_progress_report: {"number": "PPR-YYYY-MM as written, or null", "month": "YYYY-MM — the month the report covers"}; otherwise null,
  "pa_revision_by": for a payment application that the client / employer's agent has marked up or revised: "client"; CCG's own (re)issued version: "ccg"; otherwise null,
  "products": [{"manufacturer": string or null, "product": "product name as written", "code": "product code or null", "qty": "e.g. 24 sheets, or null", "installed": true when it's a material/product built into the works that the O&M needs a datasheet for (insulation, boards, membranes, roofing, sanitaryware, fittings, equipment…); false for tools, drill bits, blades, consumables, fixings packs, stationery, PPE, cleaning, fuel, hire, welfare, delivery charges}] — the materials/products on an invoice, delivery note, order confirmation, or the product a datasheet / manual / warranty is about; [] if none,
  "application": {"number": string or null, "period_to": "YYYY-MM-DD" or null, "gross_to_date": number or null, "amount_due": number or null},
@@ -929,6 +932,16 @@ async function sendFacts(projectId: string, g: any, item: any, trial: boolean) {
 // ─── Deciding where it goes ──────────────────────────────────────────────────
 type Plan = { status: "filed" | "to_check" | "ignored"; decision?: any; reason: string }
 
+// Which month / number a progress report is (PPR-2026-11, or the month the reader saw)
+function reportRef(g: any, item: any) {
+  const num = (String(g?.report?.number || "").match(/PPR-\d{4}-\d{2}(?:-\d{2})?/i)?.[0]
+    || String(item.file_name || "").match(/PPR-\d{4}-\d{2}(?:-\d{2})?/i)?.[0] || "").toUpperCase() || null
+  const month = num ? num.slice(4, 11) : (/^\d{4}-\d{2}$/.test(String(g?.report?.month || "")) ? g.report.month : null)
+  return { number: num, month }
+}
+const reportMatches = (r: any, pr: { number: string | null; month: string | null }) =>
+  pr.number ? r.report_number === pr.number : !!pr.month && String(r.period_to || r.report_date || "").slice(0, 7) === pr.month
+
 async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<Plan> {
   const type = DOC_TYPES.includes(g.doc_type) ? g.doc_type : "other"
   const tc = num(g.type_confidence) ?? 0
@@ -966,6 +979,22 @@ async function planFor(g: any, item: any, ctx: any, threshold: number): Promise<
       const { data: bf } = await sb.from("project_doc_folders").select("folder_key")
         .eq("project_id", project.id).eq("parent_key", dest.folder_key).limit(1)
       if (bf?.length) return { status: "to_check", reason: "This job has a folder per building — pick one" }
+    }
+    // Our progress report, already sent to the client by a person: it IS this month's
+    // report — filed in 05 (the building's folder when the CRM knows it) and the CRM's
+    // own draft for that month is closed, so nothing automatic goes out for it
+    if (type === "our_progress_report") {
+      const pr = reportRef(g, item)
+      const { data: same } = await sb.from("project_doc_files").select("id").eq("project_id", project.id).eq("folder_key", dest.folder_key).eq("file_name", cleanName(item.file_name)).limit(1)
+      if (same?.length) return { status: "ignored", reason: "This progress report is already in the CRM" }
+      const { data: reps } = await sb.from("progress_reports").select("id, report_number, subfolder_key, period_to, report_date").eq("project_id", project.id).order("created_at", { ascending: false }).limit(60)
+      const match = (reps || []).filter((r: any) => reportMatches(r, pr))
+      const where = new Set(match.map((r: any) => r.subfolder_key ?? null))
+      const { data: bf } = await sb.from("project_doc_folders").select("folder_key").eq("project_id", project.id).eq("parent_key", dest.folder_key).limit(1)
+      const decision: any = { target: "project_doc", project_id: project.id, folder_key: dest.folder_key, subfolder_key: null }
+      if (where.size === 1) decision.subfolder_key = [...where][0]
+      else if (bf?.length) return { status: "to_check", decision, reason: `${pr.number || "Progress report"} — this job has a report folder per building, pick one (it then counts as that building's ${pr.month || "month's"} report)` }
+      return { status: "filed", decision, reason: `${pr.number || "Our progress report"}${pr.month ? ` for ${pr.month}` : ""}, sent by ${senderOf(item.file_name) || "the team"} — counts as issued; the CRM won't send its own for that month` }
     }
     const decision: any = { target: "project_doc", project_id: project.id, folder_key: dest.folder_key, subfolder_key: dest.subfolder_key }
     // PAs get re-issued: CCG keeps ONE version of each PA. A client's marked-up
@@ -1140,6 +1169,8 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
     const { data: dup } = replacing ? { data: [] } : await sb.from("project_doc_files").select("id").eq("project_id", p.id).eq("folder_key", folder).eq("file_name", item.file_name).limit(1)
     if (dup?.length) return { status: "duplicate", filed_to: { ...out, project_id: p.id, label: `Already in ${p.project_name}` } }
     const path = sub ? `projects/${p.id}/${folder}/${sub}/${stamp}` : `projects/${p.id}/${folder}/${stamp}`
+    // Our progress report: shown like one published from the CRM (the client already has it by email)
+    const isReport = folder === "05-progress-report"
     await copyStaged(item, path)
     // What the Inbox read from it (the drawing's title block, who sent it, when) stays with the file
     const dr = g?.drawing && (g.drawing.number || g.drawing.title) ? Object.fromEntries(Object.entries(g.drawing).filter(([, v]) => v != null && v !== "")) : null
@@ -1147,7 +1178,7 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
       sender: senderOf(item0.file_name) || null, received_at: sentAt(item0), intake_item_id: isUuid(item.id) ? item.id : null }).filter(([, v]) => v != null))
     let ins = await sb.from("project_doc_files").insert({
       project_id: p.id, folder_key: folder, subfolder_key: sub, file_name: item.file_name,
-      file_size: item.file_size, storage_path: path, client_visible: false, meta,
+      file_size: item.file_size, storage_path: path, ...(isReport ? {} : { client_visible: false }), meta,
     }).select("id").single()
     // Before 046 is run there's no meta column — file it without
     if (ins.error && /meta/.test(ins.error.message)) ins = await sb.from("project_doc_files").insert({
@@ -1156,6 +1187,16 @@ async function fileItem(item0: any, d: any, actorId: string | null) {
     }).select("id").single()
     const { data: row, error } = ins
     if (error) throw new Error(error.message)
+    // A progress report a person sent: the CRM's draft for the same report / month
+    // (same building) becomes a normal, issued report — no automatic one follows
+    if (isReport) {
+      const pr = reportRef(g, item)
+      let rq = sb.from("progress_reports").select("id, report_number, period_to, report_date, ai_draft").eq("project_id", p.id)
+      rq = sub ? rq.eq("subfolder_key", sub) : rq.is("subfolder_key", null)
+      const { data: reps } = await rq.limit(60)
+      const ids = (reps || []).filter((r: any) => r.ai_draft && reportMatches(r, pr)).map((r: any) => r.id)
+      if (ids.length) { await sb.from("progress_reports").update({ ai_draft: false }).in("id", ids); out.closed_draft = ids.length }
+    }
     if (replacing) {
       // Old version → hidden archive (kept, recoverable; out of the CRM list, portal and figures)
       const ids = d.replace_file_ids.filter((x: unknown) => isUuid(x))

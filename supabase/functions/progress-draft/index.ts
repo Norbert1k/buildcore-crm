@@ -984,6 +984,18 @@ async function draft(projectId: string, paRefIn: string | null, force = false, m
   const monthKey = ymd(periodEnd).slice(0, 7)
   // A draft for this month already: keep it — unless it was drafted before the month
   // end and nobody has touched it since, then it's redone in place from the final PA
+  // Already issued for this month — published in the CRM, or sent by a person (the Inbox
+  // filed it into this report folder): nothing automatic is written over or after it
+  if (!force) {
+    const done = (prevs || []).find((r: any) => !r.ai_draft && String(r.period_to || r.report_date || "").slice(0, 7) === monthKey)
+    if (done) return { report_id: done.id, existing: true, issued: true }
+    let fq = sb.from("project_doc_files").select("id, file_name, created_at").eq("project_id", projectId).eq("folder_key", "05-progress-report")
+    fq = sub ? fq.eq("subfolder_key", sub) : fq.is("subfolder_key", null)
+    const { data: sent } = await fq.order("created_at", { ascending: false }).limit(20)
+    const since = new Date(periodEnd.getTime() - 10 * 864e5)
+    const f = (sent || []).find((f: any) => /PPR-\d{4}-\d{2}/i.test(f.file_name) ? f.file_name.toUpperCase().includes(`PPR-${monthKey}`) : new Date(f.created_at) >= since)
+    if (f) return { report_id: null, existing: true, issued: true, file: f.file_name }
+  }
   let refresh: any = null
   const dup = (prevs || []).find((r: any) => r.ai_draft && String(r.period_to || "").slice(0, 7) === monthKey)
   if (dup && !force) {
