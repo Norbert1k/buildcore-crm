@@ -263,8 +263,11 @@ async function trimPdf(bytes: Uint8Array): Promise<Uint8Array | null> {
     return bytes.length < 8_000_000 ? bytes : null
   }
 }
-async function contentFor(name: string, mime: string, bytes: Uint8Array) {
+async function contentFor(name: string, mime: string, bytes: Uint8Array, light = false) {
   const ext = extOf(name)
+  // A run already died on this file (out of memory): judge it from its name, sender and folder
+  if (light && (ext === "pdf" || mime === "application/pdf"))
+    return [{ type: "text", text: `(Large PDF, ${(bytes.length / 1e6).toFixed(1)} MB — too heavy to open here. Judge it from its file name, sender and folder.)` }]
   if (ext === "pdf" || mime === "application/pdf") {
     const pdf = await trimPdf(bytes)
     if (pdf) return [{ type: "document", source: { type: "base64", media_type: "application/pdf", data: b64(pdf) } }]
@@ -402,9 +405,15 @@ const cacheNote = () => {
   return all ? { cache: { ...CACHE, reused_pct: Math.round(100 * CACHE.read / all) } } : {}
 }
 
-async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint = "") {
+// Big PDFs are opened one at a time across the workers (pdf-lib needs a lot of memory)
+let heavyLock: Promise<unknown> = Promise.resolve()
+async function readWithClaude(system: string, item: any, bytes: Uint8Array, hint = "", light = false) {
+  const isPdf = extOf(item.file_name) === "pdf" || item.mime_type === "application/pdf"
+  const parts = isPdf && !light && bytes.length > 4_000_000
+    ? await (heavyLock = heavyLock.then(() => contentFor(item.file_name, item.mime_type || "", bytes), () => contentFor(item.file_name, item.mime_type || "", bytes))) as any[]
+    : await contentFor(item.file_name, item.mime_type || "", bytes, light)
   const content = [
-    ...(await contentFor(item.file_name, item.mime_type || "", bytes)),
+    ...parts,
     { type: "text", text: `File name: ${item.file_name}\nDrive folder: ${item.source_path || "(top level)"}${hint ? "\n" + hint : ""}\nSize: ${item.file_size || bytes.length} bytes\nSent: ${sentAt(item) || ""} (UTC)\n\nWhat is this file? JSON only.` },
   ]
   const r = await fetch("https://api.anthropic.com/v1/messages", {
@@ -1398,6 +1407,12 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
       return upd({ status: "to_check", reason: "Google Docs/Sheets file — file it by hand" })
     }
     if ((item.file_size || 0) > MAX_BYTES) return upd({ status: "to_check", reason: "Too large to read automatically" })
+    // Claimed by a run that then died (out of memory) without finishing it: read it
+    // lightly (name, sender, folder) — and if that died too, a person files it.
+    // Without this one heavy file blocks the whole Inbox queue.
+    const crashed = item.status === "pending" && (item.attempts || 0) >= 1
+    if (item.status === "pending" && (item.attempts || 0) >= 2)
+      return upd({ status: "to_check", attempts: item.attempts, reason: "Too heavy to read automatically (the reader ran out of memory) — file it by hand" })
 
     // Same file already filed from another email (or another person's copy)
     if (item.md5) {
@@ -1420,7 +1435,7 @@ async function processItem(item: any, ctx: any, system: string, threshold: numbe
     const hint = mappedProject
       ? `This Drive folder ("${top}") is filed against CRM job ${mappedProject.id} | ${mappedProject.project_ref || ""} | ${mappedProject.project_name} | ${[mappedProject.site_address, mappedProject.postcode].filter(Boolean).join(", ")}.`
       : ""
-    const g = await readWithClaude(system, item, bytes, hint)
+    const g = await readWithClaude(system, item, bytes, hint, crashed && bytes.length > 3_000_000)
     if (mappedProject) {
       const pc = num(g.project_confidence) ?? 0
       if (!g.project_id || g.project_id === mappedProject.id) { g.project_id = mappedProject.id; g.project_confidence = Math.max(pc, 0.95) }
@@ -1492,7 +1507,8 @@ async function run() {
   async function worker() {
     while (next < queue.length && Date.now() - started < TIME_BUDGET_MS) {
       const item = queue[next++]
-      const { data: claimed } = await sb.from("intake_items").update({ updated_at: new Date().toISOString() })
+      // Claiming counts as a try, so a file that kills the run isn't picked first forever
+      const { data: claimed } = await sb.from("intake_items").update({ updated_at: new Date().toISOString(), attempts: (item.attempts || 0) + (item.status === "pending" ? 1 : 0) })
         .eq("id", item.id).eq("status", item.status).eq("updated_at", item.updated_at).select("id")
       if (!claimed?.length) continue
       await processItem(item, ctx, system, threshold, settings.trial !== false, settings.folder_map || {})
